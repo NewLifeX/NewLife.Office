@@ -1,0 +1,33 @@
+name: publish-beta
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+        - 'NewLife.Office/**'
+  workflow_dispatch:
+
+jobs:
+  build-publish:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup dotNET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          6.x
+          7.x
+          8.x
+          9.x
+    - name: Restore
+      run: |
+        dotnet restore NewLife.Office/NewLife.Office.csproj
+    - name: Build
+      run: |
+        dotnet pack --no-restore --version-suffix $(date "+%Y.%m%d-beta%H%M") -c Release -o out NewLife.Office/NewLife.Office.csproj
+    - name: Publish
+      run: |
+        dotnet nuget push ./out/*.nupkg --skip-duplicate --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.nugetKey }}
