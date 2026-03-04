@@ -1,8 +1,8 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net45;netstandard2.0;netstandard2.1</TargetFrameworks>
-    <AssemblyTitle>办公自动化库</AssemblyTitle>
-    <Description>Excel导入导出</Description>
+    <AssemblyTitle>Excel导入导出</AssemblyTitle>
+    <Description>办公自动化库，支持Excel文件读写、导入导出、单元格操作等功能</Description>
     <Company>新生命开发团队</Company>
     <Copyright>©2002-2026 新生命开发团队</Copyright>
     <VersionPrefix>1.0</VersionPrefix>
