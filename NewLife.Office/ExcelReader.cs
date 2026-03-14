@@ -1,5 +1,8 @@
-﻿using System.Globalization;
+﻿using System.ComponentModel;
+using System.Data;
+using System.Globalization;
 using System.IO.Compression;
+using System.Reflection;
 using System.Text;
 using System.Xml.Linq;
 
@@ -39,7 +42,7 @@ public class ExcelReader : DisposeBase
         //_zip = ZipFile.OpenRead(fileName.GetFullPath());
         // 共享访问，避免文件被其它进程打开时再次访问抛出异常
         var fs = new FileStream(fileName.GetFullPath(), FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        _zip = new ZipArchive(fs, ZipArchiveMode.Read, true);
+        _zip = new ZipArchive(fs, ZipArchiveMode.Read, false);
 
         Parse();
     }
@@ -435,6 +438,199 @@ public class ExcelReader : DisposeBase
             index = index * 26 + (ch - 'A' + 1);
         }
         return index - 1; // 转为0基
+    }
+    #endregion
+
+    #region 对象映射
+    /// <summary>将工作表数据映射到强类型对象集合</summary>
+    /// <typeparam name="T">目标类型（需有无参构造函数）</typeparam>
+    /// <param name="sheet">工作表名称（可空，空时取第一个）</param>
+    /// <returns>对象枚举（第一行作为表头映射列名）</returns>
+    public IEnumerable<T> ReadObjects<T>(String? sheet = null) where T : new()
+    {
+        ThrowIfDisposed();
+
+        using var enumerator = ReadRows(sheet).GetEnumerator();
+        if (!enumerator.MoveNext()) yield break;
+
+        // 第一行作为表头
+        var headers = enumerator.Current.Select(e => e?.ToString() ?? "").ToArray();
+
+        var props = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(e => e.CanWrite)
+            .ToArray();
+
+        // 建立列索引 → 属性映射
+        var mapping = new PropertyInfo?[headers.Length];
+        for (var i = 0; i < headers.Length; i++)
+        {
+            var h = headers[i];
+            if (h.IsNullOrEmpty()) continue;
+
+            foreach (var p in props)
+            {
+                // 按属性名匹配
+                if (p.Name.EqualIgnoreCase(h)) { mapping[i] = p; break; }
+                // 按 DisplayName 匹配
+                var dn = p.GetCustomAttribute<DisplayNameAttribute>();
+                if (dn != null && dn.DisplayName == h) { mapping[i] = p; break; }
+                // 按 Description 匹配
+                var desc = p.GetCustomAttribute<DescriptionAttribute>();
+                if (desc != null && desc.Description == h) { mapping[i] = p; break; }
+            }
+        }
+
+        // 数据行
+        while (enumerator.MoveNext())
+        {
+            var row = enumerator.Current;
+            var item = new T();
+            for (var c = 0; c < Math.Min(row.Length, mapping.Length); c++)
+            {
+                var prop = mapping[c];
+                if (prop == null || row[c] == null) continue;
+
+                try
+                {
+                    var val = row[c];
+                    var targetType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
+
+                    if (val is String s)
+                    {
+                        // 字符串到目标类型转换
+                        if (targetType == typeof(String))
+                            prop.SetValue(item, s);
+                        else if (targetType == typeof(Int32))
+                            prop.SetValue(item, s.ToInt());
+                        else if (targetType == typeof(Int64))
+                            prop.SetValue(item, Int64.TryParse(s, out var v64) ? v64 : 0L);
+                        else if (targetType == typeof(Double))
+                            prop.SetValue(item, s.ToDouble());
+                        else if (targetType == typeof(Decimal))
+                            prop.SetValue(item, Decimal.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var vd) ? vd : 0m);
+                        else if (targetType == typeof(Boolean))
+                            prop.SetValue(item, s.ToBoolean());
+                        else if (targetType == typeof(DateTime))
+                            prop.SetValue(item, s.ToDateTime());
+                        else
+                            prop.SetValue(item, Convert.ChangeType(val, targetType, CultureInfo.InvariantCulture));
+                    }
+                    else if (val != null)
+                    {
+                        // 其他类型直接或转换后赋值
+                        var valType = val.GetType();
+                        if (targetType.IsAssignableFrom(valType))
+                            prop.SetValue(item, val);
+                        else
+                            prop.SetValue(item, Convert.ChangeType(val, targetType, CultureInfo.InvariantCulture));
+                    }
+                }
+                catch
+                {
+                    // 转换失败跳过该字段
+                }
+            }
+            yield return item;
+        }
+    }
+
+    /// <summary>将工作表数据读取为 DataTable</summary>
+    /// <param name="sheet">工作表名称（可空，空时取第一个）</param>
+    /// <returns>DataTable（第一行作为列名）</returns>
+    public DataTable ReadDataTable(String? sheet = null)
+    {
+        ThrowIfDisposed();
+
+        var dt = new DataTable();
+        var isFirst = true;
+
+        foreach (var row in ReadRows(sheet))
+        {
+            if (isFirst)
+            {
+                // 第一行作为列名
+                for (var i = 0; i < row.Length; i++)
+                {
+                    var colName = row[i]?.ToString() ?? $"Column{i + 1}";
+                    dt.Columns.Add(colName);
+                }
+                isFirst = false;
+                continue;
+            }
+
+            var dr = dt.NewRow();
+            for (var i = 0; i < Math.Min(row.Length, dt.Columns.Count); i++)
+            {
+                dr[i] = row[i] ?? DBNull.Value;
+            }
+            dt.Rows.Add(dr);
+        }
+
+        return dt;
+    }
+
+    /// <summary>获取合并单元格区域列表</summary>
+    /// <param name="sheet">工作表名称（可空，空时取第一个）</param>
+    /// <returns>合并区域列表，每项为 (起始行0基, 起始列0基, 结束行0基, 结束列0基)</returns>
+    public IList<(Int32 StartRow, Int32 StartCol, Int32 EndRow, Int32 EndCol)>? GetMergeRanges(String? sheet = null)
+    {
+        ThrowIfDisposed();
+
+        if (Sheets == null || _entries == null) return null;
+
+        if (sheet.IsNullOrEmpty()) sheet = Sheets.FirstOrDefault();
+        if (sheet.IsNullOrEmpty()) return null;
+
+        if (!_entries.TryGetValue(sheet, out var entry)) return null;
+
+        using var esheet = entry.Open();
+        var doc = XDocument.Load(esheet);
+        if (doc.Root == null) return null;
+
+        var mergeNode = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("mergeCells"));
+        if (mergeNode == null) return null;
+
+        var result = new List<(Int32, Int32, Int32, Int32)>();
+        foreach (var mc in mergeNode.Elements())
+        {
+            var refAttr = mc.Attribute("ref")?.Value;
+            if (refAttr.IsNullOrEmpty()) continue;
+
+            var parts = refAttr!.Split(':');
+            if (parts.Length != 2) continue;
+
+            var (r1, c1) = ParseCellRef(parts[0]);
+            var (r2, c2) = ParseCellRef(parts[1]);
+            result.Add((r1, c1, r2, c2));
+        }
+
+        return result;
+    }
+
+    /// <summary>解析单元格引用返回 (行0基, 列0基)</summary>
+    private static (Int32 Row, Int32 Col) ParseCellRef(String cellRef)
+    {
+        var colLen = 0;
+        for (var i = 0; i < cellRef.Length; i++)
+        {
+            var ch = cellRef[i];
+            if (ch is >= 'A' and <= 'Z' or >= 'a' and <= 'z') colLen++;
+            else break;
+        }
+
+        var colIndex = 0;
+        for (var i = 0; i < colLen; i++)
+        {
+            var ch = cellRef[i];
+            if (ch is >= 'a' and <= 'z') ch = (Char)(ch - 'a' + 'A');
+            colIndex = colIndex * 26 + (ch - 'A' + 1);
+        }
+        colIndex--;
+
+        var rowStr = cellRef.Substring(colLen);
+        var rowIndex = Int32.Parse(rowStr) - 1;
+
+        return (rowIndex, colIndex);
     }
     #endregion
 

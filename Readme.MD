@@ -11,6 +11,70 @@
 源码： https://github.com/NewLifeX/NewLife.Office  
 Nuget：NewLife.Office  
 
+## 项目简介
+
+`NewLife.Office` 是一个轻量级 Excel（xlsx）读写库，定位“导出优先、导入增强”。
+
+- 仅依赖 `NewLife.Core`
+- 支持 `net45/netstandard2.0/netstandard2.1`
+- 直接基于 Open XML（ZIP + XML）实现
+
+> CSV 读写能力由 `NewLife.Core` 的 `CsvFile` 提供，本仓库不重复实现 CSV。
+
+## 已实现能力
+
+### ExcelWriter（写入）
+
+- 多工作表写入、表头与多行数据写入
+- 单元格样式：字体/背景/边框/对齐/换行/数字格式
+- 布局能力：列宽、行高、合并单元格、冻结窗格、自动筛选
+- 高级能力：超链接、下拉数据验证、条件格式、插入图片
+- 页面能力：页面方向、纸张大小、页边距、页眉页脚、打印标题行
+- 安全能力：工作表保护
+- 便捷能力：`WriteObjects<T>()`、`WriteDataTable()`
+
+### ExcelReader（读取）
+
+- 读取多工作表行数据（自动类型转换）
+- `ReadObjects<T>()` 对象映射导入（支持 `DisplayName/Description`）
+- `ReadDataTable()` 导入为 `DataTable`
+- `GetMergeRanges()` 读取合并区域
+
+### ExcelTemplate（模板填充）
+
+- 基于现有 xlsx 模板执行 `{{Key}}` 占位符替换
+- 支持输出到文件或流
+
+## 快速开始
+
+```csharp
+using NewLife.Office;
+
+using var ms = new MemoryStream();
+var writer = new ExcelWriter(ms);
+
+writer.WriteHeader("Data", new[] { "编号", "姓名", "金额" }, CellStyle.Header);
+writer.WriteRow("Data", new Object?[] { 1, "张三", 1234.56m }, new CellStyle
+{
+    Border = CellBorderStyle.Thin,
+    NumberFormat = "#,##0.00"
+});
+
+writer.FreezePane("Data", 1);
+writer.SetAutoFilter("Data", "A1:C1");
+writer.Save();
+
+ms.Position = 0;
+var reader = new ExcelReader(ms, Encoding.UTF8);
+var rows = reader.ReadRows("Data").ToList();
+```
+
+## 测试状态
+
+- 当前测试集：`63` 项
+- 通过：`63` 项
+- 失败：`0` 项
+
 ## 新生命项目矩阵
 各项目默认支持net9.0/netstandard2.1/netstandard2.0/net4.62/net4.5，旧版（2024.0801）支持net4.0/net2.0  
 
@@ -47,9 +111,8 @@ Nuget：NewLife.Office
 |                          FIoT物联网平台                          | 2020  | 物联网整体解决方案，建筑、环保、农业，软硬件及大数据分析一体化，单机十万级点位项目验证      |
 |                        UWB高精度室内定位                         | 2020  | 厘米级（10~20cm）高精度室内定位，软硬件一体化，与其它系统联动，大型展厅项目验证             |
 
-
-
 ## 新生命开发团队
+
 ![XCode](https://newlifex.com/logo.png)  
 
 新生命团队（NewLife）成立于2002年，是新时代物联网行业解决方案提供者，致力于提供软硬件应用方案咨询、系统架构规划与开发服务。  
@@ -59,8 +122,8 @@ Nuget：NewLife.Office
 我们将不断通过服务的持续改进，成为客户长期信赖的合作伙伴，通过不断的创新和发展，成为国内优秀的IoT服务供应商。  
 
 `新生命团队始于2002年，部分开源项目具有20年以上漫长历史，源码库保留有2010年以来所有修改记录`  
-网站：https://newlifex.com  
-开源：https://github.com/newlifex  
+网站：<https://newlifex.com>  
+开源：<https://github.com/newlifex>  
 QQ群：1600800/1600838  
 微信公众号：  
 ![智能大石头](https://newlifex.com/stone.jpg)  

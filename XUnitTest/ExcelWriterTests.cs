@@ -1,8 +1,9 @@
 ﻿using System.ComponentModel;
+using System.Data;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
-using NewLife.IO;
+using NewLife.Office;
 using Xunit;
 
 namespace XUnitTest;
@@ -248,4 +249,525 @@ public class ExcelWriterTests
         // 互不串表：确认 Users 的列数 != Logs 的列数
         Assert.NotEqual(users[0].Length, logs[0].Length);
     }
+
+    #region 样式测试
+    [Fact, DisplayName("WriteHeader带样式生成粗体字体")]
+    public void WriteHeader_WithStyle_GeneratesBoldFont()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        var style = new CellStyle { Bold = true, FontSize = 12, FontName = "Arial" };
+        w.WriteHeader(null!, new[] { "A", "B" }, style);
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        var stylesEntry = za.GetEntry("xl/styles.xml");
+        Assert.NotNull(stylesEntry);
+        using var sr = new StreamReader(stylesEntry!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("<b/>", xml);
+        Assert.Contains("val=\"12\"", xml);
+        Assert.Contains("val=\"Arial\"", xml);
+    }
+
+    [Fact, DisplayName("WriteRow带背景色样式")]
+    public void WriteRow_WithBackgroundColor()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        var style = new CellStyle { BackgroundColor = "FF0000" };
+        w.WriteRow(null, new Object?[] { "Red" }, style);
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/styles.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("FFFF0000", xml); // fgColor with FF prefix
+        Assert.Contains("solid", xml);
+    }
+
+    [Fact, DisplayName("WriteRow带边框样式")]
+    public void WriteRow_WithBorder()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        var style = new CellStyle { Border = CellBorderStyle.Thin, BorderColor = "000000" };
+        w.WriteRow(null, new Object?[] { "Bordered" }, style);
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/styles.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("style=\"thin\"", xml);
+    }
+
+    [Fact, DisplayName("WriteRow带自定义数字格式")]
+    public void WriteRow_WithCustomNumberFormat()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        var style = new CellStyle { NumberFormat = "#,##0.00" };
+        w.WriteRow(null, new Object?[] { 12345.678 }, style);
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/styles.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("numFmtId=\"164\"", xml); // 第一个自定义格式
+        Assert.Contains("#,##0.00", xml);
+    }
+
+    [Fact, DisplayName("WriteRow带对齐和换行样式")]
+    public void WriteRow_WithAlignmentAndWrapText()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        var style = new CellStyle { HAlign = HorizontalAlignment.Center, VAlign = VerticalAlignment.Center, WrapText = true };
+        w.WriteRow(null, new Object?[] { "Centered" }, style);
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/styles.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("horizontal=\"center\"", xml);
+        Assert.Contains("vertical=\"center\"", xml);
+        Assert.Contains("wrapText=\"1\"", xml);
+    }
+    #endregion
+
+    #region 合并单元格测试
+    [Fact, DisplayName("MergeCell生成mergeCells节点")]
+    public void MergeCell_GeneratesMergeCellsNode()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A", "B", "C" });
+        w.MergeCell(null, "A1:C1");
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("<mergeCells", xml);
+        Assert.Contains("ref=\"A1:C1\"", xml);
+    }
+
+    [Fact, DisplayName("MergeCell按行列索引")]
+    public void MergeCell_ByRowColIndex()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A", "B", "C", "D" });
+        w.WriteRow(null, new Object?[] { "data", null, null, null });
+        w.MergeCell(null, 1, 0, 1, 3); // 第2行A-D合并（0基）
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("ref=\"A2:D2\"", xml);
+    }
+    #endregion
+
+    #region 冻结窗格测试
+    [Fact, DisplayName("FreezePane冻结首行")]
+    public void FreezePane_FirstRow()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "Name" });
+        w.FreezePane(null, 1);
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("ySplit=\"1\"", xml);
+        Assert.Contains("state=\"frozen\"", xml);
+    }
+
+    [Fact, DisplayName("FreezePane冻结行列")]
+    public void FreezePane_RowAndCol()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A", "B" });
+        w.FreezePane(null, 1, 1);
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("xSplit=\"1\"", xml);
+        Assert.Contains("ySplit=\"1\"", xml);
+        Assert.Contains("activePane=\"bottomRight\"", xml);
+    }
+    #endregion
+
+    #region 自动筛选测试
+    [Fact, DisplayName("SetAutoFilter生成autoFilter节点")]
+    public void SetAutoFilter_GeneratesAutoFilterNode()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A", "B", "C" });
+        w.SetAutoFilter(null, "A1:C1");
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("<autoFilter ref=\"A1:C1\"", xml);
+    }
+    #endregion
+
+    #region 行高测试
+    [Fact, DisplayName("SetRowHeight生成行高属性")]
+    public void SetRowHeight_GeneratesHeightAttribute()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A" });
+        w.SetRowHeight(null, 1, 30);
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("ht=\"30\"", xml);
+        Assert.Contains("customHeight=\"1\"", xml);
+    }
+    #endregion
+
+    #region 超链接测试
+    [Fact, DisplayName("AddHyperlink生成超链接节点和关系")]
+    public void AddHyperlink_GeneratesHyperlinkAndRels()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "Link" });
+        w.WriteRow(null, new Object?[] { "Click" });
+        w.AddHyperlink(null, 2, 0, "https://example.com", "Example");
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("<hyperlinks>", xml);
+        Assert.Contains("ref=\"A2\"", xml);
+        Assert.Contains("display=\"Example\"", xml);
+
+        // 验证关系文件
+        var rels = za.GetEntry("xl/worksheets/_rels/sheet1.xml.rels");
+        Assert.NotNull(rels);
+        using var sr2 = new StreamReader(rels!.Open(), Encoding.UTF8);
+        var relsXml = sr2.ReadToEnd();
+        Assert.Contains("https://example.com", relsXml);
+        Assert.Contains("hyperlink", relsXml);
+    }
+    #endregion
+
+    #region 数据验证测试
+    [Fact, DisplayName("AddDropdownValidation生成数据验证节点")]
+    public void AddDropdownValidation_GeneratesDataValidation()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "Status" });
+        w.AddDropdownValidation(null, "A2:A100", new[] { "Active", "Inactive", "Pending" });
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("<dataValidations", xml);
+        Assert.Contains("type=\"list\"", xml);
+        Assert.Contains("sqref=\"A2:A100\"", xml);
+        Assert.Contains("Active", xml);
+    }
+    #endregion
+
+    #region 图片测试
+    [Fact, DisplayName("AddImage生成drawing和media文件")]
+    public void AddImage_GeneratesDrawingAndMedia()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "Image" });
+        // 最小有效 PNG（1x1 transparent pixel）
+        var pngData = new Byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52 };
+        w.AddImage(null, 2, 0, pngData, "png", 50, 50);
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+
+        // 验证 drawing 文件
+        var drawing = za.GetEntry("xl/drawings/drawing1.xml");
+        Assert.NotNull(drawing);
+        using var sr = new StreamReader(drawing!.Open(), Encoding.UTF8);
+        var drawXml = sr.ReadToEnd();
+        Assert.Contains("twoCellAnchor", drawXml);
+        Assert.Contains("blipFill", drawXml);
+
+        // 验证 media 文件
+        var media = za.GetEntry("xl/media/image1.png");
+        Assert.NotNull(media);
+
+        // 验证 sheet 引用 drawing
+        using var sr2 = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var sheetXml = sr2.ReadToEnd();
+        Assert.Contains("<drawing", sheetXml);
+    }
+    #endregion
+
+    #region 页面设置测试
+    [Fact, DisplayName("SetPageSetup生成页面设置节点")]
+    public void SetPageSetup_GeneratesPageSetupNode()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A" });
+        w.SetPageSetup(null, PageOrientation.Landscape, PaperSize.A4);
+        w.SetPageMargins(null, 1.0, 1.0, 0.5, 0.5);
+        w.SetHeaderFooter(null, "Header Text", "Footer Text");
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("orientation=\"landscape\"", xml);
+        Assert.Contains("paperSize=\"9\"", xml);
+        Assert.Contains("top=\"1\"", xml);
+        Assert.Contains("left=\"0.5\"", xml);
+        Assert.Contains("Header Text", xml);
+        Assert.Contains("Footer Text", xml);
+    }
+
+    [Fact, DisplayName("SetPrintTitleRows生成打印标题行")]
+    public void SetPrintTitleRows_GeneratesDefinedNames()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A" });
+        w.SetPrintTitleRows(null, 1, 1);
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/workbook.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("_xlnm.Print_Titles", xml);
+    }
+    #endregion
+
+    #region 工作表保护测试
+    [Fact, DisplayName("ProtectSheet生成保护节点")]
+    public void ProtectSheet_GeneratesProtectionNode()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A" });
+        w.ProtectSheet(null, "password123");
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("<sheetProtection", xml);
+        Assert.Contains("sheet=\"1\"", xml);
+        Assert.Contains("password=", xml);
+    }
+
+    [Fact, DisplayName("ProtectSheet无密码")]
+    public void ProtectSheet_WithoutPassword()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A" });
+        w.ProtectSheet(null);
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("<sheetProtection", xml);
+        Assert.DoesNotContain("password=", xml);
+    }
+    #endregion
+
+    #region 条件格式测试
+    [Fact, DisplayName("AddConditionalFormat生成条件格式节点")]
+    public void AddConditionalFormat_GeneratesConditionalFormatting()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "Score" });
+        w.WriteRow(null, new Object?[] { 90 });
+        w.WriteRow(null, new Object?[] { 50 });
+        w.AddConditionalFormat(null, "A2:A3", ConditionalFormatType.GreaterThan, "80", "00FF00");
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("<conditionalFormatting", xml);
+        Assert.Contains("operator=\"greaterThan\"", xml);
+        Assert.Contains("<formula>80</formula>", xml);
+    }
+
+    [Fact, DisplayName("AddConditionalFormat数据条")]
+    public void AddConditionalFormat_DataBar()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "Value" });
+        w.WriteRow(null, new Object?[] { 10 });
+        w.AddConditionalFormat(null, "A2:A2", ConditionalFormatType.DataBar, null, "4472C4");
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("type=\"dataBar\"", xml);
+    }
+
+    [Fact, DisplayName("AddConditionalFormat色阶")]
+    public void AddConditionalFormat_ColorScale()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "Value" });
+        w.WriteRow(null, new Object?[] { 10 });
+        w.AddConditionalFormat(null, "A2:A2", ConditionalFormatType.ColorScale, null, "FF6347");
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("type=\"colorScale\"", xml);
+    }
+
+    [Fact, DisplayName("AddConditionalFormat介于")]
+    public void AddConditionalFormat_Between()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "Score" });
+        w.WriteRow(null, new Object?[] { 75 });
+        w.AddConditionalFormat(null, "A2:A2", ConditionalFormatType.Between, "60", "FFFF00", "90");
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("operator=\"between\"", xml);
+    }
+    #endregion
+
+    #region 对象映射测试
+    [Fact, DisplayName("WriteObjects导出对象集合")]
+    public void WriteObjects_ExportObjectCollection()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        var users = new[]
+        {
+            new TestUser { Id = 1, Name = "Alice", Age = 30 },
+            new TestUser { Id = 2, Name = "Bob", Age = 25 },
+        };
+        w.WriteObjects<TestUser>(null, users, CellStyle.Header);
+        w.Save();
+
+        ms.Position = 0;
+        var r = new ExcelReader(ms, Encoding.UTF8);
+        var rows = r.ReadRows().ToList();
+        Assert.Equal(3, rows.Count); // header + 2 data
+
+        // 验证表头使用 DisplayName
+        Assert.Equal("编号", rows[0][0]);
+        Assert.Equal("姓名", rows[0][1]);
+        Assert.Equal("Age", rows[0][2]); // 无 DisplayName，使用属性名
+
+        // 验证数据
+        Assert.Equal("1", rows[1][0] + "");
+        Assert.Equal("Alice", rows[1][1]);
+    }
+
+    [Fact, DisplayName("WriteDataTable导出DataTable")]
+    public void WriteDataTable_ExportDataTable()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+
+        var dt = new DataTable();
+        dt.Columns.Add("Product", typeof(String));
+        dt.Columns.Add("Price", typeof(Decimal));
+        dt.Columns.Add("Qty", typeof(Int32));
+        dt.Rows.Add("Apple", 3.5m, 100);
+        dt.Rows.Add("Banana", 2.0m, 200);
+
+        w.WriteDataTable(null, dt, CellStyle.Header);
+        w.Save();
+
+        ms.Position = 0;
+        var r = new ExcelReader(ms, Encoding.UTF8);
+        var rows = r.ReadRows().ToList();
+        Assert.Equal(3, rows.Count);
+        Assert.Equal("Product", rows[0][0]);
+        Assert.Equal("Apple", rows[1][0]);
+    }
+    #endregion
+
+    #region 列宽测试
+    [Fact, DisplayName("SetColumnWidth手工设置列宽")]
+    public void SetColumnWidth_ManuallySetWidth()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "Name" });
+        w.SetColumnWidth(null, 0, 20);
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        using var sr = new StreamReader(za.GetEntry("xl/worksheets/sheet1.xml")!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("width=\"20\"", xml);
+        Assert.Contains("customWidth=\"1\"", xml);
+    }
+    #endregion
+
+    #region 辅助类
+    private class TestUser
+    {
+        [DisplayName("编号")]
+        public Int32 Id { get; set; }
+
+        [DisplayName("姓名")]
+        public String Name { get; set; } = "";
+
+        public Int32 Age { get; set; }
+    }
+    #endregion
 }

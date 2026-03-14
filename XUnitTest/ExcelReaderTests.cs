@@ -1,7 +1,9 @@
-﻿using System.IO.Compression;
+﻿using System.ComponentModel;
+using System.Data;
+using System.IO.Compression;
 using System.Text;
 using NewLife;
-using NewLife.IO;
+using NewLife.Office;
 using Xunit;
 
 namespace XUnitTest;
@@ -275,4 +277,135 @@ public class ExcelReaderTests
         reader.Dispose();
         Assert.Throws<ObjectDisposedException>(() => reader.ReadRows().ToList());
     }
+
+    #region 对象映射测试
+    [Fact, DisplayName("ReadObjects映射对象集合")]
+    public void ReadObjects_MapsToStrongTypedObjects()
+    {
+        // 先用 ExcelWriter 写入数据
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "编号", "姓名", "Age" });
+        w.WriteRows(null, new[]
+        {
+            new Object?[] { 1, "Alice", 30 },
+            new Object?[] { 2, "Bob", 25 },
+        });
+        w.Save();
+
+        ms.Position = 0;
+        var r = new ExcelReader(ms, Encoding.UTF8);
+        var users = r.ReadObjects<TestUser>().ToList();
+        Assert.Equal(2, users.Count);
+        Assert.Equal(1, users[0].Id);
+        Assert.Equal("Alice", users[0].Name);
+        Assert.Equal(30, users[0].Age);
+        Assert.Equal(2, users[1].Id);
+        Assert.Equal("Bob", users[1].Name);
+    }
+
+    [Fact, DisplayName("ReadObjects空数据返回空集合")]
+    public void ReadObjects_EmptySheet_ReturnsEmpty()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.Save(); // 无任何数据
+
+        ms.Position = 0;
+        var r = new ExcelReader(ms, Encoding.UTF8);
+        var users = r.ReadObjects<TestUser>().ToList();
+        Assert.Empty(users);
+    }
+    #endregion
+
+    #region DataTable测试
+    [Fact, DisplayName("ReadDataTable读取为DataTable")]
+    public void ReadDataTable_ReadsAsDataTable()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "Product", "Price", "Qty" });
+        w.WriteRows(null, new[]
+        {
+            new Object?[] { "Apple", 3.5, 100 },
+            new Object?[] { "Banana", 2.0, 200 },
+        });
+        w.Save();
+
+        ms.Position = 0;
+        var r = new ExcelReader(ms, Encoding.UTF8);
+        var dt = r.ReadDataTable();
+        Assert.Equal(3, dt.Columns.Count);
+        Assert.Equal("Product", dt.Columns[0].ColumnName);
+        Assert.Equal("Price", dt.Columns[1].ColumnName);
+        Assert.Equal(2, dt.Rows.Count);
+        Assert.Equal("Apple", dt.Rows[0][0]);
+    }
+
+    [Fact, DisplayName("ReadDataTable空Sheet返回空表")]
+    public void ReadDataTable_EmptySheet_ReturnsEmptyTable()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.Save();
+
+        ms.Position = 0;
+        var r = new ExcelReader(ms, Encoding.UTF8);
+        var dt = r.ReadDataTable();
+        Assert.Equal(0, dt.Columns.Count);
+        Assert.Equal(0, dt.Rows.Count);
+    }
+    #endregion
+
+    #region 合并单元格读取测试
+    [Fact, DisplayName("GetMergeRanges读取合并区域")]
+    public void GetMergeRanges_ReadsMergedCells()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A", "B", "C" });
+        w.MergeCell(null, "A1:C1");
+        w.MergeCell(null, 1, 0, 1, 2); // A2:C2
+        w.Save();
+
+        ms.Position = 0;
+        var r = new ExcelReader(ms, Encoding.UTF8);
+        var merges = r.GetMergeRanges();
+        Assert.NotNull(merges);
+        Assert.Equal(2, merges!.Count);
+
+        // 第一个合并: A1:C1 => (0,0) 到 (0,2)
+        Assert.Equal(0, merges[0].StartRow);
+        Assert.Equal(0, merges[0].StartCol);
+        Assert.Equal(0, merges[0].EndRow);
+        Assert.Equal(2, merges[0].EndCol);
+    }
+
+    [Fact, DisplayName("GetMergeRanges无合并区域返回null")]
+    public void GetMergeRanges_NoMerge_ReturnsNull()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A" });
+        w.Save();
+
+        ms.Position = 0;
+        var r = new ExcelReader(ms, Encoding.UTF8);
+        var merges = r.GetMergeRanges();
+        Assert.Null(merges);
+    }
+    #endregion
+
+    #region 辅助类
+    private class TestUser
+    {
+        [DisplayName("编号")]
+        public Int32 Id { get; set; }
+
+        [DisplayName("姓名")]
+        public String Name { get; set; } = "";
+
+        public Int32 Age { get; set; }
+    }
+    #endregion
 }
