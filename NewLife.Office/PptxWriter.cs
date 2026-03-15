@@ -4,6 +4,52 @@ using System.Text;
 
 namespace NewLife.Office;
 
+/// <summary>PPT 富文本片段（S10-01）</summary>
+/// <remarks>
+/// 支持每个片段独立设置字拉、复体、斜体、颜色、超链接。
+/// 将多个 <see cref="PptTextRun"/> 添加到 <see cref="PptTextBox.Runs"/> 即可实现富文本效果。
+/// </remarks>
+public class PptTextRun
+{
+    #region 属性
+    /// <summary>文本内容</summary>
+    public String Text { get; set; } = String.Empty;
+
+    /// <summary>字拉7（磅），0 表示继承文本框默认字拉</summary>
+    public Int32 FontSize { get; set; }
+
+    /// <summary>粗体</summary>
+    public Boolean Bold { get; set; }
+
+    /// <summary>斜体</summary>
+    public Boolean Italic { get; set; }
+
+    /// <summary>文字颜色（16进制 RGB），null 表示继承文本框设置</summary>
+    public String? FontColor { get; set; }
+
+    /// <summary>超链接 URL，不为 null 时点击该片段跳转</summary>
+    public String? HyperlinkUrl { get; set; }
+    #endregion
+}
+
+/// <summary>PPT 表格单元格样式（S10-02）</summary>
+public class PptCellStyle
+{
+    #region 属性
+    /// <summary>单元格背景色（16进制 RGB），null 表示表格默认色</summary>
+    public String? BackgroundColor { get; set; }
+
+    /// <summary>字体颜色（16进制 RGB），null 表示继承</summary>
+    public String? FontColor { get; set; }
+
+    /// <summary>粗体</summary>
+    public Boolean Bold { get; set; }
+
+    /// <summary>字拉（磅），0 表示继承</summary>
+    public Int32 FontSize { get; set; }
+    #endregion
+}
+
 /// <summary>PPT 幻灯片文本框</summary>
 public class PptTextBox
 {
@@ -40,6 +86,9 @@ public class PptTextBox
 
     /// <summary>超链接 URL，不为 null 时点击文字跳转</summary>
     public String? HyperlinkUrl { get; set; }
+
+    /// <summary>富文本片段集合；非空时优先使用，忽略 Text/FontSize/Bold/FontColor 等单一格式属性</summary>
+    public List<PptTextRun> Runs { get; } = [];
     #endregion
 }
 
@@ -157,6 +206,12 @@ public class PptTable
 
     /// <summary>首行是否表头</summary>
     public Boolean FirstRowHeader { get; set; } = true;
+
+    /// <summary>各列宽度（EMU），数组长度等于列数；空时按总宽平均分配</summary>
+    public Int64[] ColWidths { get; set; } = [];
+
+    /// <summary>单元格样式字典，键为 (行索引, 列索引)，优先级高于行级默认样式</summary>
+    public Dictionary<(Int32 Row, Int32 Col), PptCellStyle> CellStyles { get; } = [];
     #endregion
 }
 
@@ -247,8 +302,13 @@ public class PptxWriter : IDisposable
     private Int32 _imgGlobal = 1;
     private Int32 _chartGlobal = 1;
     private Int32 _hlinkGlobal = 1;
+    private Int32 _mediaGlobal = 1;
     private String? _protectionHash;
     private String? _protectionSalt;
+    // 跨文件复制的原始幻灯片（S10-04）：(幻灯片XML, rels XML)
+    private readonly List<(String SlideXml, String RelsXml)> _rawSlides = [];
+    // 跨文件复制的媒体文件：(文件名, 字节数据)
+    private readonly List<(String Name, Byte[] Data)> _rawSlideMedia = [];
     #endregion
 
     #region 构造
@@ -626,6 +686,159 @@ public class PptxWriter : IDisposable
             });
     }
 
+    /// <summary>从另一个 pptx 文件复制单张幻灯片（S10-04）</summary>
+    /// <remarks>
+    /// 在 ZIP 层面直接复制幻灯片 XML 及其引用的媒体文件，并重命名以避免冲突。
+    /// 复制的幻灯片追加在所有普通幻灯片之后，调用 Save 时一并写出。
+    /// </remarks>
+    /// <param name="sourcePath">源 pptx 文件路径</param>
+    /// <param name="slideIndex">源文件中的幻灯片索引（0 起始）</param>
+    /// <returns>新幻灯片在目标文档中的索引（0 起始）</returns>
+    public Int32 CopySlideFrom(String sourcePath, Int32 slideIndex)
+        => CopySlideFrom(File.ReadAllBytes(sourcePath.GetFullPath()), slideIndex);
+
+    /// <summary>从另一个 pptx 字节数数据复制单张幻灯片（S10-04）</summary>
+    /// <param name="sourceData">源 pptx 字节数据</param>
+    /// <param name="slideIndex">源文件中的幻灯片索引（0 起始）</param>
+    /// <returns>新幻灯片在目标文档中的索引（0 起始）</returns>
+    public Int32 CopySlideFrom(Byte[] sourceData, Int32 slideIndex)
+    {
+        using var ms = new MemoryStream(sourceData);
+        using var srcZip = new ZipArchive(ms, ZipArchiveMode.Read);
+        var srcSlideNum = slideIndex + 1;
+        var slideEntry = srcZip.GetEntry($"ppt/slides/slide{srcSlideNum}.xml")
+            ?? throw new ArgumentOutOfRangeException(nameof(slideIndex), $"源文件中不存在第 {slideIndex} 张幻灯片");
+        String slideXml;
+        using (var sr = new StreamReader(slideEntry.Open())) slideXml = sr.ReadToEnd();
+        String relsXml;
+        var relsEntry = srcZip.GetEntry($"ppt/slides/_rels/slide{srcSlideNum}.xml.rels");
+        if (relsEntry != null)
+        {
+            using var sr = new StreamReader(relsEntry.Open());
+            relsXml = sr.ReadToEnd();
+        }
+        else
+        {
+            relsXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                "<Relationship Id=\"rLayout1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/></Relationships>";
+        }
+        // 复制媒体文件并重命名
+        foreach (var entry in srcZip.Entries)
+        {
+            if (!entry.FullName.StartsWith("ppt/media/", StringComparison.OrdinalIgnoreCase)) continue;
+            var baseName = entry.Name;
+            if (relsXml.IndexOf(baseName, StringComparison.OrdinalIgnoreCase) < 0
+                && slideXml.IndexOf(baseName, StringComparison.OrdinalIgnoreCase) < 0) continue;
+            var ext = Path.GetExtension(baseName);
+            var newName = $"m{_mediaGlobal++}{ext}";
+            relsXml = relsXml.Replace($"../media/{baseName}", $"../media/{newName}");
+            slideXml = slideXml.Replace($"../media/{baseName}", $"../media/{newName}");
+            var buf = new MemoryStream();
+            using (var es = entry.Open()) es.CopyTo(buf);
+            _rawSlideMedia.Add((newName, buf.ToArray()));
+        }
+        _rawSlides.Add((slideXml, relsXml));
+        return Slides.Count + _rawSlides.Count - 1;
+    }
+
+    /// <summary>修改 pptx 文件中指定图表的系列数据（S10-03）</summary>
+    /// <remarks>
+    /// 直接替换图表 XML 中所有 c:numCache 的数值缓存，不修改内嵌 Excel。
+    /// 如果系列/数据点数量与原图表不匹配，按最小公集处理。
+    /// </remarks>
+    /// <param name="sourcePath">源 pptx 文件路径</param>
+    /// <param name="chartNumber">图表编号（ppt/charts/chart{N}.xml 的 N，从 1 开始）</param>
+    /// <param name="series">新系列数据</param>
+    /// <param name="outputPath">输出路径，null 时覆盖源文件</param>
+    public static void UpdateChartData(String sourcePath, Int32 chartNumber, IEnumerable<PptChartSeries> series, String? outputPath = null)
+    {
+        var data = File.ReadAllBytes(sourcePath.GetFullPath());
+        var result = UpdateChartData(data, chartNumber, series);
+        var dst = (outputPath ?? sourcePath).GetFullPath();
+        File.WriteAllBytes(dst, result);
+    }
+
+    /// <summary>修改 pptx 字节中指定图表的系列数据并返回新的字节数据（S10-03）</summary>
+    /// <param name="pptxData">源 pptx 字节数据</param>
+    /// <param name="chartNumber">图表编号（1 起始）</param>
+    /// <param name="series">新系列数据</param>
+    /// <returns>更新后的 pptx 字节数据</returns>
+    public static Byte[] UpdateChartData(Byte[] pptxData, Int32 chartNumber, IEnumerable<PptChartSeries> series)
+    {
+        var serList = series.ToList();
+        var chartPath = $"ppt/charts/chart{chartNumber}.xml";
+        using var srcMs = new MemoryStream(pptxData);
+        using var dstMs = new MemoryStream();
+        using (var srcZip = new ZipArchive(srcMs, ZipArchiveMode.Read))
+        using (var dstZip = new ZipArchive(dstMs, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var entry in srcZip.Entries)
+            {
+                if (!entry.FullName.Equals(chartPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Copy as-is
+                    var dst = dstZip.CreateEntry(entry.FullName, CompressionLevel.Fastest);
+                    using var ss = entry.Open();
+                    using var ds = dst.Open();
+                    ss.CopyTo(ds);
+                    continue;
+                }
+                // Rewrite chart XML with new series data
+                String chartXml;
+                using (var sr = new StreamReader(entry.Open())) chartXml = sr.ReadToEnd();
+                chartXml = PatchChartXml(chartXml, serList);
+                WriteZipEntryText(dstZip, entry.FullName, chartXml);
+            }
+        }
+        return dstMs.ToArray();
+    }
+
+    /// <summary>更新图表 XML 中每个系列的 numCache 数值</summary>
+    /// <param name="xml">原始图表 XML 字符串</param>
+    /// <param name="series">新系列数据列表</param>
+    /// <returns>更新后的 XML 字符串</returns>
+    private static String PatchChartXml(String xml, List<PptChartSeries> series)
+    {
+        var doc = new System.Xml.XmlDocument();
+        doc.LoadXml(xml);
+        const String C = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+        var ns = new System.Xml.XmlNamespaceManager(doc.NameTable);
+        ns.AddNamespace("c", C);
+        var serNodes = doc.SelectNodes("//c:ser", ns);
+        if (serNodes == null) return xml;
+        for (var si = 0; si < serNodes.Count && si < series.Count; si++)
+        {
+            var ser = series[si];
+            var serNode = serNodes[si]!;
+            // Update series name
+            var txV = serNode.SelectSingleNode(".//c:tx//c:v", ns);
+            if (txV != null) txV.InnerText = ser.Name;
+            // Update numCache
+            var numCache = serNode.SelectSingleNode(".//c:val//c:numCache", ns);
+            if (numCache == null) continue;
+            var ptCountNode = numCache.SelectSingleNode("c:ptCount", ns);
+            if (ptCountNode != null)
+                ((System.Xml.XmlElement)ptCountNode).SetAttribute("val", ser.Values.Length.ToString());
+            // Remove old pt nodes
+            foreach (var old in numCache.SelectNodes("c:pt", ns)!.Cast<System.Xml.XmlNode>().ToList())
+                numCache.RemoveChild(old);
+            // Add new pt nodes
+            for (var vi = 0; vi < ser.Values.Length; vi++)
+            {
+                var pt = doc.CreateElement("c:pt", C);
+                ((System.Xml.XmlElement)pt).SetAttribute("idx", vi.ToString());
+                var v = doc.CreateElement("c:v", C);
+                v.InnerText = ser.Values[vi].ToString(System.Globalization.CultureInfo.InvariantCulture);
+                pt.AppendChild(v);
+                numCache.AppendChild(pt);
+            }
+        }
+        var sb = new StringBuilder();
+        using var sw = new System.IO.StringWriter(sb);
+        doc.Save(sw);
+        return sb.ToString();
+    }
+
     /// <summary>合并多个 pptx 文件为一个（S05-02）</summary>
     /// <param name="sourcePaths">源文件路径集合</param>
     /// <param name="outputPath">输出文件路径</param>
@@ -785,6 +998,21 @@ public class PptxWriter : IDisposable
         WriteSlideMaster(za);
         for (var i = 0; i < Slides.Count; i++)
             WriteSlide(za, i, Slides[i]);
+        // 写入跨文件复制的原始幻灯片（S10-04）
+        var totalSlides = Slides.Count;
+        for (var ri = 0; ri < _rawSlides.Count; ri++)
+        {
+            var rawIdx = totalSlides + ri;
+            WriteZipEntryText(za, $"ppt/slides/slide{rawIdx + 1}.xml", _rawSlides[ri].SlideXml);
+            WriteZipEntryText(za, $"ppt/slides/_rels/slide{rawIdx + 1}.xml.rels", _rawSlides[ri].RelsXml);
+        }
+        // 写入原始幻灯片的媒体文件
+        foreach (var (name, data) in _rawSlideMedia)
+        {
+            var entry = za.CreateEntry($"ppt/media/{name}", CompressionLevel.Fastest);
+            using var es = entry.Open();
+            es.Write(data, 0, data.Length);
+        }
         WriteTheme(za);
     }
     #endregion
@@ -797,7 +1025,25 @@ public class PptxWriter : IDisposable
         return Slides[idx];
     }
 
-    private static Int64 CmToEmu(Double cm) => (Int64)(cm * 360000);
+    /// <summary>厘米转换为 EMU（English Metric Units）</summary>
+    /// <param name="cm">厘米值</param>
+    /// <returns>EMU 值（1 cm = 360000 EMU）</returns>
+    public static Int64 CmToEmu(Double cm) => (Int64)(cm * 360000);
+
+    /// <summary>EMU 转换为厘米</summary>
+    /// <param name="emu">EMU 值</param>
+    /// <returns>厘米值（1 cm = 360000 EMU）</returns>
+    public static Double EmuToCm(Int64 emu) => emu / 360000.0;
+
+    /// <summary>磅（点/pt）转换为 EMU</summary>
+    /// <param name="pt">磅值</param>
+    /// <returns>EMU 值（1 pt = 12700 EMU）</returns>
+    public static Int64 PtToEmu(Double pt) => (Int64)(pt * 12700);
+
+    /// <summary>EMU 转换为磅（点/pt）</summary>
+    /// <param name="emu">EMU 值</param>
+    /// <returns>磅值（1 pt = 12700 EMU）</returns>
+    public static Double EmuToPt(Int64 emu) => emu / 12700.0;
 
     private void WriteEntry(ZipArchive za, String path, String content)
     {
@@ -824,6 +1070,9 @@ public class PptxWriter : IDisposable
         sb.Append("<Override PartName=\"/ppt/theme/theme1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\"/>");
         for (var i = 0; i < Slides.Count; i++)
             sb.Append($"<Override PartName=\"/ppt/slides/slide{i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/>");
+        // 原始幻灯片内容类型（S10-04）
+        for (var i = 0; i < _rawSlides.Count; i++)
+            sb.Append($"<Override PartName=\"/ppt/slides/slide{Slides.Count + i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/>");
         // chart types
         foreach (var slide in Slides)
             foreach (var chart in slide.Charts)
@@ -865,6 +1114,9 @@ public class PptxWriter : IDisposable
         sb.Append("<p:sldIdLst>");
         for (var i = 0; i < Slides.Count; i++)
             sb.Append($"<p:sldId id=\"{256 + i}\" r:id=\"rSlide{i + 1}\"/>");
+        // 原始幻灯片（S10-04）
+        for (var i = 0; i < _rawSlides.Count; i++)
+            sb.Append($"<p:sldId id=\"{256 + Slides.Count + i}\" r:id=\"rSlide{Slides.Count + i + 1}\"/>");
         sb.Append("</p:sldIdLst>");
         // 演示文稿保护（S07-04）
         if (_protectionHash != null)
@@ -882,6 +1134,9 @@ public class PptxWriter : IDisposable
         sb.Append("<Relationship Id=\"rTheme1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"theme/theme1.xml\"/>");
         for (var i = 0; i < Slides.Count; i++)
             sb.Append($"<Relationship Id=\"rSlide{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide{i + 1}.xml\"/>");
+        // 原始幻灯片关系（S10-04）
+        for (var i = 0; i < _rawSlides.Count; i++)
+            sb.Append($"<Relationship Id=\"rSlide{Slides.Count + i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide{Slides.Count + i + 1}.xml\"/>");
         sb.Append("</Relationships>");
         WriteEntry(za, "ppt/_rels/presentation.xml.rels", sb.ToString());
     }
@@ -932,16 +1187,42 @@ public class PptxWriter : IDisposable
             sb.Append("</p:spPr>");
             sb.Append("<p:txBody><a:bodyPr wrap=\"square\" rtlCol=\"0\"><a:normAutofit/></a:bodyPr><a:lstStyle/>");
             sb.Append($"<a:p><a:pPr algn=\"{tb.Alignment}\"/>");
-            sb.Append("<a:r>");
-            // rPr：超链接时加 hlinkClick
-            sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{tb.FontSize * 100}\"{(tb.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
-            if (tb.FontColor != null)
-                sb.Append($"<a:solidFill><a:srgbClr val=\"{tb.FontColor.TrimStart('#')}\"/></a:solidFill>");
-            if (hlRelId != null)
-                sb.Append($"<a:hlinkClick r:id=\"{hlRelId}\"/>");
-            sb.Append("</a:rPr>");
-            sb.Append($"<a:t>{EscXml(tb.Text)}</a:t>");
-            sb.Append("</a:r></a:p></p:txBody></p:sp>");
+            if (tb.Runs.Count > 0)
+            {
+                foreach (var run in tb.Runs)
+                {
+                    String? runHlRelId = null;
+                    if (run.HyperlinkUrl != null)
+                    {
+                        runHlRelId = $"rHlk{_hlinkGlobal++}";
+                        hlinkMap[runHlRelId] = run.HyperlinkUrl;
+                    }
+                    var runSz = run.FontSize > 0 ? run.FontSize : tb.FontSize;
+                    var runFc = run.FontColor ?? tb.FontColor;
+                    sb.Append("<a:r>");
+                    sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{runSz * 100}\"{(run.Bold ? " b=\"1\"" : "")}{(run.Italic ? " i=\"1\"" : "")} dirty=\"0\">");
+                    if (runFc != null)
+                        sb.Append($"<a:solidFill><a:srgbClr val=\"{runFc.TrimStart('#')}\"/></a:solidFill>");
+                    if (runHlRelId != null)
+                        sb.Append($"<a:hlinkClick r:id=\"{runHlRelId}\"/>");
+                    sb.Append("</a:rPr>");
+                    sb.Append($"<a:t>{EscXml(run.Text)}</a:t>");
+                    sb.Append("</a:r>");
+                }
+            }
+            else
+            {
+                sb.Append("<a:r>");
+                sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{tb.FontSize * 100}\"{(tb.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
+                if (tb.FontColor != null)
+                    sb.Append($"<a:solidFill><a:srgbClr val=\"{tb.FontColor.TrimStart('#')}\"/></a:solidFill>");
+                if (hlRelId != null)
+                    sb.Append($"<a:hlinkClick r:id=\"{hlRelId}\"/>");
+                sb.Append("</a:rPr>");
+                sb.Append($"<a:t>{EscXml(tb.Text)}</a:t>");
+                sb.Append("</a:r>");
+            }
+            sb.Append("</a:p></p:txBody></p:sp>");
         }
 
         // shapes（基本图形）
@@ -1190,23 +1471,39 @@ public class PptxWriter : IDisposable
         sb.Append("<a:tbl><a:tblPr firstRow=\"1\" bandRow=\"1\"><a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId></a:tblPr>");
         // columns
         var colCount = tbl.Rows.Count > 0 ? tbl.Rows[0].Length : 1;
-        var colW = colCount > 0 ? tbl.Width / colCount : tbl.Width;
+        var autoColW = colCount > 0 ? tbl.Width / colCount : tbl.Width;
         sb.Append("<a:tblGrid>");
         for (var c = 0; c < colCount; c++)
-            sb.Append($"<a:gridCol w=\"{colW}\"/>");
+        {
+            var cw = tbl.ColWidths.Length > c ? tbl.ColWidths[c] : autoColW;
+            sb.Append($"<a:gridCol w=\"{cw}\"/>");
+        }
         sb.Append("</a:tblGrid>");
         for (var ri = 0; ri < tbl.Rows.Count; ri++)
         {
             var row = tbl.Rows[ri];
-            var isHeader = ri == 0 && tbl.FirstRowHeader;
+            var isHeaderRow = ri == 0 && tbl.FirstRowHeader;
             sb.Append("<a:tr h=\"370840\">");
-            foreach (var cell in row)
+            for (var ci = 0; ci < row.Length; ci++)
             {
+                tbl.CellStyles.TryGetValue((ri, ci), out var cs);
+                var isBold = isHeaderRow || (cs?.Bold ?? false);
+                var cellSz = (cs?.FontSize ?? 0) > 0 ? cs!.FontSize : 0;
+                var cellFc = cs?.FontColor;
+                var cellBg = cs?.BackgroundColor;
                 sb.Append("<a:tc><a:txBody><a:bodyPr/><a:lstStyle/>");
                 sb.Append("<a:p><a:r>");
-                sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\"{(isHeader ? " b=\"1\"" : "")} dirty=\"0\"/>");
-                sb.Append($"<a:t>{EscXml(cell)}</a:t>");
-                sb.Append("</a:r></a:p></a:txBody><a:tcPr/></a:tc>");
+                sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\"{(isBold ? " b=\"1\"" : "")}{(cellSz > 0 ? $" sz=\"{cellSz * 100}\"" : "")} dirty=\"0\">");
+                if (cellFc != null)
+                    sb.Append($"<a:solidFill><a:srgbClr val=\"{cellFc.TrimStart('#')}\"/></a:solidFill>");
+                sb.Append("</a:rPr>");
+                sb.Append($"<a:t>{EscXml(row[ci])}</a:t>");
+                sb.Append("</a:r></a:p></a:txBody>");
+                if (cellBg != null)
+                    sb.Append($"<a:tcPr><a:solidFill><a:srgbClr val=\"{cellBg.TrimStart('#')}\"/></a:solidFill></a:tcPr>");
+                else
+                    sb.Append("<a:tcPr/>");
+                sb.Append("</a:tc>");
             }
             sb.Append("</a:tr>");
         }

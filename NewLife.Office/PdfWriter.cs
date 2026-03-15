@@ -1,4 +1,5 @@
 #nullable enable
+using System.Security.Cryptography;
 using System.Text;
 
 namespace NewLife.Office;
@@ -133,6 +134,15 @@ public class PdfWriter : IDisposable
 
     /// <summary>文档主题</summary>
     public String? DocumentSubject { get; set; }
+
+    /// <summary>用户密码（文档打开密码），null 表示不加密</summary>
+    public String? UserPassword { get; set; }
+
+    /// <summary>所有者密码（权限管理密码），null 时回退到 UserPassword</summary>
+    public String? OwnerPassword { get; set; }
+
+    /// <summary>权限标志位（PDF 标准，-1 表示全部允许，-3904 表示允许打印/复制，-3844 表示禁止修改）</summary>
+    public Int32 Permissions { get; set; } = -1;
 
     /// <summary>书签列表</summary>
     public List<PdfBookmark> Bookmarks { get; } = [];
@@ -536,19 +546,53 @@ public class PdfWriter : IDisposable
         if (DocumentTitle != null || DocumentAuthor != null || DocumentSubject != null)
             infoObjId = NextId();
 
+        // 加密字典对象 ID
+        var encryptObjId = 0;
+        if (UserPassword != null || OwnerPassword != null)
+            encryptObjId = NextId();
+
         var totalObjs = nextId;
         while (offsets.Count < totalObjs) offsets.Add(0);
+
+        // 创建加密器
+        Byte[]? fileIdBytes = null;
+        PdfEncryptor? enc = null;
+        if (encryptObjId > 0)
+        {
+            using var encMd5 = MD5.Create();
+            fileIdBytes = encMd5.ComputeHash(latin1.GetBytes(DateTime.Now.Ticks.ToString()));
+            enc = new PdfEncryptor(UserPassword, OwnerPassword ?? UserPassword ?? String.Empty, Permissions, fileIdBytes);
+        }
+
+        String PdfStr(String text, Int32 objId)
+        {
+            if (enc == null) return $"({EncodePdfText(text)})";
+            return enc.EncryptString(text, objId, 0);
+        }
 
         // ── 写入 Catalog (obj 1) ──
         var catalogSb = new StringBuilder();
         catalogSb.Append("<< /Type /Catalog\n/Pages 2 0 R");
         if (outlineObjId > 0) catalogSb.Append($"\n/Outlines {outlineObjId} 0 R\n/PageMode /UseOutlines");
+        if (encryptObjId > 0) catalogSb.Append($"\n/Encrypt {encryptObjId} 0 R");
         catalogSb.Append("\n>>");
         WriteObj(1, catalogSb.ToString());
 
         // ── 写入 Pages (obj 2) ──
         var kidsStr = String.Join(" ", allPages.Select(p => $"{p.PageObjId} 0 R"));
         WriteObj(2, $"<< /Type /Pages\n/Kids [{kidsStr}]\n/Count {pageCount}\n>>");
+
+        // ── 写入加密字典 (encryptObjId) ──
+        if (enc != null)
+        {
+            var oHex = BitConverter.ToString(enc.OEntry).Replace("-", "");
+            var uHex = BitConverter.ToString(enc.UEntry).Replace("-", "");
+            WriteObj(encryptObjId,
+                $"<< /Filter /Standard /V 2 /R 3 /Length 128\n" +
+                $"/P {enc.EncPermissions}\n" +
+                $"/O <{oHex}>\n" +
+                $"/U <{uHex}>\n>>");
+        }
 
         // ── 写入字体对象 ──
         for (var fi = 0; fi < _fonts.Count; fi++)
@@ -562,13 +606,14 @@ public class PdfWriter : IDisposable
         {
             var rawRgb = ExtractPngRgb(data, imgW, imgH);
             var imgObjId = imgObjMap[name];
+            var imgData = enc != null ? enc.EncryptBytes(rawRgb, imgObjId, 0) : rawRgb;
             offsets[imgObjId - 1] = ms.Position;
             var imgHdr = latin1.GetBytes(
                 $"{imgObjId} 0 obj\n" +
                 $"<< /Type /XObject /Subtype /Image\n/Width {imgW} /Height {imgH}\n" +
-                $"/ColorSpace /DeviceRGB\n/BitsPerComponent 8\n/Length {rawRgb.Length}\n>>\nstream\n");
+                $"/ColorSpace /DeviceRGB\n/BitsPerComponent 8\n/Length {imgData.Length}\n>>\nstream\n");
             ms.Write(imgHdr, 0, imgHdr.Length);
-            ms.Write(rawRgb, 0, rawRgb.Length);
+            ms.Write(imgData, 0, imgData.Length);
             ms.Write(latin1.GetBytes("\nendstream\nendobj\n"), 0, "\nendstream\nendobj\n".Length);
         }
 
@@ -580,10 +625,9 @@ public class PdfWriter : IDisposable
             {
                 var (ax, ay, aw, ah, url) = page.LinkAnnotations[ai];
                 var rect = $"[{ax:F2} {ay:F2} {(ax + aw):F2} {(ay + ah):F2}]";
-                var escapedUrl = url.Replace("\\", "\\\\").Replace("(", "\\(").Replace(")", "\\)");
                 WriteObj(annotIds[ai],
                     $"<< /Type /Annot /Subtype /Link\n/Rect {rect}\n/Border [0 0 0]\n" +
-                    $"/A << /Type /Action /S /URI /URI ({escapedUrl}) >>\n>>");
+                    $"/A << /Type /Action /S /URI /URI {PdfStr(url, annotIds[ai])} >>\n>>");
             }
         }
 
@@ -601,7 +645,7 @@ public class PdfWriter : IDisposable
                 var pageRef = (bm.PageIndex < allPages.Count) ? allPages[bm.PageIndex].PageObjId : allPages[0].PageObjId;
                 var pageSz = allPages[Math.Min(bm.PageIndex, allPages.Count - 1)];
                 var bmSb = new StringBuilder();
-                bmSb.Append($"<< /Title ({EncodePdfText(bm.Title)})\n");
+                bmSb.Append($"<< /Title {PdfStr(bm.Title, bookmarkObjIds[bi])}\n");
                 bmSb.Append($"/Parent {outlineObjId} 0 R\n");
                 bmSb.Append($"/Dest [{pageRef} 0 R /XYZ 0 {pageSz.Height} 0]\n");
                 if (bi > 0) bmSb.Append($"/Prev {bookmarkObjIds[bi - 1]} 0 R\n");
@@ -615,9 +659,9 @@ public class PdfWriter : IDisposable
         if (infoObjId > 0)
         {
             var infoSb = new StringBuilder("<< ");
-            if (DocumentTitle != null) infoSb.Append($"/Title ({EncodePdfText(DocumentTitle)}) ");
-            if (DocumentAuthor != null) infoSb.Append($"/Author ({EncodePdfText(DocumentAuthor)}) ");
-            if (DocumentSubject != null) infoSb.Append($"/Subject ({EncodePdfText(DocumentSubject)}) ");
+            if (DocumentTitle != null) infoSb.Append($"/Title {PdfStr(DocumentTitle, infoObjId)} ");
+            if (DocumentAuthor != null) infoSb.Append($"/Author {PdfStr(DocumentAuthor, infoObjId)} ");
+            if (DocumentSubject != null) infoSb.Append($"/Subject {PdfStr(DocumentSubject, infoObjId)} ");
             infoSb.Append(">>");
             WriteObj(infoObjId, infoSb.ToString());
         }
@@ -687,10 +731,11 @@ public class PdfWriter : IDisposable
                 finalContent = page.ContentBytes;
             }
 
+            var encContent = enc != null ? enc.EncryptBytes(finalContent, page.ContentObjId, 0) : finalContent;
             offsets[page.ContentObjId - 1] = ms.Position;
-            var contentHdr = latin1.GetBytes($"{page.ContentObjId} 0 obj\n<< /Length {finalContent.Length} >>\nstream\n");
+            var contentHdr = latin1.GetBytes($"{page.ContentObjId} 0 obj\n<< /Length {encContent.Length} >>\nstream\n");
             ms.Write(contentHdr, 0, contentHdr.Length);
-            ms.Write(finalContent, 0, finalContent.Length);
+            ms.Write(encContent, 0, encContent.Length);
             ms.Write(latin1.GetBytes("\nendstream\nendobj\n"), 0, "\nendstream\nendobj\n".Length);
         }
 
@@ -707,6 +752,12 @@ public class PdfWriter : IDisposable
         var trailerStr = new StringBuilder("trailer\n<< /Size ");
         trailerStr.Append($"{totalObjs + 1}\n/Root 1 0 R");
         if (infoObjId > 0) trailerStr.Append($"\n/Info {infoObjId} 0 R");
+        if (encryptObjId > 0) trailerStr.Append($"\n/Encrypt {encryptObjId} 0 R");
+        if (fileIdBytes != null)
+        {
+            var idHex = BitConverter.ToString(fileIdBytes).Replace("-", "");
+            trailerStr.Append($"\n/ID [<{idHex}><{idHex}>]");
+        }
         trailerStr.Append($" >>\nstartxref\n{xrefPos}\n%%EOF\n");
         ms.Write(latin1.GetBytes(trailerStr.ToString()), 0, trailerStr.Length);
 
@@ -809,6 +860,167 @@ public class PdfWriter : IDisposable
         var rgb = new Byte[w * h * 3];
         for (var i = 0; i < rgb.Length; i++) rgb[i] = 255; // white
         return rgb;
+    }
+    #endregion
+}
+
+/// <summary>PDF 标准安全加密器（RC4 128 位，修订版 3，PDF 1.4 规范 §3.5）</summary>
+internal sealed class PdfEncryptor
+{
+    #region 属性
+    private static readonly Byte[] _padding =
+    [
+        0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41,
+        0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01, 0x08,
+        0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80,
+        0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A,
+    ];
+
+    private readonly Byte[] _key; // 128 位全局密钥（MD5 输出，16 字节）
+
+    /// <summary>Owner 密钥条目（32 字节，写入加密字典 /O）</summary>
+    public Byte[] OEntry { get; }
+
+    /// <summary>User 密钥条目（32 字节，写入加密字典 /U）</summary>
+    public Byte[] UEntry { get; }
+
+    /// <summary>加密权限标志（写入加密字典 /P）</summary>
+    public Int32 EncPermissions { get; }
+    #endregion
+
+    #region 构造
+    /// <summary>实例化 PDF 加密器，按 PDF 1.4 算法 3.2/3.3/3.5 计算密钥和授权条目</summary>
+    /// <param name="userPwd">用户密码（打开密码），null 表示空密码</param>
+    /// <param name="ownerPwd">所有者密码（权限密码）</param>
+    /// <param name="permissions">权限标志位（PDF 规范 Table 3.20）</param>
+    /// <param name="fileId">文件标识符（16 字节 MD5）</param>
+    public PdfEncryptor(String? userPwd, String? ownerPwd, Int32 permissions, Byte[] fileId)
+    {
+        EncPermissions = permissions;
+        var uPass = PadPwd(userPwd ?? String.Empty);
+        var oPass = PadPwd(ownerPwd ?? (userPwd ?? String.Empty));
+
+        // 算法 3.3：计算 O 条目（修订版 3）
+        var ownerKey = ComputeMd5(oPass);
+        for (var i = 0; i < 50; i++) ownerKey = ComputeMd5(ownerKey);
+        var oStep = ComputeRc4(ownerKey, uPass);
+        for (var i = 1; i <= 19; i++)
+        {
+            var k = new Byte[ownerKey.Length];
+            for (var j = 0; j < k.Length; j++) k[j] = (Byte)(ownerKey[j] ^ i);
+            oStep = ComputeRc4(k, oStep);
+        }
+        OEntry = oStep; // 32 字节
+
+        // 算法 3.2：计算全局加密密钥
+        var fid = fileId.Length >= 16 ? fileId.Take(16).ToArray() : fileId;
+        var buf = new List<Byte>(84);
+        buf.AddRange(uPass);                                    // 32 字节：用户密码
+        buf.AddRange(OEntry);                                   // 32 字节：O 条目
+        buf.Add((Byte)permissions);                             // 4 字节：权限（小端）
+        buf.Add((Byte)(permissions >> 8));
+        buf.Add((Byte)(permissions >> 16));
+        buf.Add((Byte)(permissions >> 24));
+        buf.AddRange(fid);                                      // 16 字节：文件 ID
+        var keyHash = ComputeMd5(buf.ToArray());
+        for (var i = 0; i < 50; i++) keyHash = ComputeMd5(keyHash);
+        _key = keyHash; // 16 字节
+
+        // 算法 3.5：计算 U 条目（修订版 3）
+        var uBuf = new List<Byte>(_padding);
+        uBuf.AddRange(fid);
+        var uStep = ComputeRc4(_key, ComputeMd5(uBuf.ToArray()));
+        for (var i = 1; i <= 19; i++)
+        {
+            var k = new Byte[_key.Length];
+            for (var j = 0; j < k.Length; j++) k[j] = (Byte)(_key[j] ^ i);
+            uStep = ComputeRc4(k, uStep);
+        }
+        UEntry = new Byte[32];
+        Array.Copy(uStep, UEntry, uStep.Length);
+    }
+    #endregion
+
+    #region 方法
+    /// <summary>加密字节数组（RC4，基于对象号派生子密钥，算法 3.1）</summary>
+    /// <param name="data">原始字节</param>
+    /// <param name="objNum">PDF 对象号</param>
+    /// <param name="genNum">PDF 代数号</param>
+    /// <returns>加密后字节（长度与原始相同）</returns>
+    public Byte[] EncryptBytes(Byte[] data, Int32 objNum, Int32 genNum) => ComputeRc4(ObjKey(objNum, genNum), data);
+
+    /// <summary>加密字符串，返回 PDF 十六进制字符串格式 &lt;hex&gt;</summary>
+    /// <param name="s">待加密文本（非 Latin-1 字符自动替换为 ?）</param>
+    /// <param name="objNum">PDF 对象号</param>
+    /// <param name="genNum">PDF 代数号</param>
+    /// <returns>十六进制字符串，格式如 &lt;AABB...&gt;</returns>
+    public String EncryptString(String s, Int32 objNum, Int32 genNum)
+    {
+        var sb = new StringBuilder(s.Length);
+        foreach (var ch in s)
+        {
+            if (ch >= 32 && ch < 256) sb.Append(ch);
+            else if (ch >= 256) sb.Append('?');
+        }
+        var bytes = Encoding.GetEncoding(1252).GetBytes(sb.ToString());
+        var encrypted = EncryptBytes(bytes, objNum, genNum);
+        return "<" + BitConverter.ToString(encrypted).Replace("-", "") + ">";
+    }
+    #endregion
+
+    #region 辅助
+    private Byte[] ObjKey(Int32 objNum, Int32 genNum)
+    {
+        var buf = new Byte[_key.Length + 5];
+        _key.CopyTo(buf, 0);
+        buf[_key.Length]     = (Byte)objNum;
+        buf[_key.Length + 1] = (Byte)(objNum >> 8);
+        buf[_key.Length + 2] = (Byte)(objNum >> 16);
+        buf[_key.Length + 3] = (Byte)genNum;
+        buf[_key.Length + 4] = (Byte)(genNum >> 8);
+        var hash = ComputeMd5(buf);
+        var keyLen = Math.Min(hash.Length, _key.Length + 5);
+        var result = new Byte[keyLen];
+        Array.Copy(hash, result, keyLen);
+        return result;
+    }
+
+    private static Byte[] PadPwd(String pwd)
+    {
+        var raw = Encoding.GetEncoding(1252).GetBytes(pwd);
+        var r = new Byte[32];
+        var copyLen = Math.Min(raw.Length, 32);
+        Array.Copy(raw, r, copyLen);
+        Array.Copy(_padding, 0, r, copyLen, 32 - copyLen);
+        return r;
+    }
+
+    private static Byte[] ComputeMd5(Byte[] data)
+    {
+        using var md5 = MD5.Create();
+        return md5.ComputeHash(data);
+    }
+
+    private static Byte[] ComputeRc4(Byte[] key, Byte[] data)
+    {
+        var s = new Byte[256];
+        for (var i = 0; i < 256; i++) s[i] = (Byte)i;
+        var j = 0;
+        for (var i = 0; i < 256; i++)
+        {
+            j = (j + s[i] + key[i % key.Length]) & 0xFF;
+            var tmp = s[i]; s[i] = s[j]; s[j] = tmp;
+        }
+        var result = new Byte[data.Length];
+        var x = 0; j = 0;
+        for (var k = 0; k < data.Length; k++)
+        {
+            x = (x + 1) & 0xFF;
+            j = (j + s[x]) & 0xFF;
+            var tmp = s[x]; s[x] = s[j]; s[j] = tmp;
+            result[k] = (Byte)(data[k] ^ s[(s[x] + s[j]) & 0xFF]);
+        }
+        return result;
     }
     #endregion
 }

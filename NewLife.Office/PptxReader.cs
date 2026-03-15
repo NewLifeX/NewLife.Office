@@ -5,6 +5,36 @@ using System.Xml;
 
 namespace NewLife.Office;
 
+/// <summary>PPT 图表系列数据（S06-04）</summary>
+public class PptChartSeriesData
+{
+    #region 属性
+    /// <summary>系列名称</summary>
+    public String Name { get; set; } = String.Empty;
+
+    /// <summary>数据值数组，对应各分类</summary>
+    public Double[] Values { get; set; } = [];
+    #endregion
+}
+
+/// <summary>PPT 图表信息（S06-04）</summary>
+public class PptChartInfo
+{
+    #region 属性
+    /// <summary>图表编号（在 ppt/charts/chart{N}.xml 中的序号）</summary>
+    public Int32 ChartNumber { get; set; }
+
+    /// <summary>图表类型（bar/line/pie/area/scatter 等）</summary>
+    public String ChartType { get; set; } = String.Empty;
+
+    /// <summary>分类标签数组</summary>
+    public String[] Categories { get; set; } = [];
+
+    /// <summary>系列数据集合</summary>
+    public List<PptChartSeriesData> Series { get; } = [];
+    #endregion
+}
+
 /// <summary>PPT 幻灯片母版信息（S04-01）</summary>
 public class PptMasterInfo
 {
@@ -329,6 +359,66 @@ public class PptxReader : IDisposable
                     : (doc.SelectSingleNode("//*[local-name()='cSld']") as XmlElement)?.GetAttribute("name") ?? String.Empty,
             };
             yield return li;
+        }
+    }
+    /// <summary>读取指定幻灯片关联的图表数据（S06-04）</summary>
+    /// <remarks>
+    /// 通过幻灯片关系文件定位图表 XML，解析 c:ser 中的分类和数值缓存。
+    /// 仅读取 numCache/strCache 中的缓存数据，不依赖内嵌 Excel。
+    /// </remarks>
+    /// <param name="slideIndex">幻灯片索引（0 起始）</param>
+    /// <returns>该页所有图表的数据集合</returns>
+    public IEnumerable<PptChartInfo> ReadChartData(Int32 slideIndex)
+    {
+        ThrowIfDisposed();
+        var relsEntry = _zip.GetEntry($"ppt/slides/_rels/slide{slideIndex + 1}.xml.rels");
+        if (relsEntry == null) yield break;
+        var relsDoc = LoadXml(relsEntry);
+        const String PKGNS = "http://schemas.openxmlformats.org/package/2006/relationships";
+        var ns = new XmlNamespaceManager(relsDoc.NameTable);
+        ns.AddNamespace("r", PKGNS);
+        var chartNum = 0;
+        foreach (XmlElement rel in relsDoc.SelectNodes("//r:Relationship", ns)!)
+        {
+            var target = rel.GetAttribute("Target");
+            var type = rel.GetAttribute("Type");
+            if (!type.Contains("chart", StringComparison.OrdinalIgnoreCase)) continue;
+            // target 形如 ../charts/chart1.xml
+            var chartPath = "ppt/" + target.TrimStart('.').TrimStart('/');
+            var chartEntry = _zip.GetEntry(chartPath);
+            if (chartEntry == null) continue;
+            var chartDoc = LoadXml(chartEntry);
+            const String C = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+            var cns = new XmlNamespaceManager(chartDoc.NameTable);
+            cns.AddNamespace("c", C);
+            var info = new PptChartInfo { ChartNumber = ++chartNum };
+            // 图表类型
+            var chartTypeNode = chartDoc.SelectSingleNode("//*[substring(local-name(), string-length(local-name())-4) = 'Chart'][@*]", null);
+            info.ChartType = chartTypeNode?.LocalName?.Replace("Chart", String.Empty) ?? "bar";
+            // 第一个系列的分类
+            var firstCatNode = chartDoc.SelectSingleNode("//c:ser[1]/c:cat//c:strCache", cns)
+                            ?? chartDoc.SelectSingleNode("//c:ser[1]/c:cat//c:numCache", cns);
+            if (firstCatNode != null)
+            {
+                var cats = new List<String>();
+                foreach (XmlElement pt in firstCatNode.SelectNodes("c:pt/c:v", cns)!)
+                    cats.Add(pt.InnerText);
+                info.Categories = cats.ToArray();
+            }
+            // 所有系列
+            foreach (XmlElement ser in chartDoc.SelectNodes("//c:ser", cns)!)
+            {
+                var serName = ser.SelectSingleNode(".//c:tx//c:v", cns)?.InnerText ?? String.Empty;
+                var vals = new List<Double>();
+                foreach (XmlElement v in ser.SelectNodes(".//c:val//c:numCache/c:pt/c:v", cns)!)
+                {
+                    if (Double.TryParse(v.InnerText, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var d))
+                        vals.Add(d);
+                }
+                info.Series.Add(new PptChartSeriesData { Name = serName, Values = vals.ToArray() });
+            }
+            yield return info;
         }
     }
     #endregion
