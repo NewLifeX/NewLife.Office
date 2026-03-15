@@ -47,7 +47,11 @@ public class ExcelWriter : DisposeBase
     private class SheetValidation
     {
         public String CellRange { get; set; } = null!;
-        public String[] Items { get; set; } = null!;
+        public String[]? Items { get; set; }          // 下拉列表选项
+        public String? ValidationType { get; set; }   // decimal, whole, date, time, textLength
+        public String? Operator { get; set; }         // between, notBetween, equal, notEqual, greaterThan, lessThan, greaterThanOrEqual, lessThanOrEqual
+        public String? Formula1 { get; set; }
+        public String? Formula2 { get; set; }
     }
 
     private class SheetImage
@@ -81,6 +85,14 @@ public class ExcelWriter : DisposeBase
         public String? Value { get; set; }
         public String? Value2 { get; set; }
         public String? Color { get; set; }
+    }
+
+    private class SheetComment
+    {
+        public Int32 Row { get; set; }   // 1-based
+        public Int32 Col { get; set; }   // 0-based
+        public String Text { get; set; } = null!;
+        public String Author { get; set; } = String.Empty;
     }
     #endregion
 
@@ -143,6 +155,8 @@ public class ExcelWriter : DisposeBase
     private readonly Dictionary<String, String?> _sheetProtection = new(StringComparer.OrdinalIgnoreCase);
     // 条件格式
     private readonly Dictionary<String, List<ConditionalFormatEntry>> _sheetCondFormats = new(StringComparer.OrdinalIgnoreCase);
+    // 批注
+    private readonly Dictionary<String, List<SheetComment>> _sheetComments = new(StringComparer.OrdinalIgnoreCase);
     #endregion
 
     #region 构造
@@ -399,6 +413,38 @@ public class ExcelWriter : DisposeBase
         }
         list.Add(new SheetValidation { CellRange = cellRange, Items = items });
     }
+
+    /// <summary>添加数值/日期范围数据验证</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="cellRange">验证范围（如 "B2:B100"）</param>
+    /// <param name="validationType">验证类型：whole（整数）、decimal（小数）、date（日期）、time（时间）、textLength（文本长度）</param>
+    /// <param name="operator">运算符：between、notBetween、equal、notEqual、greaterThan、lessThan、greaterThanOrEqual、lessThanOrEqual</param>
+    /// <param name="formula1">最小值（或比较值）</param>
+    /// <param name="formula2">最大值（仅 between 和 notBetween 有效）</param>
+    public void AddRangeValidation(String? sheet, String cellRange,
+        String validationType = "whole",
+        String @operator = "between",
+        String formula1 = "0",
+        String? formula2 = null)
+    {
+        if (cellRange.IsNullOrEmpty()) throw new ArgumentNullException(nameof(cellRange));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+
+        if (!_sheetValidations.TryGetValue(sheet, out var list))
+        {
+            list = [];
+            _sheetValidations[sheet] = list;
+        }
+        list.Add(new SheetValidation
+        {
+            CellRange = cellRange,
+            ValidationType = validationType,
+            Operator = @operator,
+            Formula1 = formula1,
+            Formula2 = formula2,
+        });
+    }
     #endregion
 
     #region 图片
@@ -502,6 +548,45 @@ public class ExcelWriter : DisposeBase
         if (sheet.IsNullOrEmpty()) sheet = SheetName;
         EnsureSheet(sheet);
         _sheetProtection[sheet] = password;
+    }
+    #endregion
+
+    #region 公式
+    /// <summary>在指定行写入公式单元格（与 WriteRow 配合使用）</summary>
+    /// <remarks>更简单的方式是在 WriteRow 的 values 数组中直接传入 <see cref="ExcelFormula"/> 实例。</remarks>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="formula">公式文本（不含等号，如 "SUM(A1:A10)"）</param>
+    /// <param name="cachedValue">缓存值（可空）</param>
+    public void AppendFormula(String? sheet, String formula, Object? cachedValue = null)
+    {
+        if (formula.IsNullOrEmpty()) throw new ArgumentNullException(nameof(formula));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        // 包装为 ExcelFormula 放入当前行
+        AddRow(sheet, [new ExcelFormula(formula, cachedValue)]);
+    }
+    #endregion
+
+    #region 批注
+    /// <summary>为指定单元格添加批注</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="row">行号（1基）</param>
+    /// <param name="col">列号（0基）</param>
+    /// <param name="text">批注文本</param>
+    /// <param name="author">批注作者（可空）</param>
+    public void AddComment(String? sheet, Int32 row, Int32 col, String text, String? author = null)
+    {
+        if (text.IsNullOrEmpty()) throw new ArgumentNullException(nameof(text));
+        if (row < 1) throw new ArgumentOutOfRangeException(nameof(row));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+
+        if (!_sheetComments.TryGetValue(sheet, out var list))
+        {
+            list = [];
+            _sheetComments[sheet] = list;
+        }
+        list.Add(new SheetComment { Row = row, Col = col, Text = text, Author = author ?? String.Empty });
     }
     #endregion
 
@@ -620,6 +705,35 @@ public class ExcelWriter : DisposeBase
             if (val == null) continue; // 缺失列：解析时自动补 null
 
             var cellRef = GetColumnName(i) + rowIndex; // A1 / B2 ...
+
+            // 公式快捷路径
+            if (val is ExcelFormula fval)
+            {
+                var fxml = SecurityElement.Escape(fval.Formula) ?? fval.Formula;
+                sb.Append("<c r=\"").Append(cellRef).Append('"');
+                String? fType = null;
+                String fInner;
+                switch (fval.CachedValue)
+                {
+                    case Boolean b:
+                        fType = "b";
+                        fInner = b ? "1" : "0";
+                        break;
+                    case String str:
+                        fType = "str";
+                        fInner = SecurityElement.Escape(str) ?? str;
+                        break;
+                    case null:
+                        fInner = String.Empty;
+                        break;
+                    default:
+                        fInner = Convert.ToString(fval.CachedValue, CultureInfo.InvariantCulture) ?? String.Empty;
+                        break;
+                }
+                if (fType != null) sb.Append(" t=\"").Append(fType).Append('"');
+                sb.Append("><f>").Append(fxml).Append("</f><v>").Append(fInner).Append("</v></c>");
+                continue;
+            }
 
             // 识别类型
             var autoStyle = ExcelCellStyle.General;
@@ -974,6 +1088,14 @@ public class ExcelWriter : DisposeBase
                 sheetsWithPrintTitles.Add(i);
         }
 
+        // 判断哪些 sheet 有批注
+        var sheetsWithComments = new HashSet<Int32>();
+        for (var i = 0; i < _sheetNames.Count; i++)
+        {
+            if (_sheetComments.TryGetValue(_sheetNames[i], out var cmts) && cmts.Count > 0)
+                sheetsWithComments.Add(i);
+        }
+
         using var za = new ZipArchive(target, ZipArchiveMode.Create, leaveOpen: Stream != null, entryNameEncoding: Encoding);
 
         // _rels/.rels
@@ -1017,6 +1139,14 @@ public class ExcelWriter : DisposeBase
             {
                 if (sheetsWithImages.Contains(i))
                     sw.Write($"<Override PartName=\"/xl/drawings/drawing{i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawing+xml\"/>");
+            }
+            // 批注
+            if (sheetsWithComments.Count > 0)
+                sw.Write("<Default Extension=\"vml\" ContentType=\"application/vnd.openxmlformats-officedocument.vmlDrawing\"/>");
+            for (var i = 0; i < _sheetNames.Count; i++)
+            {
+                if (sheetsWithComments.Contains(i))
+                    sw.Write($"<Override PartName=\"/xl/comments{i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml\"/>");
             }
             sw.Write("</Types>");
         }
@@ -1207,8 +1337,19 @@ public class ExcelWriter : DisposeBase
                 sw.Write($"<dataValidations count=\"{validations.Count}\">");
                 foreach (var v in validations)
                 {
-                    var formula = "\"" + String.Join(",", v.Items.Select(e => SecurityElement.Escape(e))) + "\"";
-                    sw.Write($"<dataValidation type=\"list\" allowBlank=\"1\" showInputMessage=\"1\" showErrorMessage=\"1\" sqref=\"{v.CellRange}\"><formula1>{formula}</formula1></dataValidation>");
+                    if (v.Items != null)
+                    {
+                        var formula = "\"" + String.Join(",", v.Items.Select(e => SecurityElement.Escape(e))) + "\"";
+                        sw.Write($"<dataValidation type=\"list\" allowBlank=\"1\" showInputMessage=\"1\" showErrorMessage=\"1\" sqref=\"{v.CellRange}\"><formula1>{formula}</formula1></dataValidation>");
+                    }
+                    else if (!v.ValidationType.IsNullOrEmpty())
+                    {
+                        var op = v.Operator ?? "between";
+                        sw.Write($"<dataValidation type=\"{v.ValidationType}\" operator=\"{op}\" allowBlank=\"1\" showInputMessage=\"1\" showErrorMessage=\"1\" sqref=\"{v.CellRange}\">");
+                        sw.Write($"<formula1>{SecurityElement.Escape(v.Formula1 ?? "0")}</formula1>");
+                        if (!v.Formula2.IsNullOrEmpty()) sw.Write($"<formula2>{SecurityElement.Escape(v.Formula2!)}</formula2>");
+                        sw.Write("</dataValidation>");
+                    }
                 }
                 sw.Write("</dataValidations>");
             }
@@ -1251,11 +1392,17 @@ public class ExcelWriter : DisposeBase
                 sw.Write($"<drawing r:id=\"rDr1\"/>");
             }
 
+            // legacyDrawing（批注 VML 引用）
+            if (sheetsWithComments.Contains(i))
+            {
+                sw.Write($"<legacyDrawing r:id=\"rVml1\"/>");
+            }
+
             sw.Write("</worksheet>");
             sw.Dispose();
 
-            // sheet rels（超链接 + 图片 drawing 关系）
-            if (sheetsWithHyperlinks.Contains(i) || sheetsWithImages.Contains(i))
+            // sheet rels（超链接 + 图片 drawing + 批注关系）
+            if (sheetsWithHyperlinks.Contains(i) || sheetsWithImages.Contains(i) || sheetsWithComments.Contains(i))
             {
                 var relEntry = za.CreateEntry($"xl/worksheets/_rels/sheet{i + 1}.xml.rels");
                 using var rsw = new StreamWriter(relEntry.Open(), Encoding);
@@ -1270,6 +1417,11 @@ public class ExcelWriter : DisposeBase
                 if (sheetsWithImages.Contains(i))
                 {
                     rsw.Write($"<Relationship Id=\"rDr1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing\" Target=\"../drawings/drawing{i + 1}.xml\"/>");
+                }
+                if (sheetsWithComments.Contains(i))
+                {
+                    rsw.Write($"<Relationship Id=\"rVml1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing\" Target=\"../drawings/vmlDrawing{i + 1}.vml\"/>");
+                    rsw.Write($"<Relationship Id=\"rCmt1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments\" Target=\"../comments{i + 1}.xml\"/>");
                 }
                 rsw.Write("</Relationships>");
             }
@@ -1321,6 +1473,62 @@ public class ExcelWriter : DisposeBase
                 var mediaEntry = za.CreateEntry($"xl/media/image{globalImageIndex - images.Count + j + 1}.{img.Extension}");
                 using var ms2 = mediaEntry.Open();
                 ms2.Write(img.Data, 0, img.Data.Length);
+            }
+        }
+
+        // 批注文件：xl/commentsN.xml + xl/drawings/vmlDrawingN.vml
+        for (var i = 0; i < _sheetNames.Count; i++)
+        {
+            if (!sheetsWithComments.Contains(i)) continue;
+            var sheet = _sheetNames[i];
+            var comments = _sheetComments[sheet];
+
+            // 收集所有不同作者（保持插入顺序，用 List 去重）
+            var authors = new List<String>();
+            foreach (var c in comments)
+            {
+                if (!authors.Contains(c.Author)) authors.Add(c.Author);
+            }
+
+            // xl/commentsN.xml
+            using (var csw = new StreamWriter(za.CreateEntry($"xl/comments{i + 1}.xml").Open(), Encoding))
+            {
+                csw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+                csw.Write("<comments xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
+                csw.Write("<authors>");
+                foreach (var a in authors) csw.Write($"<author>{SecurityElement.Escape(a)}</author>");
+                csw.Write("</authors><commentList>");
+                foreach (var c in comments)
+                {
+                    var cellRef = MakeCellRef(c.Row - 1, c.Col);
+                    var authorId = authors.IndexOf(c.Author);
+                    csw.Write($"<comment ref=\"{cellRef}\" authorId=\"{authorId}\">");
+                    csw.Write($"<text><r><t xml:space=\"preserve\">{SecurityElement.Escape(c.Text)}</t></r></text>");
+                    csw.Write("</comment>");
+                }
+                csw.Write("</commentList></comments>");
+            }
+
+            // xl/drawings/vmlDrawingN.vml
+            using (var vsw = new StreamWriter(za.CreateEntry($"xl/drawings/vmlDrawing{i + 1}.vml").Open(), Encoding))
+            {
+                vsw.Write("<xml xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:x=\"urn:schemas-microsoft-com:office:excel\">");
+                vsw.Write("<o:shapelayout v:ext=\"edit\"><o:idmap v:ext=\"edit\" data=\"1\"/></o:shapelayout>");
+                vsw.Write("<v:shapetype id=\"_x0000_t202\" coordsize=\"21600,21600\" o:spt=\"202\" path=\"m0,0l0,21600,21600,21600,21600,0xe\">");
+                vsw.Write("<v:stroke joinstyle=\"miter\"/><v:path gradientshapeok=\"t\" o:connecttype=\"rect\"/></v:shapetype>");
+                for (var j = 0; j < comments.Count; j++)
+                {
+                    var c = comments[j];
+                    vsw.Write($"<v:shape id=\"_x0000_s{1025 + j}\" type=\"#_x0000_t202\" " +
+                              "style=\"position:absolute;margin-left:59.25pt;margin-top:1.5pt;width:108pt;height:59.25pt;z-index:1;visibility:hidden\" " +
+                              "fillcolor=\"#ffffe1\" o:insetmode=\"auto\">");
+                    vsw.Write("<v:fill color2=\"#ffffe1\"/><v:shadow on=\"t\" color=\"black\" obscured=\"t\"/>");
+                    vsw.Write("<v:path o:connecttype=\"none\"/><v:textbox style=\"mso-direction-alt:auto\"><div style=\"text-align:left\"/></v:textbox>");
+                    vsw.Write("<x:ClientData ObjectType=\"Note\"><x:MoveWithCells/><x:SizeWithCells/>");
+                    vsw.Write($"<x:Row>{c.Row - 1}</x:Row><x:Column>{c.Col}</x:Column>");
+                    vsw.Write("</x:ClientData></v:shape>");
+                }
+                vsw.Write("</xml>");
             }
         }
 

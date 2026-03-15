@@ -607,6 +607,70 @@ public class ExcelReader : DisposeBase
         return result;
     }
 
+    /// <summary>读取工作表超链接</summary>
+    /// <param name="sheet">工作表名称（可空，空时取第一个）</param>
+    /// <returns>单元格引用到 URL 的字典（如 "A1" → "https://..."）</returns>
+    public IDictionary<String, String> ReadHyperlinks(String? sheet = null)
+    {
+        ThrowIfDisposed();
+        var result = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+
+        if (Sheets == null || _entries == null) return result;
+        if (sheet.IsNullOrEmpty()) sheet = Sheets.FirstOrDefault();
+        if (sheet.IsNullOrEmpty()) return result;
+        if (!_entries.TryGetValue(sheet, out var entry)) return result;
+
+        // 读取 .rels 文件（r:id → URL）
+        var relsPath = "xl/worksheets/_rels/" + entry.Name + ".rels";
+        var relsEntry = _zip.GetEntry(relsPath);
+        var urlMap = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+        if (relsEntry != null)
+        {
+            using var rs = relsEntry.Open();
+            var relsDoc = XDocument.Load(rs);
+            if (relsDoc.Root != null)
+            {
+                foreach (var rel in relsDoc.Root.Elements())
+                {
+                    var type = rel.Attribute("Type")?.Value ?? String.Empty;
+                    if (!type.EndsWith("/hyperlink", StringComparison.OrdinalIgnoreCase)) continue;
+                    var id = rel.Attribute("Id")?.Value;
+                    var target = rel.Attribute("Target")?.Value;
+                    if (id != null && target != null) urlMap[id] = target;
+                }
+            }
+        }
+
+        // 读取 sheet.xml 中的 <hyperlinks> 节点
+        using var esheet = entry.Open();
+        var doc = XDocument.Load(esheet);
+        if (doc.Root == null) return result;
+
+        var hyperlinks = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "hyperlinks");
+        if (hyperlinks == null) return result;
+
+        foreach (var hl in hyperlinks.Elements())
+        {
+            var cellRef = hl.Attribute("ref")?.Value;
+            if (cellRef.IsNullOrEmpty()) continue;
+
+            // 外部链接：通过 r:id 查找 URL
+            var rId = hl.Attributes().FirstOrDefault(a => a.Name.LocalName == "id")?.Value;
+            if (rId != null && urlMap.TryGetValue(rId, out var url))
+            {
+                result[cellRef!] = url;
+            }
+            else
+            {
+                // 内部位置超链接（#SheetName!A1 格式）
+                var loc = hl.Attribute("location")?.Value;
+                if (!loc.IsNullOrEmpty()) result[cellRef!] = "#" + loc;
+            }
+        }
+
+        return result;
+    }
+
     /// <summary>解析单元格引用返回 (行0基, 列0基)</summary>
     private static (Int32 Row, Int32 Col) ParseCellRef(String cellRef)
     {
