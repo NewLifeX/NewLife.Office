@@ -120,7 +120,7 @@ public class PdfWriter : IDisposable
     private void EndPageInternal()
     {
         if (CurrentPage == null) return;
-        CurrentPage!.ContentBytes = Encoding.GetEncoding(1252).GetBytes(_content.ToString());
+        CurrentPage!.ContentBytes = Encoding.GetEncoding(28591).GetBytes(_content.ToString());
         Pages.Add(CurrentPage);
         CurrentPage = null;
         _content.Clear();
@@ -410,7 +410,7 @@ public class PdfWriter : IDisposable
     {
         using var ms = new MemoryStream();
         var offsets = new List<Int64>();
-        var latin1 = Encoding.GetEncoding(1252);
+        var latin1 = Encoding.GetEncoding(28591);
 
         void WriteObj(Int32 id, String content)
         {
