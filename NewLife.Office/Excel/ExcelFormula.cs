@@ -1,6 +1,4 @@
-using System.Globalization;
-
-namespace NewLife.Office;
+﻿namespace NewLife.Office;
 
 /// <summary>Excel 公式封装，用于在 WriteRow 中嵌入公式单元格</summary>
 /// <remarks>

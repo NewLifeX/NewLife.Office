@@ -1,5 +1,4 @@
-#nullable enable
-namespace NewLife.Office;
+﻿namespace NewLife.Office;
 
 /// <summary>声明式 Fluent PDF 文档生成器（P07）</summary>
 /// <remarks>

@@ -1,7 +1,4 @@
-#nullable enable
-using System.Text;
-
-namespace NewLife.Office;
+﻿namespace NewLife.Office;
 
 /// <summary>PDF 文档操作工具类</summary>
 /// <remarks>

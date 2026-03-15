@@ -1,77 +1,7 @@
-#nullable enable
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 
 namespace NewLife.Office;
-
-/// <summary>PDF 元数据</summary>
-public class PdfMetadata
-{
-    #region 属性
-    /// <summary>标题</summary>
-    public String? Title { get; set; }
-
-    /// <summary>作者</summary>
-    public String? Author { get; set; }
-
-    /// <summary>主题</summary>
-    public String? Subject { get; set; }
-
-    /// <summary>创建时间字符串（PDF 格式 D:YYYYMMDDHHmmss）</summary>
-    public String? CreationDate { get; set; }
-
-    /// <summary>PDF 版本（如 1.4）</summary>
-    public String? PdfVersion { get; set; }
-
-    /// <summary>总页数</summary>
-    public Int32 PageCount { get; set; }
-    #endregion
-}
-
-/// <summary>PDF 文本项，包含文本内容和近似坐标</summary>
-/// <remarks>
-/// 坐标系以页面左下角为原点，单位为 PDF 用户空间单位（通常约等于磅/pt）。
-/// </remarks>
-public class PdfTextItem
-{
-    #region 属性
-    /// <summary>文本内容</summary>
-    public String Text { get; set; } = String.Empty;
-
-    /// <summary>近似 X 坐标（PDF 用户空间单位）</summary>
-    public Single X { get; set; }
-
-    /// <summary>近似 Y 坐标（PDF 用户空间单位）</summary>
-    public Single Y { get; set; }
-
-    /// <summary>字体大小（通过 Tf 操作符获取，0 表示未知）</summary>
-    public Single FontSize { get; set; }
-    #endregion
-}
-
-/// <summary>PDF 嵌入图片流</summary>
-public class PdfImageStream
-{
-    #region 属性
-    /// <summary>图片在文档中的顺序索引（从 0 开始）</summary>
-    public Int32 Index { get; set; }
-
-    /// <summary>图片宽度（像素）</summary>
-    public Int32 Width { get; set; }
-
-    /// <summary>图片高度（像素）</summary>
-    public Int32 Height { get; set; }
-
-    /// <summary>编码过滤器名称，如 DCTDecode、FlateDecode 等</summary>
-    public String Filter { get; set; } = String.Empty;
-
-    /// <summary>原始流字节（未解压缩），对 JPEG 可直接使用</summary>
-    public Byte[] RawData { get; set; } = [];
-
-    /// <summary>是否为 JPEG（DCTDecode）图片，可直接将 RawData 保存为 .jpg</summary>
-    public Boolean IsJpeg => Filter.IndexOf("DCTDecode", StringComparison.OrdinalIgnoreCase) >= 0;
-    #endregion
-}
 
 /// <summary>PDF 读取器（基础实现）</summary>
 /// <remarks>
@@ -88,7 +18,6 @@ public class PdfReader : IDisposable
 
     #region 私有字段
     private readonly Byte[] _data;
-    private Boolean _disposed;
     #endregion
 
     #region 构造
@@ -110,11 +39,7 @@ public class PdfReader : IDisposable
     }
 
     /// <summary>释放资源</summary>
-    public void Dispose()
-    {
-        _disposed = true;
-        GC.SuppressFinalize(this);
-    }
+    public void Dispose() => GC.SuppressFinalize(this);
     #endregion
 
     #region 读取方法

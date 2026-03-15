@@ -1,5 +1,4 @@
-#nullable enable
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
 
