@@ -5,9 +5,47 @@ using System.Xml;
 
 namespace NewLife.Office;
 
-/// <summary>PPT 幻灯片文本形状</summary>
-public class PptShape
+/// <summary>PPT 幻灯片母版信息（S04-01）</summary>
+public class PptMasterInfo
 {
+    #region 属性
+    /// <summary>母版索引（0起始）</summary>
+    public Int32 Index { get; set; }
+
+    /// <summary>母版文件名（不含扩展名）</summary>
+    public String Name { get; set; } = String.Empty;
+
+    /// <summary>母版背景色（16进制 RGB），null 表示未设置</summary>
+    public String? BackgroundColor { get; set; }
+
+    /// <summary>关联版式 ID 列表</summary>
+    public List<String> LayoutIds { get; } = [];
+
+    /// <summary>关联主题名称</summary>
+    public String ThemeRef { get; set; } = String.Empty;
+    #endregion
+}
+
+/// <summary>PPT 幻灯片版式信息（S04-02）</summary>
+public class PptLayoutInfo
+{
+    #region 属性
+    /// <summary>版式索引（0起始）</summary>
+    public Int32 Index { get; set; }
+
+    /// <summary>版式文件名（不含扩展名）</summary>
+    public String Name { get; set; } = String.Empty;
+
+    /// <summary>版式类型（如 blank、title、twoContent 等）</summary>
+    public String LayoutType { get; set; } = String.Empty;
+
+    /// <summary>版式显示名称</summary>
+    public String DisplayName { get; set; } = String.Empty;
+    #endregion
+}
+
+/// <summary>PPT 幻灯片文本形状</summary>
+public class PptShape{
     #region 属性
     /// <summary>形状ID</summary>
     public Int32 Id { get; set; }
@@ -219,9 +257,88 @@ public class PptxReader : IDisposable
             yield return (ext, ms.ToArray());
         }
     }
+
+    /// <summary>读取幻灯片母版信息（S04-01）</summary>
+    /// <remarks>
+    /// 解析 ppt/slideMasters/*.xml，返回每个母版的背景色及关联版式列表索引。
+    /// 对生成工具创建的 pptx 文件，通常只有一个母版（slideMaster1.xml）。
+    /// </remarks>
+    /// <returns>母版信息列表</returns>
+    public IEnumerable<PptMasterInfo> ReadSlideMasters()
+    {
+        ThrowIfDisposed();
+        var masters = _zip.Entries
+            .Where(e => e.FullName.StartsWith("ppt/slideMasters/", StringComparison.OrdinalIgnoreCase)
+                     && e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
+                     && !e.FullName.Contains("_rels", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(e => e.FullName)
+            .ToList();
+
+        var idx = 0;
+        foreach (var entry in masters)
+        {
+            var doc = LoadXml(entry);
+            var mi = new PptMasterInfo { Index = idx++, Name = Path.GetFileNameWithoutExtension(entry.Name) };
+
+            // 背景色
+            var bgNode = doc.SelectSingleNode("//*[local-name()='bg']//*[local-name()='srgbClr']") as XmlElement;
+            mi.BackgroundColor = bgNode?.GetAttribute("val");
+
+            // 版式列表（sldLayoutId）
+            var layoutIds = doc.SelectNodes("//*[local-name()='sldLayoutId']");
+            if (layoutIds != null)
+            {
+                foreach (XmlElement lid in layoutIds)
+                    mi.LayoutIds.Add(lid.GetAttribute("id") ?? String.Empty);
+            }
+
+            // 主题引用
+            mi.ThemeRef = (doc.SelectSingleNode("//*[local-name()='theme']") as XmlElement)
+                ?.GetAttribute("name") ?? String.Empty;
+
+            yield return mi;
+        }
+    }
+
+    /// <summary>读取幻灯片版式列表（S04-02）</summary>
+    /// <remarks>
+    /// 解析 ppt/slideLayouts/*.xml，返回版式名称及类型。
+    /// </remarks>
+    /// <returns>版式信息列表</returns>
+    public IEnumerable<PptLayoutInfo> ReadSlideLayouts()
+    {
+        ThrowIfDisposed();
+        var layouts = _zip.Entries
+            .Where(e => e.FullName.StartsWith("ppt/slideLayouts/", StringComparison.OrdinalIgnoreCase)
+                     && e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
+                     && !e.FullName.Contains("_rels", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(e => e.FullName)
+            .ToList();
+
+        var idx = 0;
+        foreach (var entry in layouts)
+        {
+            var doc = LoadXml(entry);
+            var root = doc.DocumentElement;
+            var li = new PptLayoutInfo
+            {
+                Index = idx++,
+                Name = Path.GetFileNameWithoutExtension(entry.Name),
+                LayoutType = root?.GetAttribute("type") ?? String.Empty,
+                DisplayName = root?.GetAttribute("showMasterSp") == "0" ? String.Empty
+                    : (doc.SelectSingleNode("//*[local-name()='cSld']") as XmlElement)?.GetAttribute("name") ?? String.Empty,
+            };
+            yield return li;
+        }
+    }
     #endregion
 
     #region 私有方法
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(nameof(PptxReader));
+    }
+
     private static Boolean IsSlideEntry(String name) =>
         name.StartsWith("ppt/slides/slide", StringComparison.OrdinalIgnoreCase)
         && name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)

@@ -190,6 +190,34 @@ public class PptSlide
 
     /// <summary>图片关系计数器</summary>
     internal Int32 ImageCounter { get; set; } = 1;
+
+    /// <summary>形状组集合（S07-02 组合形状）</summary>
+    public List<PptGroup> Groups { get; } = [];
+    #endregion
+}
+
+/// <summary>PPT 形状组（S07-02）</summary>
+/// <remarks>将多个形状组合为一个组，使用 <c>&lt;p:grpSp&gt;</c> 元素生成。</remarks>
+public class PptGroup
+{
+    #region 属性
+    /// <summary>组左边距（EMU）</summary>
+    public Int64 Left { get; set; }
+
+    /// <summary>组上边距（EMU）</summary>
+    public Int64 Top { get; set; }
+
+    /// <summary>组宽度（EMU）</summary>
+    public Int64 Width { get; set; }
+
+    /// <summary>组高度（EMU）</summary>
+    public Int64 Height { get; set; }
+
+    /// <summary>组内形状</summary>
+    public List<PptShape> Shapes { get; } = [];
+
+    /// <summary>组内文本框</summary>
+    public List<PptTextBox> TextBoxes { get; } = [];
     #endregion
 }
 
@@ -210,12 +238,17 @@ public class PptxWriter : IDisposable
 
     /// <summary>幻灯片集合</summary>
     public List<PptSlide> Slides { get; } = [];
+
+    /// <summary>主题强调色（6个，默认 Office 配色，可通过 SetAccentColors 修改）</summary>
+    public String[] AccentColors { get; set; } = ["4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F79646"];
     #endregion
 
     #region 私有字段
     private Int32 _imgGlobal = 1;
     private Int32 _chartGlobal = 1;
     private Int32 _hlinkGlobal = 1;
+    private String? _protectionHash;
+    private String? _protectionSalt;
     #endregion
 
     #region 构造
@@ -485,8 +518,80 @@ public class PptxWriter : IDisposable
         AddTable(slideIndex, rows, leftCm, topCm, widthCm, firstRowHeader: true);
     }
 
-    /// <summary>为幻灯片添加页脚文本和/或页码（S04-05）</summary>
+    /// <summary>设置演示文稿修改密码保护（S07-04）</summary>
+    /// <remarks>
+    /// 设置后保存的 pptx 文件在 Word/PowerPoint 中打开时需要输入密码才能修改。
+    /// 传入 null 可清除保护。基于 SHA-512 算法，符合 OOXML 标准。
+    /// </remarks>
+    /// <param name="password">修改密码，null 表示清除保护</param>
+    public void SetProtection(String? password = null)
+    {
+        if (password == null) { _protectionHash = null; _protectionSalt = null; return; }
+        var salt = new Byte[16];
+        using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+            rng.GetBytes(salt);
+        _protectionSalt = Convert.ToBase64String(salt);
+
+        var pwd = Encoding.UTF8.GetBytes(password);
+        using var sha = System.Security.Cryptography.SHA512.Create();
+        var buf = new Byte[salt.Length + pwd.Length];
+        salt.CopyTo(buf, 0);
+        pwd.CopyTo(buf, salt.Length);
+        var hash = sha.ComputeHash(buf);
+        for (var i = 0; i < 100000; i++)
+        {
+            var iter = new Byte[hash.Length + 4];
+            hash.CopyTo(iter, 0);
+            iter[hash.Length] = (Byte)(i & 0xFF);
+            iter[hash.Length + 1] = (Byte)((i >> 8) & 0xFF);
+            iter[hash.Length + 2] = (Byte)((i >> 16) & 0xFF);
+            iter[hash.Length + 3] = (Byte)((i >> 24) & 0xFF);
+            hash = sha.ComputeHash(iter);
+        }
+        _protectionHash = Convert.ToBase64String(hash);
+    }
+
+    /// <summary>设置演示文稿主题强调色（S07-03）</summary>
+    /// <remarks>
+    /// 修改主题的 6 个强调色（accent1~accent6），影响图表默认配色和内置主题样式。
+    /// 所有幻灯片使用同一主题，修改后保存即生效。
+    /// </remarks>
+    /// <param name="hexColors">最多 6 个颜色（16进制 RGB，可带或不带 # 前缀）</param>
+    /// <returns>自身，支持链式调用</returns>
+    public PptxWriter SetAccentColors(params String[] hexColors)
+    {
+        for (var i = 0; i < Math.Min(hexColors.Length, AccentColors.Length); i++)
+            AccentColors[i] = hexColors[i].TrimStart('#');
+        return this;
+    }
+
+    /// <summary>向幻灯片添加形状组（S07-02）</summary>
+    /// <remarks>
+    /// 组内的形状和文本框将以 <c>&lt;p:grpSp&gt;</c> 元素组合，
+    /// 可作为一个整体移动/缩放。返回 PptGroup 对象，向其 Shapes/TextBoxes 属性添加元素即可。
+    /// </remarks>
     /// <param name="slideIndex">幻灯片索引（0起始）</param>
+    /// <param name="leftCm">组左边距（厘米）</param>
+    /// <param name="topCm">组上边距（厘米）</param>
+    /// <param name="widthCm">组宽度（厘米）</param>
+    /// <param name="heightCm">组高度（厘米）</param>
+    /// <returns>形状组对象</returns>
+    public PptGroup GroupShapes(Int32 slideIndex, Double leftCm, Double topCm,
+        Double widthCm, Double heightCm)
+    {
+        var slide = EnsureSlide(slideIndex);
+        var group = new PptGroup
+        {
+            Left = CmToEmu(leftCm),
+            Top = CmToEmu(topCm),
+            Width = CmToEmu(widthCm),
+            Height = CmToEmu(heightCm),
+        };
+        slide.Groups.Add(group);
+        return group;
+    }
+
+    /// <summary>为幻灯片添加页脚文本和/或页码（S04-05）</summary>    /// <param name="slideIndex">幻灯片索引（0起始）</param>
     /// <param name="footerText">页脚文本，null 表示不显示</param>
     /// <param name="showSlideNumber">是否在右下角显示幻灯片序号</param>
     public void SetSlideFooter(Int32 slideIndex, String? footerText = null, Boolean showSlideNumber = false)
@@ -760,7 +865,11 @@ public class PptxWriter : IDisposable
         sb.Append("<p:sldIdLst>");
         for (var i = 0; i < Slides.Count; i++)
             sb.Append($"<p:sldId id=\"{256 + i}\" r:id=\"rSlide{i + 1}\"/>");
-        sb.Append("</p:sldIdLst></p:presentation>");
+        sb.Append("</p:sldIdLst>");
+        // 演示文稿保护（S07-04）
+        if (_protectionHash != null)
+            sb.Append($"<p:modifyVerifier algorithmName=\"SHA-512\" hashData=\"{_protectionHash}\" saltData=\"{_protectionSalt}\" spinCount=\"100000\"/>");
+        sb.Append("</p:presentation>");
         WriteEntry(za, "ppt/presentation.xml", sb.ToString());
     }
 
@@ -888,6 +997,55 @@ public class PptxWriter : IDisposable
             sb.Append($"<a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/chart\">");
             sb.Append($"<c:chart xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" r:id=\"{chart.RelId}\"/>");
             sb.Append("</a:graphicData></a:graphic></p:graphicFrame>");
+        }
+
+        // groups（形状组，S07-02）
+        foreach (var grp in slide.Groups)
+        {
+            sb.Append($"<p:grpSp><p:nvGrpSpPr><p:cNvPr id=\"{shapeId++}\" name=\"Group\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>");
+            sb.Append("<p:grpSpPr>");
+            sb.Append($"<a:xfrm><a:off x=\"{grp.Left}\" y=\"{grp.Top}\"/><a:ext cx=\"{grp.Width}\" cy=\"{grp.Height}\"/>");
+            sb.Append($"<a:chOff x=\"{grp.Left}\" y=\"{grp.Top}\"/><a:chExt cx=\"{grp.Width}\" cy=\"{grp.Height}\"/></a:xfrm>");
+            sb.Append("</p:grpSpPr>");
+            // shapes inside group
+            foreach (var sp in grp.Shapes)
+            {
+                sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"GrpShape\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>");
+                sb.Append("<p:spPr>");
+                sb.Append($"<a:xfrm><a:off x=\"{sp.Left}\" y=\"{sp.Top}\"/><a:ext cx=\"{sp.Width}\" cy=\"{sp.Height}\"/></a:xfrm>");
+                sb.Append($"<a:prstGeom prst=\"{sp.ShapeType}\"><a:avLst/></a:prstGeom>");
+                if (sp.FillColor != null)
+                    sb.Append($"<a:solidFill><a:srgbClr val=\"{sp.FillColor.TrimStart('#')}\"/></a:solidFill>");
+                else
+                    sb.Append("<a:noFill/>");
+                sb.Append("</p:spPr>");
+                if (sp.Text != null)
+                {
+                    sb.Append("<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r>");
+                    sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{sp.FontSize * 100}\" dirty=\"0\"/>");
+                    sb.Append($"<a:t>{EscXml(sp.Text)}</a:t>");
+                    sb.Append("</a:r></a:p></p:txBody>");
+                }
+                sb.Append("</p:sp>");
+            }
+            // text boxes inside group
+            foreach (var tb in grp.TextBoxes)
+            {
+                sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"GrpTextBox\"/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr>");
+                sb.Append("<p:spPr>");
+                sb.Append($"<a:xfrm><a:off x=\"{tb.Left}\" y=\"{tb.Top}\"/><a:ext cx=\"{tb.Width}\" cy=\"{tb.Height}\"/></a:xfrm>");
+                sb.Append("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom><a:noFill/>");
+                sb.Append("</p:spPr>");
+                sb.Append("<p:txBody><a:bodyPr wrap=\"square\" rtlCol=\"0\"><a:normAutofit/></a:bodyPr><a:lstStyle/>");
+                sb.Append($"<a:p><a:pPr algn=\"{tb.Alignment}\"/><a:r>");
+                sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{tb.FontSize * 100}\"{(tb.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
+                if (tb.FontColor != null)
+                    sb.Append($"<a:solidFill><a:srgbClr val=\"{tb.FontColor.TrimStart('#')}\"/></a:solidFill>");
+                sb.Append("</a:rPr>");
+                sb.Append($"<a:t>{EscXml(tb.Text)}</a:t>");
+                sb.Append("</a:r></a:p></p:txBody></p:sp>");
+            }
+            sb.Append("</p:grpSp>");
         }
 
         sb.Append("</p:spTree></p:cSld>");
@@ -1104,12 +1262,12 @@ public class PptxWriter : IDisposable
             "<a:lt1><a:sysClr lastClr=\"FFFFFF\" val=\"window\"/></a:lt1>" +
             "<a:dk2><a:srgbClr val=\"1F497D\"/></a:dk2>" +
             "<a:lt2><a:srgbClr val=\"EEECE1\"/></a:lt2>" +
-            "<a:accent1><a:srgbClr val=\"4F81BD\"/></a:accent1>" +
-            "<a:accent2><a:srgbClr val=\"C0504D\"/></a:accent2>" +
-            "<a:accent3><a:srgbClr val=\"9BBB59\"/></a:accent3>" +
-            "<a:accent4><a:srgbClr val=\"8064A2\"/></a:accent4>" +
-            "<a:accent5><a:srgbClr val=\"4BACC6\"/></a:accent5>" +
-            "<a:accent6><a:srgbClr val=\"F79646\"/></a:accent6>" +
+            $"<a:accent1><a:srgbClr val=\"{AccentColors[0]}\"/></a:accent1>" +
+            $"<a:accent2><a:srgbClr val=\"{AccentColors[1]}\"/></a:accent2>" +
+            $"<a:accent3><a:srgbClr val=\"{AccentColors[2]}\"/></a:accent3>" +
+            $"<a:accent4><a:srgbClr val=\"{AccentColors[3]}\"/></a:accent4>" +
+            $"<a:accent5><a:srgbClr val=\"{AccentColors[4]}\"/></a:accent5>" +
+            $"<a:accent6><a:srgbClr val=\"{AccentColors[5]}\"/></a:accent6>" +
             "<a:hlink><a:srgbClr val=\"0000FF\"/></a:hlink>" +
             "<a:folHlink><a:srgbClr val=\"800080\"/></a:folHlink>" +
             "</a:clrScheme>" +
