@@ -13,15 +13,16 @@ Nuget：NewLife.Office
 
 ## 项目简介
 
-`NewLife.Office` 是一个轻量级 Excel（xlsx）读写库，定位“导出优先、导入增强”。
+`NewLife.Office` 是一个功能全面的 .NET 办公自动化库，覆盖 Excel（xlsx）、Word（docx）、PPT（pptx）、PDF 四大主流办公格式，致力于为 .NET 社区提供零依赖、MIT 许可的高质量办公自动化能力。
 
-- 仅依赖 `NewLife.Core`
+- 仅依赖 `NewLife.Core`，零外部依赖
 - 支持 `net45/netstandard2.0/netstandard2.1`
-- 直接基于 Open XML（ZIP + XML）实现
+- 直接基于 Open XML（ZIP + XML）/ PDF 文件结构实现
+- 四大格式 API 风格统一，学习成本低
 
 > CSV 读写能力由 `NewLife.Core` 的 `CsvFile` 提供，本仓库不重复实现 CSV。
 
-## 已实现能力
+## 已实现能力（Excel）
 
 ### ExcelWriter（写入）
 
@@ -69,11 +70,96 @@ var reader = new ExcelReader(ms, Encoding.UTF8);
 var rows = reader.ReadRows("Data").ToList();
 ```
 
+### 对象集合导出
+
+```csharp
+public class UserInfo
+{
+    [DisplayName("编号")]
+    public Int32 Id { get; set; }
+
+    [DisplayName("姓名")]
+    public String Name { get; set; }
+
+    [DisplayName("金额")]
+    public Decimal Amount { get; set; }
+}
+
+var list = new List<UserInfo>
+{
+    new() { Id = 1, Name = "张三", Amount = 1234.56m },
+    new() { Id = 2, Name = "李四", Amount = 9876.00m },
+};
+
+using var ms = new MemoryStream();
+var writer = new ExcelWriter(ms);
+writer.WriteObjects("用户列表", list);
+writer.Save();
+```
+
+### 对象集合导入
+
+```csharp
+using var fs = File.OpenRead("users.xlsx");
+var reader = new ExcelReader(fs);
+var users = reader.ReadObjects<UserInfo>("用户列表");
+```
+
+### 模板填充
+
+```csharp
+// 基于 xlsx 模板替换 {{Key}} 占位符，保留原有样式
+var template = new ExcelTemplate("report_template.xlsx");
+template.Fill(new Dictionary<String, Object>
+{
+    ["Title"] = "2025年度报告",
+    ["Author"] = "张三",
+    ["Date"] = DateTime.Today.ToString("yyyy-MM-dd"),
+});
+template.Save("report_output.xlsx");
+```
+
+### 单元格样式
+
+```csharp
+var style = new CellStyle
+{
+    Bold = true,
+    FontColor = "FFFFFF",        // 白色字体
+    BackgroundColor = "4472C4",  // 蓝色背景
+    HAlign = HorizontalAlignment.Center,
+    Border = CellBorderStyle.Thin,
+    NumberFormat = "#,##0.00",
+};
+
+writer.WriteHeader("Sheet1", new[] { "编号", "姓名", "金额" }, style);
+writer.MergeCell("Sheet1", "A1:C1");  // 合并标题行
+writer.SetRowHeight("Sheet1", 1, 30); // 设置行高
+```
+
 ## 测试状态
 
 - 当前测试集：`63` 项
 - 通过：`63` 项
 - 失败：`0` 项
+
+## 规划中
+
+### Word（docx）
+- 文档创建与读取（段落、标题、表格、图片）
+- 模板填充（占位符替换、表格区域填充）
+- 页面设置（页面大小/方向/页边距/页眉页脚）
+- 段落样式、文档属性
+
+### PPT（pptx）
+- 演示文稿创建与读取（幻灯片、文本框、表格、图片）
+- 模板填充（占位符替换）
+- 母版与版式、图表、幻灯片操作
+
+### PDF
+- PDF 创建（文本排版、中文字体、表格、图片）
+- PDF 读取（文本提取、元数据）
+- 合并拆分、水印、页面操作
 
 ## 新生命项目矩阵
 各项目默认支持net9.0/netstandard2.1/netstandard2.0/net4.62/net4.5，旧版（2024.0801）支持net4.0/net2.0  
