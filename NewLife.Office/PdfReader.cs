@@ -1,4 +1,5 @@
 #nullable enable
+using System.Globalization;
 using System.Text;
 
 namespace NewLife.Office;
@@ -24,6 +25,51 @@ public class PdfMetadata
 
     /// <summary>总页数</summary>
     public Int32 PageCount { get; set; }
+    #endregion
+}
+
+/// <summary>PDF 文本项，包含文本内容和近似坐标</summary>
+/// <remarks>
+/// 坐标系以页面左下角为原点，单位为 PDF 用户空间单位（通常约等于磅/pt）。
+/// </remarks>
+public class PdfTextItem
+{
+    #region 属性
+    /// <summary>文本内容</summary>
+    public String Text { get; set; } = String.Empty;
+
+    /// <summary>近似 X 坐标（PDF 用户空间单位）</summary>
+    public Single X { get; set; }
+
+    /// <summary>近似 Y 坐标（PDF 用户空间单位）</summary>
+    public Single Y { get; set; }
+
+    /// <summary>字体大小（通过 Tf 操作符获取，0 表示未知）</summary>
+    public Single FontSize { get; set; }
+    #endregion
+}
+
+/// <summary>PDF 嵌入图片流</summary>
+public class PdfImageStream
+{
+    #region 属性
+    /// <summary>图片在文档中的顺序索引（从 0 开始）</summary>
+    public Int32 Index { get; set; }
+
+    /// <summary>图片宽度（像素）</summary>
+    public Int32 Width { get; set; }
+
+    /// <summary>图片高度（像素）</summary>
+    public Int32 Height { get; set; }
+
+    /// <summary>编码过滤器名称，如 DCTDecode、FlateDecode 等</summary>
+    public String Filter { get; set; } = String.Empty;
+
+    /// <summary>原始流字节（未解压缩），对 JPEG 可直接使用</summary>
+    public Byte[] RawData { get; set; } = [];
+
+    /// <summary>是否为 JPEG（DCTDecode）图片，可直接将 RawData 保存为 .jpg</summary>
+    public Boolean IsJpeg => Filter.IndexOf("DCTDecode", StringComparison.OrdinalIgnoreCase) >= 0;
     #endregion
 }
 
@@ -118,6 +164,93 @@ public class PdfReader : IDisposable
         }
 
         return meta;
+    }
+
+    /// <summary>提取带坐标位置的文本（P06-05）</summary>
+    /// <remarks>
+    /// 解析内容流中的文本定位/显示操作符，返回各文本段落及其近似坐标。
+    /// 坐标系以页面左下角为原点，单位为 PDF 用户空间单位（通常约等于磅/pt）。
+    /// 注意：对加密或使用自定义字体映射的 PDF，文本内容可能不准确。
+    /// </remarks>
+    /// <returns>文本项序列，每项含文本内容和近似 (X, Y) 坐标</returns>
+    public IEnumerable<PdfTextItem> ExtractTextWithPositions()
+    {
+        var latin1 = Encoding.GetEncoding(1252);
+        var pdf = latin1.GetString(_data);
+        var results = new List<PdfTextItem>();
+        var pos = 0;
+        while (pos < pdf.Length)
+        {
+            var streamStart = pdf.IndexOf("stream", pos, StringComparison.Ordinal);
+            if (streamStart < 0) break;
+            var contentStart = streamStart + 6;
+            if (contentStart < pdf.Length && pdf[contentStart] == '\r') contentStart++;
+            if (contentStart < pdf.Length && pdf[contentStart] == '\n') contentStart++;
+            var streamEnd = pdf.IndexOf("endstream", contentStart, StringComparison.Ordinal);
+            if (streamEnd < 0) break;
+            var content = pdf.Substring(contentStart, streamEnd - contentStart);
+            ExtractPositionedText(content, results);
+            pos = streamEnd + 9;
+        }
+        return results;
+    }
+
+    /// <summary>从 PDF 中提取嵌入图片（P06-04）</summary>
+    /// <remarks>
+    /// 扫描所有流字典，找到类型为 /Subtype /Image 的 XObject 流并提取原始字节。
+    /// 对 /Filter /DCTDecode（JPEG）图片返回直接可用的 JPEG 字节。
+    /// 其他编码格式返回原始压缩字节，可结合 <see cref="PdfImageStream.Filter"/> 判断。
+    /// </remarks>
+    /// <returns>图片流对象序列</returns>
+    public IEnumerable<PdfImageStream> ExtractImageStreams()
+    {
+        var latin1 = Encoding.GetEncoding(1252);
+        var text = latin1.GetString(_data);
+        var pos = 0;
+        var imgIdx = 0;
+        while (pos < text.Length)
+        {
+            // 寻找包含 /Subtype /Image 的字典
+            var dictStart = text.IndexOf("<<", pos, StringComparison.Ordinal);
+            if (dictStart < 0) break;
+            var dictEnd = text.IndexOf(">>", dictStart + 2, StringComparison.Ordinal);
+            if (dictEnd < 0) break;
+            var dict = text.Substring(dictStart, dictEnd - dictStart + 2);
+
+            if (dict.IndexOf("/Subtype", StringComparison.Ordinal) >= 0 && dict.IndexOf("/Image", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                // 解析宽高
+                var widthTok = GetDictIntValue(dict, "Width");
+                var heightTok = GetDictIntValue(dict, "Height");
+                var filter = GetDictToken(dict, "Filter");
+                var lengthTok = GetDictIntValue(dict, "Length");
+
+                // 找到紧随 >> 之后的 stream
+                var strmPos = text.IndexOf("stream", dictEnd, StringComparison.Ordinal);
+                if (strmPos >= 0 && strmPos < dictEnd + 100)
+                {
+                    var dataStart = strmPos + 6;
+                    if (dataStart < text.Length && text[dataStart] == '\r') dataStart++;
+                    if (dataStart < text.Length && text[dataStart] == '\n') dataStart++;
+                    var dataEnd = text.IndexOf("endstream", dataStart, StringComparison.Ordinal);
+                    if (dataEnd > dataStart && widthTok > 0 && heightTok > 0)
+                    {
+                        var rawBytes = _data.AsSpan(dataStart, Math.Min(dataEnd - dataStart, _data.Length - dataStart)).ToArray();
+                        yield return new PdfImageStream
+                        {
+                            Index = imgIdx++,
+                            Width = widthTok,
+                            Height = heightTok,
+                            Filter = filter ?? String.Empty,
+                            RawData = rawBytes,
+                        };
+                        pos = dataEnd + 9;
+                        continue;
+                    }
+                }
+            }
+            pos = dictEnd + 2;
+        }
     }
     #endregion
 
@@ -289,6 +422,275 @@ public class PdfReader : IDisposable
             return ReadParenString(dict, ref tmp);
         }
         return ExtractNextToken(dict, valStart);
+    }
+
+    /// <summary>从 PDF 字典字符串中提取整型值</summary>
+    /// <param name="dict">字典字符串</param>
+    /// <param name="key">键名（不含前导 /）</param>
+    /// <returns>整型值，未找到时返回 0</returns>
+    private static Int32 GetDictIntValue(String dict, String key)
+    {
+        var tag = $"/{key}";
+        var idx = dict.IndexOf(tag, StringComparison.Ordinal);
+        if (idx < 0) return 0;
+        var valStart = idx + tag.Length;
+        SkipWhitespace(dict, ref valStart);
+        var str = ExtractNextToken(dict, valStart);
+        return Int32.TryParse(str.Trim(), out var v) ? v : 0;
+    }
+
+    /// <summary>从 PDF 字典字符串中提取 Name 类型的值（不含前导 /）</summary>
+    /// <param name="dict">字典字符串</param>
+    /// <param name="key">键名（不含前导 /）</param>
+    /// <returns>Name 值字符串，未找到时返回 null</returns>
+    private static String? GetDictToken(String dict, String key)
+    {
+        var tag = $"/{key}";
+        var idx = dict.IndexOf(tag, StringComparison.Ordinal);
+        if (idx < 0) return null;
+        var valStart = idx + tag.Length;
+        SkipWhitespace(dict, ref valStart);
+        if (valStart >= dict.Length) return null;
+        if (dict[valStart] == '/')
+        {
+            var nameEnd = valStart + 1;
+            while (nameEnd < dict.Length && dict[nameEnd] != ' ' && dict[nameEnd] != '\t'
+                   && dict[nameEnd] != '\r' && dict[nameEnd] != '\n'
+                   && dict[nameEnd] != '/' && dict[nameEnd] != '<' && dict[nameEnd] != '>')
+                nameEnd++;
+            return dict.Substring(valStart + 1, nameEnd - valStart - 1);
+        }
+        return ExtractNextToken(dict, valStart).Trim();
+    }
+
+    /// <summary>从 PDF 内容流中提取带位置信息的文本</summary>
+    /// <param name="content">内容流字符串</param>
+    /// <param name="results">结果列表</param>
+    private static void ExtractPositionedText(String content, List<PdfTextItem> results)
+    {
+        var curX = 0f;
+        var curY = 0f;
+        var fontSize = 0f;
+        var inText = false;
+        var i = 0;
+        var numStack = new List<Single>();
+
+        while (i < content.Length)
+        {
+            SkipWhitespace(content, ref i);
+            if (i >= content.Length) break;
+
+            var c = content[i];
+
+            // PDF 注释行
+            if (c == '%')
+            {
+                while (i < content.Length && content[i] != '\n') i++;
+                continue;
+            }
+
+            // 括号字符串 (text)
+            if (c == '(')
+            {
+                var s = ReadParenString(content, ref i);
+                if (inText)
+                {
+                    var peek = i;
+                    SkipWhitespace(content, ref peek);
+                    if (peek + 1 < content.Length && content[peek] == 'T'
+                        && (content[peek + 1] == 'j' || content[peek + 1] == 'J'
+                            || content[peek + 1] == '\'' || content[peek + 1] == '"'))
+                    {
+                        var decoded = DecodePdfString(s);
+                        if (decoded.Length > 0)
+                            results.Add(new PdfTextItem { Text = decoded, X = curX, Y = curY, FontSize = fontSize });
+                        i = peek + 2;
+                        numStack.Clear();
+                        continue;
+                    }
+                }
+                numStack.Clear();
+                continue;
+            }
+
+            // 嵌套字典 << >>
+            if (c == '<' && i + 1 < content.Length && content[i + 1] == '<')
+            {
+                var end = content.IndexOf(">>", i + 2, StringComparison.Ordinal);
+                i = end >= 0 ? end + 2 : i + 2;
+                numStack.Clear();
+                continue;
+            }
+
+            // 十六进制字符串 <hex>
+            if (c == '<')
+            {
+                var end = content.IndexOf('>', i + 1);
+                if (end > i)
+                {
+                    if (inText)
+                    {
+                        var hex = content.Substring(i + 1, end - i - 1);
+                        var decoded = HexToString(hex);
+                        if (decoded.Length > 0)
+                        {
+                            var peek = end + 1;
+                            SkipWhitespace(content, ref peek);
+                            if (peek + 1 < content.Length && content[peek] == 'T' && content[peek + 1] == 'j')
+                            {
+                                results.Add(new PdfTextItem { Text = decoded, X = curX, Y = curY, FontSize = fontSize });
+                                i = peek + 2;
+                                numStack.Clear();
+                                continue;
+                            }
+                        }
+                    }
+                    i = end + 1;
+                }
+                else
+                    i++;
+                continue;
+            }
+
+            // TJ 数组 [...]
+            if (c == '[')
+            {
+                var arrEnd = content.IndexOf(']', i);
+                if (arrEnd > i && inText)
+                {
+                    var arr = content.Substring(i + 1, arrEnd - i - 1);
+                    var arrSb = new StringBuilder();
+                    var ap = 0;
+                    while (ap < arr.Length)
+                    {
+                        SkipWhitespace(arr, ref ap);
+                        if (ap >= arr.Length) break;
+                        if (arr[ap] == '(')
+                        {
+                            var s = ReadParenString(arr, ref ap);
+                            arrSb.Append(DecodePdfString(s));
+                        }
+                        else
+                        {
+                            // 数字（字间距调整）或其他 — 跳过到下一个空白或 (
+                            while (ap < arr.Length && arr[ap] != '(' && arr[ap] != ' '
+                                   && arr[ap] != '\t' && arr[ap] != '\r' && arr[ap] != '\n')
+                                ap++;
+                        }
+                    }
+                    var txt = arrSb.ToString();
+                    if (txt.Length > 0)
+                        results.Add(new PdfTextItem { Text = txt, X = curX, Y = curY, FontSize = fontSize });
+                    i = arrEnd + 1;
+                    SkipWhitespace(content, ref i);
+                    if (i + 1 < content.Length && content[i] == 'T' && content[i + 1] == 'J')
+                        i += 2;
+                }
+                else
+                    i = arrEnd >= 0 ? arrEnd + 1 : i + 1;
+                numStack.Clear();
+                continue;
+            }
+
+            // PDF Name（/name），用于 Tf 的字体名等
+            if (c == '/')
+            {
+                var nameEnd = i + 1;
+                while (nameEnd < content.Length && content[nameEnd] != ' ' && content[nameEnd] != '\t'
+                       && content[nameEnd] != '\r' && content[nameEnd] != '\n'
+                       && content[nameEnd] != '/' && content[nameEnd] != '<' && content[nameEnd] != '>')
+                    nameEnd++;
+                i = nameEnd;
+                continue;
+            }
+
+            // 数字（操作符参数）
+            if (Char.IsDigit(c) || c == '-'
+                || (c == '.' && i + 1 < content.Length && Char.IsDigit(content[i + 1])))
+            {
+                var numEnd = i + 1;
+                while (numEnd < content.Length && (Char.IsDigit(content[numEnd]) || content[numEnd] == '.'))
+                    numEnd++;
+                if (Single.TryParse(content.Substring(i, numEnd - i),
+                    NumberStyles.Float, CultureInfo.InvariantCulture, out var num))
+                    numStack.Add(num);
+                i = numEnd;
+                continue;
+            }
+
+            // 操作符
+            if (Char.IsLetter(c) || c == '\'' || c == '"' || c == '*')
+            {
+                var opEnd = i + 1;
+                while (opEnd < content.Length
+                       && (Char.IsLetterOrDigit(content[opEnd]) || content[opEnd] == '*'))
+                    opEnd++;
+                var op = content.Substring(i, opEnd - i);
+                i = opEnd;
+
+                switch (op)
+                {
+                    case "BT":
+                        inText = true;
+                        curX = 0;
+                        curY = 0;
+                        break;
+                    case "ET":
+                        inText = false;
+                        break;
+                    case "Td":
+                    case "TD":
+                        if (numStack.Count >= 2)
+                        {
+                            curX += numStack[numStack.Count - 2];
+                            curY += numStack[numStack.Count - 1];
+                        }
+                        break;
+                    case "Tm":
+                        if (numStack.Count >= 6)
+                        {
+                            curX = numStack[numStack.Count - 2];
+                            curY = numStack[numStack.Count - 1];
+                        }
+                        break;
+                    case "Tf":
+                        if (numStack.Count >= 1)
+                            fontSize = numStack[numStack.Count - 1];
+                        break;
+                    case "T*":
+                        curY -= fontSize > 0 ? fontSize * 1.2f : 12f;
+                        break;
+                }
+                numStack.Clear();
+                continue;
+            }
+
+            i++;
+        }
+    }
+
+    /// <summary>将 PDF 十六进制字符串转换为可读文本</summary>
+    /// <param name="hex">十六进制字符串（可含空白符）</param>
+    /// <returns>可打印字符序列</returns>
+    private static String HexToString(String hex)
+    {
+        var sb = new StringBuilder();
+        var clean = hex.ToCharArray();
+        var ci = 0;
+        var cleanBuf = new StringBuilder(hex.Length);
+        while (ci < clean.Length)
+        {
+            var ch = clean[ci++];
+            if (ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n') continue;
+            cleanBuf.Append(ch);
+        }
+        var s = cleanBuf.ToString();
+        for (var k = 0; k + 1 < s.Length; k += 2)
+        {
+            if (Byte.TryParse(s.Substring(k, 2), NumberStyles.HexNumber, null, out var b) && b >= 32)
+                sb.Append((Char)b);
+        }
+        return sb.ToString();
     }
     #endregion
 }
