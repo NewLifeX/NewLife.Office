@@ -29,7 +29,7 @@ Nuget：NewLife.Office
 - 多工作表写入、表头与多行数据写入
 - 单元格样式：字体/背景/边框/对齐/换行/数字格式
 - 布局能力：列宽、行高、合并单元格、冻结窗格、自动筛选
-- 高级能力：超链接、下拉数据验证、条件格式、插入图片
+- 高级能力：超链接、下拉数据验证、条件格式、插入图片、图表（柱/折/饼/散点）、数据透视表
 - 页面能力：页面方向、纸张大小、页边距、页眉页脚、打印标题行
 - 安全能力：工作表保护
 - 便捷能力：`WriteObjects<T>()`、`WriteDataTable()`
@@ -45,6 +45,65 @@ Nuget：NewLife.Office
 
 - 基于现有 xlsx 模板执行 `{{Key}}` 占位符替换
 - 支持输出到文件或流
+
+### BiffReader（xls 安全读取）
+
+- 基于 OLE2/CFB 容器，解析 BIFF8 格式工作表流
+- `ReadSheet()` 读取工作表行数据
+- `ReadObjects<T>()` 对象映射导入
+- 支持字符串、数字、布尔、日期、RK 编码等多种单元格类型
+
+## 已实现能力（Word）
+
+### WordWriter / WordReader / WordTemplate
+
+- docx 全面读写：段落、表格、图片、标题、列表、超链接、页眉页脚、页面设置
+- 模板填充：`{{Key}}` 占位符替换，保留原样式
+- `WordHtmlConverter`：docx 转语义化 HTML（段落→`<p>`，表格→`<table>`，标题→`<h1>`-`<h6>`）
+- `WordPdfConverter`：docx 转 PDF（内容映射型，纳入 PdfFluentDocument）
+- `DocReader`：读取 doc 格式（OLE2 容器，提取纯文本和段落结构）
+
+## 已实现能力（PPT）
+
+### PptxWriter / PptxReader / PptxTemplate
+
+- pptx 全面读写：幻灯片管理、文本框、表格、图片、基本形状、超链接、备注、模板填充
+- 布局设计：母版、版式、背景、尺寸、幻灯片切换动画
+- `PptReader`：读取 ppt 格式（OLE2 容器，提取幻灯片文本）
+
+## 已实现能力（PDF）
+
+### PdfWriter / PdfReader / PdfDocument
+
+- 创建 PDF：文本排版、表格、图片、页眉页脚、中文字体支持
+- `PdfFluentDocument`：声明式布局 API（Row/Column/Text/Image/Table），自动分页
+- PDF 操作：合并/拆分、水印、页面旋转、文字覆盖、可点击链接、书签导航
+- `PdfEncryptor`：加密/权限控制
+- 文本提取：逐页/全文，带坐标信息提取
+
+## 已实现能力（Markdown / RTF / ODS）
+
+### Markdown
+
+- `MarkdownParser`：解析 CommonMark + GFM（标题/段落/代码块/列表/引用/粗斜体/图片/表格/任务列表）
+- `MarkdownWriter`：将 `MarkdownDocument` 序列化为 .md 文本（包括 GFM 扩展）
+- `MarkdownHtmlConverter`：Markdown 转换为语义化 HTML
+
+### RTF
+
+- `RtfReader`：解析 RTF 文件，提取段落（字体/颜色/对齐）、表格、文档属性
+- `RtfWriter`：创建 RTF 文件（段落格式/表格/模板填充）
+
+### ODS
+
+- `OdsReader`：读取 LibreOffice ODS 格式，提取多工作表单元格数据
+- `OdsWriter`：生成 ODS 文件（多工作表、字符串/数字/日期/布尔数据）
+
+## OLE2/CFB 容器
+
+- `CfbReader`：解析 Compound File Binary 容器（安全寻找 Stream，支持 v3/v4 水印）
+- `CfbWriter`：生成合法 CFB 文件（写入流和目录树）
+- 支撟 xls（Excel 97-2003）、doc（Word 97-2003）、ppt（PPT 97-2003）共用基础层
 
 ## 快速开始
 
@@ -139,43 +198,43 @@ writer.SetRowHeight("Sheet1", 1, 30); // 设置行高
 
 ## 测试状态
 
-- 当前测试集：`70` 项
-- 通过：`70` 项
+- 当前测试集：`246` 项
+- 通过：`246` 项
 - 失败：`0` 项
 
 ## 已实现格式概览
 
-| 格式 | 读取 | 写入 | 模板 | 说明 |
-|------|:---:|:---:|:---:|------|
-| **Excel xlsx** | ✅ | ✅ | ✅ | 含样式/图表/透视表/条件格式/图片 |
-| **Excel xls** | 🔄规划 | 🔄规划 | — | OLE2/BIFF8，依赖 CfbContainer |
-| **Word docx** | ✅ | ✅ | ✅ | 含段落/表格/图片/页眉页脚 |
-| **Word doc** | 🔄规划 | — | — | MS-DOC，OLE2 格式 |
-| **PPT pptx** | ✅ | ✅ | ✅ | 含文本框/图片/表格/图表/母版 |
-| **PPT ppt** | 🔄规划 | — | — | MS-PPT，OLE2 格式 |
-| **PDF** | ✅ | ✅ | — | 含 Fluent API/合并/拆分/加密 |
-| **Markdown** | 🔄规划 | 🔄规划 | — | CommonMark + GFM |
-| **RTF** | 🔄规划 | 🔄规划 | 🔄规划 | 段落/表格/图片 |
-| **ODS** | 🔄规划 | 🔄规划 | — | LibreOffice 原生格式 |
-| **EML** | 🔄规划 | 🔄规划 | — | RFC 5322 + MIME |
-| **MSG** | 🔄规划 | — | — | Outlook, OLE2 容器 |
-| **iCalendar** | 🔄规划 | 🔄规划 | — | RFC 5545 .ics 格式 |
-| **vCard** | 🔄规划 | 🔄规划 | — | RFC 6350 .vcf 格式 |
-| **EPUB** | 🔄规划 | 🔄规划 | — | EPUB 2/3 电子书 |
-| **XPS** | 🔄规划 | 🔄规划 | — | XPS/OXPS 固定版式 |
+| 格式 | 读取 | 写入 | 模板 | 转换 | 说明 |
+|------|:---:|:---:|:---:|:---:|------|
+| **Excel xlsx** | ✅ | ✅ | ✅ | — | 含样式/图表/透视表/条件格式/图片 |
+| **Excel xls** | ✅ | 🔄规划 | — | — | OLE2/BIFF8，BiffReader 已实现读取 |
+| **Word docx** | ✅ | ✅ | ✅ | HTML/PDF | 含段落/表格/图片/页眉页脚 |
+| **Word doc** | ✅ | — | — | — | MS-DOC，DocReader 提取纯文本 |
+| **PPT pptx** | ✅ | ✅ | ✅ | 🔄规划 | 含文本框/图片/表格/图表/母版 |
+| **PPT ppt** | ✅ | — | — | — | MS-PPT，PptReader 提取幻灯片文本 |
+| **PDF** | ✅ | ✅ | — | — | 含 Fluent API/合并/拆分/加密 |
+| **Markdown** | ✅ | ✅ | — | HTML | CommonMark + GFM，含 AST 模型 |
+| **RTF** | ✅ | ✅ | ✅ | — | 段落/表格/模板填充 |
+| **ODS** | ✅ | ✅ | — | — | LibreOffice 原生格式 |
+| **EML** | 🔄规划 | 🔄规划 | — | — | RFC 5322 + MIME |
+| **MSG** | 🔄规划 | — | — | — | Outlook，OLE2 容器 |
+| **iCalendar** | 🔄规划 | 🔄规划 | — | — | RFC 5545 .ics 格式 |
+| **vCard** | 🔄规划 | 🔄规划 | — | — | RFC 6350 .vcf 格式 |
+| **EPUB** | 🔄规划 | 🔄规划 | — | — | EPUB 2/3 电子书 |
+| **XPS** | 🔄规划 | 🔄规划 | — | — | XPS/OXPS 固定版式 |
 
 ## 代码结构
 
 ```
 NewLife.Office/
-├── Excel/        # xlsx 读写：ExcelWriter / ExcelReader / ExcelTemplate / CellStyle
-├── Word/         # docx 读写：WordWriter / WordReader / WordTemplate
-├── PPT/          # pptx 读写：PptxWriter / PptxReader / PptxTemplate
-├── PDF/          # PDF 读写：PdfWriter / PdfReader / PdfDocument / PdfFluentDocument
-├── OLE2/         # OLE2/CFB 基础层 + BIFF8 + MS-DOC + MS-PPT（规划中）
-├── Markdown/     # Markdown 读写（规划中）
-├── Rtf/          # RTF 读写（规划中）
-├── Ods/          # ODS 读写（规划中）
+├── Excel/        # xlsx 读写：ExcelWriter / ExcelReader / ExcelTemplate / CellStyle / ExcelHelper / BiffReader
+├── Word/         # docx 读写：WordWriter / WordReader / WordTemplate / DocReader / WordHtmlConverter / WordPdfConverter
+├── PPT/          # pptx 读写：PptxWriter / PptxReader / PptxTemplate / PptReader
+├── PDF/          # PDF 读写：PdfWriter / PdfReader / PdfDocument / PdfFluentDocument / PdfEncryptor
+├── OLE2/         # OLE2/CFB 容器：CfbReader / CfbWriter
+├── Markdown/     # Markdown 读写：MarkdownParser / MarkdownWriter / MarkdownHtmlConverter
+├── Rtf/          # RTF 读写：RtfReader / RtfWriter
+├── Ods/          # ODS 读写：OdsReader / OdsWriter
 ├── Email/        # EML/MSG 读写（规划中）
 ├── Calendar/     # iCalendar .ics 读写（规划中）
 ├── Contact/      # vCard .vcf 读写（规划中）
@@ -185,27 +244,24 @@ NewLife.Office/
 
 ## 规划中
 
-### OLE2/BIFF8（老式二进制格式）
+以下功能已在路线图中，但尚未实现：
 
-- OLE2/CFB 容器解析与写入（xls/doc/ppt 共用基础）
-- 读写 xls（BIFF8 格式，Excel 97-2003）
-- 读取 doc（MS-DOC 格式，Word 97-2003）
-- 读取 ppt（MS-PPT 格式，PPT 97-2003）
+### 写入 xls（BIFF8，Excel 97-2003）
 
-### Markdown
+- 生成合法 BIFF8 工作簿流并写入 OLE2 容器
 
-- CommonMark + GFM 读写
-- Markdown → HTML / Word / PDF 转换
+### PPT → PDF / 图片
 
-### RTF
+- pptx 每张幻灯片转换为 PDF 页面或 PNG/JPEG 图像
 
-- RTF 读写（段落/表格/图片/样式）
-- 模板占位符填充
+### Markdown → Word / PDF
 
-### ODS（OpenDocument Spreadsheet）
+- Markdown 标题/段落映射为 Word 样式或通过 PDF 渲染
 
-- LibreOffice 原生格式完整读写
-- 对象映射导入/导出
+### RTF 图片嵌入 / ODS 合并单元格
+
+- RtfWriter 支持 PNG/JPEG 图片嵌入
+- OdsReader 识别合并单元格（number-columns-spanned）
 
 ### Email / iCalendar / vCard
 
