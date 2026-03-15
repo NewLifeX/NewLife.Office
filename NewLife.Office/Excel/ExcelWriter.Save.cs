@@ -6,7 +6,6 @@ namespace NewLife.Office;
 
 partial class ExcelWriter
 {
-
     #region 样式管理
     /// <summary>根据用户样式和数字格式，查找或创建 XF 条目并返回索引</summary>
     private Int32 GetOrCreateXf(CellStyle cs, Int32 numFmtId)
