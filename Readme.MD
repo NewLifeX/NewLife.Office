@@ -75,7 +75,7 @@ Nuget：NewLife.Office
 
 ### PdfWriter / PdfReader / PdfDocument
 
-- 创建 PDF：文本排版、表格、图片、页眉页脚、中文字体支持
+- 创建 PDF：文本排版、表格、图片、页眉页脚、中文字体支持（Type0/STSong-Light，UniGB-UCS2-H 编码）
 - `PdfFluentDocument`：声明式布局 API（Row/Column/Text/Image/Table），自动分页
 - PDF 操作：合并/拆分、水印、页面旋转、文字覆盖、可点击链接、书签导航
 - `PdfEncryptor`：加密/权限控制
@@ -99,8 +99,8 @@ Nuget：NewLife.Office
 
 ### ODS
 
-- `OdsReader`：读取 LibreOffice ODS 格式，提取多工作表单元格数据
-- `OdsWriter`：生成 ODS 文件（多工作表、字符串/数字/日期/布尔数据）
+- `OdsReader`：读取 LibreOffice ODS 格式，提取多工作表单元格数据、合并单元格、单元格样式（字体/颜色/背景/对齐）
+- `OdsWriter`：生成 ODS 文件（多工作表、字符串/数字/日期/布尔/公式、单元格样式写入）
 
 ## OLE2/CFB 容器
 
@@ -246,8 +246,8 @@ writer.SetRowHeight("Sheet1", 1, 30); // 设置行高
 
 ## 测试状态
 
-- 当前测试集：`370` 项
-- 通过：`370` 项
+- 当前测试集：`395` 项
+- 通过：`395` 项
 - 失败：`0` 项
 
 ## 已实现格式概览
