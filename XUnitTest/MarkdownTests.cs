@@ -551,4 +551,130 @@ public class MarkdownTests
     }
 
     #endregion
+
+    #region MD03-02 Markdown → Word
+    private const String SampleMd = @"# Heading 1
+## Heading 2
+
+Normal paragraph with **bold** and *italic* text.
+
+- Item A
+- Item B
+- Item C
+
+1. First
+2. Second
+
+| Col1 | Col2 |
+|------|------|
+| A    | B    |
+
+> Block quote here.
+
+```csharp
+var x = 1;
+```
+
+---
+";
+
+    [Fact]
+    [DisplayName("MD03-02 ToWord 返回非空字节数组")]
+    public void ToWord_ReturnsNonEmptyBytes()
+    {
+        var doc = MarkdownDocument.Parse(SampleMd);
+        var bytes = doc.ToWord();
+        Assert.NotNull(bytes);
+        Assert.True(bytes.Length > 100);
+    }
+
+    [Fact]
+    [DisplayName("MD03-02 ToWord 输出为合法 ZIP（docx）")]
+    public void ToWord_OutputIsZipWithDocumentXml()
+    {
+        var doc = MarkdownDocument.Parse(SampleMd);
+        var bytes = doc.ToWord();
+        // docx 是 ZIP，以 PK 开头
+        Assert.Equal(0x50, bytes[0]);
+        Assert.Equal(0x4B, bytes[1]);
+    }
+
+    [Fact]
+    [DisplayName("MD03-02 SaveWord 写入文件")]
+    public void SaveWord_WritesFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "test_md_output.docx");
+        try
+        {
+            var doc = MarkdownDocument.Parse(SampleMd);
+            doc.SaveWord(path);
+            Assert.True(File.Exists(path));
+            Assert.True(new FileInfo(path).Length > 100);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
+    [DisplayName("MD03-02 Markdown 标题映射到 Word 段落")]
+    public void ToWord_HeadingIsMappedToDoc()
+    {
+        var doc = MarkdownDocument.Parse("# My Title\n\nBody text here.");
+        var bytes = doc.ToWord();
+        // docx 的 word/document.xml 应包含标题文本
+        using var ms = new MemoryStream(bytes);
+        using var zip = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Read);
+        var entry = zip.GetEntry("word/document.xml");
+        Assert.NotNull(entry);
+        using var sr = new System.IO.StreamReader(entry.Open());
+        var xml = sr.ReadToEnd();
+        Assert.Contains("My Title", xml);
+        Assert.Contains("Body text here", xml);
+    }
+    #endregion
+
+    #region MD03-03 Markdown → PDF
+    [Fact]
+    [DisplayName("MD03-03 ToPdf 返回非空字节数组")]
+    public void ToPdf_ReturnsNonEmptyBytes()
+    {
+        var doc = MarkdownDocument.Parse(SampleMd);
+        var bytes = doc.ToPdf();
+        Assert.NotNull(bytes);
+        Assert.True(bytes.Length > 100);
+    }
+
+    [Fact]
+    [DisplayName("MD03-03 ToPdf 输出以 %PDF 开头")]
+    public void ToPdf_OutputStartsWithPdfHeader()
+    {
+        var doc = MarkdownDocument.Parse(SampleMd);
+        var bytes = doc.ToPdf();
+        var header = System.Text.Encoding.ASCII.GetString(bytes, 0, 4);
+        Assert.Equal("%PDF", header);
+    }
+
+    [Fact]
+    [DisplayName("MD03-03 SavePdf 写入文件")]
+    public void SavePdf_WritesFile()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "test_md_output.pdf");
+        try
+        {
+            var doc = MarkdownDocument.Parse(SampleMd);
+            doc.SavePdf(path);
+            Assert.True(File.Exists(path));
+            Assert.True(new FileInfo(path).Length > 100);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
+    [DisplayName("MD03-03 空文档 ToPdf 不崩溃")]
+    public void ToPdf_EmptyDocument_DoesNotThrow()
+    {
+        var doc = MarkdownDocument.Parse("");
+        var ex = Record.Exception(() => doc.ToPdf());
+        Assert.Null(ex);
+    }
+    #endregion
 }

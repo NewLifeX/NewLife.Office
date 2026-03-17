@@ -117,6 +117,54 @@ public sealed class MarkdownDocument
         .Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
         .Replace("\"", "&quot;");
     #endregion
+
+    #region Word/PDF 转换
+    /// <summary>将文档转换为 .docx 字节数组（MD03-02）</summary>
+    /// <returns>docx 字节数组</returns>
+    public Byte[] ToWord()
+    {
+        return new MarkdownWordConverter().ToBytes(this);
+    }
+
+    /// <summary>将文档保存为 .docx 文件（MD03-02）</summary>
+    /// <param name="path">目标文件路径</param>
+    public void SaveWord(String path)
+    {
+        var bytes = ToWord();
+        File.WriteAllBytes(path, bytes);
+    }
+
+    /// <summary>将文档写入流（Word 格式，MD03-02）</summary>
+    /// <param name="stream">目标可写流</param>
+    public void SaveWord(Stream stream)
+    {
+        var bytes = ToWord();
+        stream.Write(bytes, 0, bytes.Length);
+    }
+
+    /// <summary>将文档转换为 PDF 字节数组（MD03-03）</summary>
+    /// <returns>PDF 字节数组</returns>
+    public Byte[] ToPdf()
+    {
+        return new MarkdownPdfConverter().ToBytes(this);
+    }
+
+    /// <summary>将文档保存为 PDF 文件（MD03-03）</summary>
+    /// <param name="path">目标文件路径</param>
+    public void SavePdf(String path)
+    {
+        var bytes = ToPdf();
+        File.WriteAllBytes(path, bytes);
+    }
+
+    /// <summary>将文档写入流（PDF 格式，MD03-03）</summary>
+    /// <param name="stream">目标可写流</param>
+    public void SavePdf(Stream stream)
+    {
+        var bytes = ToPdf();
+        stream.Write(bytes, 0, bytes.Length);
+    }
+    #endregion
 }
 
 /// <summary>Markdown → HTML 转换选项</summary>
