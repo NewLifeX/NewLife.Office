@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+﻿namespace NewLife.Office;
 
 /// <summary>vCard 联系人（RFC 6350，vCard 4.0）</summary>
 /// <remarks>
@@ -40,13 +40,13 @@ public class VCardContact
     public DateTimeOffset? Revision { get; set; }
 
     /// <summary>电话号码列表（TEL）</summary>
-    public List<VCardPhone> Phones { get; } = new List<VCardPhone>();
+    public List<VCardPhone> Phones { get; } = [];
 
     /// <summary>电子邮件列表（EMAIL）</summary>
-    public List<VCardEmail> Emails { get; } = new List<VCardEmail>();
+    public List<VCardEmail> Emails { get; } = [];
 
     /// <summary>地址列表（ADR）</summary>
-    public List<VCardAddress> Addresses { get; } = new List<VCardAddress>();
+    public List<VCardAddress> Addresses { get; } = [];
 
     /// <summary>扩展属性（X-* 和未知属性）</summary>
     public Dictionary<String, String> ExtraProps { get; } = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);

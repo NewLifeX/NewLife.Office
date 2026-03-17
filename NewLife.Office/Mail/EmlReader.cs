@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.RegularExpressions;
 
 namespace NewLife.Office;
@@ -338,7 +338,7 @@ public class EmlReader
             var line = lines[i].TrimEnd('\r');
             if (line.Length > 0 && line[line.Length - 1] == '=')
             {
-                line = line.Substring(0, line.Length - 1);  // soft line break
+                line = line[..^1];  // soft line break
                 var lineBytes = ParseQpLine(line);
                 ms.Write(lineBytes, 0, lineBytes.Length);
             }

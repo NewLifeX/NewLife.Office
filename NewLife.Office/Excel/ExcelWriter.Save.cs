@@ -80,7 +80,7 @@ partial class ExcelWriter
         }
         colIndex--; // 转 0 基
 
-        var rowStr = cellRef.Substring(colLen);
+        var rowStr = cellRef[colLen..];
         var rowIndex = Int32.Parse(rowStr) - 1; // 转 0 基
 
         return (rowIndex, colIndex);

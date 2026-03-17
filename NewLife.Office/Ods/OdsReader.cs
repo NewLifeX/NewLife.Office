@@ -1,7 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
@@ -19,10 +20,10 @@ public sealed class OdsReader
 {
     #region 常量
     private const String NsOffice = "urn:oasis:names:tc:opendocument:xmlns:office:1.0";
-    private const String NsTable  = "urn:oasis:names:tc:opendocument:xmlns:table:1.0";
-    private const String NsText   = "urn:oasis:names:tc:opendocument:xmlns:text:1.0";
-    private const String NsStyle  = "urn:oasis:names:tc:opendocument:xmlns:style:1.0";
-    private const String NsFo     = "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0";
+    private const String NsTable = "urn:oasis:names:tc:opendocument:xmlns:table:1.0";
+    private const String NsText = "urn:oasis:names:tc:opendocument:xmlns:text:1.0";
+    private const String NsStyle = "urn:oasis:names:tc:opendocument:xmlns:style:1.0";
+    private const String NsFo = "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0";
     #endregion
 
     #region 方法 — 读取
@@ -326,9 +327,9 @@ public sealed class OdsReader
     private static Single ParsePtValue(String val)
     {
         if (val.EndsWith("pt", StringComparison.OrdinalIgnoreCase) &&
-            Single.TryParse(val.Substring(0, val.Length - 2),
-                System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out var f))
+            Single.TryParse(val[..^2],
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture, out var f))
             return f;
         return 0f;
     }
@@ -401,12 +402,12 @@ public sealed class OdsReader
                 {
                     var targetType = Nullable.GetUnderlyingType(prop.PropertyType) ?? prop.PropertyType;
                     Object? val = targetType == typeof(String) ? s
-                        : targetType == typeof(Int32) ? (Object)s.ToInt()
+                        : targetType == typeof(Int32) ? s.ToInt()
                         : targetType == typeof(Int64) ? (Int64.TryParse(s, out var v64) ? v64 : 0L)
                         : targetType == typeof(Double) ? s.ToDouble()
                         : targetType == typeof(Boolean) ? s.ToBoolean()
                         : targetType == typeof(DateTime) ? s.ToDateTime()
-                        : Convert.ChangeType(s, targetType, System.Globalization.CultureInfo.InvariantCulture);
+                        : Convert.ChangeType(s, targetType, CultureInfo.InvariantCulture);
                     prop.SetValue(item, val);
                 }
                 catch { /* 转换失败跳过 */ }

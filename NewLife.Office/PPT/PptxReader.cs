@@ -1,4 +1,5 @@
-﻿using System.IO.Compression;
+﻿using System.Globalization;
+using System.IO.Compression;
 using System.Text;
 using System.Xml;
 
@@ -283,8 +284,7 @@ public class PptxReader : IDisposable
                 var vals = new List<Double>();
                 foreach (XmlElement v in ser.SelectNodes(".//c:val//c:numCache/c:pt/c:v", cns)!)
                 {
-                    if (Double.TryParse(v.InnerText, System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out var d))
+                    if (Double.TryParse(v.InnerText, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
                         vals.Add(d);
                 }
                 info.Series.Add(new PptChartSeriesData { Name = serName, Values = vals.ToArray() });

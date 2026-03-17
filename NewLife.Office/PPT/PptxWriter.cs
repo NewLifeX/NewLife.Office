@@ -1,4 +1,5 @@
-﻿using System.IO.Compression;
+﻿using System.Globalization;
+using System.IO.Compression;
 using System.Text;
 
 namespace NewLife.Office;
@@ -553,9 +554,9 @@ public partial class PptxWriter : IDisposable
             for (var vi = 0; vi < ser.Values.Length; vi++)
             {
                 var pt = doc.CreateElement("c:pt", C);
-                ((System.Xml.XmlElement)pt).SetAttribute("idx", vi.ToString());
+                pt.SetAttribute("idx", vi.ToString());
                 var v = doc.CreateElement("c:v", C);
-                v.InnerText = ser.Values[vi].ToString(System.Globalization.CultureInfo.InvariantCulture);
+                v.InnerText = ser.Values[vi].ToString(CultureInfo.InvariantCulture);
                 pt.AppendChild(v);
                 numCache.AppendChild(pt);
             }

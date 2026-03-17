@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace NewLife.Office.Markdown;
 
@@ -109,7 +109,7 @@ internal sealed class MarkdownParser
         var lang = firstLine.TrimStart('~', '`').Trim();
         // extract just the language (first word)
         var spaceIdx = lang.IndexOf(' ');
-        if (spaceIdx >= 0) lang = lang.Substring(0, spaceIdx);
+        if (spaceIdx >= 0) lang = lang[..spaceIdx];
 
         _pos++;
         var sb = new System.Text.StringBuilder();
@@ -126,8 +126,8 @@ internal sealed class MarkdownParser
             _pos++;
         }
         var code = sb.ToString();
-        if (code.EndsWith("\n")) code = code.Substring(0, code.Length - 1);
-        if (code.EndsWith("\r")) code = code.Substring(0, code.Length - 1);
+        if (code.EndsWith("\n")) code = code[..^1];
+        if (code.EndsWith("\r")) code = code[..^1];
         return MarkdownBlock.CreateCodeBlock(code, lang);
     }
 
@@ -177,11 +177,11 @@ internal sealed class MarkdownParser
                 continue;
             }
             if (trimmed.StartsWith("> "))
-                quotedLines.Add(trimmed.Substring(2));
+                quotedLines.Add(trimmed[2..]);
             else if (trimmed == ">")
                 quotedLines.Add("");
             else if (trimmed.StartsWith(">"))       // ">>" nested, strip one level
-                quotedLines.Add(trimmed.Substring(1));
+                quotedLines.Add(trimmed[1..]);
             else
                 break;
             _pos++;
@@ -231,7 +231,7 @@ internal sealed class MarkdownParser
                 if (bulletChar == ' ') bulletChar = m;
                 else if (m != bulletChar) break;
                 _pos++;
-                items.Add(ParseListItem(trimmed.Substring(2).TrimStart(), false));
+                items.Add(ParseListItem(trimmed[2..].TrimStart(), false));
             }
             else
             {
@@ -239,7 +239,7 @@ internal sealed class MarkdownParser
                 if (orderedDelim == ' ') orderedDelim = delim;
                 else if (delim != orderedDelim) break;
                 var markerMatch = Regex.Match(trimmed, @"^(\d{1,9}[.)]) (.*)$");
-                var content = markerMatch.Success ? markerMatch.Groups[2].Value : trimmed.Substring(3);
+                var content = markerMatch.Success ? markerMatch.Groups[2].Value : trimmed[3..];
                 _pos++;
                 items.Add(ParseListItem(content, false));
             }
@@ -413,8 +413,8 @@ internal sealed class MarkdownParser
     private static List<String> SplitTableRow(String line)
     {
         line = line.Trim();
-        if (line.StartsWith("|")) line = line.Substring(1);
-        if (line.EndsWith("|")) line = line.Substring(0, line.Length - 1);
+        if (line.StartsWith("|")) line = line[1..];
+        if (line.EndsWith("|")) line = line[..^1];
         return [.. line.Split('|')];
     }
     #endregion
@@ -556,9 +556,9 @@ internal sealed class MarkdownParser
     private static void FlushText(String text, Int32 start, Int32 end, List<MarkdownInline> result)
     {
         if (start >= end) return;
-        var s = text.Substring(start, end - start);
+        var s = text[start..end];
         // Remove trailing backslash before hard break
-        if (s.EndsWith("\\")) s = s.Substring(0, s.Length - 1);
+        if (s.EndsWith("\\")) s = s[..^1];
         if (s.Length > 0)
             result.Add(MarkdownInline.CreateText(s));
     }
@@ -627,7 +627,7 @@ internal sealed class MarkdownParser
             while (i < end && text[i] != ' ' && text[i] != ')' && text[i] != '"' && text[i] != '\'') i++;
             urlEnd = i;
         }
-        var url = text.Substring(urlStart, urlEnd - urlStart);
+        var url = text[urlStart..urlEnd];
 
         // optional title
         while (i < end && text[i] == ' ') i++;
@@ -639,7 +639,7 @@ internal sealed class MarkdownParser
             var titleEnd = text.IndexOf(close, titleStart);
             if (titleEnd > 0)
             {
-                title = text.Substring(titleStart, titleEnd - titleStart);
+                title = text[titleStart..titleEnd];
                 i = titleEnd + 1;
             }
         }

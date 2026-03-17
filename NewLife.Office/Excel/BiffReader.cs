@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 
 namespace NewLife.Office;
 
@@ -128,7 +128,7 @@ public sealed class BiffReader : IDisposable
                 data = merged;
             }
 
-            result.Add(((UInt16)type, data));
+            result.Add((type, data));
         }
         return result;
     }
@@ -191,7 +191,7 @@ public sealed class BiffReader : IDisposable
         if (fRichString)
         {
             if (pos + 2 > data.Length) return String.Empty;
-            cRun = (Int32)ReadUInt16(data, pos);
+            cRun = ReadUInt16(data, pos);
             pos += 2;
         }
 
@@ -431,7 +431,7 @@ public sealed class BiffReader : IDisposable
     {
         if (!cells.TryGetValue(row, out var rowDict))
         {
-            rowDict = new SortedDictionary<Int32, Object?>();
+            rowDict = [];
             cells[row] = rowDict;
         }
         rowDict[col] = value;

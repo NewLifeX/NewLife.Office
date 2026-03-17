@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -512,7 +512,7 @@ internal sealed class RtfReader
         // Control word: letters
         var start = _pos - 1; // include backslash
         while (_pos < _rtf.Length && Char.IsLetter(_rtf[_pos])) _pos++;
-        var kw = _rtf.Substring(start, _pos - start);
+        var kw = _rtf[start.._pos];
 
         // Optional numeric parameter
         var neg = false;
@@ -525,7 +525,7 @@ internal sealed class RtfReader
         {
             var numStart = _pos;
             while (_pos < _rtf.Length && Char.IsDigit(_rtf[_pos])) _pos++;
-            var numStr = _rtf.Substring(numStart, _pos - numStart);
+            var numStr = _rtf[numStart.._pos];
             var num = Int32.Parse(numStr);
             if (neg) num = -num;
             // Consume optional trailing space delimiter
@@ -547,7 +547,7 @@ internal sealed class RtfReader
         if (!Char.IsLetter(_rtf[_pos])) { _pos = savedPos; return ""; }
         var start = _pos - 1;
         while (_pos < _rtf.Length && Char.IsLetter(_rtf[_pos])) _pos++;
-        var kw = _rtf.Substring(start, _pos - start);
+        var kw = _rtf[start.._pos];
         _pos = savedPos;
         return kw;
     }

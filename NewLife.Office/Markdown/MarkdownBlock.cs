@@ -1,4 +1,4 @@
-namespace NewLife.Office.Markdown;
+﻿namespace NewLife.Office.Markdown;
 
 /// <summary>Markdown 块级元素</summary>
 /// <remarks>
@@ -175,7 +175,7 @@ public sealed class MarkdownBlock
     public override String ToString()
     {
         var text = GetPlainText().Replace('\n', ' ');
-        return $"{Type}: {(text.Length > 60 ? text.Substring(0, 60) : text)}";
+        return $"{Type}: {(text.Length > 60 ? text[..60] : text)}";
     }
     #endregion
 }

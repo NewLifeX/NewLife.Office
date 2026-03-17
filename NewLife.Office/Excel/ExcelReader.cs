@@ -691,7 +691,7 @@ public class ExcelReader : DisposeBase
         }
         colIndex--;
 
-        var rowStr = cellRef.Substring(colLen);
+        var rowStr = cellRef[colLen..];
         var rowIndex = Int32.Parse(rowStr) - 1;
 
         return (rowIndex, colIndex);

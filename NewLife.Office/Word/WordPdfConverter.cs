@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Xml;
 using NewLife.Office;
 
@@ -189,7 +189,7 @@ public sealed class WordPdfConverter
         if (rows.Count == 0) return;
 
         pdf.AddEmptyLine(4f);
-        pdf.AddTable((IEnumerable<String[]>)rows, firstRowHeader: true, columnWidths: null);
+        pdf.AddTable(rows, firstRowHeader: true, columnWidths: null);
         pdf.AddEmptyLine(4f);
     }
 

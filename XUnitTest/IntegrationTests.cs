@@ -487,10 +487,10 @@ public class IntegrationTests
         var msgDoc = new CfbDocument();
         var root   = msgDoc.Root;
         // 写 Unicode 流（MAPI PT_UNICODE = 001F）
-        root.AddStream("__substg1.0_0037001F", System.Text.Encoding.Unicode.GetBytes("Integration Subject\0"));
-        root.AddStream("__substg1.0_1000001F", System.Text.Encoding.Unicode.GetBytes("Integration body text.\0"));
-        root.AddStream("__substg1.0_0C1F001F", System.Text.Encoding.Unicode.GetBytes("from@test.com\0"));
-        root.AddStream("__substg1.0_0C1A001F", System.Text.Encoding.Unicode.GetBytes("FromName\0"));
+        root.AddStream("__substg1.0_0037001F", Encoding.Unicode.GetBytes("Integration Subject\0"));
+        root.AddStream("__substg1.0_1000001F", Encoding.Unicode.GetBytes("Integration body text.\0"));
+        root.AddStream("__substg1.0_0C1F001F", Encoding.Unicode.GetBytes("from@test.com\0"));
+        root.AddStream("__substg1.0_0C1A001F", Encoding.Unicode.GetBytes("FromName\0"));
 
         using var ms = new MemoryStream(msgDoc.ToBytes());
         var msg = new MsgReader().Read(ms);

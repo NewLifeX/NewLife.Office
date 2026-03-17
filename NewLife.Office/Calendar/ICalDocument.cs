@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+﻿namespace NewLife.Office;
 
 /// <summary>iCal 日历文档（RFC 5545）</summary>
 /// <remarks>包含一组日历事件（VEVENT）和待办（VTODO）</remarks>
@@ -22,10 +22,10 @@ public class ICalDocument
     public String? Method { get; set; }
 
     /// <summary>事件列表</summary>
-    public List<ICalEvent> Events { get; } = new List<ICalEvent>();
+    public List<ICalEvent> Events { get; } = [];
 
     /// <summary>待办列表</summary>
-    public List<ICalTodo> Todos { get; } = new List<ICalTodo>();
+    public List<ICalTodo> Todos { get; } = [];
 
     #endregion
 }
@@ -75,7 +75,7 @@ public class ICalEvent
     public String? Organizer { get; set; }
 
     /// <summary>参与者列表（ATTENDEE）</summary>
-    public List<String> Attendees { get; } = new List<String>();
+    public List<String> Attendees { get; } = [];
 
     /// <summary>扩展属性</summary>
     public Dictionary<String, String> ExtraProps { get; } = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);

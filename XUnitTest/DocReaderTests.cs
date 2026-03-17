@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using NewLife.Office;
 using Xunit;
 
@@ -89,8 +89,8 @@ public class DocReaderTests
         fib[152] = 74; fib[153] = 0;
         // FibRgFcLcb97 at offset 154: 74 entries * 8 bytes = 592 bytes (only need index 13)
         // Entry 13 (fcClx at 258, lcbClx at 262)
-        var fcClxBytes = LE4((UInt32)ClxStart);
-        var lcbClxBytes = LE4((UInt32)ClxBlockSize);
+        var fcClxBytes = LE4(ClxStart);
+        var lcbClxBytes = LE4(ClxBlockSize);
         fib[FcClxInFib] = fcClxBytes[0]; fib[FcClxInFib + 1] = fcClxBytes[1];
         fib[FcClxInFib + 2] = fcClxBytes[2]; fib[FcClxInFib + 3] = fcClxBytes[3];
         fib[LcbClxInFib] = lcbClxBytes[0]; fib[LcbClxInFib + 1] = lcbClxBytes[1];

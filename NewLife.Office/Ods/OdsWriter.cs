@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
@@ -99,7 +100,7 @@ public sealed class OdsWriter
             for (var i = 0; i < props.Length; i++)
             {
                 var val = props[i].GetValue(item);
-                row[i] = val == null ? "" : Convert.ToString(val, System.Globalization.CultureInfo.InvariantCulture) ?? "";
+                row[i] = val == null ? "" : Convert.ToString(val, CultureInfo.InvariantCulture) ?? "";
             }
             sheet.Rows.Add(row);
         }
@@ -278,10 +279,9 @@ public sealed class OdsWriter
             return;
         }
 
-        if (Double.TryParse(value, System.Globalization.NumberStyles.Number,
-            System.Globalization.CultureInfo.InvariantCulture, out var num))
+        if (Double.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var num))
         {
-            w.WriteLine($@"          <table:table-cell{sAttr} office:value-type=""float"" office:value=""{num.ToString(System.Globalization.CultureInfo.InvariantCulture)}""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
+            w.WriteLine($@"          <table:table-cell{sAttr} office:value-type=""float"" office:value=""{num.ToString(CultureInfo.InvariantCulture)}""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
             return;
         }
 

@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Data;
 using System.Reflection;
 using System.Text;
@@ -545,14 +545,14 @@ public sealed class BiffWriter : IDisposable
             Double d => d,
             Single f => (Double)f,
             Decimal dec => (Double)dec,
-            Int32 i => (Double)i,
-            Int64 l => (Double)l,
-            Int16 sh => (Double)sh,
-            Byte b => (Double)b,
-            SByte sb2 => (Double)sb2,
-            UInt16 us => (Double)us,
-            UInt32 ui => (Double)ui,
-            UInt64 ul => (Double)ul,
+            Int32 i => i,
+            Int64 l => l,
+            Int16 sh => sh,
+            Byte b => b,
+            SByte sb2 => sb2,
+            UInt16 us => us,
+            UInt32 ui => ui,
+            UInt64 ul => ul,
             _ => Convert.ToDouble(value)
         };
     }

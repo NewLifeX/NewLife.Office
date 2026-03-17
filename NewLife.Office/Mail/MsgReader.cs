@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 
 namespace NewLife.Office;
 
@@ -147,7 +147,7 @@ public class MsgReader
         {
             var propTag = BitConverter.ToString(data, offset, 4).Replace("-", "").ToUpperInvariant();
             var typePart = propTag.Substring(4, 4);
-            var idPart   = propTag.Substring(0, 4);
+            var idPart   = propTag[..4];
 
             if (idPart == propId.ToUpperInvariant() && typePart == "0300")
             {

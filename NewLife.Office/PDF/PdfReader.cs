@@ -113,7 +113,7 @@ public class PdfReader : IDisposable
             if (contentStart < pdf.Length && pdf[contentStart] == '\n') contentStart++;
             var streamEnd = pdf.IndexOf("endstream", contentStart, StringComparison.Ordinal);
             if (streamEnd < 0) break;
-            var content = pdf.Substring(contentStart, streamEnd - contentStart);
+            var content = pdf[contentStart..streamEnd];
             ExtractPositionedText(content, results);
             pos = streamEnd + 9;
         }
@@ -199,7 +199,7 @@ public class PdfReader : IDisposable
             var streamEnd = pdf.IndexOf("endstream", contentStart, StringComparison.Ordinal);
             if (streamEnd < 0) break;
 
-            var streamContent = pdf.Substring(contentStart, streamEnd - contentStart);
+            var streamContent = pdf[contentStart..streamEnd];
             ExtractTextFromContent(streamContent, sb);
             pos = streamEnd + 9;
         }
@@ -320,7 +320,7 @@ public class PdfReader : IDisposable
         while (end < pdf.Length && pdf[end] != ' ' && pdf[end] != '\n' && pdf[end] != '\r'
                && pdf[end] != '/' && pdf[end] != '<' && pdf[end] != '>')
             end++;
-        return pdf.Substring(pos, end - pos);
+        return pdf[pos..end];
     }
 
     private static String ExtractDict(String pdf, Int32 startOffset)
@@ -536,7 +536,7 @@ public class PdfReader : IDisposable
                 var numEnd = i + 1;
                 while (numEnd < content.Length && (Char.IsDigit(content[numEnd]) || content[numEnd] == '.'))
                     numEnd++;
-                if (Single.TryParse(content.Substring(i, numEnd - i),
+                if (Single.TryParse(content[i..numEnd],
                     NumberStyles.Float, CultureInfo.InvariantCulture, out var num))
                     numStack.Add(num);
                 i = numEnd;
@@ -550,7 +550,7 @@ public class PdfReader : IDisposable
                 while (opEnd < content.Length
                        && (Char.IsLetterOrDigit(content[opEnd]) || content[opEnd] == '*'))
                     opEnd++;
-                var op = content.Substring(i, opEnd - i);
+                var op = content[i..opEnd];
                 i = opEnd;
 
                 switch (op)

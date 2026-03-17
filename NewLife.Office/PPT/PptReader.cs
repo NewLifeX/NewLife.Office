@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using NewLife.Office;
 
 namespace NewLife.Office;
@@ -27,7 +27,7 @@ public sealed class PptReader : IDisposable
 
     #region 私有字段
 
-    private readonly List<String> _slideTexts = new List<String>();
+    private readonly List<String> _slideTexts = [];
 
     #endregion
 
@@ -165,7 +165,7 @@ public sealed class PptReader : IDisposable
     /// <returns>最后一个幻灯片的文本收集器</returns>
     private static List<String> GetOrAddSlide(List<List<String>> slides)
     {
-        if (slides.Count == 0) slides.Add(new List<String>());
+        if (slides.Count == 0) slides.Add([]);
         return slides[slides.Count - 1];
     }
 

@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using NewLife.Collections;
 using NewLife.Office;
 
@@ -125,7 +125,7 @@ public sealed class DocReader : IDisposable
         {
             if (i < rawText.Length && rawText[i] != '\n') continue;
 
-            var line = rawText.Substring(start, i - start);
+            var line = rawText[start..i];
             start = i + 1;
 
             if (line.Contains('\x07'))

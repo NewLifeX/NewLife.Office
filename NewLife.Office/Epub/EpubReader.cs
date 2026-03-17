@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -202,7 +202,7 @@ public class EpubReader
     private static String GetDirectory(String path)
     {
         var idx = path.LastIndexOf('/');
-        return idx < 0 ? String.Empty : path.Substring(0, idx + 1);
+        return idx < 0 ? String.Empty : path[..(idx + 1)];
     }
 
     private static String CombinePath(String dir, String href)

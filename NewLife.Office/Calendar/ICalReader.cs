@@ -1,3 +1,4 @@
+﻿using System.Globalization;
 using System.Text;
 
 namespace NewLife.Office;
@@ -51,8 +52,8 @@ public class ICalReader
                     switch (value.ToUpperInvariant())
                     {
                         case "VCALENDAR": inCalendar = true; break;
-                        case "VEVENT":    currentEvent = new ICalEvent(); break;
-                        case "VTODO":     currentTodo = new ICalTodo(); break;
+                        case "VEVENT": currentEvent = new ICalEvent(); break;
+                        case "VTODO": currentTodo = new ICalTodo(); break;
                     }
                     break;
                 case "end":
@@ -94,7 +95,7 @@ public class ICalReader
         {
             var l = line.TrimEnd('\r');
             if (l.Length > 0 && (l[0] == ' ' || l[0] == '\t'))
-                sb.Append(l.Substring(1));
+                sb.Append(l[1..]);
             else
             {
                 if (sb.Length > 0) lines.Add(sb.ToString());
@@ -115,11 +116,11 @@ public class ICalReader
             if (String.IsNullOrWhiteSpace(line)) continue;
             var colonIdx = line.IndexOf(':');
             if (colonIdx <= 0) continue;
-            var left = line.Substring(0, colonIdx);
-            var val = line.Substring(colonIdx + 1);
+            var left = line[..colonIdx];
+            var val = line[(colonIdx + 1)..];
             var semiIdx = left.IndexOf(';');
-            var name = semiIdx >= 0 ? left.Substring(0, semiIdx) : left;
-            var param = semiIdx >= 0 ? left.Substring(semiIdx + 1) : String.Empty;
+            var name = semiIdx >= 0 ? left[..semiIdx] : left;
+            var param = semiIdx >= 0 ? left[(semiIdx + 1)..] : String.Empty;
             result.Add((name.Trim(), param.Trim(), val.Trim()));
         }
         return result;
@@ -141,14 +142,14 @@ public class ICalReader
     {
         switch (name.ToLowerInvariant())
         {
-            case "uid":           evt.Uid = value; break;
-            case "summary":       evt.Summary = UnescapeText(value); break;
-            case "description":   evt.Description = UnescapeText(value); break;
-            case "location":      evt.Location = UnescapeText(value); break;
-            case "rrule":         evt.Recurrence = value; break;
-            case "status":        evt.Status = value; break;
-            case "organizer":     evt.Organizer = value; break;
-            case "attendee":      evt.Attendees.Add(value); break;
+            case "uid": evt.Uid = value; break;
+            case "summary": evt.Summary = UnescapeText(value); break;
+            case "description": evt.Description = UnescapeText(value); break;
+            case "location": evt.Location = UnescapeText(value); break;
+            case "rrule": evt.Recurrence = value; break;
+            case "status": evt.Status = value; break;
+            case "organizer": evt.Organizer = value; break;
+            case "attendee": evt.Attendees.Add(value); break;
             case "dtstart":
                 evt.AllDay = param.IndexOf("VALUE=DATE", StringComparison.OrdinalIgnoreCase) >= 0
                              && !param.Contains("DATE-TIME");
@@ -159,8 +160,8 @@ public class ICalReader
                                 && !param.Contains("DATE-TIME");
                 evt.End = ParseDateTime(value, allDayEnd);
                 break;
-            case "duration":      evt.Duration = value; break;
-            case "created":       evt.Created = ParseDateTime(value, false); break;
+            case "duration": evt.Duration = value; break;
+            case "created": evt.Created = ParseDateTime(value, false); break;
             case "last-modified": evt.LastModified = ParseDateTime(value, false); break;
             default:
                 evt.ExtraProps[name] = value;
@@ -172,13 +173,13 @@ public class ICalReader
     {
         switch (name.ToLowerInvariant())
         {
-            case "uid":             todo.Uid = value; break;
-            case "summary":         todo.Summary = UnescapeText(value); break;
-            case "description":     todo.Description = UnescapeText(value); break;
-            case "status":          todo.Status = value; break;
-            case "dtstart":         todo.Start = ParseDateTime(value, false); break;
-            case "due":             todo.Due = ParseDateTime(value, false); break;
-            case "completed":       todo.Completed = ParseDateTime(value, false); break;
+            case "uid": todo.Uid = value; break;
+            case "summary": todo.Summary = UnescapeText(value); break;
+            case "description": todo.Description = UnescapeText(value); break;
+            case "status": todo.Status = value; break;
+            case "dtstart": todo.Start = ParseDateTime(value, false); break;
+            case "due": todo.Due = ParseDateTime(value, false); break;
+            case "completed": todo.Completed = ParseDateTime(value, false); break;
             case "percent-complete":
                 if (Int32.TryParse(value, out var pct)) todo.PercentComplete = pct;
                 break;
@@ -196,8 +197,8 @@ public class ICalReader
         {
             // YYYYMMDD
             if (DateTime.TryParseExact(value, "yyyyMMdd",
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out var d))
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None, out var d))
                 return new DateTimeOffset(d, TimeSpan.Zero);
         }
         else
@@ -205,8 +206,8 @@ public class ICalReader
             // YYYYMMDDTHHMISS or YYYYMMDDTHHMISSZ
             var fmt = value.EndsWith("Z", StringComparison.OrdinalIgnoreCase) ? "yyyyMMddTHHmmssZ" : "yyyyMMddTHHmmss";
             if (DateTime.TryParseExact(value.TrimEnd('Z', 'z'), "yyyyMMddTHHmmss",
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.AssumeUniversal, out var dt))
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal, out var dt))
                 return new DateTimeOffset(dt.ToUniversalTime(), TimeSpan.Zero);
         }
         return null;

@@ -1,3 +1,4 @@
+﻿using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -53,8 +54,8 @@ public class VCardReader
             if (String.IsNullOrWhiteSpace(line)) continue;
             var colonIdx = line.IndexOf(':');
             if (colonIdx <= 0) continue;
-            var left = line.Substring(0, colonIdx).Trim();
-            var value = line.Substring(colonIdx + 1).Trim();
+            var left = line[..colonIdx].Trim();
+            var value = line[(colonIdx + 1)..].Trim();
 
             // 拆分属性名和参数（; 分隔）
             var parts = left.Split(';');
@@ -96,7 +97,7 @@ public class VCardReader
         {
             var l = line.TrimEnd('\r');
             if (l.Length > 0 && (l[0] == ' ' || l[0] == '\t'))
-                sb.Append(l.Substring(1));
+                sb.Append(l[1..]);
             else
             {
                 if (sb.Length > 0) lines.Add(sb.ToString());
@@ -170,11 +171,11 @@ public class VCardReader
         var parts = value.Split(';');
         return new VCardName
         {
-            Family     = parts.Length > 0 ? parts[0] : null,
-            Given      = parts.Length > 1 ? parts[1] : null,
+            Family = parts.Length > 0 ? parts[0] : null,
+            Given = parts.Length > 1 ? parts[1] : null,
             Additional = parts.Length > 2 ? parts[2] : null,
-            Prefix     = parts.Length > 3 ? parts[3] : null,
-            Suffix     = parts.Length > 4 ? parts[4] : null,
+            Prefix = parts.Length > 3 ? parts[3] : null,
+            Suffix = parts.Length > 4 ? parts[4] : null,
         };
     }
 
@@ -183,14 +184,14 @@ public class VCardReader
         var parts = value.Split(';');
         return new VCardAddress
         {
-            PoBox      = parts.Length > 0 ? parts[0] : null,
-            Extended   = parts.Length > 1 ? parts[1] : null,
-            Street     = parts.Length > 2 ? parts[2] : null,
-            City       = parts.Length > 3 ? parts[3] : null,
-            Region     = parts.Length > 4 ? parts[4] : null,
+            PoBox = parts.Length > 0 ? parts[0] : null,
+            Extended = parts.Length > 1 ? parts[1] : null,
+            Street = parts.Length > 2 ? parts[2] : null,
+            City = parts.Length > 3 ? parts[3] : null,
+            Region = parts.Length > 4 ? parts[4] : null,
             PostalCode = parts.Length > 5 ? parts[5] : null,
-            Country    = parts.Length > 6 ? parts[6] : null,
-            Type       = type,
+            Country = parts.Length > 6 ? parts[6] : null,
+            Type = type,
         };
     }
 
@@ -199,8 +200,8 @@ public class VCardReader
         // YYYYMMDD or YYYY-MM-DD
         var clean = value.Replace("-", "").Split('T')[0];
         if (clean.Length == 8 && DateTime.TryParseExact(clean, "yyyyMMdd",
-            System.Globalization.CultureInfo.InvariantCulture,
-            System.Globalization.DateTimeStyles.None, out var d))
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None, out var d))
             return d;
         return null;
     }
@@ -227,7 +228,7 @@ public class VCardReader
         {
             if (input[i] == '=' && i + 2 < input.Length)
             {
-                if (Byte.TryParse(input.Substring(i + 1, 2), System.Globalization.NumberStyles.HexNumber, null, out var b))
+                if (Byte.TryParse(input.Substring(i + 1, 2), NumberStyles.HexNumber, null, out var b))
                 {
                     ms.WriteByte(b);
                     i += 3;

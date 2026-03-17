@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Text;
 using System.Xml;
 
@@ -44,7 +44,7 @@ public sealed class WordHtmlConverter
     {
         using var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
         var rels = LoadRelationships(zip);
-        var images = EmbedImages ? LoadImages(zip) : new Dictionary<String, String>();
+        var images = EmbedImages ? LoadImages(zip) : [];
         var doc = LoadDocumentXml(zip);
         var body = RenderDocument(doc, rels, images);
         return FullPage ? BuildFullPage(body) : body;
@@ -234,7 +234,7 @@ public sealed class WordHtmlConverter
             var lastChar = normalized[normalized.Length - 1];
             if (lastChar >= '1' && lastChar <= '6')
             {
-                var prefix = normalized.Substring(0, normalized.Length - 1);
+                var prefix = normalized[..^1];
                 if (prefix == "heading" || prefix == "h" || prefix == "\u6807\u9898")
                     return lastChar - '0';
             }

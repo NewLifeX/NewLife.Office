@@ -1,3 +1,4 @@
+﻿using System.Globalization;
 using System.IO.Compression;
 using System.Security;
 using System.Text;
@@ -205,7 +206,7 @@ public class ExcelPivotBuilder
                 if (val is String s)
                     sb.Append($"<c r=\"{col}\" t=\"inlineStr\"><is><t>{Escape(s)}</t></is></c>");
                 else
-                    sb.Append($"<c r=\"{col}\"><v>{System.Security.SecurityElement.Escape(System.Convert.ToString(val, System.Globalization.CultureInfo.InvariantCulture))}</v></c>");
+                    sb.Append($"<c r=\"{col}\"><v>{SecurityElement.Escape(Convert.ToString(val, CultureInfo.InvariantCulture))}</v></c>");
             }
             sb.Append("</row>");
         }
@@ -235,7 +236,7 @@ public class ExcelPivotBuilder
             // 收集唯一值
             var uniques = _rows!.Select(r => r.Length > h ? r[h] : null)
                                 .Where(v => v != null)
-                                .Select(v => System.Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture)!)
+                                .Select(v => Convert.ToString(v, CultureInfo.InvariantCulture)!)
                                 .Distinct()
                                 .OrderBy(x => x)
                                 .ToList();
@@ -278,7 +279,7 @@ public class ExcelPivotBuilder
                 if (v == null || v is String)
                     sb.Append($"<s v=\"{Escape(v?.ToString() ?? String.Empty)}\"/>");
                 else
-                    sb.Append($"<n v=\"{System.Security.SecurityElement.Escape(System.Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture))}\"/>");
+                    sb.Append($"<n v=\"{SecurityElement.Escape(Convert.ToString(v, CultureInfo.InvariantCulture))}\"/>");
             }
             sb.Append("</r>");
         }

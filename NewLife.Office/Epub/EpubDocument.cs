@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace NewLife.Office;
@@ -36,7 +36,7 @@ public class EpubDocument
     public String CoverMediaType { get; set; } = "image/jpeg";
 
     /// <summary>章节列表（按顺序）</summary>
-    public List<EpubChapter> Chapters { get; set; } = new List<EpubChapter>();
+    public List<EpubChapter> Chapters { get; set; } = [];
 
     /// <summary>自定义 CSS 样式表内容</summary>
     public String StyleSheet { get; set; } = String.Empty;
@@ -59,7 +59,7 @@ public class EpubChapter
     public String FileName { get; set; } = String.Empty;
 
     /// <summary>子章节（嵌套 TOC 支持）</summary>
-    public List<EpubChapter> Children { get; set; } = new List<EpubChapter>();
+    public List<EpubChapter> Children { get; set; } = [];
 
     #endregion
 }

@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Data;
 using NewLife.Office;
 using Xunit;
@@ -129,10 +129,10 @@ public class BiffWriterTests
         using var writer = new BiffWriter();
         writer.WriteRow(new Object?[]
         {
-            (Int32)100,
-            (Int64)999999999L,
-            (Single)3.14f,
-            (Decimal)9999.99m,
+            100,
+            999999999L,
+            3.14f,
+            9999.99m,
             Double.MaxValue
         });
 
@@ -298,7 +298,7 @@ public class BiffWriterTests
 
         for (var i = 1; i <= 1000; i++)
         {
-            writer.WriteRow([i, $"Row_{i}", (Double)i * 1.5]);
+            writer.WriteRow([i, $"Row_{i}", i * 1.5]);
         }
 
         var bytes = writer.ToBytes();

@@ -229,7 +229,7 @@ public class PptxTemplate
 
             var relMap = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase); // rId -> "ppt/media/..."
             foreach (Match m in Regex.Matches(relsXml, @"Id=""([^""]+)""[^>]+Target=""(\.\./media/[^""]+)"""))
-                relMap[m.Groups[1].Value] = "ppt/media/" + m.Groups[2].Value.Substring("../media/".Length);
+                relMap[m.Groups[1].Value] = "ppt/media/" + m.Groups[2].Value["../media/".Length..];
 
             foreach (var kv in images)
             {

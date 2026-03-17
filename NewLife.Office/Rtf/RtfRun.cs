@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace NewLife.Office.Rtf;
@@ -43,6 +43,6 @@ public sealed class RtfRun
 
     #region 方法
     /// <inheritdoc/>
-    public override String ToString() => $"{Text.Substring(0, Math.Min(Text.Length, 40))}{(Text.Length > 40 ? "..." : "")}";
+    public override String ToString() => $"{Text[..Math.Min(Text.Length, 40)]}{(Text.Length > 40 ? "..." : "")}";
     #endregion
 }

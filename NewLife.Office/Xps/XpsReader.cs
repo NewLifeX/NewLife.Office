@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Text;
 using System.Xml;
 
@@ -274,7 +274,7 @@ public class XpsReader
     private static String ResolveUri(String baseUri, String relative)
     {
         if (relative.StartsWith("/")) return relative.TrimStart('/');
-        var dir = baseUri.Contains('/') ? baseUri.Substring(0, baseUri.LastIndexOf('/') + 1) : String.Empty;
+        var dir = baseUri.Contains('/') ? baseUri[..(baseUri.LastIndexOf('/') + 1)] : String.Empty;
         return dir + relative;
     }
 

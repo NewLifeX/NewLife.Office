@@ -764,7 +764,7 @@ public class PdfWriter : IDisposable
     {
         hex = hex.TrimStart('#');
         if (hex.Length < 6) hex = "000000";
-        var r = Convert.ToInt32(hex.Substring(0, 2), 16) / 255f;
+        var r = Convert.ToInt32(hex[..2], 16) / 255f;
         var g = Convert.ToInt32(hex.Substring(2, 2), 16) / 255f;
         var b = Convert.ToInt32(hex.Substring(4, 2), 16) / 255f;
         return fill
