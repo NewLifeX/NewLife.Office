@@ -236,4 +236,23 @@ public static class PdfDocument
         w.Save(outputPath);
     }
     #endregion
+
+    #region 渲染为图片
+    /// <summary>将 PDF 每页渲染为图片（PNG/JPEG）</summary>
+    /// <remarks>
+    /// TODO: 本方法尚未实现。将 PDF 页面渲染为光栅图片需要引入渲染引擎，
+    /// 如 Docnet.Core（基于 PDFium）或 SkiaSharp + 自定义 PDF 解码器。
+    /// 当前版本为零依赖库，故此功能暂不支持。
+    /// 待引入渲染库时，此方法应返回每页对应的图片字节数组（PNG 格式）。
+    /// </remarks>
+    /// <param name="sourcePath">源 PDF 文件路径</param>
+    /// <param name="dpi">输出分辨率（DPI），默认 150</param>
+    /// <returns>每页图片字节（PNG 格式）的序列</returns>
+    /// <exception cref="NotSupportedException">当前版本始终抛出，待引入渲染库后实现</exception>
+    public static IEnumerable<Byte[]> RenderToImages(String sourcePath, Int32 dpi = 150)
+    {
+        throw new NotSupportedException(
+            "将 PDF 页面渲染为图片需要引入 Docnet.Core 或 SkiaSharp 等渲染库，当前版本不支持。");
+    }
+    #endregion
 }
