@@ -80,6 +80,23 @@ public sealed class WordPdfConverter
         pdf.Save(outputPath);
     }
 
+    /// <summary>将 docx 每页渲染为图片（PNG/JPEG）</summary>
+    /// <remarks>
+    /// TODO: 本方法尚未实现。将文档渲染为光栅图片需要引入渲染引擎（如 SkiaSharp + Docnet.Core）
+    /// 将 PDF 中间格式解码为帧位图，当前版本不依赖外部库，故此功能暂不支持。
+    /// 如需此功能，建议先调用 ConvertToBytes/ConvertToFile 获得 PDF，再用 PdfDocument.RenderToImages 处理。
+    /// </remarks>
+    /// <param name="stream">包含 docx 内容的可读流</param>
+    /// <param name="dpi">输出分辨率（DPI）</param>
+    /// <returns>每页图片字节（PNG 格式）</returns>
+    /// <exception cref="NotSupportedException">当前版本始终抛出，待引入渲染库后实现</exception>
+    public IEnumerable<Byte[]> ConvertToImages(Stream stream, Int32 dpi = 150)
+    {
+        throw new NotSupportedException(
+            "渲染为图片需要引入 SkiaSharp/Docnet.Core 等渲染库，当前版本不支持。" +
+            "建议先转换为 PDF，再使用 PdfDocument.RenderToImages 处理。");
+    }
+
     #endregion
 
     #region 渲染核心
