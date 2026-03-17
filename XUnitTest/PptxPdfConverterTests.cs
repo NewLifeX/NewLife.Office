@@ -145,4 +145,25 @@ public class PptxPdfConverterTests
         var text = Encoding.Latin1.GetString(output.ToArray());
         Assert.StartsWith("%PDF-1.4", text);
     }
+
+    // ─── S09-02：PPT 转图片（当前版本为占位桩，依赖外部渲染库）── ──────
+
+    [Fact, System.ComponentModel.DisplayName("S09-02 ConvertToImages 当前版本抛出 NotSupportedException")]
+    public void ConvertToImages_ThrowsNotSupportedException()
+    {
+        // ConvertToImages 需要 SkiaSharp/Docnet.Core 渲染引擎
+        // 当前零依赖版本按约定抛出 NotSupportedException
+        var ex = Assert.Throws<NotSupportedException>(
+            () => new PptxPdfConverter().ConvertToImages("dummy.pptx").GetEnumerator().MoveNext());
+        Assert.Contains("SkiaSharp", ex.Message);
+    }
+
+    [Fact, System.ComponentModel.DisplayName("S09-02 ConvertToImages 错误消息包含替代方案提示")]
+    public void ConvertToImages_ErrorMessageSuggestsAlternative()
+    {
+        var ex = Assert.Throws<NotSupportedException>(
+            () => new PptxPdfConverter().ConvertToImages("any.pptx").GetEnumerator().MoveNext());
+        // 错误信息应包含建议使用 Convert → PDF 路径的提示
+        Assert.Contains("Convert", ex.Message);
+    }
 }

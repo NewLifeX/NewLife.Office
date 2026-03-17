@@ -22,6 +22,7 @@ public sealed class OdsReader
     private const String NsTable  = "urn:oasis:names:tc:opendocument:xmlns:table:1.0";
     private const String NsText   = "urn:oasis:names:tc:opendocument:xmlns:text:1.0";
     private const String NsStyle  = "urn:oasis:names:tc:opendocument:xmlns:style:1.0";
+    private const String NsFo     = "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0";
     #endregion
 
     #region 方法 — 读取
@@ -130,12 +131,69 @@ public sealed class OdsReader
         var currentRowIndex = 0;
         var currentColIndex = 0;
 
+        // 样式解析状态
+        var styleMap = new Dictionary<String, OdsCellStyle>();
+        var inAutoStyles = false;
+        String? currentStyleName = null;
+        OdsCellStyle? currentCellStyle = null;
+        String? currentCellStyleName = null;
+
         while (reader.Read())
         {
             if (reader.NodeType == XmlNodeType.Element)
             {
                 var ns = reader.NamespaceURI;
                 var name = reader.LocalName;
+
+                // 进入 automatic-styles 区段
+                if (ns == NsOffice && name == "automatic-styles")
+                {
+                    inAutoStyles = true;
+                    continue;
+                }
+
+                // 样式定义：仅处理 family="table-cell"
+                if (inAutoStyles && ns == NsStyle && name == "style")
+                {
+                    var family = reader.GetAttribute("family", NsStyle);
+                    if (family == "table-cell")
+                    {
+                        currentStyleName = reader.GetAttribute("name", NsStyle);
+                        currentCellStyle = new OdsCellStyle();
+                    }
+                    continue;
+                }
+
+                // 文本属性：字体粗体/斜体/大小/颜色
+                if (inAutoStyles && currentCellStyle != null && ns == NsStyle && name == "text-properties")
+                {
+                    var weight = reader.GetAttribute("font-weight", NsFo);
+                    if (weight == "bold") currentCellStyle.FontBold = true;
+                    var fontStyle = reader.GetAttribute("font-style", NsFo);
+                    if (fontStyle == "italic") currentCellStyle.FontItalic = true;
+                    var size = reader.GetAttribute("font-size", NsFo);
+                    if (size != null) currentCellStyle.FontSize = ParsePtValue(size);
+                    var color = reader.GetAttribute("color", NsFo);
+                    if (!String.IsNullOrEmpty(color)) currentCellStyle.FontColor = color;
+                    continue;
+                }
+
+                // 单元格属性：背景色
+                if (inAutoStyles && currentCellStyle != null && ns == NsStyle && name == "table-cell-properties")
+                {
+                    var bg = reader.GetAttribute("background-color", NsFo);
+                    if (!String.IsNullOrEmpty(bg) && bg != "transparent")
+                        currentCellStyle.BackgroundColor = bg;
+                    continue;
+                }
+
+                // 段落属性：水平对齐
+                if (inAutoStyles && currentCellStyle != null && ns == NsStyle && name == "paragraph-properties")
+                {
+                    var align = reader.GetAttribute("text-align", NsFo);
+                    if (!String.IsNullOrEmpty(align)) currentCellStyle.HAlign = align;
+                    continue;
+                }
 
                 if (ns == NsTable && name == "table")
                 {
@@ -160,6 +218,7 @@ public sealed class OdsReader
                     cellRepeat = GetRepeatAttr(reader, NsTable, "number-columns-repeated");
                     colSpan = GetRepeatAttr(reader, NsTable, "number-columns-spanned");
                     rowSpan = GetRepeatAttr(reader, NsTable, "number-rows-spanned");
+                    currentCellStyleName = reader.GetAttribute("style-name", NsTable);
                     cellText = new StringBuilder();
                     inTextP = false;
                     continue;
@@ -175,6 +234,25 @@ public sealed class OdsReader
             {
                 var ns = reader.NamespaceURI;
                 var name = reader.LocalName;
+
+                // 离开 automatic-styles
+                if (ns == NsOffice && name == "automatic-styles")
+                {
+                    inAutoStyles = false;
+                    currentStyleName = null;
+                    currentCellStyle = null;
+                    continue;
+                }
+
+                // 完成一条样式定义
+                if (inAutoStyles && ns == NsStyle && name == "style")
+                {
+                    if (currentStyleName != null && currentCellStyle != null)
+                        styleMap[currentStyleName] = currentCellStyle;
+                    currentStyleName = null;
+                    currentCellStyle = null;
+                    continue;
+                }
 
                 if (ns == NsText && name == "p")
                 {
@@ -198,6 +276,12 @@ public sealed class OdsReader
                                 RowSpan = rowSpan,
                             });
                         }
+                        // 记录单元格样式（仅首列，不展开 repeat）
+                        if (currentSheet != null && currentCellStyleName != null &&
+                            styleMap.TryGetValue(currentCellStyleName, out var cellStyle))
+                        {
+                            currentSheet.CellStyles[(currentRowIndex, currentColIndex)] = cellStyle;
+                        }
                         for (var i = 0; i < cellRepeat; i++)
                             currentRow.Add(val);
                         currentColIndex += cellRepeat;
@@ -206,6 +290,7 @@ public sealed class OdsReader
                     inTextP = false;
                     colSpan = 1;
                     rowSpan = 1;
+                    currentCellStyleName = null;
                     continue;
                 }
 
@@ -235,6 +320,17 @@ public sealed class OdsReader
         }
 
         return result;
+    }
+
+    /// <summary>解析 "12pt"/"12.5pt" 格式的字体大小，返回 Single</summary>
+    private static Single ParsePtValue(String val)
+    {
+        if (val.EndsWith("pt", StringComparison.OrdinalIgnoreCase) &&
+            Single.TryParse(val.Substring(0, val.Length - 2),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var f))
+            return f;
+        return 0f;
     }
 
     private static Int32 GetRepeatAttr(XmlReader reader, String ns, String localName)
@@ -351,6 +447,9 @@ public sealed class OdsSheet
 
     /// <summary>合并单元格区域列表</summary>
     public List<OdsMergeRegion> MergedCells { get; } = [];
+
+    /// <summary>单元格样式字典，键为（行索引 0 基, 列索引 0 基）</summary>
+    public Dictionary<(Int32 Row, Int32 Col), OdsCellStyle> CellStyles { get; } = [];
 }
 
 /// <summary>ODS 合并单元格区域</summary>
@@ -367,4 +466,26 @@ public sealed class OdsMergeRegion
 
     /// <summary>跨列数，≥ 1</summary>
     public Int32 ColSpan { get; set; } = 1;
+}
+
+/// <summary>ODS 单元格样式（字体、颜色、对齐）</summary>
+public sealed class OdsCellStyle
+{
+    /// <summary>字体是否加粗</summary>
+    public Boolean FontBold { get; set; }
+
+    /// <summary>字体是否斜体</summary>
+    public Boolean FontItalic { get; set; }
+
+    /// <summary>字体大小（磅），0 表示未设置</summary>
+    public Single FontSize { get; set; }
+
+    /// <summary>字体颜色，格式 #RRGGBB；null 表示未设置</summary>
+    public String? FontColor { get; set; }
+
+    /// <summary>背景颜色，格式 #RRGGBB；null 表示未设置</summary>
+    public String? BackgroundColor { get; set; }
+
+    /// <summary>水平对齐：start / center / end / left / right；null 表示未设置</summary>
+    public String? HAlign { get; set; }
 }

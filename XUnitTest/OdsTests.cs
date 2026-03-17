@@ -459,4 +459,153 @@ public class OdsTests
         Assert.Equal("Bob", people[1].Name);
     }
     #endregion
+
+    #region OD01-04 单元格样式读取
+
+    // 构造带样式定义的最简 content.xml
+    private static String BuildStyledContentXml(String styleXml, String cellStyleName, String cellValue)
+    {
+        return $@"<?xml version=""1.0"" encoding=""UTF-8""?>
+<office:document-content
+  xmlns:office=""urn:oasis:names:tc:opendocument:xmlns:office:1.0""
+  xmlns:table=""urn:oasis:names:tc:opendocument:xmlns:table:1.0""
+  xmlns:text=""urn:oasis:names:tc:opendocument:xmlns:text:1.0""
+  xmlns:style=""urn:oasis:names:tc:opendocument:xmlns:style:1.0""
+  xmlns:fo=""urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"">
+  <office:automatic-styles>
+    {styleXml}
+  </office:automatic-styles>
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name=""Sheet1"">
+        <table:table-row>
+          <table:table-cell table:style-name=""{cellStyleName}"">
+            <text:p>{cellValue}</text:p>
+          </table:table-cell>
+        </table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document-content>";
+    }
+
+    [Fact]
+    [DisplayName("OD01-04 读取粗体单元格样式")]
+    public void ReadSheet_BoldCellStyle_Detected()
+    {
+        var styleXml = @"<style:style style:name=""ce1"" style:family=""table-cell"">
+      <style:text-properties fo:font-weight=""bold""/>
+    </style:style>";
+        using var ms = BuildOdsMsWithContent(BuildStyledContentXml(styleXml, "ce1", "Hello"));
+        var sheets = OdsReader.Read(ms);
+        Assert.Single(sheets);
+        var style = sheets[0].CellStyles.GetValueOrDefault((0, 0));
+        Assert.NotNull(style);
+        Assert.True(style!.FontBold);
+        Assert.False(style.FontItalic);
+    }
+
+    [Fact]
+    [DisplayName("OD01-04 读取斜体单元格样式")]
+    public void ReadSheet_ItalicCellStyle_Detected()
+    {
+        var styleXml = @"<style:style style:name=""ce2"" style:family=""table-cell"">
+      <style:text-properties fo:font-style=""italic""/>
+    </style:style>";
+        using var ms = BuildOdsMsWithContent(BuildStyledContentXml(styleXml, "ce2", "World"));
+        var sheets = OdsReader.Read(ms);
+        var style = sheets[0].CellStyles.GetValueOrDefault((0, 0));
+        Assert.NotNull(style);
+        Assert.True(style!.FontItalic);
+    }
+
+    [Fact]
+    [DisplayName("OD01-04 读取字体大小")]
+    public void ReadSheet_FontSize_Parsed()
+    {
+        var styleXml = @"<style:style style:name=""ce3"" style:family=""table-cell"">
+      <style:text-properties fo:font-size=""14pt""/>
+    </style:style>";
+        using var ms = BuildOdsMsWithContent(BuildStyledContentXml(styleXml, "ce3", "Sized"));
+        var sheets = OdsReader.Read(ms);
+        var style = sheets[0].CellStyles.GetValueOrDefault((0, 0));
+        Assert.NotNull(style);
+        Assert.Equal(14f, style!.FontSize, 0.01f);
+    }
+
+    [Fact]
+    [DisplayName("OD01-04 读取字体颜色和背景色")]
+    public void ReadSheet_FontAndBgColor_Parsed()
+    {
+        var styleXml = @"<style:style style:name=""ce4"" style:family=""table-cell"">
+      <style:text-properties fo:color=""#FF0000""/>
+      <style:table-cell-properties fo:background-color=""#FFFF00""/>
+    </style:style>";
+        using var ms = BuildOdsMsWithContent(BuildStyledContentXml(styleXml, "ce4", "Color"));
+        var sheets = OdsReader.Read(ms);
+        var style = sheets[0].CellStyles.GetValueOrDefault((0, 0));
+        Assert.NotNull(style);
+        Assert.Equal("#FF0000", style!.FontColor);
+        Assert.Equal("#FFFF00", style.BackgroundColor);
+    }
+
+    [Fact]
+    [DisplayName("OD01-04 读取水平对齐属性")]
+    public void ReadSheet_HAlign_Parsed()
+    {
+        var styleXml = @"<style:style style:name=""ce5"" style:family=""table-cell"">
+      <style:paragraph-properties fo:text-align=""center""/>
+    </style:style>";
+        using var ms = BuildOdsMsWithContent(BuildStyledContentXml(styleXml, "ce5", "Center"));
+        var sheets = OdsReader.Read(ms);
+        var style = sheets[0].CellStyles.GetValueOrDefault((0, 0));
+        Assert.NotNull(style);
+        Assert.Equal("center", style!.HAlign);
+    }
+
+    [Fact]
+    [DisplayName("OD01-04 无样式的单元格不出现在 CellStyles 字典")]
+    public void ReadSheet_NoStyle_NotInCellStyles()
+    {
+        var xml = @"<?xml version=""1.0"" encoding=""UTF-8""?>
+<office:document-content
+  xmlns:office=""urn:oasis:names:tc:opendocument:xmlns:office:1.0""
+  xmlns:table=""urn:oasis:names:tc:opendocument:xmlns:table:1.0""
+  xmlns:text=""urn:oasis:names:tc:opendocument:xmlns:text:1.0"">
+  <office:body>
+    <office:spreadsheet>
+      <table:table table:name=""Plain"">
+        <table:table-row>
+          <table:table-cell><text:p>NoStyle</text:p></table:table-cell>
+        </table:table-row>
+      </table:table>
+    </office:spreadsheet>
+  </office:body>
+</office:document-content>";
+        using var ms = BuildOdsMsWithContent(xml);
+        var sheets = OdsReader.Read(ms);
+        Assert.Single(sheets);
+        Assert.Empty(sheets[0].CellStyles);
+    }
+
+    [Fact]
+    [DisplayName("OD01-04 复合样式：粗体+颜色+背景同时读取")]
+    public void ReadSheet_CompoundStyle_AllPropertiesParsed()
+    {
+        var styleXml = @"<style:style style:name=""ce6"" style:family=""table-cell"">
+      <style:text-properties fo:font-weight=""bold"" fo:color=""#0000FF"" fo:font-size=""12pt""/>
+      <style:table-cell-properties fo:background-color=""#E0E0E0""/>
+      <style:paragraph-properties fo:text-align=""end""/>
+    </style:style>";
+        using var ms = BuildOdsMsWithContent(BuildStyledContentXml(styleXml, "ce6", "Compound"));
+        var sheets = OdsReader.Read(ms);
+        var style = sheets[0].CellStyles.GetValueOrDefault((0, 0));
+        Assert.NotNull(style);
+        Assert.True(style!.FontBold);
+        Assert.Equal("#0000FF", style.FontColor);
+        Assert.Equal(12f, style.FontSize, 0.01f);
+        Assert.Equal("#E0E0E0", style.BackgroundColor);
+        Assert.Equal("end", style.HAlign);
+    }
+    #endregion
 }
