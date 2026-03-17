@@ -88,11 +88,14 @@ Nuget：NewLife.Office
 - `MarkdownParser`：解析 CommonMark + GFM（标题/段落/代码块/列表/引用/粗斜体/图片/表格/任务列表）
 - `MarkdownWriter`：将 `MarkdownDocument` 序列化为 .md 文本（包括 GFM 扩展）
 - `MarkdownHtmlConverter`：Markdown 转换为语义化 HTML
+- `MarkdownWordConverter`：Markdown → Word（docx），标题/段落/列表/表格映射为 Word 样式
+- `MarkdownPdfConverter`：Markdown → PDF（通过 PdfFluentDocument 直出 PDF）
+- `MarkdownDocument.ToWord()` / `ToPdf()` 快捷方法
 
 ### RTF
 
-- `RtfReader`：解析 RTF 文件，提取段落（字体/颜色/对齐）、表格、文档属性
-- `RtfWriter`：创建 RTF 文件（段落格式/表格/模板填充）
+- `RtfReader`：解析 RTF 文件，提取段落（字体/颜色/对齐）、表格、文档属性、嵌入图片（PNG/JPEG/WMF/EMF）
+- `RtfWriter`：创建 RTF 文件（段落格式/表格/模板填充）；`AddImage()` 支持嵌入 PNG/JPEG 图片（十六进制编码）
 
 ### ODS
 
@@ -204,6 +207,13 @@ writer.SetRowHeight("Sheet1", 1, 30); // 设置行高
 - `EmlWriter`：生成合法 MIME 邮件（文本/HTML 正文、附件、内嵌图片）
 - 支持 RFC 2047 Base64/Q-Encoding 头部解码、quoted-printable 正文解码
 
+### MSG（Outlook 邮件）
+
+- `MsgReader`：基于 OLE2/CFB 容器解析 Outlook .msg 文件，提取 MAPI 属性
+- 支持主题（PR_SUBJECT）、发件人、收件人列表（To/Cc/Bcc）
+- 支持纯文本正文（PR_BODY）和 HTML 正文（PR_HTML_BODY）
+- 支持多附件提取（`__attach_version1.0_#NN` 子存储，含文件名和二进制数据）
+
 ### iCalendar（日历）
 
 - `ICalReader`：解析 RFC 5545 .ics 文件，提取 VEVENT/VTODO/VJOURNAL 及重复规则
@@ -219,10 +229,25 @@ writer.SetRowHeight("Sheet1", 1, 30); // 设置行高
 - `EpubReader`：读取 EPUB 2/3 文件（ZIP + OPF + XHTML），提取元数据和章节内容
 - `EpubWriter`：生成符合 EPUB 3 规范的电子书（mimetype/container.xml/OPF/Nav/章节 XHTML/CSS/封面图片）
 
+## 已实现能力（XPS）
+
+### XpsReader / XpsWriter
+
+- `XpsReader`：解析 XPS（XML Paper Specification）文件（ZIP + XML），遍历 FixedDocumentSequence → FixedDocument → FixedPage
+- 文本提取：从 `<Glyphs UnicodeString="...">` 元素提取文本内容
+- 图片提取：`ExtractImages()` 返回所有嵌入 PNG/JPEG 资源
+- 页面信息：`Width`/`Height` 从 `<FixedPage>` 属性读取
+- 元数据：`ReadProperties()` 解析 `docProps/core.xml`（标题/作者/主题）
+- `XpsWriter`：生成合法 XPS 文件（`[Content_Types].xml` + `_rels/.rels` + FDS + .fpage）
+- `AddPage(width, height, IEnumerable<(text, x, y, fontSize)>)` 多页写入
+- `SetProperties(XpsProperties)` 写入文档属性
+- `AddImage(name, data, mime)` 嵌入图片资源
+- `Save(path|stream)` / `ToBytes()` 输出
+
 ## 测试状态
 
-- 当前测试集：`312` 项
-- 通过：`312` 项
+- 当前测试集：`370` 项
+- 通过：`370` 项
 - 失败：`0` 项
 
 ## 已实现格式概览
@@ -236,15 +261,15 @@ writer.SetRowHeight("Sheet1", 1, 30); // 设置行高
 | **PPT pptx** | ✅ | ✅ | ✅ | 🔄规划 | 含文本框/图片/表格/图表/母版 |
 | **PPT ppt** | ✅ | — | — | — | MS-PPT，PptReader 提取幻灯片文本 |
 | **PDF** | ✅ | ✅ | — | — | 含 Fluent API/合并/拆分/加密 |
-| **Markdown** | ✅ | ✅ | — | HTML | CommonMark + GFM，含 AST 模型 |
-| **RTF** | ✅ | ✅ | ✅ | — | 段落/表格/模板填充 |
+| **Markdown** | ✅ | ✅ | — | HTML/Word/PDF | CommonMark + GFM，含 AST 模型，→Word/→PDF 已实现 |
+| **RTF** | ✅ | ✅ | ✅ | — | 段落/表格/模板填充/图片嵌入（PNG/JPEG） |
 | **ODS** | ✅ | ✅ | — | — | LibreOffice 原生格式 |
 | **EML** | ✅ | ✅ | — | — | RFC 5322 + MIME，附件/内嵌图片 |
-| **MSG** | 🔄规划 | — | — | — | Outlook，OLE2 容器 |
+| **MSG** | ✅ | — | — | — | Outlook，OLE2 + MAPI，提取主题/正文/附件 |
 | **iCalendar** | ✅ | ✅ | — | — | RFC 5545 .ics，VEVENT/VTODO/RRULE |
 | **vCard** | ✅ | ✅ | — | — | RFC 6350 .vcf，vCard 3.0/4.0 |
 | **EPUB** | ✅ | ✅ | — | — | EPUB 2/3，OPF/Nav/章节/封面 |
-| **XPS** | 🔄规划 | 🔄规划 | — | — | XPS/OXPS 固定版式 |
+| **XPS** | ✅ | ✅ | — | — | ZIP+XML，Glyphs 文本提取/多页写入/图片/元数据 |
 
 ## 代码结构
 
@@ -262,7 +287,7 @@ NewLife.Office/
 ├── Calendar/     # iCalendar .ics 读写：ICalReader / ICalWriter / ICalDocument
 ├── VCard/        # vCard .vcf 读写：VCardReader / VCardWriter / VCardContact
 ├── Epub/         # EPUB 读写：EpubReader / EpubWriter / EpubDocument
-└── Xps/          # XPS 读写（规划中）
+└── Xps/          # XPS 读写：XpsReader / XpsWriter
 ```
 
 ## 规划中
@@ -277,19 +302,9 @@ NewLife.Office/
 
 - pptx 每张幻灯片转换为 PDF 页面或 PNG/JPEG 图像
 
-### Markdown → Word / PDF
+### ODS 合并单元格
 
-- Markdown 标题/段落映射为 Word 样式或通过 PDF 渲染
-
-### RTF 图片嵌入 / ODS 合并单元格
-
-- RtfWriter 支持 PNG/JPEG 图片嵌入
 - OdsReader 识别合并单元格（number-columns-spanned）
-
-### MSG / XPS
-
-- MSG（Outlook，基于 OLE2）读取
-- XPS/OXPS 固定版式文档读写
 
 ## 新生命项目矩阵
 
