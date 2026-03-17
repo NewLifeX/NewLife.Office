@@ -1,4 +1,4 @@
-using NewLife.Buffers;
+﻿using NewLife.Buffers;
 
 namespace NewLife.Office;
 
@@ -31,11 +31,10 @@ internal sealed class CfbReader
     /// <returns>根存储节点</returns>
     public CfbStorage Parse()
     {
-        // 1. 读取并解析文件头
-        var headerBuf = new Byte[512];
+        // 1. 顺序读取 512 字节文件头（SpanReader 适合此处的顺序读取）
         _fs.Seek(0, SeekOrigin.Begin);
-        ReadFull(_fs, headerBuf);
-        _header = CfbHeader.ReadFrom(headerBuf);
+        var headerReader = new SpanReader(_fs, bufferSize: 512);
+        _header = CfbHeader.ReadFrom(ref headerReader);
 
         // 2. 构建完整的 FAT 扇区 ID 列表（含 DIFAT 扩展）
         var fatSectorIds = BuildFatSectorList();
@@ -83,18 +82,19 @@ internal sealed class CfbReader
 
         // 若存在 DIFAT 扇区链，继续追加
         var difatSid = _header.FirstDifatSectorId;
+        var sectorBuf = new Byte[_header.SectorSize];
         while (difatSid != CfbSectorMarker.EndOfChain && difatSid != CfbSectorMarker.FreeSect)
         {
-            var buf = ReadSector(difatSid);
-            var reader = new SpanReader(buf, 0, buf.Length);
+            ReadAt((Int64)(difatSid + 1) * _header.SectorSize, sectorBuf, 0, _header.SectorSize);
+            var sr = new SpanReader(sectorBuf, 0, _header.SectorSize);
             var entriesPerSector = (_header.SectorSize / 4) - 1; // 最后 4 字节是下 DIFAT 扇区 ID
             for (var i = 0; i < entriesPerSector; i++)
             {
-                var id = reader.ReadInt32();
+                var id = sr.ReadInt32();
                 if (id != CfbSectorMarker.FreeSect && id != CfbSectorMarker.EndOfChain)
                     list.Add(id);
             }
-            difatSid = reader.ReadInt32(); // 最后4字节：下一个 DIFAT 扇区
+            difatSid = sr.ReadInt32(); // 最后4字节：下一个 DIFAT 扇区
         }
 
         return list;
@@ -106,14 +106,13 @@ internal sealed class CfbReader
         var entriesPerSector = _header.SectorSize / 4;
         var fat = new Int32[fatSectorIds.Count * entriesPerSector];
         var idx = 0;
+        var sectorBuf = new Byte[_header.SectorSize];
         foreach (var sid in fatSectorIds)
         {
-            var buf = ReadSector(sid);
-            var reader = new SpanReader(buf, 0, buf.Length);
+            ReadAt((Int64)(sid + 1) * _header.SectorSize, sectorBuf, 0, _header.SectorSize);
+            var sr = new SpanReader(sectorBuf, 0, _header.SectorSize);
             for (var i = 0; i < entriesPerSector; i++)
-            {
-                fat[idx++] = reader.ReadInt32();
-            }
+                fat[idx++] = sr.ReadInt32();
         }
         return fat;
     }
@@ -124,11 +123,9 @@ internal sealed class CfbReader
         var data = ReadSectorChain(startSid, _header.MiniFatSectorCount * _header.SectorSize);
         var count = data.Length / 4;
         var arr = new Int32[count];
-        var reader = new SpanReader(data, 0, data.Length);
+        var sr = new SpanReader(data, 0, data.Length);
         for (var i = 0; i < count; i++)
-        {
-            arr[i] = reader.ReadInt32();
-        }
+            arr[i] = sr.ReadInt32();
         return arr;
     }
 
@@ -140,10 +137,7 @@ internal sealed class CfbReader
         var count = dirData.Length / entrySize;
         var entries = new CfbDirectoryEntry[count];
         for (var i = 0; i < count; i++)
-        {
-            var buf = Slice(dirData, i * entrySize, entrySize);
-            entries[i] = CfbDirectoryEntry.ReadFrom(buf, i);
-        }
+            entries[i] = CfbDirectoryEntry.ReadFrom(dirData.AsSpan(i * entrySize, entrySize), i);
         return entries;
     }
 
@@ -196,97 +190,93 @@ internal sealed class CfbReader
     /// <param name="expectedSize">期望大小（-1 表示读取整个链）</param>
     private Byte[] ReadSectorChain(Int32 startSid, Int32 expectedSize)
     {
-        var chunks = new List<Byte[]>();
-        var total = 0;
+        // 先遍历 FAT 链计算扇区数量
+        var sectorSize = _header.SectorSize;
+        var sectorCount = 0;
         var sid = startSid;
         while (sid != CfbSectorMarker.EndOfChain && sid != CfbSectorMarker.FreeSect && sid >= 0)
         {
-            var sector = ReadSector(sid);
-            chunks.Add(sector);
-            total += sector.Length;
+            sectorCount++;
+            if (sid >= _fat.Length) break;
+            sid = _fat[sid];
+        }
+        if (sectorCount == 0) return [];
+
+        // 分配结果缓冲区并通过 ReadAt 按扇区读取
+        var total = sectorCount * sectorSize;
+        var resultSize = expectedSize > 0 && expectedSize < total ? expectedSize : total;
+        var result = new Byte[resultSize];
+
+        var pos = 0;
+        sid = startSid;
+        while (sid != CfbSectorMarker.EndOfChain && sid != CfbSectorMarker.FreeSect && sid >= 0 && pos < resultSize)
+        {
+            var copyLen = Math.Min(sectorSize, resultSize - pos);
+            ReadAt((Int64)(sid + 1) * sectorSize, result, pos, copyLen);
+            pos += copyLen;
             if (sid >= _fat.Length) break;
             sid = _fat[sid];
         }
 
-        // 如果没有数据
-        if (total == 0) return [];
-
-        // 拼接并截断到期望大小
-        var result = new Byte[total];
-        var pos = 0;
-        foreach (var chunk in chunks)
-        {
-            Array.Copy(chunk, 0, result, pos, chunk.Length);
-            pos += chunk.Length;
-        }
-
-        if (expectedSize > 0 && expectedSize < total)
-            return Slice(result, 0, expectedSize);
-
         return result;
+    }
+
+    /// <summary>从流的指定偏移处读取确定数量的字节</summary>
+    /// <param name="offset">文件偏移</param>
+    /// <param name="dest">目标缓冲区</param>
+    /// <param name="destOffset">写入起始偏移</param>
+    /// <param name="count">读取字节数</param>
+    private void ReadAt(Int64 offset, Byte[] dest, Int32 destOffset, Int32 count)
+    {
+        _fs.Seek(offset, SeekOrigin.Begin);
+        var read = 0;
+        while (read < count)
+        {
+            var r = _fs.Read(dest, destOffset + read, count - read);
+            if (r == 0) throw new EndOfStreamException("Unexpected end of CFB stream.");
+            read += r;
+        }
     }
 
     /// <summary>通过 Mini FAT 链读取迷你流数据</summary>
     private Byte[] ReadMiniStreamChain(Int32 startMiniSid, Int32 expectedSize)
     {
         var miniSectorSize = _header.MiniSectorSize;
-        var chunks = new List<Byte[]>();
-        var total = 0;
+
+        // 先遍历 Mini FAT 链计算有效扇区数量
+        var sectorCount = 0;
         var msid = startMiniSid;
         while (msid != CfbSectorMarker.EndOfChain && msid != CfbSectorMarker.FreeSect && msid >= 0)
+        {
+            if (msid * miniSectorSize + miniSectorSize <= _miniStream.Length)
+                sectorCount++;
+            if (msid >= _miniFat.Length) break;
+            msid = _miniFat[msid];
+        }
+        if (sectorCount == 0) return [];
+
+        // 分配结果缓冲区并直接从迷你流复制
+        var total = sectorCount * miniSectorSize;
+        var resultSize = expectedSize > 0 && expectedSize < total ? expectedSize : total;
+        var result = new Byte[resultSize];
+
+        var pos = 0;
+        msid = startMiniSid;
+        while (msid != CfbSectorMarker.EndOfChain && msid != CfbSectorMarker.FreeSect && msid >= 0 && pos < resultSize)
         {
             var offset = msid * miniSectorSize;
             if (offset + miniSectorSize <= _miniStream.Length)
             {
-                chunks.Add(Slice(_miniStream, offset, miniSectorSize));
-                total += miniSectorSize;
+                var copyLen = Math.Min(miniSectorSize, resultSize - pos);
+                Array.Copy(_miniStream, offset, result, pos, copyLen);
+                pos += copyLen;
             }
             if (msid >= _miniFat.Length) break;
             msid = _miniFat[msid];
         }
 
-        var result = new Byte[total];
-        var pos = 0;
-        foreach (var chunk in chunks)
-        {
-            Array.Copy(chunk, 0, result, pos, chunk.Length);
-            pos += chunk.Length;
-        }
-
-        if (expectedSize > 0 && expectedSize < total)
-            return Slice(result, 0, expectedSize);
-
         return result;
     }
 
-    /// <summary>读取指定编号的扇区（512 或 4096 字节）</summary>
-    private Byte[] ReadSector(Int32 sectorId)
-    {
-        var buf = new Byte[_header.SectorSize];
-        var offset = (Int64)(sectorId + 1) * _header.SectorSize;
-        _fs.Seek(offset, SeekOrigin.Begin);
-        ReadFull(_fs, buf);
-        return buf;
-    }
-
-    /// <summary>兼容所有目标框架的全量读取（替代 net7+ 的 ReadExactly）</summary>
-    private static void ReadFull(Stream stream, Byte[] buf)
-    {
-        var offset = 0;
-        while (offset < buf.Length)
-        {
-            var read = stream.Read(buf, offset, buf.Length - offset);
-            if (read == 0) throw new EndOfStreamException("Unexpected end of CFB stream.");
-            offset += read;
-        }
-    }
-
-    /// <summary>兼容所有目标框架的数组切片（替代 C# 8 range 语法）</summary>
-    private static Byte[] Slice(Byte[] src, Int32 start, Int32 length)
-    {
-        var result = new Byte[length];
-        Array.Copy(src, start, result, 0, length);
-        return result;
-    }
     #endregion
 }

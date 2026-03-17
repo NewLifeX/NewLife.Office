@@ -1,6 +1,8 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
+using NewLife.Buffers;
 
 namespace NewLife.Office;
 
@@ -318,24 +320,23 @@ public partial class PptxWriter : IDisposable
     {
         if (password == null) { _protectionHash = null; _protectionSalt = null; return; }
         var salt = new Byte[16];
-        using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+        using (var rng = RandomNumberGenerator.Create())
             rng.GetBytes(salt);
         _protectionSalt = Convert.ToBase64String(salt);
 
         var pwd = Encoding.UTF8.GetBytes(password);
-        using var sha = System.Security.Cryptography.SHA512.Create();
+        using var sha = SHA512.Create();
         var buf = new Byte[salt.Length + pwd.Length];
-        salt.CopyTo(buf, 0);
-        pwd.CopyTo(buf, salt.Length);
+        var bw = new SpanWriter(buf, 0, buf.Length);
+        bw.Write(salt);
+        bw.Write(pwd);
         var hash = sha.ComputeHash(buf);
+        var iter = new Byte[hash.Length + 4]; // SHA-512 = 64 bytes，复用缓冲区
         for (var i = 0; i < 100000; i++)
         {
-            var iter = new Byte[hash.Length + 4];
-            hash.CopyTo(iter, 0);
-            iter[hash.Length] = (Byte)(i & 0xFF);
-            iter[hash.Length + 1] = (Byte)((i >> 8) & 0xFF);
-            iter[hash.Length + 2] = (Byte)((i >> 16) & 0xFF);
-            iter[hash.Length + 3] = (Byte)((i >> 24) & 0xFF);
+            var iw = new SpanWriter(iter, 0, iter.Length);
+            iw.Write(hash);
+            iw.Write(i);
             hash = sha.ComputeHash(iter);
         }
         _protectionHash = Convert.ToBase64String(hash);

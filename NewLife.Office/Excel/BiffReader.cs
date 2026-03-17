@@ -1,4 +1,5 @@
-using System.Text;
+﻿using System.Text;
+using NewLife.Buffers;
 
 namespace NewLife.Office;
 
@@ -72,8 +73,11 @@ public sealed class BiffReader : IDisposable
     #region 解析
     private void Parse()
     {
+        // 创建单一 SpanReader，整个解析过程共用，不在循环内重复分配
+        var reader = new SpanReader(_workbook, 0, _workbook.Length);
+
         // 第一遍：收集所有记录；合并 CONTINUE 扩展数据
-        var records = ReadAllRecords(_workbook);
+        var records = ReadAllRecords(ref reader);
 
         // 找到 Globals BOF
         var globalsStart = FindGlobalsBof(records);
@@ -95,32 +99,28 @@ public sealed class BiffReader : IDisposable
     }
 
     /// <summary>读取所有 BIFF 记录（自动合并 CONTINUE 内容）</summary>
-    /// <param name="buf">工作簿字节流</param>
+    /// <param name="reader">已定位到工作簿头部的读取器</param>
     /// <returns>记录列表（type, data）</returns>
-    private static List<(UInt16 type, Byte[] data)> ReadAllRecords(Byte[] buf)
+    private static List<(UInt16 type, Byte[] data)> ReadAllRecords(ref SpanReader reader)
     {
         var result = new List<(UInt16, Byte[])>();
-        var pos = 0;
-        while (pos + 4 <= buf.Length)
+        while (reader.Available >= 4)
         {
-            var type = ReadUInt16(buf, pos);
-            var len = (Int32)ReadUInt16(buf, pos + 2);
-            pos += 4;
-            if (pos + len > buf.Length) break;
+            var type = reader.ReadUInt16();
+            var len = (Int32)reader.ReadUInt16();
+            if (reader.Available < len) break;
 
-            var data = Slice(buf, pos, len);
-            pos += len;
+            var data = reader.ReadBytes(len).ToArray();
 
             // 将紧随的 CONTINUE 记录合并（SST 等超长记录会跨多个 CONTINUE）
-            while (pos + 4 <= buf.Length)
+            while (reader.Available >= 4)
             {
-                var nextType = ReadUInt16(buf, pos);
-                if (nextType != RecContinue) break;
-                var nextLen = (Int32)ReadUInt16(buf, pos + 2);
-                pos += 4;
-                if (pos + nextLen > buf.Length) break;
-                var continuation = Slice(buf, pos, nextLen);
-                pos += nextLen;
+                var savedPos = reader.Position;
+                var nextType = reader.ReadUInt16();
+                if (nextType != RecContinue) { reader.Position = savedPos; break; }
+                var nextLen = (Int32)reader.ReadUInt16();
+                if (reader.Available < nextLen) { reader.Position = savedPos; break; }
+                var continuation = reader.ReadBytes(nextLen).ToArray();
                 var merged = new Byte[data.Length + continuation.Length];
                 Array.Copy(data, 0, merged, 0, data.Length);
                 Array.Copy(continuation, 0, merged, data.Length, continuation.Length);
@@ -142,8 +142,9 @@ public sealed class BiffReader : IDisposable
             var (t, d) = records[i];
             if (t != RecBof) continue;
             if (d.Length < 4) continue;
-            var version = ReadUInt16(d, 0);
-            var bofType = ReadUInt16(d, 2);
+            var reader = new SpanReader(d, 0, 4);
+            var version = reader.ReadUInt16();
+            var bofType = reader.ReadUInt16();
             if (version == 0x0600 && bofType == 0x0005) return i + 1; // 指向 BOF 后的第一条
         }
         return -1;
@@ -157,7 +158,8 @@ public sealed class BiffReader : IDisposable
         if (data.Length < 8) return [];
 
         // 4字节总引用数，4字节唯一字符串数
-        var uniqueCount = (Int32)ReadUInt32(data, 4);
+        var reader = new SpanReader(data, 4, 4);
+        var uniqueCount = reader.ReadInt32();
         var strings = new String[uniqueCount];
         var pos = 8;
 
@@ -235,10 +237,11 @@ public sealed class BiffReader : IDisposable
     {
         if (data.Length < 8) return;
 
-        var bofOffset = (Int32)ReadUInt32(data, 0);
-        // data[4..5] = grbit（可见性+类型）
-        var nameLen = data[6];   // cch: 字符数
-        var flags = data[7];     // fHighByte: 0=Latin-1, 1=Unicode
+        var reader = new SpanReader(data, 0, data.Length);
+        var bofOffset = reader.ReadInt32();
+        reader.Advance(2); // grbit（可见性+类型）
+        var nameLen = reader.ReadByte();   // cch: 字符数
+        var flags = reader.ReadByte();     // fHighByte: 0=Latin-1, 1=Unicode
         var isUnicode = (flags & 0x01) != 0;
 
         String name;
@@ -263,7 +266,8 @@ public sealed class BiffReader : IDisposable
 
         // 定位到工作表 BOF（从文件流偏移）
         var bofFileOffset = _sheetBofOffsets[idx];
-        var sheetRecords = ReadSheetRecords(_workbook, bofFileOffset);
+        var sheetReader = new SpanReader(_workbook, 0, _workbook.Length);
+        var sheetRecords = ReadSheetRecords(ref sheetReader, bofFileOffset);
 
         // 收集所有单元格
         var cells = new SortedDictionary<Int32, SortedDictionary<Int32, Object?>>();
@@ -348,9 +352,11 @@ public sealed class BiffReader : IDisposable
     {
         // row(2)+col(2)+xf(2)+sstIndex(4) = 共10字节
         if (data.Length < 10) return;
-        var row = (Int32)ReadUInt16(data, 0);
-        var col = (Int32)ReadUInt16(data, 2);
-        var sstIdx = (Int32)ReadUInt32(data, 6);
+        var reader = new SpanReader(data, 0, data.Length);
+        var row = (Int32)reader.ReadUInt16();
+        var col = (Int32)reader.ReadUInt16();
+        reader.Advance(2); // skip xf
+        var sstIdx = (Int32)reader.ReadUInt32();
         var value = sstIdx >= 0 && sstIdx < _sst.Length ? (Object?)_sst[sstIdx] : null;
         SetCell(cells, row, col, value, ref maxCol);
     }
@@ -359,9 +365,11 @@ public sealed class BiffReader : IDisposable
     {
         // row(2)+col(2)+xf(2)+double(8) = 14字节
         if (data.Length < 14) return;
-        var row = (Int32)ReadUInt16(data, 0);
-        var col = (Int32)ReadUInt16(data, 2);
-        var value = BitConverterToDouble(data, 6);
+        var reader = new SpanReader(data, 0, data.Length);
+        var row = (Int32)reader.ReadUInt16();
+        var col = (Int32)reader.ReadUInt16();
+        reader.Advance(2); // skip xf
+        var value = reader.ReadDouble();
         SetCell(cells, row, col, (Object?)value, ref maxCol);
     }
 
@@ -369,9 +377,11 @@ public sealed class BiffReader : IDisposable
     {
         // row(2)+col(2)+xf(2)+rk(4) = 10字节
         if (data.Length < 10) return;
-        var row = (Int32)ReadUInt16(data, 0);
-        var col = (Int32)ReadUInt16(data, 2);
-        var rk = (Int32)ReadUInt32(data, 6);
+        var reader = new SpanReader(data, 0, data.Length);
+        var row = (Int32)reader.ReadUInt16();
+        var col = (Int32)reader.ReadUInt16();
+        reader.Advance(2); // skip xf
+        var rk = reader.ReadInt32();
         var value = DecodeRk(rk);
         SetCell(cells, row, col, (Object?)value, ref maxCol);
     }
@@ -380,15 +390,16 @@ public sealed class BiffReader : IDisposable
     {
         // row(2)+firstCol(2)+[xf(2)+rk(4)]*n+lastCol(2)
         if (data.Length < 6) return;
-        var row = (Int32)ReadUInt16(data, 0);
-        var firstCol = (Int32)ReadUInt16(data, 2);
-        var lastCol = (Int32)ReadUInt16(data, data.Length - 2);
+        var reader = new SpanReader(data, 0, data.Length);
+        var row = (Int32)reader.ReadUInt16();
+        var firstCol = (Int32)reader.ReadUInt16();
+        var lastCol = (Int32)new SpanReader(data, data.Length - 2, 2).ReadUInt16();
         var count = lastCol - firstCol + 1;
         for (var i = 0; i < count; i++)
         {
-            var offset = 4 + i * 6;
-            if (offset + 6 > data.Length - 2) break;
-            var rk = (Int32)ReadUInt32(data, offset + 2);
+            if (reader.Position + 6 > data.Length - 2) break;
+            reader.Advance(2); // skip xf
+            var rk = reader.ReadInt32();
             var value = DecodeRk(rk);
             SetCell(cells, row, firstCol + i, (Object?)value, ref maxCol);
         }
@@ -398,13 +409,15 @@ public sealed class BiffReader : IDisposable
     {
         // row(2)+col(2)+xf(2)+boolOrErr(1)+isError(1) = 8字节
         if (data.Length < 8) return;
-        var row = (Int32)ReadUInt16(data, 0);
-        var col = (Int32)ReadUInt16(data, 2);
-        var isError = data[7] != 0;
+        var reader = new SpanReader(data, 0, data.Length);
+        var row = (Int32)reader.ReadUInt16();
+        var col = (Int32)reader.ReadUInt16();
+        reader.Advance(2); // skip xf
+        var boolOrErr = reader.ReadByte();
+        var isError = reader.ReadByte() != 0;
         if (!isError)
         {
-            var boolVal = data[6] != 0;
-            SetCell(cells, row, col, (Object?)boolVal, ref maxCol);
+            SetCell(cells, row, col, (Object?)(boolOrErr != 0), ref maxCol);
         }
         // 错误值暂时跳过
     }
@@ -413,10 +426,12 @@ public sealed class BiffReader : IDisposable
     {
         // row(2)+col(2)+xf(2)+cch(2)+fHighByte(1)+chars
         if (data.Length < 9) return;
-        var row = (Int32)ReadUInt16(data, 0);
-        var col = (Int32)ReadUInt16(data, 2);
-        var cch = (Int32)ReadUInt16(data, 6);
-        var fHighByte = data[8];
+        var reader = new SpanReader(data, 0, data.Length);
+        var row = (Int32)reader.ReadUInt16();
+        var col = (Int32)reader.ReadUInt16();
+        reader.Advance(2); // skip xf
+        var cch = (Int32)reader.ReadUInt16();
+        var fHighByte = reader.ReadByte();
         String value;
         if (fHighByte != 0)
             value = Encoding.Unicode.GetString(data, 9, Math.Min(cch * 2, data.Length - 9));
@@ -466,24 +481,22 @@ public sealed class BiffReader : IDisposable
 
     #region 工作表记录读取
     /// <summary>从指定文件流偏移读取工作表段的所有记录（到 EOF）</summary>
-    /// <param name="buf">工作簿字节流</param>
+    /// <param name="reader">工作簿读取器</param>
     /// <param name="bofOffset">工作表 BOF 在字节流中的偏移</param>
     /// <returns>记录列表</returns>
-    private static List<(UInt16, Byte[])> ReadSheetRecords(Byte[] buf, Int32 bofOffset)
+    private static List<(UInt16, Byte[])> ReadSheetRecords(ref SpanReader reader, Int32 bofOffset)
     {
+        reader.Position = bofOffset;
         var result = new List<(UInt16, Byte[])>();
-        var pos = bofOffset;
         var depth = 0;
 
-        while (pos + 4 <= buf.Length)
+        while (reader.Available >= 4)
         {
-            var type = ReadUInt16(buf, pos);
-            var len = (Int32)ReadUInt16(buf, pos + 2);
-            pos += 4;
-            if (pos + len > buf.Length) break;
+            var type = reader.ReadUInt16();
+            var len = (Int32)reader.ReadUInt16();
+            if (reader.Available < len) break;
 
-            var data = Slice(buf, pos, len);
-            pos += len;
+            var data = reader.ReadBytes(len).ToArray();
 
             if (type == RecBof)
             {
@@ -515,24 +528,16 @@ public sealed class BiffReader : IDisposable
     #endregion
 
     #region 字节工具
-    private static UInt16 ReadUInt16(Byte[] buf, Int32 pos) =>
-        (UInt16)(buf[pos] | (buf[pos + 1] << 8));
-
-    private static UInt32 ReadUInt32(Byte[] buf, Int32 pos) =>
-        (UInt32)(buf[pos] | (buf[pos + 1] << 8) | (buf[pos + 2] << 16) | (buf[pos + 3] << 24));
-
-    private static Double BitConverterToDouble(Byte[] buf, Int32 pos)
+    private static UInt16 ReadUInt16(Byte[] buf, Int32 pos)
     {
-        var tmp = new Byte[8];
-        Array.Copy(buf, pos, tmp, 0, 8);
-        return BitConverter.ToDouble(tmp, 0);
+        var reader = new SpanReader(buf.AsSpan(pos));
+        return reader.ReadUInt16();
     }
 
-    private static Byte[] Slice(Byte[] buf, Int32 offset, Int32 length)
+    private static UInt32 ReadUInt32(Byte[] buf, Int32 pos)
     {
-        var result = new Byte[length];
-        Array.Copy(buf, offset, result, 0, length);
-        return result;
+        var reader = new SpanReader(buf.AsSpan(pos));
+        return reader.ReadUInt32();
     }
 
     /// <summary>ISO-8859-1 直接映射：每个字节直接转为 Unicode 同码点的字符</summary>

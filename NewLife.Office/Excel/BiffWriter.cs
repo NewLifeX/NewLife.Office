@@ -1,7 +1,8 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Data;
 using System.Reflection;
 using System.Text;
+using NewLife.Buffers;
 
 namespace NewLife.Office;
 
@@ -322,12 +323,13 @@ public sealed class BiffWriter : IDisposable
     private static Byte[] BuildBofData(UInt16 bofType)
     {
         var buf = new Byte[16];
-        WriteUInt16(buf, 0, 0x0600);   // BIFF8 version
-        WriteUInt16(buf, 2, bofType);   // type
-        WriteUInt16(buf, 4, 0x0DBB);   // build identifier
-        WriteUInt16(buf, 6, 0x07CC);   // build year (1996)
-        WriteUInt32(buf, 8, 0x00000041); // file history flags
-        WriteUInt32(buf, 12, 0x00000006); // runtime version
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)0x0600);   // BIFF8 version
+        writer.Write(bofType);           // type
+        writer.Write((UInt16)0x0DBB);   // build identifier
+        writer.Write((UInt16)0x07CC);   // build year (1996)
+        writer.Write(0x00000041u);       // file history flags
+        writer.Write(0x00000006u);       // runtime version
         return buf;
     }
 
@@ -335,11 +337,12 @@ public sealed class BiffWriter : IDisposable
     {
         var nameBytes = Encoding.Unicode.GetBytes(name);
         var buf = new Byte[8 + nameBytes.Length];
-        WriteUInt32(buf, 0, (UInt32)bofOffset);
-        buf[4] = 0x00; // grbit (visible + worksheet)
-        buf[5] = 0x00;
-        buf[6] = (Byte)name.Length; // cch
-        buf[7] = 0x01; // fHighByte = UTF-16LE
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt32)bofOffset);
+        writer.Write((Byte)0x00); // grbit (visible + worksheet)
+        writer.Write((Byte)0x00);
+        writer.Write((Byte)name.Length); // cch
+        writer.Write((Byte)0x01); // fHighByte = UTF-16LE
         Array.Copy(nameBytes, 0, buf, 8, nameBytes.Length);
         return buf;
     }
@@ -372,65 +375,71 @@ public sealed class BiffWriter : IDisposable
     private static Byte[] BuildDimensionsData(Int32 rowCount, Int32 colCount)
     {
         var buf = new Byte[14];
-        WriteUInt32(buf, 0, 0); // first row
-        WriteUInt32(buf, 4, (UInt32)Math.Max(rowCount, 1)); // last row + 1
-        WriteUInt16(buf, 8, 0); // first col
-        WriteUInt16(buf, 10, (UInt16)Math.Max(colCount, 1)); // last col + 1
-        WriteUInt16(buf, 12, 0); // reserved
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write(0u); // first row
+        writer.Write((UInt32)Math.Max(rowCount, 1)); // last row + 1
+        writer.Write((UInt16)0); // first col
+        writer.Write((UInt16)Math.Max(colCount, 1)); // last col + 1
+        writer.Write((UInt16)0); // reserved
         return buf;
     }
 
     private static Byte[] BuildRowData(Int32 row, Int32 firstCol, Int32 lastCol)
     {
         var buf = new Byte[16];
-        WriteUInt16(buf, 0, (UInt16)row);
-        WriteUInt16(buf, 2, (UInt16)firstCol);
-        WriteUInt16(buf, 4, (UInt16)lastCol);
-        WriteUInt16(buf, 6, 0x00FF); // row height = 255 twips (default)
-        WriteUInt16(buf, 8, 0);      // unused
-        WriteUInt16(buf, 10, 0);     // unused
-        WriteUInt16(buf, 12, 0x0100); // default row attributes
-        WriteUInt16(buf, 14, 0x0F);  // XF index 15 (default)
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)row);
+        writer.Write((UInt16)firstCol);
+        writer.Write((UInt16)lastCol);
+        writer.Write((UInt16)0x00FF); // row height = 255 twips (default)
+        writer.Write((UInt16)0);      // unused
+        writer.Write((UInt16)0);      // unused
+        writer.Write((UInt16)0x0100); // default row attributes
+        writer.Write((UInt16)0x0F);   // XF index 15 (default)
         return buf;
     }
 
     private static Byte[] BuildLabelSstData(Int32 row, Int32 col, Int32 sstIndex)
     {
         var buf = new Byte[10];
-        WriteUInt16(buf, 0, (UInt16)row);
-        WriteUInt16(buf, 2, (UInt16)col);
-        WriteUInt16(buf, 4, 0x000F);    // XF index 15
-        WriteUInt32(buf, 6, (UInt32)sstIndex);
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)row);
+        writer.Write((UInt16)col);
+        writer.Write((UInt16)0x000F);    // XF index 15
+        writer.Write((UInt32)sstIndex);
         return buf;
     }
 
     private static Byte[] BuildNumberData(Int32 row, Int32 col, Double value, Int32 xfIndex = 15)
     {
         var buf = new Byte[14];
-        WriteUInt16(buf, 0, (UInt16)row);
-        WriteUInt16(buf, 2, (UInt16)col);
-        WriteUInt16(buf, 4, (UInt16)xfIndex);
-        WriteDouble(buf, 6, value);
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)row);
+        writer.Write((UInt16)col);
+        writer.Write((UInt16)xfIndex);
+        writer.Write(value);
         return buf;
     }
 
     private static Byte[] BuildBoolErrData(Int32 row, Int32 col, Byte value, Boolean isError)
     {
         var buf = new Byte[8];
-        WriteUInt16(buf, 0, (UInt16)row);
-        WriteUInt16(buf, 2, (UInt16)col);
-        WriteUInt16(buf, 4, 0x000F); // XF index 15
-        buf[6] = value;
-        buf[7] = isError ? (Byte)1 : (Byte)0;
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)row);
+        writer.Write((UInt16)col);
+        writer.Write((UInt16)0x000F); // XF index 15
+        writer.Write(value);
+        writer.Write(isError ? (Byte)1 : (Byte)0);
         return buf;
     }
 
     private static Byte[] BuildBlankData(Int32 row, Int32 col)
     {
         var buf = new Byte[6];
-        WriteUInt16(buf, 0, (UInt16)row);
-        WriteUInt16(buf, 2, (UInt16)col);
-        WriteUInt16(buf, 4, 0x000F); // XF index 15
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)row);
+        writer.Write((UInt16)col);
+        writer.Write((UInt16)0x000F); // XF index 15
         return buf;
     }
 
@@ -441,17 +450,18 @@ public sealed class BiffWriter : IDisposable
         var nameBytes = Encoding.Unicode.GetBytes(name);
         // dyHeight(2)+grbit(2)+icv(2)+bls(2)+sss(2)+uls(1)+bFamily(1)+bCharSet(1)+reserved(1)+cch(1)+fHighByte(1)+name(n)
         var buf = new Byte[16 + nameBytes.Length];
-        WriteUInt16(buf, 0, 200);    // dyHeight: 200 = 10pt (in 1/20 pt units)
-        WriteUInt16(buf, 2, 0);      // grbit
-        WriteUInt16(buf, 4, 0x7FFF); // icv: colour index (default/auto)
-        WriteUInt16(buf, 6, 0x0190); // bls: bold weight (400 = normal)
-        WriteUInt16(buf, 8, 0);      // sss: super/sub script
-        buf[10] = 0;                 // uls: underline type
-        buf[11] = 0;                 // bFamily: font family
-        buf[12] = 0;                 // bCharSet: charset
-        buf[13] = 0;                 // reserved
-        buf[14] = (Byte)name.Length; // cch: character count of font name
-        buf[15] = 0x01;              // fHighByte: 1 = UTF-16LE
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)200);    // dyHeight: 200 = 10pt (in 1/20 pt units)
+        writer.Write((UInt16)0);      // grbit
+        writer.Write((UInt16)0x7FFF); // icv: colour index (default/auto)
+        writer.Write((UInt16)0x0190); // bls: bold weight (400 = normal)
+        writer.Write((UInt16)0);      // sss: super/sub script
+        writer.Write((Byte)0);        // uls: underline type
+        writer.Write((Byte)0);        // bFamily: font family
+        writer.Write((Byte)0);        // bCharSet: charset
+        writer.Write((Byte)0);        // reserved
+        writer.Write((Byte)name.Length); // cch: character count of font name
+        writer.Write((Byte)0x01);     // fHighByte: 1 = UTF-16LE
         Array.Copy(nameBytes, 0, buf, 16, nameBytes.Length);
         return buf;
     }
@@ -461,9 +471,10 @@ public sealed class BiffWriter : IDisposable
         // BIFF8 FORMAT 记录: ixfe(2) + cch(2) + fHighByte(1) + rgch(n*2)
         var fmtBytes = Encoding.Unicode.GetBytes(formatString);
         var buf = new Byte[5 + fmtBytes.Length];
-        WriteUInt16(buf, 0, (UInt16)formatIndex);       // format index
-        WriteUInt16(buf, 2, (UInt16)formatString.Length); // character count
-        buf[4] = 0x01;                                   // fHighByte = UTF-16LE
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)formatIndex);       // format index
+        writer.Write((UInt16)formatString.Length); // character count
+        writer.Write((Byte)0x01);                 // fHighByte = UTF-16LE
         Array.Copy(fmtBytes, 0, buf, 5, fmtBytes.Length);
         return buf;
     }
@@ -481,17 +492,18 @@ public sealed class BiffWriter : IDisposable
 
     private static Byte[] BuildXfRecord(Int32 index)
     {
-        var buf = new Byte[20];
-        WriteUInt16(buf, 0, 0); // font index
+        var buf = new Byte[22];
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)0); // font index
         // Format index: 1 = 日期格式自定义索引 164
-        WriteUInt16(buf, 2, index == 1 ? (UInt16)164 : (UInt16)0);
-        WriteUInt16(buf, 4, index < 16 ? (UInt16)0xFFF5 : (UInt16)0x0001); // style flag
-        WriteUInt16(buf, 6, 0x20C0); // alignment
-        WriteUInt16(buf, 8, 0);      // rotation
-        WriteUInt16(buf, 10, 0);     // text properties
-        WriteUInt16(buf, 12, 0);     // used attribute
-        WriteUInt32(buf, 14, 0);     // border lines
-        WriteUInt32(buf, 16, 0);     // colour / pattern
+        writer.Write(index == 1 ? (UInt16)164 : (UInt16)0);
+        writer.Write(index < 16 ? (UInt16)0xFFF5 : (UInt16)0x0001); // style flag
+        writer.Write((UInt16)0x20C0); // alignment
+        writer.Write((UInt16)0);      // rotation
+        writer.Write((UInt16)0);      // text properties
+        writer.Write((UInt16)0);      // used attribute
+        writer.Write(0u);             // border lines
+        writer.Write(0u);             // colour / pattern
         return buf;
     }
 
@@ -572,31 +584,6 @@ public sealed class BiffWriter : IDisposable
     {
         var dn = p.GetCustomAttributes<DisplayNameAttribute>(false).FirstOrDefault();
         return dn?.DisplayName ?? p.Name;
-    }
-
-    #endregion
-
-    #region 底层二进制写入
-
-    private static void WriteUInt16(Byte[] buf, Int32 offset, UInt16 value)
-    {
-        buf[offset] = (Byte)(value & 0xFF);
-        buf[offset + 1] = (Byte)((value >> 8) & 0xFF);
-    }
-
-    private static void WriteUInt32(Byte[] buf, Int32 offset, UInt32 value)
-    {
-        buf[offset] = (Byte)(value & 0xFF);
-        buf[offset + 1] = (Byte)((value >> 8) & 0xFF);
-        buf[offset + 2] = (Byte)((value >> 16) & 0xFF);
-        buf[offset + 3] = (Byte)((value >> 24) & 0xFF);
-    }
-
-    private static void WriteDouble(Byte[] buf, Int32 offset, Double value)
-    {
-        var bytes = BitConverter.GetBytes(value);
-        if (!BitConverter.IsLittleEndian) Array.Reverse(bytes);
-        Array.Copy(bytes, 0, buf, offset, 8);
     }
 
     #endregion

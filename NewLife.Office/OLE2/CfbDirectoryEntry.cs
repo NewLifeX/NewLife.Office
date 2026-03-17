@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using NewLife.Buffers;
 
 namespace NewLife.Office;
@@ -44,12 +44,12 @@ internal sealed class CfbDirectoryEntry
 
     #region 方法
     /// <summary>从 128 字节缓冲区解析一个目录项</summary>
-    /// <param name="buf">128 字节缓冲区</param>
+    /// <param name="buf">128 字节只读缓冲区</param>
     /// <param name="sid">本条目 SID</param>
     /// <returns>解析后的目录项</returns>
-    public static CfbDirectoryEntry ReadFrom(Byte[] buf, Int32 sid)
+    public static CfbDirectoryEntry ReadFrom(ReadOnlySpan<Byte> buf, Int32 sid)
     {
-        var reader = new SpanReader(buf, 0, 128);
+        var reader = new SpanReader(buf);
         var entry = new CfbDirectoryEntry { Sid = sid };
 
         // 名称（64 字节，UTF-16LE，包含 null 终止符）

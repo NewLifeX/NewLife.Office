@@ -1,4 +1,4 @@
-using NewLife.Buffers;
+﻿using NewLife.Buffers;
 
 namespace NewLife.Office;
 
@@ -48,12 +48,11 @@ internal sealed class CfbHeader
     /// <summary>CFB 魔数签名</summary>
     private static readonly Byte[] MagicBytes = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
 
-    /// <summary>从二进制缓冲区解析文件头</summary>
-    /// <param name="buf">至少 512 字节的缓冲区</param>
+    /// <summary>从 SpanReader 解析文件头（消耗 512 字节）</summary>
+    /// <param name="reader">已定位到文件头起始处的读取器</param>
     /// <returns>解析后的文件头对象</returns>
-    public static CfbHeader ReadFrom(Byte[] buf)
+    public static CfbHeader ReadFrom(ref SpanReader reader)
     {
-        var reader = new SpanReader(buf, 0, 512);
         var header = new CfbHeader();
 
         // 校验魔数

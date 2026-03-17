@@ -422,21 +422,27 @@ public class PdfWriter : IDisposable
     #region PDF 构建
     private void BuildPdf(Stream stream)
     {
-        using var ms = new MemoryStream();
+        var written = 0L;
         var offsets = new List<Int64>();
         var latin1 = Encoding.GetEncoding(28591);
+
+        void WriteBytes(Byte[] bytes, Int32 offset, Int32 count)
+        {
+            stream.Write(bytes, offset, count);
+            written += count;
+        }
 
         void WriteObj(Int32 id, String content)
         {
             while (offsets.Count < id) offsets.Add(0);
-            offsets[id - 1] = ms.Position;
+            offsets[id - 1] = written;
             var bytes = latin1.GetBytes($"{id} 0 obj\n{content}\nendobj\n");
-            ms.Write(bytes, 0, bytes.Length);
+            WriteBytes(bytes, 0, bytes.Length);
         }
 
         // Header
         var header = latin1.GetBytes("%PDF-1.4\n%\xFF\xFF\xFF\xFF\n");
-        ms.Write(header, 0, header.Length);
+        WriteBytes(header, 0, header.Length);
 
         var allPages = Pages;
         var pageCount = allPages.Count;
@@ -575,14 +581,15 @@ public class PdfWriter : IDisposable
             var rawRgb = ExtractPngRgb(data, imgW, imgH);
             var imgObjId = imgObjMap[name];
             var imgData = enc != null ? enc.EncryptBytes(rawRgb, imgObjId, 0) : rawRgb;
-            offsets[imgObjId - 1] = ms.Position;
+            offsets[imgObjId - 1] = written;
             var imgHdr = latin1.GetBytes(
                 $"{imgObjId} 0 obj\n" +
                 $"<< /Type /XObject /Subtype /Image\n/Width {imgW} /Height {imgH}\n" +
                 $"/ColorSpace /DeviceRGB\n/BitsPerComponent 8\n/Length {imgData.Length}\n>>\nstream\n");
-            ms.Write(imgHdr, 0, imgHdr.Length);
-            ms.Write(imgData, 0, imgData.Length);
-            ms.Write(latin1.GetBytes("\nendstream\nendobj\n"), 0, "\nendstream\nendobj\n".Length);
+            WriteBytes(imgHdr, 0, imgHdr.Length);
+            WriteBytes(imgData, 0, imgData.Length);
+            var imgEnd = latin1.GetBytes("\nendstream\nendobj\n");
+            WriteBytes(imgEnd, 0, imgEnd.Length);
         }
 
         // ── 写入超链接注释对象 ──
@@ -700,21 +707,23 @@ public class PdfWriter : IDisposable
             }
 
             var encContent = enc != null ? enc.EncryptBytes(finalContent, page.ContentObjId, 0) : finalContent;
-            offsets[page.ContentObjId - 1] = ms.Position;
+            offsets[page.ContentObjId - 1] = written;
             var contentHdr = latin1.GetBytes($"{page.ContentObjId} 0 obj\n<< /Length {encContent.Length} >>\nstream\n");
-            ms.Write(contentHdr, 0, contentHdr.Length);
-            ms.Write(encContent, 0, encContent.Length);
-            ms.Write(latin1.GetBytes("\nendstream\nendobj\n"), 0, "\nendstream\nendobj\n".Length);
+            WriteBytes(contentHdr, 0, contentHdr.Length);
+            WriteBytes(encContent, 0, encContent.Length);
+            var contentEnd = latin1.GetBytes("\nendstream\nendobj\n");
+            WriteBytes(contentEnd, 0, contentEnd.Length);
         }
 
         // ── xref 表 ──
-        var xrefPos = ms.Position;
+        var xrefPos = written;
         var xrefSb = new StringBuilder();
         xrefSb.AppendLine("xref");
         xrefSb.AppendLine($"0 {totalObjs + 1}");
         xrefSb.AppendLine("0000000000 65535 f ");
         foreach (var off in offsets) xrefSb.AppendLine($"{off:D10} 00000 n ");
-        ms.Write(latin1.GetBytes(xrefSb.ToString()), 0, xrefSb.Length);
+        var xrefBytes = latin1.GetBytes(xrefSb.ToString());
+        WriteBytes(xrefBytes, 0, xrefBytes.Length);
 
         // ── trailer ──
         var trailerStr = new StringBuilder("trailer\n<< /Size ");
@@ -727,10 +736,8 @@ public class PdfWriter : IDisposable
             trailerStr.Append($"\n/ID [<{idHex}><{idHex}>]");
         }
         trailerStr.Append($" >>\nstartxref\n{xrefPos}\n%%EOF\n");
-        ms.Write(latin1.GetBytes(trailerStr.ToString()), 0, trailerStr.Length);
-
-        ms.Position = 0;
-        ms.CopyTo(stream);
+        var trailerBytes = latin1.GetBytes(trailerStr.ToString());
+        WriteBytes(trailerBytes, 0, trailerBytes.Length);
     }
     #endregion
 

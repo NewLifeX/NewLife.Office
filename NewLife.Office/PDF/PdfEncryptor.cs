@@ -1,5 +1,6 @@
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
+using NewLife.Buffers;
 
 namespace NewLife.Office;
 
@@ -51,23 +52,23 @@ internal sealed class PdfEncryptor
         OEntry = oStep; // 32 字节
 
         // 算法 3.2：计算全局加密密钥
-        var fid = fileId.Length >= 16 ? fileId.Take(16).ToArray() : fileId;
-        var buf = new List<Byte>(84);
-        buf.AddRange(uPass);                                    // 32 字节：用户密码
-        buf.AddRange(OEntry);                                   // 32 字节：O 条目
-        buf.Add((Byte)permissions);                             // 4 字节：权限（小端）
-        buf.Add((Byte)(permissions >> 8));
-        buf.Add((Byte)(permissions >> 16));
-        buf.Add((Byte)(permissions >> 24));
-        buf.AddRange(fid);                                      // 16 字节：文件 ID
-        var keyHash = ComputeMd5(buf.ToArray());
+        var fid = fileId.Length >= 16 ? fileId.AsSpan(0, 16).ToArray() : fileId;
+        var buf = new Byte[32 + 32 + 4 + fid.Length];
+        var bw = new SpanWriter(buf, 0, buf.Length);
+        bw.Write(uPass);                                        // 32 字节：用户密码
+        bw.Write(OEntry);                                       // 32 字节：O 条目
+        bw.Write(permissions);                                  // 4 字节：权限（小端）
+        bw.Write(fid);                                          // 文件 ID
+        var keyHash = ComputeMd5(buf);
         for (var i = 0; i < 50; i++) keyHash = ComputeMd5(keyHash);
         _key = keyHash; // 16 字节
 
         // 算法 3.5：计算 U 条目（修订版 3）
-        var uBuf = new List<Byte>(_padding);
-        uBuf.AddRange(fid);
-        var uStep = ComputeRc4(_key, ComputeMd5(uBuf.ToArray()));
+        var uBuf = new Byte[_padding.Length + fid.Length];
+        var ubw = new SpanWriter(uBuf, 0, uBuf.Length);
+        ubw.Write(_padding);
+        ubw.Write(fid);
+        var uStep = ComputeRc4(_key, ComputeMd5(uBuf));
         for (var i = 1; i <= 19; i++)
         {
             var k = new Byte[_key.Length];
@@ -110,12 +111,13 @@ internal sealed class PdfEncryptor
     private Byte[] ObjKey(Int32 objNum, Int32 genNum)
     {
         var buf = new Byte[_key.Length + 5];
-        _key.CopyTo(buf, 0);
-        buf[_key.Length] = (Byte)objNum;
-        buf[_key.Length + 1] = (Byte)(objNum >> 8);
-        buf[_key.Length + 2] = (Byte)(objNum >> 16);
-        buf[_key.Length + 3] = (Byte)genNum;
-        buf[_key.Length + 4] = (Byte)(genNum >> 8);
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write(_key);
+        writer.Write((Byte)objNum);
+        writer.Write((Byte)(objNum >> 8));
+        writer.Write((Byte)(objNum >> 16));
+        writer.Write((Byte)genNum);
+        writer.Write((Byte)(genNum >> 8));
         var hash = ComputeMd5(buf);
         var keyLen = Math.Min(hash.Length, _key.Length + 5);
         var result = new Byte[keyLen];
