@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 
 namespace NewLife.Office;
@@ -230,6 +230,29 @@ public class PdfReader : IDisposable
                     }
                 }
             }
+            else if (content[i] == '<' && i + 1 < content.Length && content[i + 1] != '<')
+            {
+                // 读取 <hex> 字符串（CJK UTF-16BE 编码或 Latin-1 hex）
+                var hexEnd = content.IndexOf('>', i + 1);
+                if (hexEnd > i)
+                {
+                    var hexStr = content.Substring(i + 1, hexEnd - i - 1);
+                    i = hexEnd + 1;
+                    var opPos = i;
+                    SkipWhitespace(content, ref opPos);
+                    if (opPos + 1 < content.Length)
+                    {
+                        var op2 = content.Substring(opPos, Math.Min(2, content.Length - opPos));
+                        if (op2.StartsWith("Tj") || op2.StartsWith("TJ"))
+                        {
+                            sb.Append(DecodeHexString(hexStr));
+                            i = opPos + 2;
+                            continue;
+                        }
+                    }
+                    continue;
+                }
+            }
             else if (content[i] == '[')
             {
                 // TJ array
@@ -307,6 +330,45 @@ public class PdfReader : IDisposable
             else if (c == '\n' || c == '\r') sb.Append(' ');
         }
         return sb.ToString();
+    }
+
+    /// <summary>解码 PDF hex 字符串（&lt;XXXX...&gt;）为 Unicode 文本</summary>
+    private static String DecodeHexString(String hex)
+    {
+        // 移除空白字符
+        var clean = new StringBuilder(hex.Length);
+        foreach (var c in hex)
+        {
+            if (c != ' ' && c != '\t' && c != '\r' && c != '\n')
+                clean.Append(c);
+        }
+        var h = clean.ToString();
+        if (h.Length == 0 || h.Length % 2 != 0) return String.Empty;
+        var byteCount = h.Length / 2;
+        var bytes = new Byte[byteCount];
+        for (var j = 0; j < byteCount; j++)
+        {
+            if (!Byte.TryParse(h.Substring(j * 2, 2), NumberStyles.HexNumber, null, out bytes[j]))
+                return String.Empty;
+        }
+        // UTF-16BE（我方 CJK 字体编码）：字节数必须为 2 的倍数
+        if (byteCount % 2 == 0)
+        {
+            try
+            {
+                var text = Encoding.BigEndianUnicode.GetString(bytes);
+                // 确认解码结果有打印字符（避免将 Latin-1 hex 误识为 UTF-16BE）
+                var printable = 0;
+                foreach (var c in text)
+                    if (c >= 32) printable++;
+                if (printable > 0 && printable * 2 >= text.Length)
+                    return text;
+            }
+            catch { }
+        }
+        // 回退：Latin-1 单字节解码
+        try { return Encoding.GetEncoding(1252).GetString(bytes); }
+        catch { return String.Empty; }
     }
 
     private static Int32 FindToken(String pdf, String token)

@@ -81,6 +81,7 @@ public class PdfWriter : IDisposable
     private readonly PdfFont _fontHelvetica = new("F1", "Helvetica");
     private readonly PdfFont _fontTimesBold = new("F2", "Times-Bold");
     private readonly PdfFont _fontCourier = new("F3", "Courier");
+    private PdfFont? _fontCjk;
     #endregion
 
     #region 构造
@@ -137,7 +138,7 @@ public class PdfWriter : IDisposable
     public void DrawText(String text, Single x, Single y, Single fontSize = 12, PdfFont? font = null)
     {
         EnsurePage();
-        font ??= _fontHelvetica;
+        font ??= ContainsCjk(text) ? EnsureCjkFont() : _fontHelvetica;
         _content.AppendLine("BT");
         _content.AppendLine($"/{font.Name} {fontSize:F1} Tf");
         _content.AppendLine($"{x:F2} {y:F2} Td");
@@ -166,7 +167,7 @@ public class PdfWriter : IDisposable
     public void AppendLine(String text, Single fontSize = 12, PdfFont? font = null, Single indentX = 0)
     {
         EnsurePage();
-        font ??= _fontHelvetica;
+        font ??= ContainsCjk(text) ? EnsureCjkFont() : _fontHelvetica;
         var lineHeight = fontSize * 1.4f;
         // 换页检测
         if (CurrentY + lineHeight > PageHeight - MarginBottom)
@@ -282,8 +283,8 @@ public class PdfWriter : IDisposable
                 var cellW = ci < colWidths.Length ? colWidths[ci] : colWidths[^1];
                 var cellText = ci < row.Length ? row[ci] : String.Empty;
                 var textY = rowBottomY + padding;
-                DrawText(cellText, cellX + padding, textY, fontSize,
-                    isHeader ? _fontTimesBold : _fontHelvetica);
+                var cellFont = ContainsCjk(cellText) ? EnsureCjkFont() : (isHeader ? _fontTimesBold : _fontHelvetica);
+                DrawText(cellText, cellX + padding, textY, fontSize, cellFont);
                 cellX += cellW;
             }
 
@@ -745,6 +746,29 @@ public class PdfWriter : IDisposable
     private void EnsurePage()
     {
         if (CurrentPage == null) BeginPage();
+    }
+
+    /// <summary>惰性获取简体中文字体，首次调用时自动注册</summary>
+    private PdfFont EnsureCjkFont()
+    {
+        if (_fontCjk == null)
+            _fontCjk = CreateSimplifiedChineseFont();
+        return _fontCjk;
+    }
+
+    /// <summary>判断文本中是否含有 CJK 字符（中日韩统一表意文字及相关区块）</summary>
+    private static Boolean ContainsCjk(String text)
+    {
+        foreach (var ch in text)
+        {
+            // CJK 符号与标点、假名、CJK 统一表意文字主区（U+3000–U+9FFF）
+            if (ch >= '\u3000' && ch <= '\u9FFF') return true;
+            // CJK 兼容表意文字（U+F900–U+FAFF）
+            if (ch >= '\uF900' && ch <= '\uFAFF') return true;
+            // 全角/半角字符（U+FF00–U+FFEF）
+            if (ch >= '\uFF00' && ch <= '\uFFEF') return true;
+        }
+        return false;
     }
 
     private static String EncodePdfText(String text)
