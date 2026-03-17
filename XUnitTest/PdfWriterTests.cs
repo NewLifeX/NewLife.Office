@@ -127,4 +127,99 @@ public class PdfWriterTests
             $"Encrypted PDF ({msEnc.Length}) should be larger than plain ({msPlain.Length})");
     }
     #endregion
+
+    #region P01-03 中文字体支持
+    [Fact, DisplayName("P01-03 CreateSimplifiedChineseFont 返回 IsCjk=true 的字体")]
+    public void CreateCjkFont_IsCjkTrue()
+    {
+        var writer = new PdfWriter();
+        var font = writer.CreateSimplifiedChineseFont();
+
+        Assert.True(font.IsCjk);
+        Assert.Equal("STSong-Light", font.BaseFont);
+    }
+
+    [Fact, DisplayName("P01-03 创建 CJK 字体后 PDF 包含 Type0 和 CIDFontType0 字体声明")]
+    public void CreateCjkFont_PdfContainsType0AndCidFont()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        var cjk = writer.CreateSimplifiedChineseFont();
+        writer.BeginPage();
+        writer.DrawText("中文测试", 56, 780, 14, cjk);
+        writer.Save(ms);
+
+        var text = Encoding.Latin1.GetString(ms.ToArray());
+        Assert.Contains("/Subtype /Type0", text);
+        Assert.Contains("/Subtype /CIDFontType0", text);
+        Assert.Contains("/BaseFont /STSong-Light", text);
+        Assert.Contains("/Encoding /UniGB-UCS2-H", text);
+    }
+
+    [Fact, DisplayName("P01-03 CJK 字体包含 CIDSystemInfo 描述 Adobe/GB1")]
+    public void CreateCjkFont_CidFontHasCidSystemInfo()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        var cjk = writer.CreateSimplifiedChineseFont();
+        writer.BeginPage();
+        writer.DrawText("汉字", 56, 780, 12, cjk);
+        writer.Save(ms);
+
+        var text = Encoding.Latin1.GetString(ms.ToArray());
+        Assert.Contains("/CIDSystemInfo", text);
+        Assert.Contains("(Adobe)", text);
+        Assert.Contains("(GB1)", text);
+    }
+
+    [Fact, DisplayName("P01-03 CJK 文本使用 UTF-16BE 十六进制编码 <...> Tj")]
+    public void DrawText_CjkFont_UsesHexEncoding()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        var cjk = writer.CreateSimplifiedChineseFont();
+        writer.BeginPage();
+        writer.DrawText("中", 56, 780, 12, cjk);
+        writer.Save(ms);
+
+        // 'U+4E2D' → UTF-16BE → 0x4E 0x2D → hex "4E2D"
+        var text = Encoding.Latin1.GetString(ms.ToArray());
+        Assert.Contains("<4E2D>", text);
+        Assert.Contains("Tj", text);
+    }
+
+    [Fact, DisplayName("P01-03 CJK 字体注册后不影响已有 Latin 字体的对象数量")]
+    public void CreateCjkFont_DoesNotBreakLatinFonts()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        var cjk = writer.CreateSimplifiedChineseFont();
+        writer.BeginPage();
+        writer.DrawText("Hello", 56, 780, 12);       // 默认 Helvetica
+        writer.DrawText("World", 56, 760, 12, cjk);  // CJK
+        writer.Save(ms);
+
+        var text = Encoding.Latin1.GetString(ms.ToArray());
+        // 仍包含 Type1 (Helvetica)
+        Assert.Contains("/Subtype /Type1", text);
+        // 同时包含 Type0 (STSong-Light)
+        Assert.Contains("/Subtype /Type0", text);
+    }
+
+    [Fact, DisplayName("P01-03 DescendantFonts 正确引用 CIDFont 对象 ID")]
+    public void CreateCjkFont_DescendantFontsRefValid()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        var cjk = writer.CreateSimplifiedChineseFont();
+        writer.BeginPage();
+        writer.DrawText("测", 56, 780, 12, cjk);
+        writer.Save(ms);
+
+        var text = Encoding.Latin1.GetString(ms.ToArray());
+        // DescendantFonts 应有 [N 0 R] 形式的引用
+        Assert.Contains("/DescendantFonts [", text);
+        Assert.Contains("0 R]", text);
+    }
+    #endregion
 }

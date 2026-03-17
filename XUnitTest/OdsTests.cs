@@ -608,4 +608,210 @@ public class OdsTests
         Assert.Equal("end", style.HAlign);
     }
     #endregion
+
+    #region OD02-03 基础样式写入
+
+    private static MemoryStream WriteSheetWithStyle(OdsSheet sheet)
+    {
+        var writer = new OdsWriter();
+        writer.AddSheet(sheet);
+        var ms = new MemoryStream();
+        writer.Save(ms);
+        ms.Position = 0;
+        return ms;
+    }
+
+    [Fact]
+    [DisplayName("OD02-03 写入粗体样式后可回读到 FontBold")]
+    public void WriteStyle_Bold_RoundTrip()
+    {
+        var sheet = new OdsSheet { Name = "S1" };
+        sheet.Rows.Add(["Hello"]);
+        sheet.CellStyles[(0, 0)] = new OdsCellStyle { FontBold = true };
+
+        using var ms = WriteSheetWithStyle(sheet);
+        var sheets = OdsReader.Read(ms);
+        var style = sheets[0].CellStyles.GetValueOrDefault((0, 0));
+        Assert.NotNull(style);
+        Assert.True(style!.FontBold);
+    }
+
+    [Fact]
+    [DisplayName("OD02-03 写入背景色后可回读到 BackgroundColor")]
+    public void WriteStyle_BackgroundColor_RoundTrip()
+    {
+        var sheet = new OdsSheet { Name = "S1" };
+        sheet.Rows.Add(["Cell"]);
+        sheet.CellStyles[(0, 0)] = new OdsCellStyle { BackgroundColor = "#FFFF00" };
+
+        using var ms = WriteSheetWithStyle(sheet);
+        var sheets = OdsReader.Read(ms);
+        var style = sheets[0].CellStyles.GetValueOrDefault((0, 0));
+        Assert.NotNull(style);
+        Assert.Equal("#FFFF00", style!.BackgroundColor);
+    }
+
+    [Fact]
+    [DisplayName("OD02-03 写入字体颜色后可回读到 FontColor")]
+    public void WriteStyle_FontColor_RoundTrip()
+    {
+        var sheet = new OdsSheet { Name = "S1" };
+        sheet.Rows.Add(["Cell"]);
+        sheet.CellStyles[(0, 0)] = new OdsCellStyle { FontColor = "#FF0000" };
+
+        using var ms = WriteSheetWithStyle(sheet);
+        var sheets = OdsReader.Read(ms);
+        var style = sheets[0].CellStyles.GetValueOrDefault((0, 0));
+        Assert.NotNull(style);
+        Assert.Equal("#FF0000", style!.FontColor);
+    }
+
+    [Fact]
+    [DisplayName("OD02-03 写入字体大小后可回读到 FontSize")]
+    public void WriteStyle_FontSize_RoundTrip()
+    {
+        var sheet = new OdsSheet { Name = "S1" };
+        sheet.Rows.Add(["Cell"]);
+        sheet.CellStyles[(0, 0)] = new OdsCellStyle { FontSize = 16f };
+
+        using var ms = WriteSheetWithStyle(sheet);
+        var sheets = OdsReader.Read(ms);
+        var style = sheets[0].CellStyles.GetValueOrDefault((0, 0));
+        Assert.NotNull(style);
+        Assert.Equal(16f, style!.FontSize, 0.01f);
+    }
+
+    [Fact]
+    [DisplayName("OD02-03 写入水平对齐后可回读到 HAlign")]
+    public void WriteStyle_HAlign_RoundTrip()
+    {
+        var sheet = new OdsSheet { Name = "S1" };
+        sheet.Rows.Add(["Cell"]);
+        sheet.CellStyles[(0, 0)] = new OdsCellStyle { HAlign = "center" };
+
+        using var ms = WriteSheetWithStyle(sheet);
+        var sheets = OdsReader.Read(ms);
+        var style = sheets[0].CellStyles.GetValueOrDefault((0, 0));
+        Assert.NotNull(style);
+        Assert.Equal("center", style!.HAlign);
+    }
+
+    [Fact]
+    [DisplayName("OD02-03 content.xml 包含 automatic-styles 块")]
+    public void WriteStyle_ContentXmlHasAutomaticStyles()
+    {
+        var sheet = new OdsSheet { Name = "S1" };
+        sheet.Rows.Add(["Cell"]);
+        sheet.CellStyles[(0, 0)] = new OdsCellStyle { FontBold = true };
+
+        var writer = new OdsWriter();
+        writer.AddSheet(sheet);
+        using var ms = new MemoryStream();
+        writer.Save(ms);
+        ms.Position = 0;
+
+        using var zip = new ZipArchive(ms, ZipArchiveMode.Read, leaveOpen: true);
+        var entry = zip.GetEntry("content.xml");
+        Assert.NotNull(entry);
+        using var sr = new StreamReader(entry!.Open());
+        var xml = sr.ReadToEnd();
+        Assert.Contains("office:automatic-styles", xml);
+        Assert.Contains("style:style", xml);
+        Assert.Contains("fo:font-weight=\"bold\"", xml);
+    }
+
+    [Fact]
+    [DisplayName("OD02-03 复合样式（粗体+背景+颜色+对齐）往返正确")]
+    public void WriteStyle_Compound_RoundTrip()
+    {
+        var sheet = new OdsSheet { Name = "S1" };
+        sheet.Rows.Add(["Title"]);
+        sheet.CellStyles[(0, 0)] = new OdsCellStyle
+        {
+            FontBold = true,
+            FontItalic = true,
+            FontSize = 14f,
+            FontColor = "#0000FF",
+            BackgroundColor = "#E0E0E0",
+            HAlign = "center"
+        };
+
+        using var ms = WriteSheetWithStyle(sheet);
+        var sheets = OdsReader.Read(ms);
+        var style = sheets[0].CellStyles.GetValueOrDefault((0, 0));
+        Assert.NotNull(style);
+        Assert.True(style!.FontBold);
+        Assert.True(style.FontItalic);
+        Assert.Equal(14f, style.FontSize, 0.01f);
+        Assert.Equal("#0000FF", style.FontColor);
+        Assert.Equal("#E0E0E0", style.BackgroundColor);
+        Assert.Equal("center", style.HAlign);
+    }
+
+    [Fact]
+    [DisplayName("OD02-03 多单元格不同样式各自独立")]
+    public void WriteStyle_MultipleCells_IndependentStyles()
+    {
+        var sheet = new OdsSheet { Name = "S1" };
+        sheet.Rows.Add(["A", "B"]);
+        sheet.CellStyles[(0, 0)] = new OdsCellStyle { FontBold = true };
+        sheet.CellStyles[(0, 1)] = new OdsCellStyle { BackgroundColor = "#FF0000" };
+
+        using var ms = WriteSheetWithStyle(sheet);
+        var sheets = OdsReader.Read(ms);
+        var s0 = sheets[0].CellStyles.GetValueOrDefault((0, 0));
+        var s1 = sheets[0].CellStyles.GetValueOrDefault((0, 1));
+        Assert.NotNull(s0);
+        Assert.True(s0!.FontBold);
+        Assert.Null(s0.BackgroundColor);
+        Assert.NotNull(s1);
+        Assert.Equal("#FF0000", s1!.BackgroundColor);
+        Assert.False(s1.FontBold);
+    }
+
+    [Fact]
+    [DisplayName("OD02-03 相同样式共享同一 style:name")]
+    public void WriteStyle_IdenticalStyles_SharedStyleName()
+    {
+        var sheet = new OdsSheet { Name = "S1" };
+        sheet.Rows.Add(["A", "B"]);
+        sheet.CellStyles[(0, 0)] = new OdsCellStyle { FontBold = true };
+        sheet.CellStyles[(0, 1)] = new OdsCellStyle { FontBold = true };
+
+        var writer = new OdsWriter();
+        writer.AddSheet(sheet);
+        using var ms = new MemoryStream();
+        writer.Save(ms);
+        ms.Position = 0;
+
+        using var zip = new ZipArchive(ms, ZipArchiveMode.Read, leaveOpen: true);
+        var entry = zip.GetEntry("content.xml");
+        Assert.NotNull(entry);
+        using var sr = new StreamReader(entry!.Open());
+        var xml = sr.ReadToEnd();
+        // 相同样式应只产生一个 style:style 定义（只出现一次 ce1）
+        var count = 0;
+        var idx = 0;
+        while ((idx = xml.IndexOf("style:name=\"ce1\"", idx, StringComparison.Ordinal)) >= 0) { count++; idx++; }
+        Assert.Equal(1, count);
+    }
+
+    [Fact]
+    [DisplayName("OD02-03 无样式的工作表不产生 automatic-styles 块")]
+    public void WriteStyle_NoStyles_NoAutomaticStylesBlock()
+    {
+        var writer = new OdsWriter();
+        writer.AddSheet("S1", new[] { new[] { "A", "B" } });
+        using var ms = new MemoryStream();
+        writer.Save(ms);
+        ms.Position = 0;
+
+        using var zip = new ZipArchive(ms, ZipArchiveMode.Read, leaveOpen: true);
+        var entry = zip.GetEntry("content.xml");
+        Assert.NotNull(entry);
+        using var sr = new StreamReader(entry!.Open());
+        var xml = sr.ReadToEnd();
+        Assert.DoesNotContain("office:automatic-styles", xml);
+    }
+    #endregion
 }

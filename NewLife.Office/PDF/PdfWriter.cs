@@ -138,12 +138,24 @@ public class PdfWriter : IDisposable
     {
         EnsurePage();
         font ??= _fontHelvetica;
-        var safe = EncodePdfText(text);
         _content.AppendLine("BT");
         _content.AppendLine($"/{font.Name} {fontSize:F1} Tf");
         _content.AppendLine($"{x:F2} {y:F2} Td");
-        _content.AppendLine($"({safe}) Tj");
+        if (font.IsCjk)
+            _content.AppendLine($"<{EncodeCjkHex(text)}> Tj");
+        else
+            _content.AppendLine($"({EncodePdfText(text)}) Tj");
         _content.AppendLine("ET");
+    }
+
+    /// <summary>创建简体中文字体（Adobe 预定义 STSong-Light，PDF 阅读器需安装 CJK 字体包）</summary>
+    /// <returns>已注册的 CJK 字体，可传入 DrawText / AppendLine</returns>
+    public PdfFont CreateSimplifiedChineseFont()
+    {
+        var fname = $"F{_fonts.Count + 1}";
+        var font = new PdfFont(fname, "STSong-Light", isCjk: true);
+        _fonts.Add(font);
+        return font;
     }
 
     /// <summary>追加文本行（自动换行，跟踪当前 Y 位置，Y 从顶部开始）</summary>
@@ -436,7 +448,13 @@ public class PdfWriter : IDisposable
             allPages[i].PageObjId = NextId();
             allPages[i].ContentObjId = NextId();
         }
-        var fontObjIds = _fonts.Select(_ => NextId()).ToArray();
+        var fontObjIds = new Int32[_fonts.Count];
+        var cidFontObjIds = new Int32[_fonts.Count];
+        for (var fi = 0; fi < _fonts.Count; fi++)
+        {
+            fontObjIds[fi] = NextId();
+            cidFontObjIds[fi] = _fonts[fi].IsCjk ? NextId() : 0;
+        }
         var imgObjMap = new Dictionary<String, Int32>();
         var allImages = new List<(String Name, Byte[] Data, Int32 W, Int32 H, Boolean IsJpeg)>();
         foreach (var page in allPages)
@@ -524,7 +542,25 @@ public class PdfWriter : IDisposable
         for (var fi = 0; fi < _fonts.Count; fi++)
         {
             var f = _fonts[fi];
-            WriteObj(fontObjIds[fi], $"<< /Type /Font\n/Subtype /Type1\n/BaseFont /{f.BaseFont}\n/Encoding /WinAnsiEncoding\n>>");
+            if (f.IsCjk)
+            {
+                // CIDFont（后代字体），用于描述字形宽度与 CIDSystemInfo
+                WriteObj(cidFontObjIds[fi],
+                    $"<< /Type /Font /Subtype /CIDFontType0\n" +
+                    $"/BaseFont /{f.BaseFont}\n" +
+                    $"/CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >>\n" +
+                    $"/DW 1000\n>>");
+                // Type0（主字体），指定 UniGB-UCS2-H 编码
+                WriteObj(fontObjIds[fi],
+                    $"<< /Type /Font /Subtype /Type0\n" +
+                    $"/BaseFont /{f.BaseFont}\n" +
+                    $"/Encoding /UniGB-UCS2-H\n" +
+                    $"/DescendantFonts [{cidFontObjIds[fi]} 0 R]\n>>");
+            }
+            else
+            {
+                WriteObj(fontObjIds[fi], $"<< /Type /Font\n/Subtype /Type1\n/BaseFont /{f.BaseFont}\n/Encoding /WinAnsiEncoding\n>>");
+            }
         }
 
         // ── 写入图片 XObject ──
@@ -709,8 +745,18 @@ public class PdfWriter : IDisposable
             if (ch < 256 && ch >= 32)
                 sb.Append(ch);
             else if (ch >= 32)
-                sb.Append('?'); // CJK fallback
+                sb.Append('?'); // CJK fallback（请改用 CreateSimplifiedChineseFont 绘制中文）
         }
+        return sb.ToString();
+    }
+
+    private static String EncodeCjkHex(String text)
+    {
+        // UTF-16BE 大端编码后转十六进制，作为 PDF 字符串 <hex> 运算符
+        var bytes = Encoding.BigEndianUnicode.GetBytes(text);
+        var sb = new StringBuilder(bytes.Length * 2);
+        foreach (var b in bytes)
+            sb.Append(b.ToString("X2"));
         return sb.ToString();
     }
 

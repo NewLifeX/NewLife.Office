@@ -176,6 +176,23 @@ public sealed class OdsWriter
 
     private void WriteContent(ZipArchive zip)
     {
+        // 收集所有唯一单元格样式，分配名称 ce1, ce2, ...
+        var styleKeyMap = new Dictionary<String, String>();
+        var styleList = new List<(String StyleName, OdsCellStyle Style)>();
+        foreach (var sheet in Sheets)
+        {
+            foreach (var style in sheet.CellStyles.Values)
+            {
+                var key = GetStyleKey(style);
+                if (!styleKeyMap.ContainsKey(key))
+                {
+                    var sname = $"ce{styleList.Count + 1}";
+                    styleKeyMap[key] = sname;
+                    styleList.Add((sname, style));
+                }
+            }
+        }
+
         var entry = zip.CreateEntry("content.xml");
         using var w = new StreamWriter(entry.Open(), new UTF8Encoding(false));
         w.WriteLine(@"<?xml version=""1.0"" encoding=""UTF-8""?>");
@@ -186,17 +203,33 @@ public sealed class OdsWriter
         w.WriteLine(@"  xmlns:fo=""urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0""");
         w.WriteLine(@"  xmlns:style=""urn:oasis:names:tc:opendocument:xmlns:style:1.0""");
         w.WriteLine(@"  office:version=""1.2"">");
+
+        // 写入自动样式块
+        if (styleList.Count > 0)
+        {
+            w.WriteLine(@"  <office:automatic-styles>");
+            foreach (var (sname, style) in styleList)
+                WriteStyleEntry(w, sname, style);
+            w.WriteLine(@"  </office:automatic-styles>");
+        }
+
         w.WriteLine(@"  <office:body>");
         w.WriteLine(@"    <office:spreadsheet>");
 
         foreach (var sheet in Sheets)
         {
             w.WriteLine($@"      <table:table table:name=""{XmlEncode(sheet.Name)}"">");
-            foreach (var row in sheet.Rows)
+            for (var ri = 0; ri < sheet.Rows.Count; ri++)
             {
+                var row = sheet.Rows[ri];
                 w.WriteLine(@"        <table:table-row>");
-                foreach (var cell in row)
-                    WriteCell(w, cell);
+                for (var ci = 0; ci < row.Length; ci++)
+                {
+                    String? sname = null;
+                    if (sheet.CellStyles.TryGetValue((ri, ci), out var cellStyle))
+                        sname = styleKeyMap[GetStyleKey(cellStyle)];
+                    WriteCell(w, row[ci], sname);
+                }
                 w.WriteLine(@"        </table:table-row>");
             }
             w.WriteLine(@"      </table:table>");
@@ -207,11 +240,32 @@ public sealed class OdsWriter
         w.Write("</office:document-content>");
     }
 
-    private static void WriteCell(StreamWriter w, String value)
+    private static void WriteStyleEntry(StreamWriter w, String styleName, OdsCellStyle style)
     {
+        w.WriteLine($@"    <style:style style:name=""{styleName}"" style:family=""table-cell"">");
+        var hasTxtProp = style.FontBold || style.FontItalic || style.FontSize > 0 || !String.IsNullOrEmpty(style.FontColor);
+        if (hasTxtProp)
+        {
+            var sb = new StringBuilder();
+            if (style.FontBold) sb.Append(@" fo:font-weight=""bold""");
+            if (style.FontItalic) sb.Append(@" fo:font-style=""italic""");
+            if (style.FontSize > 0) sb.Append($@" fo:font-size=""{style.FontSize:F1}pt""");
+            if (!String.IsNullOrEmpty(style.FontColor)) sb.Append($@" fo:color=""{style.FontColor}""");
+            w.WriteLine($@"      <style:text-properties{sb}/>");
+        }
+        if (!String.IsNullOrEmpty(style.BackgroundColor))
+            w.WriteLine($@"      <style:table-cell-properties fo:background-color=""{style.BackgroundColor}""/>");
+        if (!String.IsNullOrEmpty(style.HAlign))
+            w.WriteLine($@"      <style:paragraph-properties fo:text-align=""{style.HAlign}""/>");
+        w.WriteLine(@"    </style:style>");
+    }
+
+    private static void WriteCell(StreamWriter w, String value, String? styleName = null)
+    {
+        var sAttr = styleName != null ? $@" table:style-name=""{styleName}""" : String.Empty;
         if (String.IsNullOrEmpty(value))
         {
-            w.WriteLine(@"          <table:table-cell/>");
+            w.WriteLine($@"          <table:table-cell{sAttr}/>");
             return;
         }
 
@@ -220,14 +274,14 @@ public sealed class OdsWriter
         {
             // OpenDocument 公式前缀 of:
             var formula = "of:" + value;
-            w.WriteLine($@"          <table:table-cell table:formula=""{XmlEncode(formula)}"" office:value-type=""formula""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
+            w.WriteLine($@"          <table:table-cell{sAttr} table:formula=""{XmlEncode(formula)}"" office:value-type=""formula""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
             return;
         }
 
         if (Double.TryParse(value, System.Globalization.NumberStyles.Number,
             System.Globalization.CultureInfo.InvariantCulture, out var num))
         {
-            w.WriteLine($@"          <table:table-cell office:value-type=""float"" office:value=""{num.ToString(System.Globalization.CultureInfo.InvariantCulture)}""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
+            w.WriteLine($@"          <table:table-cell{sAttr} office:value-type=""float"" office:value=""{num.ToString(System.Globalization.CultureInfo.InvariantCulture)}""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
             return;
         }
 
@@ -235,16 +289,19 @@ public sealed class OdsWriter
             value.Equals("false", StringComparison.OrdinalIgnoreCase))
         {
             var boolVal = value.ToLowerInvariant();
-            w.WriteLine($@"          <table:table-cell office:value-type=""boolean"" office:boolean-value=""{boolVal}""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
+            w.WriteLine($@"          <table:table-cell{sAttr} office:value-type=""boolean"" office:boolean-value=""{boolVal}""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
             return;
         }
 
         // 默认字符串
-        w.WriteLine($@"          <table:table-cell office:value-type=""string""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
+        w.WriteLine($@"          <table:table-cell{sAttr} office:value-type=""string""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
     }
     #endregion
 
     #region 辅助
+    private static String GetStyleKey(OdsCellStyle s) =>
+        $"{(s.FontBold ? 1 : 0)}|{(s.FontItalic ? 1 : 0)}|{s.FontSize:F1}|{s.FontColor ?? ""}|{s.BackgroundColor ?? ""}|{s.HAlign ?? ""}";
+
     private static String XmlEncode(String text)
     {
         if (String.IsNullOrEmpty(text)) return text;
