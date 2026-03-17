@@ -196,10 +196,33 @@ writer.MergeCell("Sheet1", "A1:C1");  // 合并标题行
 writer.SetRowHeight("Sheet1", 1, 30); // 设置行高
 ```
 
+## 已实现能力（邮件 / 日历 / 联系人 / 电子书）
+
+### EML（邮件）
+
+- `EmlReader`：解析 RFC 5322 + MIME 邮件，含 multipart/mixed、multipart/alternative
+- `EmlWriter`：生成合法 MIME 邮件（文本/HTML 正文、附件、内嵌图片）
+- 支持 RFC 2047 Base64/Q-Encoding 头部解码、quoted-printable 正文解码
+
+### iCalendar（日历）
+
+- `ICalReader`：解析 RFC 5545 .ics 文件，提取 VEVENT/VTODO/VJOURNAL 及重复规则
+- `ICalWriter`：生成符合 RFC 5545 的 .ics 文件，支持 RRULE 序列化和 75 字节行折叠
+
+### vCard（联系人）
+
+- `VCardReader`：解析 RFC 6350 .vcf 文件，支持 vCard 3.0/4.0，含 FN/N/ORG/TEL/EMAIL/ADR/BDAY/PHOTO
+- `VCardWriter`：生成 vCard 4.0 格式，支持多联系人批量写入
+
+### EPUB（电子书）
+
+- `EpubReader`：读取 EPUB 2/3 文件（ZIP + OPF + XHTML），提取元数据和章节内容
+- `EpubWriter`：生成符合 EPUB 3 规范的电子书（mimetype/container.xml/OPF/Nav/章节 XHTML/CSS/封面图片）
+
 ## 测试状态
 
-- 当前测试集：`246` 项
-- 通过：`246` 项
+- 当前测试集：`312` 项
+- 通过：`312` 项
 - 失败：`0` 项
 
 ## 已实现格式概览
@@ -216,11 +239,11 @@ writer.SetRowHeight("Sheet1", 1, 30); // 设置行高
 | **Markdown** | ✅ | ✅ | — | HTML | CommonMark + GFM，含 AST 模型 |
 | **RTF** | ✅ | ✅ | ✅ | — | 段落/表格/模板填充 |
 | **ODS** | ✅ | ✅ | — | — | LibreOffice 原生格式 |
-| **EML** | 🔄规划 | 🔄规划 | — | — | RFC 5322 + MIME |
+| **EML** | ✅ | ✅ | — | — | RFC 5322 + MIME，附件/内嵌图片 |
 | **MSG** | 🔄规划 | — | — | — | Outlook，OLE2 容器 |
-| **iCalendar** | 🔄规划 | 🔄规划 | — | — | RFC 5545 .ics 格式 |
-| **vCard** | 🔄规划 | 🔄规划 | — | — | RFC 6350 .vcf 格式 |
-| **EPUB** | 🔄规划 | 🔄规划 | — | — | EPUB 2/3 电子书 |
+| **iCalendar** | ✅ | ✅ | — | — | RFC 5545 .ics，VEVENT/VTODO/RRULE |
+| **vCard** | ✅ | ✅ | — | — | RFC 6350 .vcf，vCard 3.0/4.0 |
+| **EPUB** | ✅ | ✅ | — | — | EPUB 2/3，OPF/Nav/章节/封面 |
 | **XPS** | 🔄规划 | 🔄规划 | — | — | XPS/OXPS 固定版式 |
 
 ## 代码结构
@@ -235,10 +258,10 @@ NewLife.Office/
 ├── Markdown/     # Markdown 读写：MarkdownParser / MarkdownWriter / MarkdownHtmlConverter
 ├── Rtf/          # RTF 读写：RtfReader / RtfWriter
 ├── Ods/          # ODS 读写：OdsReader / OdsWriter
-├── Email/        # EML/MSG 读写（规划中）
-├── Calendar/     # iCalendar .ics 读写（规划中）
-├── Contact/      # vCard .vcf 读写（规划中）
-├── Epub/         # EPUB 读写（规划中）
+├── Mail/         # EML 邮件读写：EmlReader / EmlWriter / EmlMessage
+├── Calendar/     # iCalendar .ics 读写：ICalReader / ICalWriter / ICalDocument
+├── VCard/        # vCard .vcf 读写：VCardReader / VCardWriter / VCardContact
+├── Epub/         # EPUB 读写：EpubReader / EpubWriter / EpubDocument
 └── Xps/          # XPS 读写（规划中）
 ```
 
@@ -263,16 +286,9 @@ NewLife.Office/
 - RtfWriter 支持 PNG/JPEG 图片嵌入
 - OdsReader 识别合并单元格（number-columns-spanned）
 
-### Email / iCalendar / vCard
+### MSG / XPS
 
-- EML（RFC 5322 + MIME）读写，附件提取
 - MSG（Outlook，基于 OLE2）读取
-- iCalendar .ics 读写（RFC 5545）
-- vCard .vcf 读写（RFC 6350）
-
-### EPUB / XPS
-
-- EPUB 2/3 电子书读写
 - XPS/OXPS 固定版式文档读写
 
 ## 新生命项目矩阵
