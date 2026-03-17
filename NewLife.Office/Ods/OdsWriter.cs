@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.IO.Compression;
+using System.Reflection;
 using System.Text;
 using System.Xml;
 
@@ -10,7 +12,7 @@ namespace NewLife.Office.Ods;
 /// <summary>ODS 电子表格写入器</summary>
 /// <remarks>
 /// 生成 OpenDocument Spreadsheet（.ods）格式文件。
-/// 支持多工作表、字符串、数值、日期、布尔值类型单元格和基本单元格样式。
+/// 支持多工作表、字符串、数值、日期、布尔值、公式类型单元格、基本样式，以及对象集合导出。
 /// </remarks>
 public sealed class OdsWriter
 {
@@ -26,6 +28,19 @@ public sealed class OdsWriter
     #endregion
 
     #region 方法 — 添加数据
+    /// <summary>添加工作表（字符串二维数据，每行为 String 数组）</summary>
+    /// <param name="name">工作表名称</param>
+    /// <param name="rows">行数据（每行为 String[]）</param>
+    /// <returns>当前写入器（链式调用）</returns>
+    public OdsWriter AddSheet(String name, IEnumerable<String[]> rows)
+    {
+        var sheet = new OdsSheet { Name = name };
+        foreach (var row in rows)
+            sheet.Rows.Add(row ?? []);
+        Sheets.Add(sheet);
+        return this;
+    }
+
     /// <summary>添加工作表（字符串二维数据）</summary>
     /// <param name="name">工作表名称</param>
     /// <param name="rows">行数据</param>
@@ -48,6 +63,47 @@ public sealed class OdsWriter
     /// <returns>当前写入器（链式调用）</returns>
     public OdsWriter AddSheet(OdsSheet sheet)
     {
+        Sheets.Add(sheet);
+        return this;
+    }
+
+    /// <summary>添加工作表（对象集合，使用反射读取属性名作列头）</summary>
+    /// <typeparam name="T">列表元素类型</typeparam>
+    /// <param name="name">工作表名称</param>
+    /// <param name="items">数据集合</param>
+    /// <returns>当前写入器（链式调用）</returns>
+    public OdsWriter AddSheet<T>(String name, IEnumerable<T> items)
+    {
+        var props = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanRead).ToArray();
+
+        var sheet = new OdsSheet { Name = name };
+
+        // 生成表头行
+        var headers = new String[props.Length];
+        for (var i = 0; i < props.Length; i++)
+        {
+            var dn = props[i].GetCustomAttribute<DisplayNameAttribute>();
+            if (dn != null) { headers[i] = dn.DisplayName; continue; }
+            var desc = props[i].GetCustomAttribute<DescriptionAttribute>();
+            if (desc != null) { headers[i] = desc.Description; continue; }
+            headers[i] = props[i].Name;
+        }
+        sheet.Rows.Add(headers);
+
+        // 数据行
+        foreach (var item in items)
+        {
+            if (item == null) continue;
+            var row = new String[props.Length];
+            for (var i = 0; i < props.Length; i++)
+            {
+                var val = props[i].GetValue(item);
+                row[i] = val == null ? "" : Convert.ToString(val, System.Globalization.CultureInfo.InvariantCulture) ?? "";
+            }
+            sheet.Rows.Add(row);
+        }
+
         Sheets.Add(sheet);
         return this;
     }
@@ -153,10 +209,18 @@ public sealed class OdsWriter
 
     private static void WriteCell(StreamWriter w, String value)
     {
-        // Attempt to detect numeric/bool/date values for proper typing
         if (String.IsNullOrEmpty(value))
         {
             w.WriteLine(@"          <table:table-cell/>");
+            return;
+        }
+
+        // 公式：以 = 开头
+        if (value.Length > 1 && value[0] == '=')
+        {
+            // OpenDocument 公式前缀 of:
+            var formula = "of:" + value;
+            w.WriteLine($@"          <table:table-cell table:formula=""{XmlEncode(formula)}"" office:value-type=""formula""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
             return;
         }
 
@@ -175,7 +239,7 @@ public sealed class OdsWriter
             return;
         }
 
-        // Default: string
+        // 默认字符串
         w.WriteLine($@"          <table:table-cell office:value-type=""string""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
     }
     #endregion
