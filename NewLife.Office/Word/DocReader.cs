@@ -108,12 +108,68 @@ public sealed class DocReader : IDisposable
         }
     }
 
+    /// <summary>读取文档中的所有表格</summary>
+    /// <remarks>
+    /// 通过检测原始文本流中的 0x07（表格单元格结束符）识别表格行，
+    /// 将连续的表格行聚合为表格，每格内容已 Trim 处理。
+    /// 空表格行（所有单元格均为空）会被自动跳过。
+    /// </remarks>
+    /// <returns>表格序列，每张表格为 String[][] （行 × 列）</returns>
+    public IEnumerable<String[][]> ReadTables()
+    {
+        var rawText = BuildRawText(keepTableMarkers: true);
+        var table = new List<String[]>();
+        var start = 0;
+
+        for (var i = 0; i <= rawText.Length; i++)
+        {
+            if (i < rawText.Length && rawText[i] != '\n') continue;
+
+            var line = rawText.Substring(start, i - start);
+            start = i + 1;
+
+            if (line.Contains('\x07'))
+            {
+                // 表格行：以 \x07 为分隔符分割单元格
+                var parts = line.Split('\x07');
+                // 最后一个 \x07 之后通常是空字符串，过滤
+                var cells = parts
+                    .Select(p => p.Trim())
+                    .ToArray();
+                // 去掉尾部多余的空单元格（行末的 \x07 产生）
+                var lastNonEmpty = cells.Length - 1;
+                while (lastNonEmpty >= 0 && cells[lastNonEmpty].Length == 0)
+                    lastNonEmpty--;
+
+                if (lastNonEmpty >= 0)
+                    table.Add(cells.Take(lastNonEmpty + 1).ToArray());
+            }
+            else
+            {
+                // 非表格行：如果之前有积累的表格行，则结束当前表格
+                if (table.Count > 0)
+                {
+                    yield return table.ToArray();
+                    table.Clear();
+                }
+            }
+        }
+
+        // 文档末尾若有未输出的表格
+        if (table.Count > 0)
+            yield return table.ToArray();
+    }
+
     #endregion
 
     #region FIB 解析与文本提取
 
     /// <summary>解析 FIB，定位 CLX，提取所有文本</summary>
-    private String BuildFullText()
+    private String BuildFullText() => BuildRawText(keepTableMarkers: false);
+
+    /// <summary>提取文档文本，可选保留表格单元格标记符（0x07）</summary>
+    /// <param name="keepTableMarkers">true = 保留 0x07 用于表格检测</param>
+    private String BuildRawText(Boolean keepTableMarkers)
     {
         var buf = _wordDoc;
         if (buf.Length < 300) return String.Empty;
@@ -206,7 +262,7 @@ public sealed class DocReader : IDisposable
                 for (var c = 0; c < byteCount; c++)
                 {
                     var ch = (Char)buf[byteOffset + c];
-                    AppendDocChar(sb, ch);
+                    AppendDocChar(sb, ch, keepTableMarkers);
                 }
             }
             else
@@ -220,7 +276,7 @@ public sealed class DocReader : IDisposable
                 for (var c = 0; c < charCount; c++)
                 {
                     var ch = (Char)ReadUInt16(buf, byteOffset + c * 2);
-                    AppendDocChar(sb, ch);
+                    AppendDocChar(sb, ch, keepTableMarkers);
                 }
             }
         }
@@ -231,7 +287,8 @@ public sealed class DocReader : IDisposable
     /// <summary>将文档字符追加到 StringBuilder，过滤控制字符并转换段落符</summary>
     /// <param name="sb">目标 StringBuilder</param>
     /// <param name="ch">文档字符</param>
-    private static void AppendDocChar(StringBuilder sb, Char ch)
+    /// <param name="keepTableMarkers">是否保留 0x07 表格单元格标记符</param>
+    private static void AppendDocChar(StringBuilder sb, Char ch, Boolean keepTableMarkers = false)
     {
         switch (ch)
         {
@@ -240,7 +297,9 @@ public sealed class DocReader : IDisposable
             case '\v':   // 分栏符（0x0B）
                 sb.Append('\n');
                 break;
-            case '\x07': // 表格分隔符，跳过
+            case '\x07': // 表格单元格结束符
+                if (keepTableMarkers) sb.Append('\x07');
+                break;
             case '\x13': // 域开始，跳过
             case '\x14': // 域分隔，跳过
             case '\x15': // 域结束，跳过

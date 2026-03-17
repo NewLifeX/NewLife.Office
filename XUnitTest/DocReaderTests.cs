@@ -191,4 +191,54 @@ public class DocReaderTests
         using var ms = new MemoryStream(cfb.ToBytes());
         Assert.Throws<InvalidDataException>(() => new DocReader(ms));
     }
+
+    [Fact, System.ComponentModel.DisplayName("ReadTables 识别含 0x07 标记的表格行")]
+    public void ReadTables_BasicTable()
+    {
+        // 在 Word 二进制格式中，0x07 是表格单元格结束符
+        // 注意：\u0007 是固定4位转义，避免 \x07B 被解析成 0x7B='{'  
+        // 模拟一个 2 行 3 列的表格：每行以 \u0007 分隔单元格，行末跟 \r（段落符）
+        const String Sep = "\u0007";
+        var tableText = "A" + Sep + "B" + Sep + "C" + Sep + "\rX" + Sep + "Y" + Sep + "Z" + Sep + "\r";
+        using var stream = BuildDoc(tableText);
+        using var reader = new DocReader(stream);
+
+        var tables = reader.ReadTables().ToList();
+        Assert.True(tables.Count >= 1, "应识别出至少一张表格");
+
+        var tbl = tables[0];
+        Assert.Equal(2, tbl.Length);
+        Assert.Equal(3, tbl[0].Length);
+        Assert.Equal("A", tbl[0][0]);
+        Assert.Equal("B", tbl[0][1]);
+        Assert.Equal("C", tbl[0][2]);
+        Assert.Equal("X", tbl[1][0]);
+        Assert.Equal("Y", tbl[1][1]);
+        Assert.Equal("Z", tbl[1][2]);
+    }
+
+    [Fact, System.ComponentModel.DisplayName("ReadTables 文档无表格时返回空序列")]
+    public void ReadTables_NoTable_ReturnsEmpty()
+    {
+        using var stream = BuildDoc("Just plain text\rAnother paragraph");
+        using var reader = new DocReader(stream);
+
+        var tables = reader.ReadTables().ToList();
+        Assert.Empty(tables);
+    }
+
+    [Fact, System.ComponentModel.DisplayName("ReadTables 表格与普通段落混合时正确分组")]
+    public void ReadTables_MixedContent()
+    {
+        // 普通段落 → 表格 → 普通段落
+        const String Sep = "\u0007";
+        var text = "Title\rA" + Sep + "B" + Sep + "\rC" + Sep + "D" + Sep + "\rFooter";
+        using var stream = BuildDoc(text);
+        using var reader = new DocReader(stream);
+
+        var tables = reader.ReadTables().ToList();
+        Assert.Single(tables);
+        Assert.Equal(2, tables[0].Length);
+        Assert.Equal(2, tables[0][0].Length);
+    }
 }
