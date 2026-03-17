@@ -414,4 +414,126 @@ public class RtfTests
         Assert.Contains("Para2", text);
     }
     #endregion
+
+    #region R01-03 图片读取
+    [Fact]
+    [DisplayName("R01-03 解析含 PNG 图片的 RTF，Images 不为空")]
+    public void ParsePict_PngBlip_ImageExtracted()
+    {
+        // 最小 PNG（8 字节签名）
+        var pngSig = new Byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        var hex = BitConverter.ToString(pngSig).Replace("-", "").ToLowerInvariant();
+        // 真实 RTF 格式：控制字参数与十六进制数据之间必须有空格
+        var rtf = @"{\rtf1\ansi{\pict\pngblip\picw100\pich100 " + hex + @"}\par}";
+        var doc = RtfDocument.Parse(rtf);
+        Assert.Single(doc.Images);
+        Assert.Equal("png", doc.Images[0].Format);
+        Assert.Equal(pngSig, doc.Images[0].Data);
+        Assert.Equal(100, doc.Images[0].Width);
+        Assert.Equal(100, doc.Images[0].Height);
+    }
+
+    [Fact]
+    [DisplayName("R01-03 解析含 JPEG 图片的 RTF，格式识别正确")]
+    public void ParsePict_JpegBlip_FormatIsJpg()
+    {
+        var jpgSig = new Byte[] { 0xFF, 0xD8, 0xFF, 0xE0 };
+        var hex = BitConverter.ToString(jpgSig).Replace("-", "").ToLowerInvariant();
+        var rtf = @"{\rtf1\ansi{\pict\jpegblip\picw200\pich150 " + hex + @"}}";
+        var doc = RtfDocument.Parse(rtf);
+        Assert.Single(doc.Images);
+        Assert.Equal("jpg", doc.Images[0].Format);
+        Assert.Equal(jpgSig, doc.Images[0].Data);
+    }
+
+    [Fact]
+    [DisplayName("R01-03 解析多张图片，全部提取")]
+    public void ParsePict_MultipleImages_AllExtracted()
+    {
+        var data1 = new Byte[] { 0x89, 0x50, 0x4E, 0x47 };
+        var data2 = new Byte[] { 0xFF, 0xD8, 0xFF, 0xE0 };
+        var hex1 = BitConverter.ToString(data1).Replace("-", "").ToLowerInvariant();
+        var hex2 = BitConverter.ToString(data2).Replace("-", "").ToLowerInvariant();
+        var rtf = @"{\rtf1\ansi{\pict\pngblip " + hex1 + @"}Text{\pict\jpegblip " + hex2 + @"}}";
+        var doc = RtfDocument.Parse(rtf);
+        Assert.Equal(2, doc.Images.Count);
+        Assert.Equal("png", doc.Images[0].Format);
+        Assert.Equal("jpg", doc.Images[1].Format);
+    }
+
+    [Fact]
+    [DisplayName("R01-03 Images 属性默认为空列表")]
+    public void Images_EmptyDocument_EmptyList()
+    {
+        var doc = RtfDocument.Parse(@"{\rtf1\ansi Hello\par}");
+        Assert.NotNull(doc.Images);
+        Assert.Empty(doc.Images);
+    }
+    #endregion
+
+    #region R02-04 图片写入
+    [Fact]
+    [DisplayName("R02-04 写入 PNG 图片，RTF 含 pict 组")]
+    public void AddImage_Png_RtfContainsPict()
+    {
+        var pngSig = new Byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        var writer = new RtfWriter();
+        writer.AddParagraph("前文").AddImage(pngSig, "png", 5040, 3780);
+        var rtf = writer.ToString();
+        Assert.Contains(@"\pict", rtf);
+        Assert.Contains(@"\pngblip", rtf);
+        Assert.Contains("89504e47", rtf);
+    }
+
+    [Fact]
+    [DisplayName("R02-04 写入 JPEG 图片，RTF 含 jpegblip")]
+    public void AddImage_Jpeg_RtfContainsJpegblip()
+    {
+        var jpgSig = new Byte[] { 0xFF, 0xD8, 0xFF };
+        var writer = new RtfWriter();
+        writer.AddImage(jpgSig, "jpg");
+        var rtf = writer.ToString();
+        Assert.Contains(@"\jpegblip", rtf);
+    }
+
+    [Fact]
+    [DisplayName("R02-04 写入图片后往返解析能还原图片数据")]
+    public void AddImage_RoundTrip_DataPreserved()
+    {
+        var data = new Byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        var writer = new RtfWriter();
+        writer.AddImage(data, "png", 2880, 2160);
+        var rtf = writer.ToString();
+
+        var doc = RtfDocument.Parse(rtf);
+        Assert.Single(doc.Images);
+        Assert.Equal("png", doc.Images[0].Format);
+        Assert.Equal(data, doc.Images[0].Data);
+        Assert.Equal(2880, doc.Images[0].Width);
+        Assert.Equal(2160, doc.Images[0].Height);
+    }
+
+    [Fact]
+    [DisplayName("R02-04 AddImage 空数据不添加块")]
+    public void AddImage_EmptyData_NoBlock()
+    {
+        var writer = new RtfWriter();
+        writer.AddImage(new Byte[0]);
+        var rtf = writer.ToString();
+        Assert.DoesNotContain(@"\pict", rtf);
+    }
+
+    [Fact]
+    [DisplayName("R02-04 链式 AddParagraph + AddImage + AddParagraph")]
+    public void AddImage_ChainWithParagraphs_AllPresent()
+    {
+        var data = new Byte[] { 0x89, 0x50, 0x4E, 0x47 };
+        var writer = new RtfWriter();
+        writer.AddParagraph("Header").AddImage(data).AddParagraph("Footer");
+        var rtf = writer.ToString();
+        Assert.Contains("Header", rtf);
+        Assert.Contains(@"\pict", rtf);
+        Assert.Contains("Footer", rtf);
+    }
+    #endregion
 }

@@ -95,6 +95,19 @@ public sealed class RtfWriter
         _blocks.Add(table);
         return this;
     }
+
+    /// <summary>嵌入图片</summary>
+    /// <param name="data">图片字节数据（PNG/JPEG/EMF/WMF 原始字节）</param>
+    /// <param name="format">图片格式（png/jpg/emf/wmf），默认 png</param>
+    /// <param name="widthTwips">显示宽度（twips，默认 5760 = 4 英寸）</param>
+    /// <param name="heightTwips">显示高度（twips，默认 4320 = 3 英寸）</param>
+    /// <returns>当前写入器（链式调用）</returns>
+    public RtfWriter AddImage(Byte[] data, String format = "png", Int32 widthTwips = 5760, Int32 heightTwips = 4320)
+    {
+        if (data == null || data.Length == 0) return this;
+        _blocks.Add(new RtfImage { Data = data, Format = format, Width = widthTwips, Height = heightTwips });
+        return this;
+    }
     #endregion
 
     #region 方法 — 输出
@@ -233,6 +246,8 @@ public sealed class RtfWriter
                 EmitParagraph(sb, para);
             else if (block is RtfTable table)
                 EmitTable(sb, table);
+            else if (block is RtfImage img)
+                EmitImage(sb, img);
         }
 
         sb.Append('}');
@@ -323,6 +338,29 @@ public sealed class RtfWriter
                 EmitRun(sb, run);
         }
         sb.Append("\\cell\r\n");
+    }
+
+    private static void EmitImage(StringBuilder sb, RtfImage img)
+    {
+        var blip = img.Format switch
+        {
+            "jpg" or "jpeg" => "\\jpegblip",
+            "emf" => "\\emfblip",
+            "wmf" => "\\wmetafile8",
+            _ => "\\pngblip",
+        };
+        sb.Append($"\\pard{{\\pict{blip}\\picw{img.Width}\\pich{img.Height}\\picwgoal{img.Width}\\pichgoal{img.Height}\r\n");
+        // 逐字节转十六进制输出，每 64 字符换行
+        var hex = new StringBuilder(img.Data.Length * 2);
+        foreach (var b in img.Data)
+            hex.Append(b.ToString("x2"));
+        for (var i = 0; i < hex.Length; i += 64)
+        {
+            var len = Math.Min(64, hex.Length - i);
+            sb.Append(hex.ToString(i, len));
+            sb.Append("\r\n");
+        }
+        sb.Append("}\\par\r\n");
     }
     #endregion
 

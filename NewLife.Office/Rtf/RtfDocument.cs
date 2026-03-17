@@ -52,6 +52,9 @@ public sealed class RtfDocument
                 if (block is RtfTable t) yield return t;
         }
     }
+
+    /// <summary>文档中嵌入的图片列表（由 \pict 块解析得到）</summary>
+    public List<RtfImage> Images { get; } = [];
     #endregion
 
     #region 解析

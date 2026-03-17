@@ -246,6 +246,15 @@ internal sealed class RtfReader
                         depth--;
                         continue;
                     }
+                    else if (kw == "\\pict")
+                    {
+                        ReadControlWord(); // consume "\pict"
+                        var image = ParsePict(); // consumes up to and including closing }
+                        if (image != null) doc.Images.Add(image);
+                        if (stateStack.Count > 0) currentState = stateStack.Pop();
+                        depth--;
+                        continue;
+                    }
                     else if (kw == "\\stylesheet" || kw == "\\listtable" || kw == "\\listoverridetable"
                           || kw == "\\rsidtbl" || kw == "\\mmathPr" || kw == "\\themedata"
                           || kw == "\\colorschememapping" || kw == "\\latentstyles" || kw == "\\generator")
@@ -645,6 +654,60 @@ internal sealed class RtfReader
             _pos++;
         }
         return sb.ToString().Trim();
+    }
+
+    /// <summary>解析 \pict 组，返回图片对象；消耗到包括结尾 } 在内</summary>
+    private RtfImage? ParsePict()
+    {
+        var format = "wmf";
+        var width = 0;
+        var height = 0;
+        var hexData = new StringBuilder();
+        var depth = 1;
+
+        while (_pos < _rtf.Length && depth > 0)
+        {
+            var ch = _rtf[_pos];
+            if (ch == '{') { depth++; _pos++; continue; }
+            if (ch == '}')
+            {
+                depth--;
+                _pos++;
+                break;
+            }
+            if (ch == '\\')
+            {
+                var (word, param, hasParam) = ReadControlWord();
+                switch (word)
+                {
+                    case "\\pngblip": format = "png"; break;
+                    case "\\jpegblip": format = "jpg"; break;
+                    case "\\emfblip": format = "emf"; break;
+                    case "\\wmetafile": format = "wmf"; break;
+                    case "\\picw": if (hasParam) width = param; break;
+                    case "\\pich": if (hasParam) height = param; break;
+                }
+                continue;
+            }
+            // 十六进制数据字符
+            if ((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F'))
+            {
+                hexData.Append(ch);
+                _pos++;
+                continue;
+            }
+            _pos++;
+        }
+
+        if (hexData.Length < 2) return null;
+
+        var hex = hexData.ToString();
+        var byteCount = hex.Length / 2;
+        var bytes = new Byte[byteCount];
+        for (var i = 0; i < byteCount; i++)
+            bytes[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
+
+        return new RtfImage { Data = bytes, Format = format, Width = width, Height = height };
     }
     #endregion
 
