@@ -1,4 +1,4 @@
-namespace NewLife.Office.Markdown;
+﻿namespace NewLife.Office.Markdown;
 
 /// <summary>Markdown 行内元素</summary>
 /// <remarks>

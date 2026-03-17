@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -73,7 +73,9 @@ public class WordTemplate
     {
         var dict = new Dictionary<String, Object?>(StringComparer.OrdinalIgnoreCase);
         foreach (var prop in model.GetType().GetProperties())
+        {
             dict[prop.Name] = prop.GetValue(model);
+        }
         Fill(outputPath, dict);
     }
 
@@ -111,7 +113,9 @@ public class WordTemplate
             {
                 var content = ReadAsString(srcStream);
                 foreach (var kv in lists)
+                {
                     content = ExpandTableRows(content, kv.Key, kv.Value, "w:tr");
+                }
                 content = ApplyReplacements(content, data);
                 var bytes = Encoding.UTF8.GetBytes(content);
                 dstStream.Write(bytes, 0, bytes.Length);
@@ -278,7 +282,9 @@ public class WordTemplate
         var relsXml = ReadAsString(relsEntry.Open());
         var relMap = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase); // rId -> "word/media/..."
         foreach (Match m in Regex.Matches(relsXml, @"Id=""([^""]+)""[^>]+Target=""(media/[^""]+)"""))
+        {
             relMap[m.Groups[1].Value] = "word/" + m.Groups[2].Value;
+        }
 
         var docEntry = srcZip.GetEntry("word/document.xml");
         if (docEntry == null) return result;

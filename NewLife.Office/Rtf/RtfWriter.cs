@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -169,9 +169,15 @@ public sealed class RtfWriter
             else if (block is RtfTable table)
             {
                 foreach (var row in table.Rows)
+                {
                     foreach (var cell in row.Cells)
+                    {
                         foreach (var cp in cell.Paragraphs)
+                        {
                             CollectFromPara(cp);
+                        }
+                    }
+                }
             }
         }
     }
@@ -225,7 +231,9 @@ public sealed class RtfWriter
         {
             sb.Append("\r\n{\\colortbl ;");
             foreach (var rgb in _colors)
+            {
                 sb.Append($"\\red{(rgb >> 16) & 0xFF}\\green{(rgb >> 8) & 0xFF}\\blue{rgb & 0xFF};");
+            }
             sb.Append('}');
         }
         // Document info
@@ -274,7 +282,9 @@ public sealed class RtfWriter
         if (para.InTable) sb.Append("\\intbl");
         sb.Append(' ');
         foreach (var run in para.Runs)
+        {
             EmitRun(sb, run);
+        }
         sb.Append("\\par\r\n");
     }
 
@@ -324,7 +334,9 @@ public sealed class RtfWriter
             }
             sb.Append("\r\n");
             foreach (var cell in row.Cells)
+            {
                 EmitCell(sb, cell);
+            }
             sb.Append("\\row\r\n");
         }
     }
@@ -335,7 +347,9 @@ public sealed class RtfWriter
         {
             sb.Append("\\pard\\intbl ");
             foreach (var run in para.Runs)
+            {
                 EmitRun(sb, run);
+            }
         }
         sb.Append("\\cell\r\n");
     }
@@ -353,7 +367,9 @@ public sealed class RtfWriter
         // 逐字节转十六进制输出，每 64 字符换行
         var hex = new StringBuilder(img.Data.Length * 2);
         foreach (var b in img.Data)
+        {
             hex.Append(b.ToString("x2"));
+        }
         for (var i = 0; i < hex.Length; i += 64)
         {
             var len = Math.Min(64, hex.Length - i);

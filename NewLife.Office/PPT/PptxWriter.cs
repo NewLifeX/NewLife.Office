@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 
@@ -302,7 +302,9 @@ public partial class PptxWriter : IDisposable
         }).ToArray();
         var rows = new List<String[]> { headers };
         foreach (var item in data)
+        {
             rows.Add(props.Select(p => Convert.ToString(p.GetValue(item)) ?? String.Empty).ToArray());
+        }
         AddTable(slideIndex, rows, leftCm, topCm, widthCm, firstRowHeader: true);
     }
 
@@ -349,7 +351,9 @@ public partial class PptxWriter : IDisposable
     public PptxWriter SetAccentColors(params String[] hexColors)
     {
         for (var i = 0; i < Math.Min(hexColors.Length, AccentColors.Length); i++)
+        {
             AccentColors[i] = hexColors[i].TrimStart('#');
+        }
         return this;
     }
 
@@ -549,7 +553,9 @@ public partial class PptxWriter : IDisposable
                 ((System.Xml.XmlElement)ptCountNode).SetAttribute("val", ser.Values.Length.ToString());
             // Remove old pt nodes
             foreach (var old in numCache.SelectNodes("c:pt", ns)!.Cast<System.Xml.XmlNode>().ToList())
+            {
                 numCache.RemoveChild(old);
+            }
             // Add new pt nodes
             for (var vi = 0; vi < ser.Values.Length; vi++)
             {
@@ -643,7 +649,9 @@ public partial class PptxWriter : IDisposable
                 String slideXml;
                 using (var sr = new StreamReader(slideEntry.Open())) slideXml = sr.ReadToEnd();
                 foreach (var kv in mediaRename)
+                {
                     slideXml = slideXml.Replace($"../media/{kv.Key}", $"../media/{kv.Value}");
+                }
                 WriteZipEntryText(dstZip, $"ppt/slides/slide{slideTotal}.xml", slideXml);
 
                 var relsEntry = srcZip.GetEntry($"ppt/slides/_rels/slide{oldNum}.xml.rels");
@@ -652,7 +660,9 @@ public partial class PptxWriter : IDisposable
                 {
                     using var sr = new StreamReader(relsEntry.Open()); relsXml = sr.ReadToEnd();
                     foreach (var kv in mediaRename)
+                    {
                         relsXml = relsXml.Replace($"../media/{kv.Key}", $"../media/{kv.Value}");
+                    }
                 }
                 else
                 {
@@ -672,7 +682,9 @@ public partial class PptxWriter : IDisposable
         presSb.Append("<p:sldMasterIdLst><p:sldMasterId id=\"2147483648\" r:id=\"rMaster1\"/></p:sldMasterIdLst>");
         presSb.Append("<p:sldIdLst>");
         for (var i = 0; i < slideTotal; i++)
+        {
             presSb.Append($"<p:sldId id=\"{256 + i}\" r:id=\"rSlide{i + 1}\"/>");
+        }
         presSb.Append("</p:sldIdLst><p:sldSz cx=\"12192000\" cy=\"6858000\"/><p:notesSz cx=\"6858000\" cy=\"9144000\"/></p:presentation>");
         WriteZipEntryText(dstZip, "ppt/presentation.xml", presSb.ToString());
 
@@ -680,7 +692,9 @@ public partial class PptxWriter : IDisposable
         var relsSb = new StringBuilder("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
         relsSb.Append("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
         for (var i = 1; i <= slideTotal; i++)
+        {
             relsSb.Append($"<Relationship Id=\"rSlide{i}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide{i}.xml\"/>");
+        }
         relsSb.Append("<Relationship Id=\"rMaster1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"slideMasters/slideMaster1.xml\"/>");
         relsSb.Append("</Relationships>");
         WriteZipEntryText(dstZip, "ppt/_rels/presentation.xml.rels", relsSb.ToString());
@@ -695,7 +709,9 @@ public partial class PptxWriter : IDisposable
         ctSb.Append("<Default Extension=\"jpeg\" ContentType=\"image/jpeg\"/>");
         ctSb.Append("<Override PartName=\"/ppt/presentation.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/>");
         for (var i = 1; i <= slideTotal; i++)
+        {
             ctSb.Append($"<Override PartName=\"/ppt/slides/slide{i}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/>");
+        }
         ctSb.Append("<Override PartName=\"/ppt/slideLayouts/slideLayout1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml\"/>");
         ctSb.Append("<Override PartName=\"/ppt/slideMasters/slideMaster1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml\"/>");
         ctSb.Append("<Override PartName=\"/ppt/theme/theme1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\"/>");

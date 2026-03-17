@@ -88,7 +88,9 @@ public class XpsWriter
         WritePages(zip);
         WriteDocProps(zip);
         foreach (var (name, data, _) in _images)
+        {
             WriteEntry(zip, $"Resources/Images/{name}", data);
+        }
     }
 
     /// <summary>获取 XPS 字节数组</summary>
@@ -171,7 +173,9 @@ public class XpsWriter
         sb.AppendLine("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
         sb.AppendLine($"<FixedDocument xmlns=\"{XpsNs}\">");
         for (var i = 0; i < _pages.Count; i++)
+        {
             sb.AppendLine($"  <PageContent Source=\"Pages/{i + 1}.fpage\"/>");
+        }
         sb.AppendLine("</FixedDocument>");
         WriteEntry(zip, "Documents/1/1.fds", sb.ToString());
     }

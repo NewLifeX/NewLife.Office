@@ -112,7 +112,9 @@ internal sealed class CfbDirectoryEntry
 
         // CLSID (16 bytes)
         for (var i = 0; i < 16; i++)
+        {
             writer.Write(i < Clsid.Length ? Clsid[i] : (Byte)0);
+        }
 
         writer.Write(0);   // State bits
         writer.Write(0L);  // Created time

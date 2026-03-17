@@ -57,9 +57,13 @@ public class EmlWriter
         if (message.From != null)
             AppendHeader(sb, "From", EncodeHeaderValue(message.From));
         foreach (var to in message.To)
+        {
             AppendHeader(sb, "To", EncodeHeaderValue(to));
+        }
         foreach (var cc in message.Cc)
+        {
             AppendHeader(sb, "Cc", EncodeHeaderValue(cc));
+        }
         if (message.ReplyTo != null)
             AppendHeader(sb, "Reply-To", EncodeHeaderValue(message.ReplyTo));
         if (message.Subject != null)
@@ -76,9 +80,13 @@ public class EmlWriter
             AppendBodyPart(sb, boundary1, message, hasText, hasHtml, multiBody);
             // 附件
             foreach (var att in message.Attachments)
+            {
                 AppendAttachment(sb, boundary2, att);
+            }
             foreach (var att in message.InlineImages.Values)
+            {
                 AppendAttachment(sb, boundary2, att, inline: true);
+            }
             sb.AppendLine($"--{boundary2}--");
         }
         else if (multiBody)

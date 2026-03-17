@@ -25,7 +25,9 @@ internal sealed class MarkdownHtmlConverter
     {
         var sb = new StringBuilder();
         foreach (var block in doc.Blocks)
+        {
             RenderBlock(sb, block);
+        }
 
         return sb.ToString();
     }
@@ -51,20 +53,26 @@ internal sealed class MarkdownHtmlConverter
             case MarkdownBlockType.BlockQuote:
                 sb.AppendLine("<blockquote>");
                 foreach (var child in block.Children)
+                {
                     RenderBlock(sb, child);
+                }
                 sb.AppendLine("</blockquote>");
                 break;
             case MarkdownBlockType.BulletList:
                 sb.AppendLine("<ul>");
                 foreach (var child in block.Children)
+                {
                     RenderBlock(sb, child);
+                }
                 sb.AppendLine("</ul>");
                 break;
             case MarkdownBlockType.OrderedList:
                 var start = block.OrderedStart > 1 ? " start=\"" + block.OrderedStart + "\"" : "";
                 sb.AppendLine("<ol" + start + ">");
                 foreach (var child in block.Children)
+                {
                     RenderBlock(sb, child);
+                }
                 sb.AppendLine("</ol>");
                 break;
             case MarkdownBlockType.ListItem:
@@ -138,7 +146,9 @@ internal sealed class MarkdownHtmlConverter
         {
             RenderInlines(sb, block.Inlines);
             foreach (var child in block.Children)
+            {
                 RenderBlock(sb, child);
+            }
         }
 
         sb.AppendLine("</li>");
@@ -166,7 +176,9 @@ internal sealed class MarkdownHtmlConverter
         {
             sb.AppendLine("<tbody>");
             for (var i = 1; i < rows.Count; i++)
+            {
                 RenderTableRow(sb, rows[i], isHeader: false);
+            }
             sb.AppendLine("</tbody>");
         }
 
@@ -197,7 +209,9 @@ internal sealed class MarkdownHtmlConverter
     private void RenderInlines(StringBuilder sb, List<MarkdownInline> inlines)
     {
         foreach (var inline in inlines)
+        {
             RenderInline(sb, inline);
+        }
     }
 
     /// <summary>渲染单个内联节点</summary>

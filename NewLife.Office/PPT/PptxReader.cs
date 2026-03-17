@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Xml;
@@ -109,7 +109,9 @@ public class PptxReader : IDisposable
             {
                 var lineSb = new StringBuilder();
                 foreach (XmlElement t in para.SelectNodes(".//a:t", ns)!)
+                {
                     lineSb.Append(t.InnerText);
+                }
                 var line = lineSb.ToString();
                 if (line.Length > 0)
                     textSb.AppendLine(line);
@@ -123,7 +125,9 @@ public class PptxReader : IDisposable
                 var spTypAttr = sp.SelectSingleNode(".//*[local-name()='prstGeom']")?.Attributes?["prst"]?.Value ?? "textBox";
                 var shapeTextSb = new StringBuilder();
                 foreach (XmlElement t in sp.SelectNodes(".//*[local-name()='t']")!)
+                {
                     shapeTextSb.Append(t.InnerText);
+                }
 
                 var xfrm = sp.SelectSingleNode(".//*[local-name()='xfrm']");
                 var off = xfrm?.SelectSingleNode(".//*[local-name()='off']");
@@ -191,7 +195,9 @@ public class PptxReader : IDisposable
             if (layoutIds != null)
             {
                 foreach (XmlElement lid in layoutIds)
+                {
                     mi.LayoutIds.Add(lid.GetAttribute("id") ?? String.Empty);
+                }
             }
 
             // 主题引用
@@ -274,7 +280,9 @@ public class PptxReader : IDisposable
             {
                 var cats = new List<String>();
                 foreach (XmlElement pt in firstCatNode.SelectNodes("c:pt/c:v", cns)!)
+                {
                     cats.Add(pt.InnerText);
+                }
                 info.Categories = cats.ToArray();
             }
             // 所有系列

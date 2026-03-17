@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Text;
 using System.Xml;
 
@@ -140,7 +140,9 @@ public class XpsReader
         // 3. 读取每个 FixedDocument，收集 Page 路径
         var pageUris = new List<String>();
         foreach (var fdUri in fdUris)
+        {
             pageUris.AddRange(ParseFixedDocument(zip, fdUri));
+        }
 
         return pageUris;
     }

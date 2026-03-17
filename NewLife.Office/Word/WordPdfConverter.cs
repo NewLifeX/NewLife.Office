@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Xml;
 using NewLife.Office;
 
@@ -142,7 +142,9 @@ public sealed class WordPdfConverter
         // 提取段落文本
         var textBuilder = new System.Text.StringBuilder();
         foreach (XmlElement t in para.SelectNodes(".//w:t", ns)!)
+        {
             textBuilder.Append(t.InnerText);
+        }
         var text = textBuilder.ToString();
         if (text.Length == 0) return;
 
@@ -180,7 +182,9 @@ public sealed class WordPdfConverter
             {
                 var sb = new System.Text.StringBuilder();
                 foreach (XmlElement t in tc.SelectNodes(".//w:t", ns)!)
+                {
                     sb.Append(t.InnerText);
+                }
                 cells.Add(sb.ToString());
             }
             if (cells.Count > 0)

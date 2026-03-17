@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -36,9 +36,15 @@ public sealed class RtfDocument
                     yield return para;
                 else if (block is RtfTable table)
                     foreach (var row in table.Rows)
+                    {
                         foreach (var cell in row.Cells)
+                        {
                             foreach (var p in cell.Paragraphs)
+                            {
                                 yield return p;
+                            }
+                        }
+                    }
             }
         }
     }
@@ -49,7 +55,9 @@ public sealed class RtfDocument
         get
         {
             foreach (var block in Blocks)
+            {
                 if (block is RtfTable t) yield return t;
+            }
         }
     }
 

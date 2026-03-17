@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.IO.Compression;
 using System.Text;
 
@@ -60,7 +57,9 @@ public class EpubWriter
         // 章节
         var chapters = PadChapters(doc.Chapters);
         foreach (var ch in chapters)
+        {
             WriteText(zip, "OEBPS/" + ch.FileName, BuildChapterXhtml(ch));
+        }
 
         // 导航 nav.xhtml (EPUB3)
         WriteText(zip, "OEBPS/nav.xhtml", BuildNav(doc, chapters));
@@ -125,7 +124,9 @@ public class EpubWriter
         }
 
         foreach (var ch in chapters)
+        {
             sb.AppendLine("    <item id=\"" + ItemId(ch.FileName) + "\" href=\"" + ch.FileName + "\" media-type=\"application/xhtml+xml\"/>");
+        }
         sb.AppendLine("  </manifest>");
 
         sb.AppendLine("  <spine>");
@@ -133,7 +134,9 @@ public class EpubWriter
             sb.AppendLine("    <itemref idref=\"cover-page\"/>");
         sb.AppendLine("    <itemref idref=\"nav\"/>");
         foreach (var ch in chapters)
+        {
             sb.AppendLine("    <itemref idref=\"" + ItemId(ch.FileName) + "\"/>");
+        }
         sb.AppendLine("  </spine>");
         sb.AppendLine("</package>");
         return sb.ToString();
@@ -151,7 +154,9 @@ public class EpubWriter
         sb.AppendLine("    <h1>目录</h1>");
         sb.AppendLine("    <ol>");
         foreach (var ch in chapters)
+        {
             sb.AppendLine("      <li><a href=\"" + ch.FileName + "\">" + XmlEscape(ch.Title) + "</a></li>");
+        }
         sb.AppendLine("    </ol>");
         sb.AppendLine("  </nav>");
         sb.AppendLine("</body>");

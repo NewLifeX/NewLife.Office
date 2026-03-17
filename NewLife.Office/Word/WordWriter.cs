@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Security;
 using System.Text;
 
@@ -195,7 +195,9 @@ public class WordWriter : IDisposable
 
         var allRows = new List<IEnumerable<String>> { headers };
         foreach (var item in data)
+        {
             allRows.Add(props.Select(p => Convert.ToString(p.GetValue(item)) ?? String.Empty).ToArray());
+        }
 
         AppendTable(allRows, firstRowHeader, style);
     }
@@ -330,9 +332,13 @@ public class WordWriter : IDisposable
         if (psRels.FooterText != null)
             sb.Append("<Relationship Id=\"rFtr1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer\" Target=\"footer1.xml\"/>");
         foreach (var (relId, url) in _hyperlinkRels)
+        {
             sb.Append($"<Relationship Id=\"{relId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"{Esc(url)}\" TargetMode=\"External\"/>");
+        }
         foreach (var (relId, ext, _) in _imageRels)
+        {
             sb.Append($"<Relationship Id=\"{relId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/{relId}.{ext}\"/>");
+        }
         sb.Append("</Relationships>");
         WriteEntry(za, "word/_rels/document.xml.rels", sb.ToString());
     }
@@ -351,12 +357,16 @@ public class WordWriter : IDisposable
         // Headings
         int[] headSizes = [40, 32, 28, 26, 24, 22];
         for (var i = 1; i <= 6; i++)
+        {
             sb.Append($"<w:style w:type=\"paragraph\" w:styleId=\"Heading{i}\"><w:name w:val=\"heading {i}\"/><w:basedOn w:val=\"Normal\"/><w:pPr><w:outlineLvl w:val=\"{i - 1}\"/></w:pPr><w:rPr><w:b/><w:sz w:val=\"{headSizes[i - 1]}\"/></w:rPr></w:style>");
+        }
         // Table Grid
         sb.Append("<w:style w:type=\"table\" w:styleId=\"TableGrid\"><w:name w:val=\"Table Grid\"/>");
         sb.Append("<w:tblPr><w:tblBorders>");
         foreach (var edge in new[] { "top", "left", "bottom", "right", "insideH", "insideV" })
+        {
             sb.Append($"<w:{edge} w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"000000\"/>");
+        }
         sb.Append("</w:tblBorders></w:tblPr></w:style>");
         sb.Append("</w:styles>");
         WriteEntry(za, "word/styles.xml", sb.ToString());
@@ -537,7 +547,9 @@ public class WordWriter : IDisposable
         else
         {
             foreach (var run in para.Runs)
+            {
                 BuildRunXml(sb, run);
+            }
         }
         sb.Append("</w:p>");
     }
@@ -583,7 +595,9 @@ public class WordWriter : IDisposable
             sb.Append("<w:tblW w:w=\"0\" w:type=\"auto\"/>");
             sb.Append("<w:tblBorders>");
             foreach (var edge in new[] { "top", "left", "bottom", "right", "insideH", "insideV" })
+            {
                 sb.Append($"<w:{edge} w:val=\"single\" w:sz=\"{borderSize}\" w:space=\"0\" w:color=\"{borderColor}\"/>");
+            }
             sb.Append("</w:tblBorders>");
         }
         else
@@ -620,7 +634,9 @@ public class WordWriter : IDisposable
                 {
                     sb.Append("<w:tcBorders>");
                     foreach (var edge in new[] { "top", "left", "bottom", "right" })
+                    {
                         sb.Append($"<w:{edge} w:val=\"single\" w:sz=\"{borderSize}\" w:space=\"0\" w:color=\"{borderColor}\"/>");
+                    }
                     sb.Append("</w:tcBorders>");
                 }
                 // 背景色：单元格自身 > 表头行 > 斑马纹

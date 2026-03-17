@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Data;
 using System.Reflection;
 using System.Text;
@@ -216,7 +216,9 @@ public sealed class BiffWriter : IDisposable
 
         // 2. 默认字体（BIFF8 要求至少 5 个 FONT 记录，index 0-4，index 4 为保留）
         for (var fi = 0; fi < 6; fi++)
+        {
             WriteRecord(bw, RecFont, BuildFontRecord());
+        }
 
         // 3. 默认格式（Format record，数值日期格式索引）
         WriteRecord(bw, RecFormat, BuildFormatRecord(164, "yyyy/mm/dd")); // 自定义日期格式
@@ -358,7 +360,9 @@ public sealed class BiffWriter : IDisposable
             bw.Write((UInt16)s.Length);
             bw.Write((Byte)0x01); // fHighByte = 1（UTF-16LE）
             foreach (var ch in s)
+            {
                 bw.Write((UInt16)ch);
+            }
         }
 
         bw.Flush();

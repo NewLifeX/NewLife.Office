@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -72,7 +72,9 @@ public class PptxTemplate
     {
         var dict = new Dictionary<String, Object?>(StringComparer.OrdinalIgnoreCase);
         foreach (var prop in model.GetType().GetProperties())
+        {
             dict[prop.Name] = prop.GetValue(model);
+        }
         Fill(outputPath, dict);
     }
 
@@ -114,7 +116,9 @@ public class PptxTemplate
                 srcStream.CopyTo(ms);
                 var content = Encoding.UTF8.GetString(ms.ToArray());
                 foreach (var kv in lists)
+                {
                     content = WordTemplate.ExpandTableRows(content, kv.Key, kv.Value, "a:tr");
+                }
                 content = ApplyReplacements(content, data);
                 var bytes = Encoding.UTF8.GetBytes(content);
                 dstStream.Write(bytes, 0, bytes.Length);
@@ -229,7 +233,9 @@ public class PptxTemplate
 
             var relMap = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase); // rId -> "ppt/media/..."
             foreach (Match m in Regex.Matches(relsXml, @"Id=""([^""]+)""[^>]+Target=""(\.\./media/[^""]+)"""))
+            {
                 relMap[m.Groups[1].Value] = "ppt/media/" + m.Groups[2].Value["../media/".Length..];
+            }
 
             foreach (var kv in images)
             {

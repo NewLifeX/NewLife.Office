@@ -1,4 +1,4 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office;
 
 /// <summary>PDF 文档操作工具类</summary>
 /// <remarks>
@@ -45,7 +45,9 @@ public static class PdfDocument
                 var linesPerPage = lines.Length / pageCount + 1;
                 var endLine = Math.Min(lineIdx + linesPerPage, lines.Length);
                 for (; lineIdx < endLine; lineIdx++)
+                {
                     writer.AppendLine(lines[lineIdx]);
+                }
                 writer.EndPage();
             }
         }
@@ -79,7 +81,9 @@ public static class PdfDocument
             var startLine = p * linesPerPage;
             var endLine = (p == pageCount - 1) ? lines.Length : Math.Min(startLine + linesPerPage, lines.Length);
             for (var i = startLine; i < endLine; i++)
+            {
                 w.AppendLine(lines[i]);
+            }
             w.EndPage();
             w.Save(outPath);
             result.Add(outPath);
@@ -112,7 +116,9 @@ public static class PdfDocument
                 var startLine = (p - 1) * linesPerPage;
                 var endLine = Math.Min(startLine + linesPerPage, lines.Length);
                 for (var i = startLine; i < endLine; i++)
+                {
                     w.AppendLine(lines[i]);
+                }
             }
             w.EndPage();
         }
@@ -148,7 +154,9 @@ public static class PdfDocument
                 var startLine = p * linesPerPage;
                 var endLine = Math.Min(startLine + linesPerPage, lines.Length);
                 for (var i = startLine; i < endLine; i++)
+                {
                     w.AppendLine(lines[i]);
+                }
             }
             // 水印：绘制于页面中央
             var x = w.PageWidth / 2 - watermarkText.Length * fontSize * 0.3f;
@@ -189,7 +197,9 @@ public static class PdfDocument
                 var startLine = p * linesPerPage;
                 var endLine = Math.Min(startLine + linesPerPage, lines.Length);
                 for (var i = startLine; i < endLine; i++)
+                {
                     w.AppendLine(lines[i]);
+                }
             }
             if (pageIndex < 0 || pageIndex == p)
                 w.DrawText(text, x, y, fontSize);
@@ -227,7 +237,9 @@ public static class PdfDocument
                 var startLine = p * linesPerPage;
                 var endLine = Math.Min(startLine + linesPerPage, lines.Length);
                 for (var i = startLine; i < endLine; i++)
+                {
                     w.AppendLine(lines[i]);
+                }
             }
             if (pageIndex < 0 || pageIndex == p)
                 w.DrawImage(imageData, x, y, width, height);

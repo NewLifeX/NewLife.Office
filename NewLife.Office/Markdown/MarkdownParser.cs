@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 
 namespace NewLife.Office.Markdown;
 
@@ -27,7 +27,9 @@ internal sealed class MarkdownParser
 
         var doc = new MarkdownDocument();
         while (_pos < _lines.Length)
+        {
             ParseBlock(doc.Blocks);
+        }
         return doc;
     }
     #endregion

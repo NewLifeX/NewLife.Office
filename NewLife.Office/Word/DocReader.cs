@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using NewLife.Collections;
 using NewLife.Office;
 
@@ -139,7 +139,9 @@ public sealed class DocReader : IDisposable
                 // 去掉尾部多余的空单元格（行末的 \x07 产生）
                 var lastNonEmpty = cells.Length - 1;
                 while (lastNonEmpty >= 0 && cells[lastNonEmpty].Length == 0)
+                {
                     lastNonEmpty--;
+                }
 
                 if (lastNonEmpty >= 0)
                     table.Add(cells.Take(lastNonEmpty + 1).ToArray());

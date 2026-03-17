@@ -26,7 +26,9 @@ partial class PptxWriter
         WriteSlideLayout(za);
         WriteSlideMaster(za);
         for (var i = 0; i < Slides.Count; i++)
+        {
             WriteSlide(za, i, Slides[i]);
+        }
         // 写入跨文件复制的原始幻灯片（S10-04）
         var totalSlides = Slides.Count;
         for (var ri = 0; ri < _rawSlides.Count; ri++)
@@ -50,7 +52,9 @@ partial class PptxWriter
     private PptSlide EnsureSlide(Int32 idx)
     {
         while (Slides.Count <= idx)
+        {
             Slides.Add(new PptSlide());
+        }
         return Slides[idx];
     }
 
@@ -98,14 +102,22 @@ partial class PptxWriter
         sb.Append("<Override PartName=\"/ppt/slideLayouts/slideLayout1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml\"/>");
         sb.Append("<Override PartName=\"/ppt/theme/theme1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\"/>");
         for (var i = 0; i < Slides.Count; i++)
+        {
             sb.Append($"<Override PartName=\"/ppt/slides/slide{i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/>");
+        }
         // 原始幻灯片内容类型（S10-04）
         for (var i = 0; i < _rawSlides.Count; i++)
+        {
             sb.Append($"<Override PartName=\"/ppt/slides/slide{Slides.Count + i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/>");
+        }
         // chart types
         foreach (var slide in Slides)
+        {
             foreach (var chart in slide.Charts)
+            {
                 sb.Append($"<Override PartName=\"/ppt/charts/chart{chart.ChartNumber}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawingml.chart+xml\"/>");
+            }
+        }
         // image types
         var addedExt = new HashSet<String>();
         foreach (var slide in Slides)
@@ -142,10 +154,14 @@ partial class PptxWriter
         sb.Append("<p:sldMasterIdLst><p:sldMasterId id=\"2147483648\" r:id=\"rMaster1\"/></p:sldMasterIdLst>");
         sb.Append("<p:sldIdLst>");
         for (var i = 0; i < Slides.Count; i++)
+        {
             sb.Append($"<p:sldId id=\"{256 + i}\" r:id=\"rSlide{i + 1}\"/>");
+        }
         // 原始幻灯片（S10-04）
         for (var i = 0; i < _rawSlides.Count; i++)
+        {
             sb.Append($"<p:sldId id=\"{256 + Slides.Count + i}\" r:id=\"rSlide{Slides.Count + i + 1}\"/>");
+        }
         sb.Append("</p:sldIdLst>");
         // 演示文稿保护（S07-04）
         if (_protectionHash != null)
@@ -162,10 +178,14 @@ partial class PptxWriter
         sb.Append("<Relationship Id=\"rMaster1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"slideMasters/slideMaster1.xml\"/>");
         sb.Append("<Relationship Id=\"rTheme1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"theme/theme1.xml\"/>");
         for (var i = 0; i < Slides.Count; i++)
+        {
             sb.Append($"<Relationship Id=\"rSlide{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide{i + 1}.xml\"/>");
+        }
         // 原始幻灯片关系（S10-04）
         for (var i = 0; i < _rawSlides.Count; i++)
+        {
             sb.Append($"<Relationship Id=\"rSlide{Slides.Count + i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide{Slides.Count + i + 1}.xml\"/>");
+        }
         sb.Append("</Relationships>");
         WriteEntry(za, "ppt/_rels/presentation.xml.rels", sb.ToString());
     }
@@ -297,7 +317,9 @@ partial class PptxWriter
 
         // tables
         foreach (var tbl in slide.Tables)
+        {
             BuildPptTableXml(sb, tbl, ref shapeId);
+        }
 
         // charts
         foreach (var chart in slide.Charts)
@@ -397,11 +419,17 @@ partial class PptxWriter
         relsSb.Append("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
         relsSb.Append("<Relationship Id=\"rLayout1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/>");
         foreach (var img in slide.Images)
+        {
             relsSb.Append($"<Relationship Id=\"{img.RelId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/{img.RelId}.{img.Extension}\"/>");
+        }
         foreach (var hlEntry in hlinkMap)
+        {
             relsSb.Append($"<Relationship Id=\"{hlEntry.Key}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"{EscXml(hlEntry.Value)}\" TargetMode=\"External\"/>");
+        }
         foreach (var chart in slide.Charts)
+        {
             relsSb.Append($"<Relationship Id=\"{chart.RelId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart\" Target=\"../charts/chart{chart.ChartNumber}.xml\"/>");
+        }
         relsSb.Append("</Relationships>");
         WriteEntry(za, $"ppt/slides/_rels/slide{idx + 1}.xml.rels", relsSb.ToString());
 
@@ -414,7 +442,9 @@ partial class PptxWriter
 
         // write chart XMLs
         foreach (var chart in slide.Charts)
+        {
             WriteChartXml(za, chart);
+        }
     }
 
     private void WriteChartXml(ZipArchive za, PptChart chart)
@@ -461,14 +491,18 @@ partial class PptxWriter
                 sb.Append("<c:cat><c:strRef><c:f/><c:strCache>");
                 sb.Append($"<c:ptCount val=\"{chart.Categories.Length}\"/>");
                 for (var ci = 0; ci < chart.Categories.Length; ci++)
+                {
                     sb.Append($"<c:pt idx=\"{ci}\"><c:v>{EscXml(chart.Categories[ci])}</c:v></c:pt>");
+                }
                 sb.Append("</c:strCache></c:strRef></c:cat>");
             }
             // values
             sb.Append("<c:val><c:numRef><c:f/><c:numCache>");
             sb.Append($"<c:ptCount val=\"{ser.Values.Length}\"/>");
             for (var vi = 0; vi < ser.Values.Length; vi++)
+            {
                 sb.Append($"<c:pt idx=\"{vi}\"><c:v>{ser.Values[vi]}</c:v></c:pt>");
+            }
             sb.Append("</c:numCache></c:numRef></c:val>");
             sb.Append("</c:ser>");
         }

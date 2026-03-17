@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
@@ -37,7 +37,9 @@ public sealed class OdsWriter
     {
         var sheet = new OdsSheet { Name = name };
         foreach (var row in rows)
+        {
             sheet.Rows.Add(row ?? []);
+        }
         Sheets.Add(sheet);
         return this;
     }
@@ -210,7 +212,9 @@ public sealed class OdsWriter
         {
             w.WriteLine(@"  <office:automatic-styles>");
             foreach (var (sname, style) in styleList)
+            {
                 WriteStyleEntry(w, sname, style);
+            }
             w.WriteLine(@"  </office:automatic-styles>");
         }
 

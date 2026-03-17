@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.IO.Compression;
 using System.Security;
 using System.Text;
@@ -244,7 +244,9 @@ public class ExcelPivotBuilder
             {
                 sb.Append($"<sharedItems count=\"{uniques.Count}\">");
                 foreach (var u in uniques)
+                {
                     sb.Append($"<s v=\"{Escape(u)}\"/>");
+                }
                 sb.Append("</sharedItems>");
             }
             else

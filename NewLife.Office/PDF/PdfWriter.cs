@@ -385,7 +385,9 @@ public class PdfWriter : IDisposable
         }).ToArray();
         var rows = new List<String[]> { headers };
         foreach (var item in data)
+        {
             rows.Add(props.Select(p => Convert.ToString(p.GetValue(item)) ?? String.Empty).ToArray());
+        }
         DrawTable(rows, firstRowHeader);
     }
     #endregion
@@ -458,12 +460,16 @@ public class PdfWriter : IDisposable
         var imgObjMap = new Dictionary<String, Int32>();
         var allImages = new List<(String Name, Byte[] Data, Int32 W, Int32 H, Boolean IsJpeg)>();
         foreach (var page in allPages)
+        {
             foreach (var kv in page.Images)
+            {
                 if (!imgObjMap.ContainsKey(kv.Key))
                 {
                     imgObjMap[kv.Key] = NextId();
                     allImages.Add((kv.Key, kv.Value.Data, kv.Value.Width, kv.Value.Height, kv.Value.IsJpeg));
                 }
+            }
+        }
 
         // 超链接注释对象 ID (每个注释一个对象)
         var pageAnnotObjIds = new Dictionary<Int32, List<Int32>>();
@@ -756,7 +762,9 @@ public class PdfWriter : IDisposable
         var bytes = Encoding.BigEndianUnicode.GetBytes(text);
         var sb = new StringBuilder(bytes.Length * 2);
         foreach (var b in bytes)
+        {
             sb.Append(b.ToString("X2"));
+        }
         return sb.ToString();
     }
 

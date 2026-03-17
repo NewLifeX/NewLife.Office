@@ -44,10 +44,14 @@ public class ICalWriter
         if (document.TimeZone != null) AppendLine(sb, "X-WR-TIMEZONE:" + document.TimeZone);
 
         foreach (var evt in document.Events)
+        {
             WriteEvent(sb, evt);
+        }
 
         foreach (var todo in document.Todos)
+        {
             WriteTodo(sb, todo);
+        }
 
         AppendLine(sb, "END:VCALENDAR");
         return sb.ToString();
@@ -61,15 +65,17 @@ public class ICalWriter
     {
         AppendLine(sb, "BEGIN:VEVENT");
         AppendLine(sb, "UID:" + (evt.Uid ?? Guid.NewGuid().ToString()));
-        if (evt.Summary != null)     AppendLine(sb, "SUMMARY:" + EscapeText(evt.Summary));
+        if (evt.Summary != null) AppendLine(sb, "SUMMARY:" + EscapeText(evt.Summary));
         if (evt.Description != null) AppendLine(sb, "DESCRIPTION:" + EscapeText(evt.Description));
-        if (evt.Location != null)    AppendLine(sb, "LOCATION:" + EscapeText(evt.Location));
-        if (evt.Organizer != null)   AppendLine(sb, "ORGANIZER:" + evt.Organizer);
+        if (evt.Location != null) AppendLine(sb, "LOCATION:" + EscapeText(evt.Location));
+        if (evt.Organizer != null) AppendLine(sb, "ORGANIZER:" + evt.Organizer);
         foreach (var att in evt.Attendees)
+        {
             AppendLine(sb, "ATTENDEE:" + att);
-        if (evt.Status != null)      AppendLine(sb, "STATUS:" + evt.Status);
-        if (evt.Recurrence != null)  AppendLine(sb, "RRULE:" + evt.Recurrence);
-        if (evt.Duration != null)    AppendLine(sb, "DURATION:" + evt.Duration);
+        }
+        if (evt.Status != null) AppendLine(sb, "STATUS:" + evt.Status);
+        if (evt.Recurrence != null) AppendLine(sb, "RRULE:" + evt.Recurrence);
+        if (evt.Duration != null) AppendLine(sb, "DURATION:" + evt.Duration);
         if (evt.Start.HasValue)
         {
             if (evt.AllDay)
@@ -84,10 +90,12 @@ public class ICalWriter
             else
                 AppendLine(sb, "DTEND:" + FormatDateTime(evt.End.Value));
         }
-        if (evt.Created.HasValue)      AppendLine(sb, "CREATED:" + FormatDateTime(evt.Created.Value));
+        if (evt.Created.HasValue) AppendLine(sb, "CREATED:" + FormatDateTime(evt.Created.Value));
         if (evt.LastModified.HasValue) AppendLine(sb, "LAST-MODIFIED:" + FormatDateTime(evt.LastModified.Value));
         foreach (var kv in evt.ExtraProps)
+        {
             AppendLine(sb, kv.Key + ":" + kv.Value);
+        }
         AppendLine(sb, "END:VEVENT");
     }
 
@@ -95,14 +103,14 @@ public class ICalWriter
     {
         AppendLine(sb, "BEGIN:VTODO");
         AppendLine(sb, "UID:" + (todo.Uid ?? Guid.NewGuid().ToString()));
-        if (todo.Summary != null)     AppendLine(sb, "SUMMARY:" + EscapeText(todo.Summary));
+        if (todo.Summary != null) AppendLine(sb, "SUMMARY:" + EscapeText(todo.Summary));
         if (todo.Description != null) AppendLine(sb, "DESCRIPTION:" + EscapeText(todo.Description));
-        if (todo.Status != null)      AppendLine(sb, "STATUS:" + todo.Status);
-        if (todo.Priority.HasValue)   AppendLine(sb, "PRIORITY:" + todo.Priority.Value);
+        if (todo.Status != null) AppendLine(sb, "STATUS:" + todo.Status);
+        if (todo.Priority.HasValue) AppendLine(sb, "PRIORITY:" + todo.Priority.Value);
         if (todo.PercentComplete.HasValue) AppendLine(sb, "PERCENT-COMPLETE:" + todo.PercentComplete.Value);
-        if (todo.Start.HasValue)      AppendLine(sb, "DTSTART:" + FormatDateTime(todo.Start.Value));
-        if (todo.Due.HasValue)        AppendLine(sb, "DUE:" + FormatDateTime(todo.Due.Value));
-        if (todo.Completed.HasValue)  AppendLine(sb, "COMPLETED:" + FormatDateTime(todo.Completed.Value));
+        if (todo.Start.HasValue) AppendLine(sb, "DTSTART:" + FormatDateTime(todo.Start.Value));
+        if (todo.Due.HasValue) AppendLine(sb, "DUE:" + FormatDateTime(todo.Due.Value));
+        if (todo.Completed.HasValue) AppendLine(sb, "COMPLETED:" + FormatDateTime(todo.Completed.Value));
         AppendLine(sb, "END:VTODO");
     }
 

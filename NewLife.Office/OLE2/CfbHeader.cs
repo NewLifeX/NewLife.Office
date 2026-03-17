@@ -91,7 +91,9 @@ internal sealed class CfbHeader
         // 读取头部内嵌的 109 个 DIFAT 条目
         var difat = new Int32[109];
         for (var i = 0; i < 109; i++)
+        {
             difat[i] = reader.ReadInt32();
+        }
         header.DifatArray = difat;
 
         return header;

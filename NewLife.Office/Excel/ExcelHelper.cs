@@ -91,7 +91,9 @@ public static class ExcelHelper
 
         using var reader = new ExcelReader(path);
         foreach (var item in reader.ReadObjects<T>(sheetName))
+        {
             yield return item;
+        }
     }
 
     /// <summary>读取 xlsx 文件的原始行数据</summary>
@@ -104,7 +106,9 @@ public static class ExcelHelper
 
         using var reader = new ExcelReader(path);
         foreach (var row in reader.ReadRows(sheetName))
+        {
             yield return row;
+        }
     }
 
     /// <summary>读取 xlsx 文件到 DataTable</summary>

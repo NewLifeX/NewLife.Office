@@ -18,7 +18,9 @@ public sealed class MarkdownWordConverter
     public void Convert(MarkdownDocument doc, WordWriter writer)
     {
         foreach (var block in doc.Blocks)
+        {
             WriteBlock(block, writer, 0);
+        }
     }
 
     /// <summary>将 Markdown 文档转换为 .docx 字节数组</summary>
@@ -57,7 +59,9 @@ public sealed class MarkdownWordConverter
 
             case MarkdownBlockType.BlockQuote:
                 foreach (var child in block.Children)
+                {
                     WriteBlock(child, writer, depth + 1);
+                }
                 break;
 
             case MarkdownBlockType.BulletList:

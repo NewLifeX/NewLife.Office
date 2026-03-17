@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace NewLife.Office;
+﻿namespace NewLife.Office;
 
 /// <summary>EPUB 电子书文档模型</summary>
 public class EpubDocument

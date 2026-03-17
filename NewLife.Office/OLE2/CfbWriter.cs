@@ -126,7 +126,9 @@ internal sealed class CfbWriter
 
         // 分配 SID（遍历完所有条目后统一分配）
         for (var i = 0; i < allEntries.Count; i++)
+        {
             allEntries[i].Sid = i;
+        }
     }
 
     private static Byte[] BuildMiniStream(List<EntryInfo> allEntries)
@@ -185,7 +187,9 @@ internal sealed class CfbWriter
         // Directory sectors
         var dirSectorCount = CeilDiv(allEntries.Count, DirEntriesPerSector);
         for (var i = 0; i < dirSectorCount; i++)
+        {
             layout.DirSectorIds.Add(nextSector + i);
+        }
         nextSector += dirSectorCount;
 
         // Now compute FAT size iteratively (FAT sectors itself consume entries)
@@ -200,7 +204,9 @@ internal sealed class CfbWriter
 
         // FAT sectors go after directory sectors
         for (var i = 0; i < fatSectorCount; i++)
+        {
             layout.FatSectorIds.Add(nextSector + i);
+        }
         nextSector += fatSectorCount;
 
         layout.TotalSectors = nextSector;
@@ -222,7 +228,9 @@ internal sealed class CfbWriter
             if (e.Type != CfbObjectType.Stream || e.Data == null || e.Data.Length < MiniStreamCutoff) continue;
             var count = CeilDiv(e.Data.Length, SectorSize);
             for (var i = 0; i < count - 1; i++)
+            {
                 fat[e.StartSector + i] = e.StartSector + i + 1;
+            }
             fat[e.StartSector + count - 1] = CfbSectorMarker.EndOfChain;
         }
 
@@ -231,7 +239,9 @@ internal sealed class CfbWriter
         {
             var count = CeilDiv(miniStreamBytes.Length, SectorSize);
             for (var i = 0; i < count - 1; i++)
+            {
                 fat[layout.MiniStreamStartSector + i] = layout.MiniStreamStartSector + i + 1;
+            }
             fat[layout.MiniStreamStartSector + count - 1] = CfbSectorMarker.EndOfChain;
         }
 
@@ -241,19 +251,25 @@ internal sealed class CfbWriter
             var miniSectorCount = miniStreamBytes.Length / MiniSectorSize;
             var miniFatSectorCount = CeilDiv(miniSectorCount, FatEntriesPerSector);
             for (var i = 0; i < miniFatSectorCount - 1; i++)
+            {
                 fat[layout.MiniFatStartSector + i] = layout.MiniFatStartSector + i + 1;
+            }
             fat[layout.MiniFatStartSector + miniFatSectorCount - 1] = CfbSectorMarker.EndOfChain;
         }
 
         // Directory sectors
         for (var i = 0; i < layout.DirSectorIds.Count - 1; i++)
+        {
             fat[layout.DirSectorIds[i]] = layout.DirSectorIds[i + 1];
+        }
         if (layout.DirSectorIds.Count > 0)
             fat[layout.DirSectorIds[layout.DirSectorIds.Count - 1]] = CfbSectorMarker.EndOfChain;
 
         // FAT sectors themselves
         foreach (var fs in layout.FatSectorIds)
+        {
             fat[fs] = CfbSectorMarker.FatSect;
+        }
 
         layout.FatArray = fat;
 
@@ -269,7 +285,9 @@ internal sealed class CfbWriter
                 if (e.Type != CfbObjectType.Stream || e.Data == null || e.Data.Length >= MiniStreamCutoff || e.Data.Length == 0) continue;
                 var count = CeilDiv(e.Data.Length, MiniSectorSize);
                 for (var i = 0; i < count - 1; i++)
+                {
                     miniFat[e.MiniStartSector + i] = e.MiniStartSector + i + 1;
+                }
                 miniFat[e.MiniStartSector + count - 1] = CfbSectorMarker.EndOfChain;
             }
 
@@ -360,10 +378,14 @@ internal sealed class CfbWriter
         var fatBytes = new Byte[fatEntryCount * 4];
         var writer = new SpanWriter(fatBytes, 0, fatBytes.Length);
         foreach (var entry in layout.FatArray)
+        {
             writer.Write(entry);
+        }
         // Pad remaining with FreeSect
         while (writer.Position < fatBytes.Length)
+        {
             writer.Write(CfbSectorMarker.FreeSect);
+        }
         return fatBytes;
     }
 

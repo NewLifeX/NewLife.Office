@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 
 namespace NewLife.Office;
 
@@ -90,12 +90,16 @@ public class MsgReader
         var displayTo = ReadString(root, PidTagDisplayTo);
         if (!String.IsNullOrEmpty(displayTo))
             foreach (var addr in SplitAddresses(displayTo))
+            {
                 msg.To.Add(addr);
+            }
 
         var displayCc = ReadString(root, PidTagDisplayCc);
         if (!String.IsNullOrEmpty(displayCc))
             foreach (var addr in SplitAddresses(displayCc))
+            {
                 msg.Cc.Add(addr);
+            }
 
         // 精确收件人地址（来自 __recip_version1.0_#xxxxx 子存储）
         ParseRecipients(root, msg);
@@ -196,7 +200,9 @@ public class MsgReader
             var displayTo = ReadString(root, PidTagDisplayTo);
             if (!String.IsNullOrEmpty(displayTo))
                 foreach (var addr in SplitAddresses(displayTo))
+                {
                     msg.To.Add(addr);
+                }
         }
     }
 

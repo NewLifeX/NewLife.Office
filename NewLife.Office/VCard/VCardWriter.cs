@@ -34,7 +34,9 @@ public class VCardWriter
     {
         var sb = new StringBuilder();
         foreach (var c in contacts)
+        {
             sb.Append(Build(c));
+        }
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(false));
     }
 
@@ -112,7 +114,9 @@ public class VCardWriter
             AppendLine(sb, "REV:" + contact.Revision.Value.ToUniversalTime().ToString("yyyyMMddTHHmmssZ"));
 
         foreach (var kv in contact.ExtraProps)
+        {
             AppendLine(sb, kv.Key.ToUpperInvariant() + ":" + kv.Value);
+        }
 
         AppendLine(sb, "END:VCARD");
         return sb.ToString();

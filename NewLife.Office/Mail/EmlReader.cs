@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace NewLife.Office;
@@ -71,15 +71,21 @@ public class EmlReader
                     break;
                 case "to":
                     foreach (var addr in SplitAddresses(val))
+                    {
                         msg.To.Add(DecodeHeaderValue(addr));
+                    }
                     break;
                 case "cc":
                     foreach (var addr in SplitAddresses(val))
+                    {
                         msg.Cc.Add(DecodeHeaderValue(addr));
+                    }
                     break;
                 case "bcc":
                     foreach (var addr in SplitAddresses(val))
+                    {
                         msg.Bcc.Add(DecodeHeaderValue(addr));
+                    }
                     break;
             }
         }
@@ -416,7 +422,9 @@ public class EmlReader
     {
         var chars = new Char[bytes.Length];
         for (var i = 0; i < bytes.Length; i++)
+        {
             chars[i] = (Char)bytes[i];
+        }
         return new String(chars);
     }
 
@@ -425,7 +433,9 @@ public class EmlReader
     {
         var bytes = new Byte[str.Length];
         for (var i = 0; i < str.Length; i++)
+        {
             bytes[i] = (Byte)str[i];
+        }
         return bytes;
     }
 

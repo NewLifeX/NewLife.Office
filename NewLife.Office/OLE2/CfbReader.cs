@@ -111,7 +111,9 @@ internal sealed class CfbReader
             var buf = ReadSector(sid);
             var reader = new SpanReader(buf, 0, buf.Length);
             for (var i = 0; i < entriesPerSector; i++)
+            {
                 fat[idx++] = reader.ReadInt32();
+            }
         }
         return fat;
     }
@@ -124,7 +126,9 @@ internal sealed class CfbReader
         var arr = new Int32[count];
         var reader = new SpanReader(data, 0, data.Length);
         for (var i = 0; i < count; i++)
+        {
             arr[i] = reader.ReadInt32();
+        }
         return arr;
     }
 

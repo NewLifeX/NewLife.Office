@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Text;
 using System.Xml;
 
@@ -62,7 +62,9 @@ public class WordReader : IDisposable
         {
             var sb = new StringBuilder();
             foreach (XmlElement t in para.SelectNodes(".//w:t", ns)!)
+            {
                 sb.Append(t.InnerText);
+            }
             var text = sb.ToString();
             if (text.Length > 0)
                 yield return text;
@@ -92,7 +94,9 @@ public class WordReader : IDisposable
                 {
                     var sb = new StringBuilder();
                     foreach (XmlElement t in tc.SelectNodes(".//w:t", ns)!)
+                    {
                         sb.Append(t.InnerText);
+                    }
                     cells.Add(sb.ToString());
                 }
                 if (cells.Count > 0)

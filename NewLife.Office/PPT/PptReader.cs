@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using NewLife.Office;
 
 namespace NewLife.Office;
@@ -178,7 +178,9 @@ public sealed class PptReader : IDisposable
     {
         var chars = new Char[count];
         for (var i = 0; i < count; i++)
+        {
             chars[i] = (Char)data[pos + i];
+        }
         return new String(chars);
     }
 

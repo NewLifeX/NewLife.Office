@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text;
 
 namespace NewLife.Office;
@@ -292,7 +292,9 @@ public class PdfReader : IDisposable
     private static void SkipWhitespace(String s, ref Int32 pos)
     {
         while (pos < s.Length && (s[pos] == ' ' || s[pos] == '\t' || s[pos] == '\r' || s[pos] == '\n'))
+        {
             pos++;
+        }
     }
 
     private static String DecodePdfString(String s)
@@ -535,7 +537,9 @@ public class PdfReader : IDisposable
             {
                 var numEnd = i + 1;
                 while (numEnd < content.Length && (Char.IsDigit(content[numEnd]) || content[numEnd] == '.'))
+                {
                     numEnd++;
+                }
                 if (Single.TryParse(content[i..numEnd],
                     NumberStyles.Float, CultureInfo.InvariantCulture, out var num))
                     numStack.Add(num);

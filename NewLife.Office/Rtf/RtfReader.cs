@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -705,7 +705,9 @@ internal sealed class RtfReader
         var byteCount = hex.Length / 2;
         var bytes = new Byte[byteCount];
         for (var i = 0; i < byteCount; i++)
+        {
             bytes[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
+        }
 
         return new RtfImage { Data = bytes, Format = format, Width = width, Height = height };
     }

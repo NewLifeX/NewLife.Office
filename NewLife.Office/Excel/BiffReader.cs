@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 
 namespace NewLife.Office;
 
@@ -17,7 +17,6 @@ namespace NewLife.Office;
 /// </remarks>
 public sealed class BiffReader : IDisposable
 {
-
     #region 属性
     /// <summary>工作表名称列表（按顺序）</summary>
     public IReadOnlyList<String> SheetNames => _sheetNames;
@@ -507,8 +506,10 @@ public sealed class BiffReader : IDisposable
         if (_sheetNames.Count == 0) return -1;
         if (String.IsNullOrEmpty(name)) return 0;
         for (var i = 0; i < _sheetNames.Count; i++)
+        {
             if (_sheetNames[i].Equals(name, StringComparison.OrdinalIgnoreCase))
                 return i;
+        }
         return -1;
     }
     #endregion
@@ -543,7 +544,9 @@ public sealed class BiffReader : IDisposable
     {
         var chars = new Char[count];
         for (var i = 0; i < count; i++)
+        {
             chars[i] = (Char)data[pos + i];
+        }
         return new String(chars);
     }
     #endregion

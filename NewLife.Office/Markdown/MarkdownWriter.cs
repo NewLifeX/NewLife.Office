@@ -46,7 +46,9 @@ internal sealed class MarkdownWriter
                 var fence = block.Language == null || !block.Language.Contains("~") ? "```" : "~~~";
                 sb.Append(pad).Append(fence).AppendLine(block.Language ?? "");
                 foreach (var codeLine in block.RawText.Split('\n'))
+                {
                     sb.Append(pad).AppendLine(codeLine);
+                }
                 sb.Append(pad).AppendLine(fence);
                 sb.AppendLine();
                 break;
@@ -67,14 +69,18 @@ internal sealed class MarkdownWriter
 
             case MarkdownBlockType.BulletList:
                 foreach (var item in block.Children)
+                {
                     WriteListItem(sb, item, false, 0, indent);
+                }
                 sb.AppendLine();
                 break;
 
             case MarkdownBlockType.OrderedList:
                 var num = block.OrderedStart;
                 foreach (var item in block.Children)
+                {
                     WriteListItem(sb, item, true, num++, indent);
+                }
                 sb.AppendLine();
                 break;
 
@@ -129,7 +135,9 @@ internal sealed class MarkdownWriter
             }
             var childIndent = indent + marker.Length;
             for (var i = 1; i < item.Children.Count; i++)
+            {
                 WriteBlock(sb, item.Children[i], childIndent);
+            }
         }
         else
         {
@@ -182,7 +190,9 @@ internal sealed class MarkdownWriter
     private static void WriteInlines(StringBuilder sb, List<MarkdownInline> inlines)
     {
         foreach (var inline in inlines)
+        {
             WriteInline(sb, inline);
+        }
     }
 
     private static void WriteInline(StringBuilder sb, MarkdownInline inline)

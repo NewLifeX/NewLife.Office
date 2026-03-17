@@ -44,7 +44,9 @@ public sealed class MarkdownPdfConverter
     public void Convert(MarkdownDocument doc, PdfFluentDocument pdf)
     {
         foreach (var block in doc.Blocks)
+        {
             WriteBlock(block, pdf, 0);
+        }
     }
     #endregion
 
@@ -79,7 +81,9 @@ public sealed class MarkdownPdfConverter
             case MarkdownBlockType.CodeBlock:
                 pdf.AddEmptyLine(2f);
                 foreach (var line in block.RawText.Split('\n'))
+                {
                     pdf.AddText(line.TrimEnd(), CodeFontSize, indentX: 20f);
+                }
                 pdf.AddEmptyLine(2f);
                 break;
 

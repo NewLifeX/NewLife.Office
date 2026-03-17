@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -284,7 +284,9 @@ public sealed class OdsReader
                             currentSheet.CellStyles[(currentRowIndex, currentColIndex)] = cellStyle;
                         }
                         for (var i = 0; i < cellRepeat; i++)
+                        {
                             currentRow.Add(val);
+                        }
                         currentColIndex += cellRepeat;
                     }
                     cellText = null;
@@ -304,7 +306,9 @@ public sealed class OdsReader
                         {
                             var arr = trimmedRow ?? [];
                             for (var i = 0; i < rowRepeat; i++)
+                            {
                                 currentSheet.Rows.Add(arr);
+                            }
                         }
                     }
                     currentRow = null;
@@ -422,14 +426,18 @@ public sealed class OdsReader
         if (rows.Count == 0) return dt;
 
         foreach (var col in rows[0])
+        {
             dt.Columns.Add(String.IsNullOrEmpty(col) ? $"Column{dt.Columns.Count + 1}" : col);
+        }
 
         for (var r = 1; r < rows.Count; r++)
         {
             var row = dt.NewRow();
             var data = rows[r];
             for (var c = 0; c < Math.Min(data.Length, dt.Columns.Count); c++)
+            {
                 row[c] = data[c] ?? "";
+            }
             dt.Rows.Add(row);
         }
         return dt;
