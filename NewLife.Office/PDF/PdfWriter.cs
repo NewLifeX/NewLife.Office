@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
 
 namespace NewLife.Office;
@@ -82,6 +83,101 @@ public class PdfWriter : IDisposable
     private readonly PdfFont _fontTimesBold = new("F2", "Times-Bold");
     private readonly PdfFont _fontCourier = new("F3", "Courier");
     private PdfFont? _fontCjk;
+
+    // WinAnsiEncoding 在 Latin-1 之外的 CP1252 扩展字符映射（U+0080-U+009F 区段）
+    private static readonly Dictionary<Char, Char> _cp1252Map = new Dictionary<Char, Char>
+    {
+        ['\u20AC'] = (Char)0x80, // €
+        ['\u201A'] = (Char)0x82, // ‚
+        ['\u0192'] = (Char)0x83, // ƒ
+        ['\u201E'] = (Char)0x84, // „
+        ['\u2026'] = (Char)0x85, // …
+        ['\u2020'] = (Char)0x86, // †
+        ['\u2021'] = (Char)0x87, // ‡
+        ['\u02C6'] = (Char)0x88, // ˆ
+        ['\u2030'] = (Char)0x89, // ‰
+        ['\u0160'] = (Char)0x8A, // Š
+        ['\u2039'] = (Char)0x8B, // ‹
+        ['\u0152'] = (Char)0x8C, // Œ
+        ['\u017D'] = (Char)0x8E, // Ž
+        ['\u2018'] = (Char)0x91, // '
+        ['\u2019'] = (Char)0x92, // '
+        ['\u201C'] = (Char)0x93, // "
+        ['\u201D'] = (Char)0x94, // "
+        ['\u2022'] = (Char)0x95, // •
+        ['\u2013'] = (Char)0x96, // –
+        ['\u2014'] = (Char)0x97, // —
+        ['\u02DC'] = (Char)0x98, // ˜
+        ['\u2122'] = (Char)0x99, // ™
+        ['\u0161'] = (Char)0x9A, // š
+        ['\u203A'] = (Char)0x9B, // ›
+        ['\u0153'] = (Char)0x9C, // œ
+        ['\u017E'] = (Char)0x9E, // ž
+        ['\u0178'] = (Char)0x9F, // Ÿ
+    };
+
+    // 常见中文字体名
+    private static readonly Dictionary<String, (String FileName, Int32 Index)> _fontFileMap =
+        new Dictionary<String, (String, Int32)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["宋体"]               = ("simsun.ttc",  0),
+            ["SimSun"]            = ("simsun.ttc",  0),
+            ["新宋体"]             = ("simsun.ttc",  1),
+            ["NSimSun"]           = ("simsun.ttc",  1),
+            ["黑体"]               = ("simhei.ttf",  0),
+            ["SimHei"]            = ("simhei.ttf",  0),
+            ["楷体"]               = ("simkai.ttf",  0),
+            ["KaiTi"]             = ("simkai.ttf",  0),
+            ["仿宋"]               = ("simfang.ttf", 0),
+            ["FangSong"]          = ("simfang.ttf", 0),
+            ["微软雅黑"]           = ("msyh.ttc",    0),
+            ["Microsoft YaHei"]   = ("msyh.ttc",    0),
+            ["MicrosoftYaHei"]    = ("msyh.ttc",    0),
+            ["微软雅黑 Light"]     = ("msyhl.ttc",   0),
+            ["等线"]               = ("Deng.ttf",    0),
+            ["DengXian"]          = ("Deng.ttf",    0),
+            ["新細明體"]           = ("mingliu.ttc", 0),
+            ["MingLiU"]           = ("mingliu.ttc", 0),
+        };
+
+    // 中文字体名 → PostScript 名
+    private static readonly Dictionary<String, String> _fontPsNameMap =
+        new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["宋体"]            = "SimSun",
+            ["新宋体"]          = "NSimSun",
+            ["黑体"]            = "SimHei",
+            ["楷体"]            = "KaiTi",
+            ["仿宋"]            = "FangSong",
+            ["微软雅黑"]        = "MicrosoftYaHei",
+            ["微软雅黑 Light"]  = "MicrosoftYaHei-Light",
+            ["等线"]            = "DengXian",
+            ["新細明體"]        = "MingLiU",
+        };
+
+    // 标准 PDF Type1（14 个内置字体）及常用英文别名 → BaseFont 名
+    private static readonly Dictionary<String, String> _latinFontMap =
+        new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Helvetica"]             = "Helvetica",
+            ["Helvetica-Bold"]        = "Helvetica-Bold",
+            ["Helvetica-Oblique"]     = "Helvetica-Oblique",
+            ["Helvetica-BoldOblique"] = "Helvetica-BoldOblique",
+            ["Arial"]                 = "Helvetica",
+            ["Arial Bold"]            = "Helvetica-Bold",
+            ["Arial-Bold"]            = "Helvetica-Bold",
+            ["Times"]                 = "Times-Roman",
+            ["Times-Roman"]           = "Times-Roman",
+            ["Times-Bold"]            = "Times-Bold",
+            ["Times-Italic"]          = "Times-Italic",
+            ["Times-BoldItalic"]      = "Times-BoldItalic",
+            ["Courier"]               = "Courier",
+            ["Courier-Bold"]          = "Courier-Bold",
+            ["Courier-Oblique"]       = "Courier-Oblique",
+            ["Courier-BoldOblique"]   = "Courier-BoldOblique",
+            ["Symbol"]                = "Symbol",
+            ["ZapfDingbats"]          = "ZapfDingbats",
+        };
     #endregion
 
     #region 构造
@@ -139,6 +235,9 @@ public class PdfWriter : IDisposable
     {
         EnsurePage();
         font ??= ContainsCjk(text) ? EnsureCjkFont() : _fontHelvetica;
+        // 若调用方显式传入 Latin 字体但文本含 CJK 字符，自动切换 CJK 字体，避免输出问号
+        if (!font.IsCjk && ContainsCjk(text))
+            font = EnsureCjkFont();
         _content.AppendLine("BT");
         _content.AppendLine($"/{font.Name} {fontSize:F1} Tf");
         _content.AppendLine($"{x:F2} {y:F2} Td");
@@ -157,6 +256,39 @@ public class PdfWriter : IDisposable
         var font = new PdfFont(fname, "STSong-Light", isCjk: true);
         _fonts.Add(font);
         return font;
+    }
+
+    /// <summary>根据字体名称创建字体，支持 PDF 标准 Type1 英文字体和系统 TrueType 中文字体</summary>
+    /// <param name="fontName">
+    /// 字体名称。标准英文字体（如 "Helvetica-Bold"、"Times-Roman"、"Courier-Bold"、"Arial" 等）无需嵌入；
+    /// 中文字体（如 "微软雅黑"、"宋体"、"SimHei" 等）默认嵌入字体文件，可通过 embed=false 禁止嵌入。
+    /// </param>
+    /// <param name="embed">是否嵌入字体文件（仅对找到字体文件的 TrueType 字体有效，默认 true）</param>
+    /// <returns>已注册的字体；中文字体未找到字体文件时回退到 Adobe STSong-Light</returns>
+    public PdfFont CreateFont(String fontName, Boolean embed = true)
+    {
+        var fname = $"F{_fonts.Count + 1}";
+        // 优先匹配标准 Type1 英文字体（不需要嵌入字体文件）
+        if (_latinFontMap.TryGetValue(fontName, out var type1Base))
+        {
+            var font = new PdfFont(fname, type1Base, isCjk: false);
+            _fonts.Add(font);
+            return font;
+        }
+        // CJK TrueType 字体：搜索系统字体文件
+        if (TryFindFontFile(fontName, out var filePath, out var ttcIndex))
+        {
+            if (!_fontPsNameMap.TryGetValue(fontName, out var psName))
+                psName = fontName.Replace(" ", "-");
+            var font = new PdfFont(fname, psName, isCjk: true);
+            font.FontFilePath = filePath;
+            font.TtcFontIndex = ttcIndex;
+            font.EmbedFont = embed;
+            _fonts.Add(font);
+            return font;
+        }
+        // 未找到字体文件，回退到 Adobe STSong-Light
+        return CreateSimplifiedChineseFont();
     }
 
     /// <summary>追加文本行（自动换行，跟踪当前 Y 位置，Y 从顶部开始）</summary>
@@ -457,12 +589,27 @@ public class PdfWriter : IDisposable
             allPages[i].PageObjId = NextId();
             allPages[i].ContentObjId = NextId();
         }
-        var fontObjIds = new Int32[_fonts.Count];
-        var cidFontObjIds = new Int32[_fonts.Count];
+        var fontObjIds      = new Int32[_fonts.Count];
+        var cidFontObjIds   = new Int32[_fonts.Count];
+        var fontDescObjIds  = new Int32[_fonts.Count];
+        var fontFile2ObjIds = new Int32[_fonts.Count];
+        var cidToGidObjIds  = new Int32[_fonts.Count];
+        var toUnicodeObjIds = new Int32[_fonts.Count];
         for (var fi = 0; fi < _fonts.Count; fi++)
         {
-            fontObjIds[fi] = NextId();
+            fontObjIds[fi]    = NextId();
             cidFontObjIds[fi] = _fonts[fi].IsCjk ? NextId() : 0;
+            // 有字体文件的 CJK 字体均需 CIDToGIDMap 和 ToUnicode；嵌入时还需 FontFile2 和 FontDescriptor
+            if (_fonts[fi].IsCjk && _fonts[fi].FontFilePath != null)
+            {
+                if (_fonts[fi].EmbedFont)
+                {
+                    fontFile2ObjIds[fi] = NextId();
+                    fontDescObjIds[fi]  = NextId();
+                }
+                cidToGidObjIds[fi]  = NextId();
+                toUnicodeObjIds[fi] = NextId();
+            }
         }
         var imgObjMap = new Dictionary<String, Int32>();
         var allImages = new List<(String Name, Byte[] Data, Int32 W, Int32 H, Boolean IsJpeg)>();
@@ -552,23 +699,118 @@ public class PdfWriter : IDisposable
         }
 
         // ── 写入字体对象 ──
+        var streamEndBytes = latin1.GetBytes("\nendstream\nendobj\n");
         for (var fi = 0; fi < _fonts.Count; fi++)
         {
             var f = _fonts[fi];
             if (f.IsCjk)
             {
-                // CIDFont（后代字体），用于描述字形宽度与 CIDSystemInfo
-                WriteObj(cidFontObjIds[fi],
-                    $"<< /Type /Font /Subtype /CIDFontType0\n" +
-                    $"/BaseFont /{f.BaseFont}\n" +
-                    $"/CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >>\n" +
-                    $"/DW 1000\n>>");
-                // Type0（主字体），指定 UniGB-UCS2-H 编码
-                WriteObj(fontObjIds[fi],
-                    $"<< /Type /Font /Subtype /Type0\n" +
-                    $"/BaseFont /{f.BaseFont}\n" +
-                    $"/Encoding /UniGB-UCS2-H\n" +
-                    $"/DescendantFonts [{cidFontObjIds[fi]} 0 R]\n>>");
+                if (f.FontFilePath != null && File.Exists(f.FontFilePath) && f.EmbedFont)
+                {
+                    // ── 嵌入 TrueType/TTC 字体 ──
+                    var fontData = File.ReadAllBytes(f.FontFilePath);
+                    var sfOff = GetSfOffset(fontData, f.TtcFontIndex);
+                    var (upm, ascent, descent, xMin, yMin, xMax, yMax) = ReadTtfMetrics(fontData, sfOff);
+                    var scale  = upm > 0 ? 1000.0 / upm : 1.0;
+                    var a1000  = (Int32)(ascent  * scale);
+                    var d1000  = (Int32)(descent * scale);
+                    var bb     = $"[{(Int32)(xMin*scale)} {(Int32)(yMin*scale)} {(Int32)(xMax*scale)} {(Int32)(yMax*scale)}]";
+
+                    // FontFile2 流（原始字体字节）
+                    offsets[fontFile2ObjIds[fi] - 1] = written;
+                    var ff2h = latin1.GetBytes($"{fontFile2ObjIds[fi]} 0 obj\n<< /Length {fontData.Length} /Length1 {fontData.Length} >>\nstream\n");
+                    WriteBytes(ff2h, 0, ff2h.Length);
+                    WriteBytes(fontData, 0, fontData.Length);
+                    WriteBytes(streamEndBytes, 0, streamEndBytes.Length);
+
+                    // FontDescriptor
+                    WriteObj(fontDescObjIds[fi],
+                        $"<< /Type /FontDescriptor\n/FontName /{f.BaseFont}\n/Flags 32\n" +
+                        $"/FontBBox {bb}\n/ItalicAngle 0\n/Ascent {a1000}\n/Descent {d1000}\n" +
+                        $"/CapHeight {a1000}\n/StemV 80\n/FontFile2 {fontFile2ObjIds[fi]} 0 R\n>>");
+
+                    // CIDToGIDMap 流（Unicode → GlyphID，压缩以减小体积）
+                    var glyphMap = ParseTtfCmap(fontData, sfOff);
+                    var ctgData  = ZlibCompress(BuildCidToGidMap(glyphMap));
+                    offsets[cidToGidObjIds[fi] - 1] = written;
+                    var ctgh = latin1.GetBytes($"{cidToGidObjIds[fi]} 0 obj\n<< /Length {ctgData.Length} /Filter /FlateDecode >>\nstream\n");
+                    WriteBytes(ctgh, 0, ctgh.Length);
+                    WriteBytes(ctgData, 0, ctgData.Length);
+                    WriteBytes(streamEndBytes, 0, streamEndBytes.Length);
+
+                    // ToUnicode 流（Identity 映射，供文本提取）
+                    var tuData = BuildIdentityToUnicodeStream();
+                    offsets[toUnicodeObjIds[fi] - 1] = written;
+                    var tuh = latin1.GetBytes($"{toUnicodeObjIds[fi]} 0 obj\n<< /Length {tuData.Length} >>\nstream\n");
+                    WriteBytes(tuh, 0, tuh.Length);
+                    WriteBytes(tuData, 0, tuData.Length);
+                    WriteBytes(streamEndBytes, 0, streamEndBytes.Length);
+
+                    // CIDFont（CIDFontType2，通过 CIDToGIDMap 流映射 Unicode → GlyphID）
+                    WriteObj(cidFontObjIds[fi],
+                        $"<< /Type /Font /Subtype /CIDFontType2\n" +
+                        $"/BaseFont /{f.BaseFont}\n" +
+                        $"/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>\n" +
+                        $"/DW 1000\n/CIDToGIDMap {cidToGidObjIds[fi]} 0 R\n" +
+                        $"/FontDescriptor {fontDescObjIds[fi]} 0 R\n>>");
+
+                    // Type0（主字体，Identity-H 编码）
+                    WriteObj(fontObjIds[fi],
+                        $"<< /Type /Font /Subtype /Type0\n" +
+                        $"/BaseFont /{f.BaseFont}\n" +
+                        $"/Encoding /Identity-H\n" +
+                        $"/DescendantFonts [{cidFontObjIds[fi]} 0 R]\n" +
+                        $"/ToUnicode {toUnicodeObjIds[fi]} 0 R\n>>");
+                }
+                else if (f.FontFilePath != null && !f.EmbedFont)
+                {
+                    // ── TrueType 字体引用（不嵌入字体数据，但写入 CIDToGIDMap 确保正确映射）──
+                    var fontData = File.ReadAllBytes(f.FontFilePath);
+                    var sfOff = GetSfOffset(fontData, f.TtcFontIndex);
+
+                    // CIDToGIDMap 流（从 cmap 解析 Unicode → GlyphID，压缩以减小体积）
+                    var glyphMap = ParseTtfCmap(fontData, sfOff);
+                    var ctgData  = ZlibCompress(BuildCidToGidMap(glyphMap));
+                    offsets[cidToGidObjIds[fi] - 1] = written;
+                    var ctgh = latin1.GetBytes($"{cidToGidObjIds[fi]} 0 obj\n<< /Length {ctgData.Length} /Filter /FlateDecode >>\nstream\n");
+                    WriteBytes(ctgh, 0, ctgh.Length);
+                    WriteBytes(ctgData, 0, ctgData.Length);
+                    WriteBytes(streamEndBytes, 0, streamEndBytes.Length);
+
+                    // ToUnicode 流（供文本提取）
+                    var tuData = BuildIdentityToUnicodeStream();
+                    offsets[toUnicodeObjIds[fi] - 1] = written;
+                    var tuh = latin1.GetBytes($"{toUnicodeObjIds[fi]} 0 obj\n<< /Length {tuData.Length} >>\nstream\n");
+                    WriteBytes(tuh, 0, tuh.Length);
+                    WriteBytes(tuData, 0, tuData.Length);
+                    WriteBytes(streamEndBytes, 0, streamEndBytes.Length);
+
+                    WriteObj(cidFontObjIds[fi],
+                        $"<< /Type /Font /Subtype /CIDFontType2\n" +
+                        $"/BaseFont /{f.BaseFont}\n" +
+                        $"/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >>\n" +
+                        $"/DW 1000\n/CIDToGIDMap {cidToGidObjIds[fi]} 0 R\n>>");
+                    WriteObj(fontObjIds[fi],
+                        $"<< /Type /Font /Subtype /Type0\n" +
+                        $"/BaseFont /{f.BaseFont}\n" +
+                        $"/Encoding /Identity-H\n" +
+                        $"/DescendantFonts [{cidFontObjIds[fi]} 0 R]\n" +
+                        $"/ToUnicode {toUnicodeObjIds[fi]} 0 R\n>>");
+                }
+                else
+                {
+                    // ── Adobe 预定义 CJK 字体（STSong-Light 等，无需嵌入）──
+                    WriteObj(cidFontObjIds[fi],
+                        $"<< /Type /Font /Subtype /CIDFontType0\n" +
+                        $"/BaseFont /{f.BaseFont}\n" +
+                        $"/CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >>\n" +
+                        $"/DW 1000\n>>");
+                    WriteObj(fontObjIds[fi],
+                        $"<< /Type /Font /Subtype /Type0\n" +
+                        $"/BaseFont /{f.BaseFont}\n" +
+                        $"/Encoding /UniGB-UCS2-H\n" +
+                        $"/DescendantFonts [{cidFontObjIds[fi]} 0 R]\n>>");
+                }
             }
             else
             {
@@ -771,9 +1013,249 @@ public class PdfWriter : IDisposable
         return false;
     }
 
+    #region TTF/TTC 字体解析
+    /// <summary>从字体文件数据中获取指定 TTC 索引对应的 sfOffset（单个 TTF 则为 0）</summary>
+    private static Int32 GetSfOffset(Byte[] data, Int32 ttcIndex)
+    {
+        // TTC magic: 'ttcf' = 0x74 0x74 0x63 0x66
+        if (data.Length > 4 && data[0] == 0x74 && data[1] == 0x74 && data[2] == 0x63 && data[3] == 0x66)
+        {
+            var numFonts = ReadU32BeAsInt(data, 8);
+            if (ttcIndex >= numFonts) ttcIndex = 0;
+            return ReadU32BeAsInt(data, 12 + ttcIndex * 4);
+        }
+        return 0;
+    }
+
+    /// <summary>在 TTF 偏移表中查找指定 4 字节 tag 的表偏移量（-1=未找到）</summary>
+    private static Int32 FindTtfTable(Byte[] data, Int32 sfOffset, String tag)
+    {
+        if (sfOffset + 12 > data.Length) return -1;
+        var numTables = ReadU16Be(data, sfOffset + 4);
+        var tableDir = sfOffset + 12;
+        for (var i = 0; i < numTables; i++)
+        {
+            var pos = tableDir + i * 16;
+            if (pos + 16 > data.Length) break;
+            if (data[pos] == (Byte)tag[0] && data[pos + 1] == (Byte)tag[1]
+                && data[pos + 2] == (Byte)tag[2] && data[pos + 3] == (Byte)tag[3])
+                return ReadU32BeAsInt(data, pos + 8);
+        }
+        return -1;
+    }
+
+    /// <summary>从 TTF 字体数据中读取关键字体度量（单位：design units）</summary>
+    private static (Int32 UnitsPerEm, Int32 Ascent, Int32 Descent, Int32 XMin, Int32 YMin, Int32 XMax, Int32 YMax) ReadTtfMetrics(Byte[] data, Int32 sfOffset)
+    {
+        var headOff = FindTtfTable(data, sfOffset, "head");
+        var hheaOff = FindTtfTable(data, sfOffset, "hhea");
+        var os2Off  = FindTtfTable(data, sfOffset, "OS/2");
+
+        var upm  = (headOff >= 0 && headOff + 20 <= data.Length) ? ReadU16Be(data, headOff + 18) : 1000;
+        var xMin = (headOff >= 0 && headOff + 44 <= data.Length) ? ReadS16Be(data, headOff + 36) : 0;
+        var yMin = (headOff >= 0 && headOff + 44 <= data.Length) ? ReadS16Be(data, headOff + 38) : -200;
+        var xMax = (headOff >= 0 && headOff + 44 <= data.Length) ? ReadS16Be(data, headOff + 40) : 1000;
+        var yMax = (headOff >= 0 && headOff + 44 <= data.Length) ? ReadS16Be(data, headOff + 42) : 800;
+
+        Int32 ascent, descent;
+        if (os2Off >= 0 && os2Off + 72 <= data.Length)
+        {
+            // OS/2 表 sTypoAscender/sTypoDescender（offset 68/70）
+            ascent  = ReadS16Be(data, os2Off + 68);
+            descent = ReadS16Be(data, os2Off + 70);
+        }
+        else if (hheaOff >= 0 && hheaOff + 8 <= data.Length)
+        {
+            ascent  = ReadS16Be(data, hheaOff + 4);
+            descent = ReadS16Be(data, hheaOff + 6);
+        }
+        else
+        {
+            ascent = yMax; descent = yMin;
+        }
+        return (upm, ascent, descent, xMin, yMin, xMax, yMax);
+    }
+
+    /// <summary>解析 TTF cmap 表，返回 Unicode 码点 → GlyphID 的映射</summary>
+    private static Dictionary<UInt16, UInt16> ParseTtfCmap(Byte[] data, Int32 sfOffset)
+    {
+        var cmapOff = FindTtfTable(data, sfOffset, "cmap");
+        if (cmapOff < 0 || cmapOff + 4 > data.Length)
+            return new Dictionary<UInt16, UInt16>();
+
+        var numSubtables = ReadU16Be(data, cmapOff + 2);
+        var format4Offset = -1;
+        for (var i = 0; i < numSubtables; i++)
+        {
+            var entryBase = cmapOff + 4 + i * 8;
+            if (entryBase + 8 > data.Length) break;
+            var platformId  = ReadU16Be(data, entryBase);
+            var encodingId  = ReadU16Be(data, entryBase + 2);
+            var subtableOff = cmapOff + ReadU32BeAsInt(data, entryBase + 4);
+            if (subtableOff + 2 > data.Length) continue;
+            if (ReadU16Be(data, subtableOff) != 4) continue;
+            // 优先 Windows Unicode BMP (3,1)，其次 Unicode (0,3/4)
+            if ((platformId == 3 && encodingId == 1) || (platformId == 0 && (encodingId == 3 || encodingId == 4)))
+            {
+                format4Offset = subtableOff;
+                if (platformId == 3) break;
+            }
+        }
+        return format4Offset >= 0 ? ParseCmapFormat4(data, format4Offset) : new Dictionary<UInt16, UInt16>();
+    }
+
+    /// <summary>解析 cmap Format 4 子表，返回 Unicode → GlyphID</summary>
+    private static Dictionary<UInt16, UInt16> ParseCmapFormat4(Byte[] data, Int32 offset)
+    {
+        if (offset + 14 > data.Length) return new Dictionary<UInt16, UInt16>();
+        var segCount       = ReadU16Be(data, offset + 6) / 2;
+        var endCodeBase    = offset + 14;
+        var startCodeBase  = endCodeBase + segCount * 2 + 2; // +2 = reservedPad
+        var idDeltaBase    = startCodeBase + segCount * 2;
+        var idRangeOffBase = idDeltaBase + segCount * 2;
+
+        var map = new Dictionary<UInt16, UInt16>(8192);
+        for (var i = 0; i < segCount; i++)
+        {
+            var endCode    = ReadU16Be(data, endCodeBase + i * 2);
+            var startCode  = ReadU16Be(data, startCodeBase + i * 2);
+            var idDelta    = ReadS16Be(data, idDeltaBase + i * 2);
+            var idRangeOff = ReadU16Be(data, idRangeOffBase + i * 2);
+            if (startCode == 0xFFFF) break;
+            for (var code = (UInt32)startCode; code <= endCode; code++)
+            {
+                UInt16 glyphId;
+                if (idRangeOff == 0)
+                {
+                    glyphId = (UInt16)((code + (UInt32)(UInt16)idDelta) & 0xFFFF);
+                }
+                else
+                {
+                    var idxPos = idRangeOffBase + i * 2 + idRangeOff + (code - startCode) * 2;
+                    if (idxPos + 1 >= data.Length) continue;
+                    glyphId = ReadU16Be(data, (Int32)idxPos);
+                    if (glyphId != 0)
+                        glyphId = (UInt16)((glyphId + (UInt32)(UInt16)idDelta) & 0xFFFF);
+                }
+                if (glyphId != 0) map[(UInt16)code] = glyphId;
+            }
+        }
+        return map;
+    }
+
+    /// <summary>构建 CIDToGIDMap 二进制流（65536 × UInt16，索引=Unicode，值=GlyphID）</summary>
+    private static Byte[] BuildCidToGidMap(Dictionary<UInt16, UInt16> glyphMap)
+    {
+        var data = new Byte[131072]; // 65536 * 2
+        foreach (var kv in glyphMap)
+        {
+            var idx = kv.Key * 2;
+            data[idx]     = (Byte)(kv.Value >> 8);
+            data[idx + 1] = (Byte)(kv.Value & 0xFF);
+        }
+        return data;
+    }
+
+    /// <summary>构建 Identity ToUnicode CMap 流（Unicode 码点映射到自身，用于文本提取）</summary>
+    private static Byte[] BuildIdentityToUnicodeStream()
+    {
+        const String cmap =
+            "/CIDInit /ProcSet findresource begin\n" +
+            "12 dict begin\nbegincmap\n" +
+            "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS2) /Supplement 0 >> def\n" +
+            "/CMapName /Adobe-Identity-UCS2 def\n" +
+            "/CMapType 2 def\n" +
+            "1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n" +
+            "1 beginbfrange\n<0000> <FFFF> <0000>\nendbfrange\n" +
+            "endcmap\nCMapType currentdict end\nend\n";
+        return Encoding.ASCII.GetBytes(cmap);
+    }
+
+    /// <summary>搜索系统字体目录，查找指定字体名称对应的文件路径和 TTC 索引</summary>
+    private static Boolean TryFindFontFile(String fontName, out String? filePath, out Int32 ttcIndex)
+    {
+        filePath = null;
+        ttcIndex = 0;
+        if (_fontFileMap.TryGetValue(fontName, out var entry))
+        {
+            ttcIndex = entry.Index;
+            foreach (var dir in GetFontDirectories())
+            {
+                var path = Path.Combine(dir, entry.FileName);
+                if (File.Exists(path)) { filePath = path; return true; }
+            }
+        }
+        // 直接按扩展名搜索
+        foreach (var dir in GetFontDirectories())
+        {
+            if (!Directory.Exists(dir)) continue;
+            foreach (var ext in new[] { ".ttf", ".otf", ".ttc" })
+            {
+                var path = Path.Combine(dir, fontName + ext);
+                if (File.Exists(path)) { filePath = path; return true; }
+            }
+        }
+        return false;
+    }
+
+    /// <summary>将数据压缩为 zlib 格式（2字节头 + deflate + 4字节 Adler-32），用于 PDF FlateDecode</summary>
+    private static Byte[] ZlibCompress(Byte[] data)
+    {
+        using var output = new MemoryStream();
+        // zlib header: CMF=0x78 (deflate, window=32KB), FLG=0x9C (default level, check bits)
+        output.WriteByte(0x78);
+        output.WriteByte(0x9C);
+        using (var deflate = new DeflateStream(output, CompressionLevel.Optimal, true))
+        {
+            deflate.Write(data, 0, data.Length);
+        }
+        // Adler-32 checksum (big-endian)
+        UInt32 a = 1, b = 0;
+        for (var i = 0; i < data.Length; i++)
+        {
+            a = (a + data[i]) % 65521;
+            b = (b + a) % 65521;
+        }
+        var adler = (b << 16) | a;
+        output.WriteByte((Byte)(adler >> 24));
+        output.WriteByte((Byte)(adler >> 16));
+        output.WriteByte((Byte)(adler >> 8));
+        output.WriteByte((Byte)adler);
+        return output.ToArray();
+    }
+
+    /// <summary>返回常见系统字体目录</summary>
+    private static IEnumerable<String> GetFontDirectories()
+    {
+        var dirs = new List<String>();
+        // Windows — SpecialFolder.Fonts 可能抛异常，捕获后跳过
+        try
+        {
+            var winFonts = Environment.GetFolderPath(Environment.SpecialFolder.Fonts);
+            if (!String.IsNullOrEmpty(winFonts) && !dirs.Contains(winFonts))
+                dirs.Add(winFonts);
+        }
+        catch { }
+        if (Directory.Exists(@"C:\Windows\Fonts") && !dirs.Contains(@"C:\Windows\Fonts"))
+            dirs.Add(@"C:\Windows\Fonts");
+        // Linux
+        if (Directory.Exists("/usr/share/fonts")) dirs.Add("/usr/share/fonts");
+        if (Directory.Exists("/usr/local/share/fonts")) dirs.Add("/usr/local/share/fonts");
+        // macOS
+        if (Directory.Exists("/System/Library/Fonts")) dirs.Add("/System/Library/Fonts");
+        if (Directory.Exists("/Library/Fonts")) dirs.Add("/Library/Fonts");
+        return dirs;
+    }
+
+    private static UInt16 ReadU16Be(Byte[] d, Int32 o) => (UInt16)((d[o] << 8) | d[o + 1]);
+    private static Int16 ReadS16Be(Byte[] d, Int32 o) => (Int16)((d[o] << 8) | d[o + 1]);
+    private static Int32 ReadU32BeAsInt(Byte[] d, Int32 o)
+        => (d[o] << 24) | (d[o + 1] << 16) | (d[o + 2] << 8) | d[o + 3];
+    #endregion
+
     private static String EncodePdfText(String text)
     {
-        // 只保留 Latin-1 可打印字符，其他替换为 ?
+        // Latin-1 (< 256) 直接输出；CP1252 扩展区通过映射转换；其余替换为 ?
         var sb = new StringBuilder(text.Length * 2);
         foreach (var ch in text)
         {
@@ -781,8 +1263,10 @@ public class PdfWriter : IDisposable
                 sb.Append('\\');
             if (ch < 256 && ch >= 32)
                 sb.Append(ch);
+            else if (_cp1252Map.TryGetValue(ch, out var mapped))
+                sb.Append(mapped);
             else if (ch >= 32)
-                sb.Append('?'); // CJK fallback（请改用 CreateSimplifiedChineseFont 绘制中文）
+                sb.Append('?'); // 非 WinAnsiEncoding 字符（请改用 CJK 字体绘制中文）
         }
         return sb.ToString();
     }

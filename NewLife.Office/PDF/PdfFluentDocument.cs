@@ -88,6 +88,17 @@ public class PdfFluentDocument : IDisposable
     }
     #endregion
 
+    #region 字体方法
+    /// <summary>根据字体名称创建字体，支持 PDF 标准 Type1 英文字体和系统 TrueType 中文字体</summary>
+    /// <param name="fontName">
+    /// 字体名称。标准英文字体（如 "Helvetica-Bold"、"Times-Roman"、"Courier-Bold"、"Arial" 等）无需嵌入；
+    /// 中文字体（如 "微软雅黑"、"宋体" 等）默认嵌入，可通过 embed=false 禁止嵌入（文件更小，阅读器需自行安装字体）。
+    /// </param>
+    /// <param name="embed">是否嵌入字体文件（仅对 TrueType 字体有效，默认 true）</param>
+    /// <returns>已注册的字体，可传入 AddText/DrawText 的 font 参数</returns>
+    public PdfFont CreateFont(String fontName, Boolean embed = true) => _writer.CreateFont(fontName, embed);
+    #endregion
+
     #region 文本方法
     /// <summary>追加文本行（自动分页）</summary>
     /// <param name="text">文字内容</param>

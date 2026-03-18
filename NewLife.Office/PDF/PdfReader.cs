@@ -188,21 +188,104 @@ public class PdfReader : IDisposable
         var pos = 0;
         while (pos < pdf.Length)
         {
-            var streamStart = pdf.IndexOf("stream", pos, StringComparison.Ordinal);
-            if (streamStart < 0) break;
+            var streamKeyStart = pdf.IndexOf("stream", pos, StringComparison.Ordinal);
+            if (streamKeyStart < 0) break;
 
             // 跳过 "stream\r\n" 或 "stream\n"
-            var contentStart = streamStart + 6;
+            var contentStart = streamKeyStart + 6;
             if (contentStart < pdf.Length && pdf[contentStart] == '\r') contentStart++;
             if (contentStart < pdf.Length && pdf[contentStart] == '\n') contentStart++;
 
-            var streamEnd = pdf.IndexOf("endstream", contentStart, StringComparison.Ordinal);
+            // ── 解析紧邻 stream 关键字之前的流字典 ──
+            // 向前最多搜索 800 字节，找 >> 再找对应 <<
+            var lookBack  = Math.Min(streamKeyStart, 800);
+            var dictEndPos = pdf.LastIndexOf(">>", streamKeyStart, lookBack, StringComparison.Ordinal);
+            var dict = String.Empty;
+            if (dictEndPos > 0)
+            {
+                var dictStartPos = pdf.LastIndexOf("<<", dictEndPos, Math.Min(dictEndPos, 600), StringComparison.Ordinal);
+                if (dictStartPos >= 0)
+                    dict = pdf.Substring(dictStartPos, dictEndPos - dictStartPos + 2);
+            }
+
+            // 从字典解析 /Length，用于精确跳过二进制数据中可能出现的假 "endstream"
+            var streamLength = ParseStreamLength(dict);
+
+            // ── 查找真正的 endstream ──
+            // 若已知 /Length，从 contentStart+length 附近开始搜，避免二进制内的假命中
+            int streamEnd;
+            if (streamLength > 0)
+            {
+                var searchFrom = Math.Min(contentStart + streamLength, pdf.Length - 9);
+                streamEnd = pdf.IndexOf("endstream", searchFrom, StringComparison.Ordinal);
+                if (streamEnd < 0)
+                    streamEnd = pdf.IndexOf("endstream", contentStart, StringComparison.Ordinal);
+            }
+            else
+            {
+                streamEnd = pdf.IndexOf("endstream", contentStart, StringComparison.Ordinal);
+            }
             if (streamEnd < 0) break;
+
+            pos = streamEnd + 9; // 无论是否提取文本，都正确前进
+
+            // ── 跳过非内容流 ──
+
+            // 1. /Length1 = 嵌入字体二进制流；/ColorSpace = 图片流
+            if (dict.IndexOf("/Length1", StringComparison.Ordinal) >= 0 ||
+                dict.IndexOf("/ColorSpace", StringComparison.Ordinal) >= 0)
+                continue;
+
+            // 2. ToUnicode/CMap 流（以 /CIDInit 或 begincmap 开头）
+            var peekLen = Math.Min(40, streamEnd - contentStart);
+            if (peekLen > 0)
+            {
+                var peek = pdf.Substring(contentStart, peekLen).TrimStart();
+                if (peek.StartsWith("/CIDInit", StringComparison.Ordinal) ||
+                    peek.StartsWith("begincmap", StringComparison.Ordinal))
+                    continue;
+            }
+
+            // 3. 开头 200 字节中非打印字符比例超过 25%（CIDToGIDMap 等二进制表）
+            var checkLen     = Math.Min(streamEnd - contentStart, 200);
+            var nonPrintable = 0;
+            for (var ci = contentStart; ci < contentStart + checkLen; ci++)
+            {
+                var b = pdf[ci];
+                if (b < 9 || (b > 13 && b < 32)) nonPrintable++;
+            }
+            if (checkLen > 0 && nonPrintable * 4 > checkLen) continue;
 
             var streamContent = pdf[contentStart..streamEnd];
             ExtractTextFromContent(streamContent, sb);
-            pos = streamEnd + 9;
         }
+    }
+
+    /// <summary>从流字典文本中解析 /Length 值（不含 /Length1/Length2 等衍生键）</summary>
+    private static Int32 ParseStreamLength(String dict)
+    {
+        var idx = 0;
+        while (idx < dict.Length)
+        {
+            var found = dict.IndexOf("/Length", idx, StringComparison.Ordinal);
+            if (found < 0) break;
+            var afterKey = found + 7; // 跳过 "/Length"
+            // 排除 /Length1、/Length2 等
+            if (afterKey < dict.Length && (dict[afterKey] >= '0' && dict[afterKey] <= '9' || dict[afterKey] == 'a' || dict[afterKey] == 'A'))
+            {
+                idx = afterKey;
+                continue;
+            }
+            // 跳过空白，读取数字
+            while (afterKey < dict.Length && dict[afterKey] == ' ') afterKey++;
+            var numEnd = afterKey;
+            while (numEnd < dict.Length && dict[numEnd] >= '0' && dict[numEnd] <= '9') numEnd++;
+            if (numEnd > afterKey &&
+                Int32.TryParse(dict.Substring(afterKey, numEnd - afterKey), out var len))
+                return len;
+            idx = afterKey;
+        }
+        return -1;
     }
 
     /// <summary>从 PDF 内容流字符串中提取文本操作符</summary>
