@@ -50,6 +50,6 @@ public class EmlTests : IntegrationTestBase
 
         // 工厂创建
         var factoryReader = OfficeFactory.CreateReader(path);
-        Assert.IsType<EmlReader>(factoryReader);
+        Assert.IsType<EmlMessage>(factoryReader);
     }
 }

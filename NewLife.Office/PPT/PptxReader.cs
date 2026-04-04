@@ -9,7 +9,7 @@ namespace NewLife.Office;
 /// <remarks>
 /// 直接解析 Open XML（ZIP+XML）提取幻灯片文本、形状等内容。
 /// </remarks>
-public class PptxReader : IDisposable
+public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
 {
     #region 属性
     /// <summary>源文件路径</summary>
@@ -331,6 +331,30 @@ public class PptxReader : IDisposable
         using var s = entry.Open();
         doc.Load(s);
         return doc;
+    }
+    #endregion
+
+    #region 文本提取
+    /// <summary>提取纯文本（幻灯片间换行分隔）</summary>
+    /// <returns>纯文本字符串</returns>
+    public String? ExtractText() => ReadAllText();
+
+    /// <summary>提取 Markdown 格式（每页用标题分隔）</summary>
+    /// <returns>Markdown 字符串</returns>
+    public String? ExtractMarkdown()
+    {
+        var count = GetSlideCount();
+        if (count == 0) return null;
+
+        var sb = new StringBuilder();
+        for (var i = 0; i < count; i++)
+        {
+            if (i > 0) sb.AppendLine();
+            sb.AppendLine($"## 幻灯片 {i + 1}");
+            sb.AppendLine();
+            sb.AppendLine(GetSlideText(i));
+        }
+        return sb.ToString();
     }
     #endregion
 }

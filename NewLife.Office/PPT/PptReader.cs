@@ -14,7 +14,7 @@ namespace NewLife.Office;
 ///     Console.WriteLine(reader.GetSlideText(i));
 /// </code>
 /// </remarks>
-public sealed class PptReader : IDisposable
+public sealed class PptReader : IDisposable, ITextExtractable, IMarkdownExtractable
 {
     #region 属性
 
@@ -205,5 +205,32 @@ public sealed class PptReader : IDisposable
     // 文本原子（ANSI/Latin-1）
     private const UInt16 RecTextBytesAtom = 0x03F0;
 
+    #endregion
+
+    #region 文本提取
+    /// <summary>提取纯文本（幻灯片间换行分隔）</summary>
+    /// <returns>纯文本字符串</returns>
+    public String? ExtractText()
+    {
+        if (_slideTexts.Count == 0) return null;
+        return String.Join(Environment.NewLine, _slideTexts);
+    }
+
+    /// <summary>提取 Markdown 格式（每页用标题分隔）</summary>
+    /// <returns>Markdown 字符串</returns>
+    public String? ExtractMarkdown()
+    {
+        if (_slideTexts.Count == 0) return null;
+
+        var sb = new StringBuilder();
+        for (var i = 0; i < _slideTexts.Count; i++)
+        {
+            if (i > 0) sb.AppendLine();
+            sb.AppendLine($"## 幻灯片 {i + 1}");
+            sb.AppendLine();
+            sb.AppendLine(_slideTexts[i]);
+        }
+        return sb.ToString();
+    }
     #endregion
 }

@@ -15,7 +15,7 @@ namespace NewLife.Office;
 /// 可根据xml格式扩展读取自己想要的内容。
 /// 本类做了最小化实现，仅解析共享字符串、样式与工作表数据。
 /// </remarks>
-public class ExcelReader : DisposeBase
+public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
 {
     #region 属性
     /// <summary>文件名</summary>
@@ -703,6 +703,108 @@ public class ExcelReader : DisposeBase
     {
         public Int32 NumFmtId { get; set; } = numFmtId;
         public String Format { get; set; } = format;
+    }
+    #endregion
+
+    #region 文本提取
+    /// <summary>提取纯文本（CSV 格式，逗号分隔）</summary>
+    /// <returns>CSV 格式文本</returns>
+    public String? ExtractText()
+    {
+        var sheets = Sheets;
+        if (sheets == null || sheets.Count == 0) return null;
+
+        var sb = new StringBuilder();
+        var sheetList = sheets.ToList();
+        for (var si = 0; si < sheetList.Count; si++)
+        {
+            var sheetName = sheetList[si];
+            if (sheetList.Count > 1)
+            {
+                if (si > 0) sb.AppendLine();
+                sb.AppendLine($"## {sheetName}");
+            }
+
+            foreach (var row in ReadRows(sheetName))
+            {
+                for (var i = 0; i < row.Length; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    sb.Append(CsvEscape(row[i]?.ToString()));
+                }
+                sb.AppendLine();
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>提取 Markdown 格式（表格）</summary>
+    /// <returns>Markdown 表格字符串</returns>
+    public String? ExtractMarkdown()
+    {
+        var sheets = Sheets;
+        if (sheets == null || sheets.Count == 0) return null;
+
+        var sb = new StringBuilder();
+        var sheetList = sheets.ToList();
+        for (var si = 0; si < sheetList.Count; si++)
+        {
+            var sheetName = sheetList[si];
+            if (sheetList.Count > 1)
+            {
+                if (si > 0) sb.AppendLine();
+                sb.AppendLine($"## {sheetName}");
+                sb.AppendLine();
+            }
+
+            var rows = ReadRows(sheetName).ToList();
+            if (rows.Count == 0) continue;
+
+            // 第一行作为表头
+            var header = rows[0];
+            sb.Append('|');
+            foreach (var cell in header)
+            {
+                sb.Append(' ').Append(MdEscape(cell?.ToString())).Append(" |");
+            }
+            sb.AppendLine();
+
+            // 分隔线
+            sb.Append('|');
+            for (var i = 0; i < header.Length; i++)
+            {
+                sb.Append(" --- |");
+            }
+            sb.AppendLine();
+
+            // 数据行
+            for (var ri = 1; ri < rows.Count; ri++)
+            {
+                var row = rows[ri];
+                sb.Append('|');
+                for (var i = 0; i < header.Length; i++)
+                {
+                    var val = i < row.Length ? row[i]?.ToString() : "";
+                    sb.Append(' ').Append(MdEscape(val)).Append(" |");
+                }
+                sb.AppendLine();
+            }
+        }
+        return sb.ToString();
+    }
+
+    private static String CsvEscape(String? value)
+    {
+        if (String.IsNullOrEmpty(value)) return "";
+        if (value.IndexOfAny([',', '"', '\n', '\r']) >= 0)
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        return value;
+    }
+
+    private static String MdEscape(String? value)
+    {
+        if (String.IsNullOrEmpty(value)) return "";
+        return value.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
     }
     #endregion
 }

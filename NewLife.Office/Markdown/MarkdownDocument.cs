@@ -18,7 +18,7 @@ namespace NewLife.Office.Markdown;
 /// var md = doc.ToMarkdown();
 /// </code>
 /// </remarks>
-public sealed class MarkdownDocument
+public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
 {
     #region 属性
     /// <summary>文档块列表（顶层）</summary>
@@ -163,6 +163,83 @@ public sealed class MarkdownDocument
     {
         var bytes = ToPdf();
         stream.Write(bytes, 0, bytes.Length);
+    }
+    #endregion
+
+    #region 文本提取
+    /// <summary>提取纯文本（去除 Markdown 标记）</summary>
+    /// <returns>纯文本字符串</returns>
+    public String? ExtractText()
+    {
+        if (Blocks.Count == 0) return null;
+
+        var sb = new StringBuilder();
+        foreach (var block in Blocks)
+        {
+            ExtractBlockText(block, sb);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>提取 Markdown 格式（原始 Markdown）</summary>
+    /// <returns>Markdown 字符串</returns>
+    public String? ExtractMarkdown() => ToMarkdown();
+
+    private static void ExtractBlockText(MarkdownBlock block, StringBuilder sb)
+    {
+        switch (block.Type)
+        {
+            case MarkdownBlockType.Heading:
+            case MarkdownBlockType.Paragraph:
+                ExtractInlinesText(block.Inlines, sb);
+                sb.AppendLine();
+                break;
+            case MarkdownBlockType.CodeBlock:
+                sb.AppendLine(block.RawText);
+                break;
+            case MarkdownBlockType.HtmlBlock:
+                sb.AppendLine(block.RawText);
+                break;
+            case MarkdownBlockType.ThematicBreak:
+                sb.AppendLine();
+                break;
+            case MarkdownBlockType.Table:
+                foreach (var row in block.Children)
+                {
+                    foreach (var cell in row.Children)
+                    {
+                        ExtractInlinesText(cell.Inlines, sb);
+                        sb.Append('\t');
+                    }
+                    sb.AppendLine();
+                }
+                break;
+            default:
+                // 容器块（列表、引用块等）递归
+                if (block.Inlines.Count > 0)
+                {
+                    ExtractInlinesText(block.Inlines, sb);
+                    sb.AppendLine();
+                }
+                foreach (var child in block.Children)
+                {
+                    ExtractBlockText(child, sb);
+                }
+                break;
+        }
+    }
+
+    private static void ExtractInlinesText(List<MarkdownInline> inlines, StringBuilder sb)
+    {
+        foreach (var inline in inlines)
+        {
+            if (!String.IsNullOrEmpty(inline.Text))
+                sb.Append(inline.Text);
+            if (!String.IsNullOrEmpty(inline.Alt))
+                sb.Append(inline.Alt);
+            if (inline.Children.Count > 0)
+                ExtractInlinesText(inline.Children, sb);
+        }
     }
     #endregion
 }

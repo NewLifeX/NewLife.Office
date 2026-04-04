@@ -1,8 +1,10 @@
-﻿namespace NewLife.Office;
+﻿using System.Text;
+
+namespace NewLife.Office;
 
 /// <summary>iCal 日历文档（RFC 5545）</summary>
 /// <remarks>包含一组日历事件（VEVENT）和待办（VTODO）</remarks>
-public class ICalDocument
+public class ICalDocument : ITextExtractable, IMarkdownExtractable
 {
     #region 属性
 
@@ -27,6 +29,79 @@ public class ICalDocument
     /// <summary>待办列表</summary>
     public List<ICalTodo> Todos { get; } = [];
 
+    #endregion
+
+    #region 文本提取
+    /// <summary>提取纯文本（事件+待办摘要）</summary>
+    /// <returns>纯文本字符串</returns>
+    public String? ExtractText()
+    {
+        if (Events.Count == 0 && Todos.Count == 0) return null;
+
+        var sb = new StringBuilder();
+        if (!String.IsNullOrEmpty(CalendarName)) sb.AppendLine(CalendarName);
+
+        foreach (var ev in Events)
+        {
+            if (sb.Length > 0) sb.AppendLine();
+            if (!String.IsNullOrEmpty(ev.Summary)) sb.AppendLine(ev.Summary);
+            if (ev.Start != null) sb.AppendLine($"开始: {ev.Start:yyyy-MM-dd HH:mm}");
+            if (ev.End != null) sb.AppendLine($"结束: {ev.End:yyyy-MM-dd HH:mm}");
+            if (!String.IsNullOrEmpty(ev.Location)) sb.AppendLine($"地点: {ev.Location}");
+            if (!String.IsNullOrEmpty(ev.Description)) sb.AppendLine($"描述: {ev.Description}");
+            if (!String.IsNullOrEmpty(ev.Status)) sb.AppendLine($"状态: {ev.Status}");
+        }
+
+        foreach (var todo in Todos)
+        {
+            if (sb.Length > 0) sb.AppendLine();
+            if (!String.IsNullOrEmpty(todo.Summary)) sb.AppendLine($"[待办] {todo.Summary}");
+            if (todo.Due != null) sb.AppendLine($"截止: {todo.Due:yyyy-MM-dd HH:mm}");
+            if (!String.IsNullOrEmpty(todo.Description)) sb.AppendLine($"描述: {todo.Description}");
+            if (!String.IsNullOrEmpty(todo.Status)) sb.AppendLine($"状态: {todo.Status}");
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>提取 Markdown 格式（事件/待办用标题分隔）</summary>
+    /// <returns>Markdown 字符串</returns>
+    public String? ExtractMarkdown()
+    {
+        if (Events.Count == 0 && Todos.Count == 0) return null;
+
+        var sb = new StringBuilder();
+        if (!String.IsNullOrEmpty(CalendarName))
+        {
+            sb.AppendLine($"# {CalendarName}");
+            sb.AppendLine();
+        }
+
+        foreach (var ev in Events)
+        {
+            sb.AppendLine($"## {ev.Summary ?? "未命名事件"}");
+            sb.AppendLine();
+            if (ev.Start != null) sb.AppendLine($"- **开始**: {ev.Start:yyyy-MM-dd HH:mm}");
+            if (ev.End != null) sb.AppendLine($"- **结束**: {ev.End:yyyy-MM-dd HH:mm}");
+            if (!String.IsNullOrEmpty(ev.Location)) sb.AppendLine($"- **地点**: {ev.Location}");
+            if (!String.IsNullOrEmpty(ev.Description)) sb.AppendLine($"- **描述**: {ev.Description}");
+            if (!String.IsNullOrEmpty(ev.Status)) sb.AppendLine($"- **状态**: {ev.Status}");
+            if (!String.IsNullOrEmpty(ev.Organizer)) sb.AppendLine($"- **组织者**: {ev.Organizer}");
+            if (ev.Attendees.Count > 0) sb.AppendLine($"- **参与者**: {String.Join(", ", ev.Attendees)}");
+            sb.AppendLine();
+        }
+
+        foreach (var todo in Todos)
+        {
+            sb.AppendLine($"## [待办] {todo.Summary ?? "未命名待办"}");
+            sb.AppendLine();
+            if (todo.Due != null) sb.AppendLine($"- **截止**: {todo.Due:yyyy-MM-dd HH:mm}");
+            if (!String.IsNullOrEmpty(todo.Description)) sb.AppendLine($"- **描述**: {todo.Description}");
+            if (!String.IsNullOrEmpty(todo.Status)) sb.AppendLine($"- **状态**: {todo.Status}");
+            if (todo.PercentComplete != null) sb.AppendLine($"- **进度**: {todo.PercentComplete}%");
+            sb.AppendLine();
+        }
+        return sb.ToString();
+    }
     #endregion
 }
 

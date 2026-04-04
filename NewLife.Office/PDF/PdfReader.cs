@@ -9,7 +9,7 @@ namespace NewLife.Office;
 /// 支持 PDF 1.0-1.7，基于对象流扫描方式提取文本（不依赖外部库）。
 /// 对加密 PDF 或内嵌 CJK 字体 PDF 的文本提取效果有限。
 /// </remarks>
-public class PdfReader : IDisposable
+public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
 {
     #region 属性
     /// <summary>源文件路径</summary>
@@ -766,5 +766,15 @@ public class PdfReader : IDisposable
         }
         return sb.ToString();
     }
+    #endregion
+
+    #region 文本提取
+    /// <summary>提取纯文本</summary>
+    /// <returns>纯文本字符串</returns>
+    String? ITextExtractable.ExtractText() => ExtractText();
+
+    /// <summary>提取 Markdown 格式</summary>
+    /// <returns>Markdown 字符串</returns>
+    String? IMarkdownExtractable.ExtractMarkdown() => ExtractText();
     #endregion
 }

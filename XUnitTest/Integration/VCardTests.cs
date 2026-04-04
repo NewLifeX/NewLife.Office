@@ -68,6 +68,6 @@ public class VCardTests : IntegrationTestBase
 
         // 工厂创建
         var factoryReader = OfficeFactory.CreateReader(path);
-        Assert.IsType<VCardReader>(factoryReader);
+        Assert.IsType<VCardDocument>(factoryReader);
     }
 }

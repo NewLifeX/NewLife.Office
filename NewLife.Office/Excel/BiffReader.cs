@@ -16,7 +16,7 @@ namespace NewLife.Office;
 /// }
 /// </code>
 /// </remarks>
-public sealed class BiffReader : IDisposable
+public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtractable
 {
     #region 属性
     /// <summary>工作表名称列表（按顺序）</summary>
@@ -571,5 +571,103 @@ public sealed class BiffReader : IDisposable
     private const UInt16 RecLabel = 0x0204;
     private const UInt16 RecBlank = 0x0201;
     private const UInt16 RecMulBlank = 0x00BF;
+    #endregion
+
+    #region 文本提取
+    /// <summary>提取纯文本（CSV 格式，逗号分隔）</summary>
+    /// <returns>CSV 格式文本</returns>
+    public String? ExtractText()
+    {
+        if (_sheetNames.Count == 0) return null;
+
+        var sb = new StringBuilder();
+        for (var si = 0; si < _sheetNames.Count; si++)
+        {
+            var sheetName = _sheetNames[si];
+            if (_sheetNames.Count > 1)
+            {
+                if (si > 0) sb.AppendLine();
+                sb.AppendLine($"## {sheetName}");
+            }
+
+            foreach (var row in ReadSheet(sheetName))
+            {
+                for (var i = 0; i < row.Length; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    sb.Append(CsvEscape(row[i]?.ToString()));
+                }
+                sb.AppendLine();
+            }
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>提取 Markdown 格式（表格）</summary>
+    /// <returns>Markdown 表格字符串</returns>
+    public String? ExtractMarkdown()
+    {
+        if (_sheetNames.Count == 0) return null;
+
+        var sb = new StringBuilder();
+        for (var si = 0; si < _sheetNames.Count; si++)
+        {
+            var sheetName = _sheetNames[si];
+            if (_sheetNames.Count > 1)
+            {
+                if (si > 0) sb.AppendLine();
+                sb.AppendLine($"## {sheetName}");
+                sb.AppendLine();
+            }
+
+            var rows = ReadSheet(sheetName).ToList();
+            if (rows.Count == 0) continue;
+
+            // 第一行作为表头
+            var header = rows[0];
+            sb.Append('|');
+            foreach (var cell in header)
+            {
+                sb.Append(' ').Append(MdEscape(cell?.ToString())).Append(" |");
+            }
+            sb.AppendLine();
+
+            // 分隔线
+            sb.Append('|');
+            for (var i = 0; i < header.Length; i++)
+            {
+                sb.Append(" --- |");
+            }
+            sb.AppendLine();
+
+            // 数据行
+            for (var ri = 1; ri < rows.Count; ri++)
+            {
+                var row = rows[ri];
+                sb.Append('|');
+                for (var i = 0; i < header.Length; i++)
+                {
+                    var val = i < row.Length ? row[i]?.ToString() : "";
+                    sb.Append(' ').Append(MdEscape(val)).Append(" |");
+                }
+                sb.AppendLine();
+            }
+        }
+        return sb.ToString();
+    }
+
+    private static String CsvEscape(String? value)
+    {
+        if (String.IsNullOrEmpty(value)) return "";
+        if (value.IndexOfAny([',', '"', '\n', '\r']) >= 0)
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        return value;
+    }
+
+    private static String MdEscape(String? value)
+    {
+        if (String.IsNullOrEmpty(value)) return "";
+        return value.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
+    }
     #endregion
 }

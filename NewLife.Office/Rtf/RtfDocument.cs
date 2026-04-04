@@ -10,7 +10,7 @@ namespace NewLife.Office.Rtf;
 /// 表示解析后的 RTF 文档，提供从文件/字符串解析，
 /// 以及访问段落、表格和提取纯文本的能力。
 /// </remarks>
-public sealed class RtfDocument
+public sealed class RtfDocument : ITextExtractable, IMarkdownExtractable
 {
     #region 属性
     /// <summary>顶层块：RTF 段落与表格的混合列表（RtfParagraph | RtfTable）</summary>
@@ -115,6 +115,67 @@ public sealed class RtfDocument
             }
         }
         return sb.ToString();
+    }
+    #endregion
+
+    #region 文本提取
+    /// <summary>提取纯文本</summary>
+    /// <returns>纯文本字符串</returns>
+    public String? ExtractText() => GetPlainText();
+
+    /// <summary>提取 Markdown 格式（段落+表格）</summary>
+    /// <returns>Markdown 字符串</returns>
+    public String? ExtractMarkdown()
+    {
+        var sb = new StringBuilder();
+        foreach (var block in Blocks)
+        {
+            if (block is RtfParagraph para)
+            {
+                sb.AppendLine(para.GetPlainText());
+                sb.AppendLine();
+            }
+            else if (block is RtfTable table)
+            {
+                if (table.Rows.Count == 0) continue;
+
+                // 第一行作为表头
+                var header = table.Rows[0];
+                sb.Append('|');
+                foreach (var cell in header.Cells)
+                {
+                    sb.Append(' ').Append(MdEscape(cell.GetPlainText())).Append(" |");
+                }
+                sb.AppendLine();
+
+                sb.Append('|');
+                for (var i = 0; i < header.Cells.Count; i++)
+                {
+                    sb.Append(" --- |");
+                }
+                sb.AppendLine();
+
+                for (var ri = 1; ri < table.Rows.Count; ri++)
+                {
+                    var row = table.Rows[ri];
+                    sb.Append('|');
+                    for (var i = 0; i < header.Cells.Count; i++)
+                    {
+                        var val = i < row.Cells.Count ? row.Cells[i].GetPlainText() : "";
+                        sb.Append(' ').Append(MdEscape(val)).Append(" |");
+                    }
+                    sb.AppendLine();
+                }
+                sb.AppendLine();
+            }
+        }
+        return sb.ToString();
+    }
+
+    private static String MdEscape(String? value)
+    {
+        if (String.IsNullOrEmpty(value)) return "";
+        return value.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
     }
     #endregion
 }

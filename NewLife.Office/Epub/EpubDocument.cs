@@ -1,7 +1,10 @@
-﻿namespace NewLife.Office;
+﻿using System.Text;
+using System.Text.RegularExpressions;
+
+namespace NewLife.Office;
 
 /// <summary>EPUB 电子书文档模型</summary>
-public class EpubDocument
+public class EpubDocument : ITextExtractable, IMarkdownExtractable
 {
     #region 属性
 
@@ -38,6 +41,79 @@ public class EpubDocument
     /// <summary>自定义 CSS 样式表内容</summary>
     public String StyleSheet { get; set; } = String.Empty;
 
+    #endregion
+
+    #region 文本提取
+    /// <summary>提取纯文本（去除 HTML 标签）</summary>
+    /// <returns>纯文本字符串</returns>
+    public String? ExtractText()
+    {
+        if (Chapters == null || Chapters.Count == 0) return null;
+
+        var sb = new StringBuilder();
+        ExtractChaptersText(Chapters, sb);
+        return sb.ToString();
+    }
+
+    /// <summary>提取 Markdown 格式（保留章节标题结构）</summary>
+    /// <returns>Markdown 字符串</returns>
+    public String? ExtractMarkdown()
+    {
+        if (Chapters == null || Chapters.Count == 0) return null;
+
+        var sb = new StringBuilder();
+        ExtractChaptersMarkdown(Chapters, sb, 1);
+        return sb.ToString();
+    }
+
+    private static void ExtractChaptersText(List<EpubChapter> chapters, StringBuilder sb)
+    {
+        foreach (var ch in chapters)
+        {
+            if (!String.IsNullOrEmpty(ch.Title))
+                sb.AppendLine(ch.Title);
+            if (!String.IsNullOrEmpty(ch.Content))
+                sb.AppendLine(StripHtml(ch.Content));
+            sb.AppendLine();
+
+            if (ch.Children != null && ch.Children.Count > 0)
+                ExtractChaptersText(ch.Children, sb);
+        }
+    }
+
+    private static void ExtractChaptersMarkdown(List<EpubChapter> chapters, StringBuilder sb, Int32 headingLevel)
+    {
+        var prefix = new String('#', Math.Min(headingLevel, 6));
+        foreach (var ch in chapters)
+        {
+            if (!String.IsNullOrEmpty(ch.Title))
+            {
+                sb.AppendLine($"{prefix} {ch.Title}");
+                sb.AppendLine();
+            }
+            if (!String.IsNullOrEmpty(ch.Content))
+            {
+                sb.AppendLine(StripHtml(ch.Content));
+                sb.AppendLine();
+            }
+
+            if (ch.Children != null && ch.Children.Count > 0)
+                ExtractChaptersMarkdown(ch.Children, sb, headingLevel + 1);
+        }
+    }
+
+    private static String StripHtml(String html)
+    {
+        if (String.IsNullOrEmpty(html)) return "";
+        // 移除 HTML 标签
+        var text = Regex.Replace(html, "<[^>]+>", " ");
+        // 解码常见 HTML 实体
+        text = text.Replace("&amp;", "&").Replace("&lt;", "<").Replace("&gt;", ">")
+                   .Replace("&quot;", "\"").Replace("&#39;", "'").Replace("&nbsp;", " ");
+        // 合并多余空白
+        text = Regex.Replace(text, @"\s+", " ").Trim();
+        return text;
+    }
     #endregion
 }
 

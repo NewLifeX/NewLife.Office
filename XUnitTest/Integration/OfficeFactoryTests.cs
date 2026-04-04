@@ -62,7 +62,7 @@ public class OfficeFactoryTests : IntegrationTestBase
     {
         var path = Path.Combine(OutputDir, "test.txt");
         File.WriteAllText(path, "hello");
-        Assert.Throws<NotSupportedException>(() => OfficeFactory.CreateReader(path));
+        Assert.Null(OfficeFactory.CreateReader(path));
     }
 
     [Fact, DisplayName("SupportedExtensions_包含15种格式")]

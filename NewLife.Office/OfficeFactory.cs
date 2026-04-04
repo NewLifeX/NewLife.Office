@@ -1,4 +1,5 @@
-﻿using NewLife.Office.Markdown;
+﻿using System.Text;
+using NewLife.Office.Markdown;
 using NewLife.Office.Ods;
 using NewLife.Office.Rtf;
 
@@ -63,13 +64,13 @@ public static class OfficeFactory
     /// <item><description>.ppt → <see cref="PptReader"/></description></item>
     /// <item><description>.pdf → <see cref="PdfReader"/></description></item>
     /// <item><description>.rtf → <see cref="RtfDocument"/>（通过 RtfDocument.ParseFile 返回）</description></item>
-    /// <item><description>.ods → <see cref="OdsReader"/>（静态方法包装）</description></item>
-    /// <item><description>.epub → <see cref="EpubReader"/></description></item>
-    /// <item><description>.vcf → <see cref="VCardReader"/></description></item>
-    /// <item><description>.eml → <see cref="EmlReader"/></description></item>
-    /// <item><description>.ics → <see cref="ICalReader"/></description></item>
-    /// <item><description>.md → MarkdownDocument（通过 ParseFile 返回）</description></item>
-    /// <item><description>.xps → <see cref="XpsReader"/></description></item>
+    /// <item><description>.ods → <see cref="OdsDocument"/>（OdsReader 包装）</description></item>
+    /// <item><description>.epub → <see cref="EpubDocument"/></description></item>
+    /// <item><description>.vcf → <see cref="VCardDocument"/>（VCardReader 包装）</description></item>
+    /// <item><description>.eml → <see cref="EmlMessage"/></description></item>
+    /// <item><description>.ics → <see cref="ICalDocument"/></description></item>
+    /// <item><description>.md → <see cref="MarkdownDocument"/>（通过 ParseFile 返回）</description></item>
+    /// <item><description>.xps → <see cref="XpsDocument"/>（XpsReader 包装）</description></item>
     /// </list>
     /// 调用方应在使用完毕后释放返回对象（若其实现 IDisposable）。
     /// </remarks>
@@ -78,7 +79,7 @@ public static class OfficeFactory
     /// <exception cref="ArgumentNullException">filePath 为空</exception>
     /// <exception cref="NotSupportedException">不支持的文件后缀</exception>
     /// <exception cref="FileNotFoundException">文件不存在</exception>
-    public static Object CreateReader(String filePath)
+    public static Object? CreateReader(String filePath)
     {
         if (String.IsNullOrWhiteSpace(filePath)) throw new ArgumentNullException(nameof(filePath));
 
@@ -97,15 +98,124 @@ public static class OfficeFactory
             ".ppt" => new PptReader(fullPath),
             ".pdf" => new PdfReader(fullPath),
             ".rtf" => RtfDocument.ParseFile(fullPath),
-            ".ods" => OdsReader.ReadFile(fullPath),
+            ".ods" => new OdsDocument(OdsReader.ReadFile(fullPath)),
             ".epub" => new EpubReader().Read(fullPath),
-            ".vcf" => new VCardReader(),
-            ".eml" => new EmlReader(),
-            ".ics" => new ICalReader(),
+            ".vcf" => new VCardDocument(new VCardReader().ReadAll(fullPath)),
+            ".eml" => new EmlReader().Read(fullPath),
+            ".ics" => new ICalReader().Read(fullPath),
             ".md" => MarkdownDocument.ParseFile(fullPath),
-            ".xps" => new XpsReader(),
-            _ => throw new NotSupportedException($"不支持的文件格式: {ext}")
+            ".xps" => new XpsDocument(new XpsReader().Read(fullPath)),
+            _ => null,
         };
+    }
+
+    /// <summary>根据数据流和扩展名创建对应的读取器</summary>
+    /// <param name="stream">数据流</param>
+    /// <param name="extension">文件后缀，可带点号（如 ".xlsx"）或不带（如 "xlsx"）</param>
+    /// <returns>读取器对象，不支持的格式返回 null</returns>
+    public static Object? CreateReader(Stream stream, String extension)
+    {
+        if (stream == null) return null;
+        if (String.IsNullOrWhiteSpace(extension)) return null;
+
+        if (!extension.StartsWith("."))
+            extension = "." + extension;
+
+        return extension.ToLowerInvariant() switch
+        {
+            ".xlsx" => new ExcelReader(stream, Encoding.UTF8),
+            ".xls" => new BiffReader(stream),
+            ".docx" => new WordReader(stream),
+            ".doc" => new DocReader(stream),
+            ".pptx" => new PptxReader(stream),
+            ".ppt" => new PptReader(stream),
+            ".pdf" => new PdfReader(stream),
+            ".rtf" => RtfDocument.Parse(stream),
+            ".ods" => new OdsDocument(OdsReader.Read(stream)),
+            ".epub" => new EpubReader().Read(stream),
+            ".vcf" => new VCardDocument(new VCardReader().ReadAll(stream)),
+            ".eml" => new EmlReader().Read(stream),
+            ".ics" => new ICalReader().Read(stream),
+            ".md" => MarkdownDocument.Parse(stream),
+            ".xps" => new XpsDocument(new XpsReader().Read(stream)),
+            _ => null,
+        };
+    }
+    #endregion
+
+    #region 文本提取
+    /// <summary>从文件提取纯文本</summary>
+    /// <param name="filePath">文件路径</param>
+    /// <returns>纯文本，不支持或无内容返回 null</returns>
+    public static String? ReadText(String filePath)
+    {
+        if (String.IsNullOrWhiteSpace(filePath)) return null;
+
+        var reader = CreateReader(filePath);
+        try
+        {
+            return (reader as ITextExtractable)?.ExtractText();
+        }
+        finally
+        {
+            (reader as IDisposable)?.Dispose();
+        }
+    }
+
+    /// <summary>从数据流提取纯文本</summary>
+    /// <param name="stream">数据流</param>
+    /// <param name="extension">文件后缀，可带点号（如 ".xlsx"）或不带（如 "xlsx"）</param>
+    /// <returns>纯文本，不支持或无内容返回 null</returns>
+    public static String? ReadText(Stream stream, String extension)
+    {
+        var reader = CreateReader(stream, extension);
+        if (reader == null) return null;
+
+        try
+        {
+            return (reader as ITextExtractable)?.ExtractText();
+        }
+        finally
+        {
+            (reader as IDisposable)?.Dispose();
+        }
+    }
+
+    /// <summary>从文件提取 Markdown 格式文本</summary>
+    /// <param name="filePath">文件路径</param>
+    /// <returns>Markdown 文本，不支持或无内容返回 null</returns>
+    public static String? ReadMarkdown(String filePath)
+    {
+        if (String.IsNullOrWhiteSpace(filePath)) return null;
+
+        var reader = CreateReader(filePath);
+        try
+        {
+            return (reader as IMarkdownExtractable)?.ExtractMarkdown();
+        }
+        finally
+        {
+            (reader as IDisposable)?.Dispose();
+        }
+    }
+
+    /// <summary>从数据流提取 Markdown 格式文本</summary>
+    /// <param name="stream">数据流</param>
+    /// <param name="extension">文件后缀，可带点号（如 ".xlsx"）或不带（如 "xlsx"）</param>
+    /// <returns>Markdown 文本，不支持或无内容返回 null</returns>
+    public static String? ReadMarkdown(Stream stream, String extension)
+    {
+        var reader = CreateReader(stream, extension);
+        if (reader == null) return null;
+
+        try
+        {
+            return (reader as IMarkdownExtractable)?.ExtractMarkdown();
+        }
+        finally
+        {
+            (reader as IDisposable)?.Dispose();
+        }
     }
     #endregion
 }

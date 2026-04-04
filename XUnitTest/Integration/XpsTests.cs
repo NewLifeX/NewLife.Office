@@ -53,6 +53,6 @@ public class XpsTests : IntegrationTestBase
 
         // 工厂创建
         var factoryReader = OfficeFactory.CreateReader(path);
-        Assert.IsType<XpsReader>(factoryReader);
+        Assert.IsType<XpsDocument>(factoryReader);
     }
 }

@@ -15,7 +15,7 @@ namespace NewLife.Office;
 ///     Console.WriteLine(para);
 /// </code>
 /// </remarks>
-public sealed class DocReader : IDisposable
+public sealed class DocReader : IDisposable, ITextExtractable, IMarkdownExtractable
 {
     #region 属性
 
@@ -323,5 +323,24 @@ public sealed class DocReader : IDisposable
     private static UInt32 ReadUInt32(Byte[] buf, Int32 pos) =>
         (UInt32)(buf[pos] | (buf[pos + 1] << 8) | (buf[pos + 2] << 16) | (buf[pos + 3] << 24));
 
+    #endregion
+
+    #region 文本提取
+    /// <summary>提取纯文本（段落间换行分隔）</summary>
+    /// <returns>纯文本字符串</returns>
+    public String? ExtractText() => ReadFullText();
+
+    /// <summary>提取 Markdown 格式（段落间空行分隔）</summary>
+    /// <returns>Markdown 字符串</returns>
+    public String? ExtractMarkdown()
+    {
+        var sb = new StringBuilder();
+        foreach (var para in ReadParagraphs())
+        {
+            sb.AppendLine(para);
+            sb.AppendLine();
+        }
+        return sb.ToString();
+    }
     #endregion
 }

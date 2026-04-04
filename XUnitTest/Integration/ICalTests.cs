@@ -72,6 +72,6 @@ public class ICalTests : IntegrationTestBase
 
         // 工厂创建
         var factoryReader = OfficeFactory.CreateReader(path);
-        Assert.IsType<ICalReader>(factoryReader);
+        Assert.IsType<ICalDocument>(factoryReader);
     }
 }

@@ -54,7 +54,7 @@ public class OdsTests : IntegrationTestBase
 
         // 工厂创建
         var factoryReader = OfficeFactory.CreateReader(path);
-        Assert.IsType<List<OdsSheet>>(factoryReader);
+        Assert.IsType<OdsDocument>(factoryReader);
     }
 
     [Fact, DisplayName("ODS转XLSX格式")]

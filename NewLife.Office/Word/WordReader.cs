@@ -8,7 +8,7 @@ namespace NewLife.Office;
 /// <remarks>
 /// 直接解析 Open XML（ZIP+XML）提取文本、表格、图片等内容。
 /// </remarks>
-public class WordReader : IDisposable
+public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
 {
     #region 属性
     /// <summary>源文件路径（从文件构造时有效）</summary>
@@ -198,6 +198,69 @@ public class WordReader : IDisposable
         using var s = entry.Open();
         doc.Load(s);
         return doc;
+    }
+    #endregion
+
+    #region 文本提取
+    /// <summary>提取纯文本（段落间换行分隔）</summary>
+    /// <returns>纯文本字符串</returns>
+    public String? ExtractText() => ReadFullText();
+
+    /// <summary>提取 Markdown 格式（段落+表格）</summary>
+    /// <returns>Markdown 字符串</returns>
+    public String? ExtractMarkdown()
+    {
+        var sb = new StringBuilder();
+
+        // 输出段落
+        foreach (var para in ReadParagraphs())
+        {
+            sb.AppendLine(para);
+            sb.AppendLine();
+        }
+
+        // 输出表格
+        foreach (var table in ReadTables())
+        {
+            if (table.Length == 0) continue;
+
+            // 第一行作为表头
+            var header = table[0];
+            sb.Append('|');
+            foreach (var cell in header)
+            {
+                sb.Append(' ').Append(MdEscape(cell)).Append(" |");
+            }
+            sb.AppendLine();
+
+            sb.Append('|');
+            for (var i = 0; i < header.Length; i++)
+            {
+                sb.Append(" --- |");
+            }
+            sb.AppendLine();
+
+            for (var ri = 1; ri < table.Length; ri++)
+            {
+                var row = table[ri];
+                sb.Append('|');
+                for (var i = 0; i < header.Length; i++)
+                {
+                    var val = i < row.Length ? row[i] : "";
+                    sb.Append(' ').Append(MdEscape(val)).Append(" |");
+                }
+                sb.AppendLine();
+            }
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+    private static String MdEscape(String? value)
+    {
+        if (String.IsNullOrEmpty(value)) return "";
+        return value.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
     }
     #endregion
 }
