@@ -110,6 +110,33 @@ Nuget：NewLife.Office
 
 ## 快速开始
 
+### 统一文本/Markdown 提取
+
+```csharp
+using NewLife.Office;
+
+// 一行代码提取任意格式纯文本
+String? text = OfficeFactory.ReadText("document.docx");
+String? text2 = OfficeFactory.ReadText("report.xlsx");
+
+// 提取为 Markdown 格式（保留结构信息）
+String? md = OfficeFactory.ReadMarkdown("slides.pptx");
+
+// 从流中提取
+using var fs = File.OpenRead("data.pdf");
+String? pdfText = OfficeFactory.ReadText(fs, ".pdf");
+```
+
+也可使用接口直接操作：
+
+```csharp
+using var reader = new WordReader("document.docx");
+String? text = (reader as ITextExtractable)?.ExtractText();
+String? md = (reader as IMarkdownExtractable)?.ExtractMarkdown();
+```
+
+### Excel 读写
+
 ```csharp
 using NewLife.Office;
 
