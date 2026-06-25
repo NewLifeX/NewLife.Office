@@ -39,11 +39,23 @@ public partial class PptxWriter : IDisposable
     private readonly List<(String SlideXml, String RelsXml)> _rawSlides = [];
     // 跨文件复制的媒体文件：(文件名, 字节数据)
     private readonly List<(String Name, Byte[] Data)> _rawSlideMedia = [];
+    // 从模板加载的母版/版式/主题（S04-Master）
+    private readonly List<PptPartContent> _masterContents = [];
+    private readonly List<PptPartContent> _layoutContents = [];
+    private readonly List<String> _layoutNames = [];
+    private String? _templateThemeXml;
+    private readonly Dictionary<String, Byte[]> _infraMedia = [];
+    // 编程式创建的母版（Phase 5：无需模板文件）
+    private readonly List<PptMaster> _progMasters = [];
     #endregion
 
     #region 构造
     /// <summary>实例化写入器（默认 16:9 比例）</summary>
     public PptxWriter() { }
+
+    /// <summary>从模板 pptx 文件实例化写入器，复用模板的母版/版式/主题（S04-Master）</summary>
+    /// <param name="templatePath">模板 pptx 文件路径</param>
+    public PptxWriter(String templatePath) => LoadMaster(templatePath);
 
     /// <summary>释放资源</summary>
     public void Dispose() { GC.SuppressFinalize(this); }
@@ -51,10 +63,12 @@ public partial class PptxWriter : IDisposable
 
     #region 幻灯片方法
     /// <summary>添加新幻灯片</summary>
+    /// <param name="layoutIndex">版式索引（0起始），超出范围时自动修正到末尾版式</param>
     /// <returns>新幻灯片对象</returns>
-    public PptSlide AddSlide()
+    public PptSlide AddSlide(Int32 layoutIndex = 0)
     {
-        var slide = new PptSlide();
+        var maxIdx = Math.Max(0, GetLayoutCount() - 1);
+        var slide = new PptSlide { LayoutIndex = Math.Min(Math.Max(0, layoutIndex), maxIdx) };
         Slides.Add(slide);
         return slide;
     }
@@ -384,7 +398,8 @@ public partial class PptxWriter : IDisposable
         return group;
     }
 
-    /// <summary>为幻灯片添加页脚文本和/或页码（S04-05）</summary>    /// <param name="slideIndex">幻灯片索引（0起始）</param>
+    /// <summary>为幻灯片添加页脚文本和/或页码（S04-05）</summary>
+    /// /// <param name="slideIndex">幻灯片索引（0起始）</param>
     /// <param name="footerText">页脚文本，null 表示不显示</param>
     /// <param name="showSlideNumber">是否在右下角显示幻灯片序号</param>
     public void SetSlideFooter(Int32 slideIndex, String? footerText = null, Boolean showSlideNumber = false)
@@ -719,6 +734,232 @@ public partial class PptxWriter : IDisposable
         ctSb.Append("</Types>");
         WriteZipEntryText(dstZip, "[Content_Types].xml", ctSb.ToString());
     }
+    #endregion
+
+    #region 母版
+
+    /// <summary>从现有 pptx 文件加载母版、版式和主题（S04-Master）</summary>
+    /// <remarks>
+    /// 以原始 XML 形式加载母版/版式/主题，保存时保留完整品牌设计。
+    /// 调用此方法会清除已加载的母版/版式内容，但不影响已添加的幻灯片。
+    /// 注意：加载模板后 SetAccentColors 对主题颜色不再生效，颜色由模板主题决定。
+    /// </remarks>
+    /// <param name="templatePath">模板 pptx 文件路径</param>
+    public void LoadMaster(String templatePath)
+        => LoadMaster(File.ReadAllBytes(templatePath.GetFullPath()), keepTemplateSlides: false);
+
+    /// <summary>从现有 pptx 文件加载母版、版式和主题，可选保留模板原有幻灯片</summary>
+    /// <param name="templatePath">模板 pptx 文件路径</param>
+    /// <param name="keepTemplateSlides">true 时保留模板原有幻灯片（追加在程序化幻灯片之后）</param>
+    public void LoadMaster(String templatePath, Boolean keepTemplateSlides)
+        => LoadMaster(File.ReadAllBytes(templatePath.GetFullPath()), keepTemplateSlides);
+
+    /// <summary>从 pptx 字节数据加载母版、版式和主题（S04-Master）</summary>
+    /// <remarks>
+    /// 可与 <see cref="PptxWriter(String)"/> 构造函数等效，也可在已有 PptxWriter 实例上调用。
+    /// </remarks>
+    /// <param name="templateBytes">模板 pptx 字节数据</param>
+    public void LoadMaster(Byte[] templateBytes) => LoadMaster(templateBytes, keepTemplateSlides: false);
+
+    /// <summary>从 pptx 字节数据加载母版、版式和主题，可选保留模板原有幻灯片</summary>
+    /// <param name="templateBytes">模板 pptx 字节数据</param>
+    /// <param name="keepTemplateSlides">true 时保留模板原有幻灯片</param>
+    public void LoadMaster(Byte[] templateBytes, Boolean keepTemplateSlides)
+    {
+        _masterContents.Clear();
+        _layoutContents.Clear();
+        _layoutNames.Clear();
+        _infraMedia.Clear();
+        _templateThemeXml = null;
+
+        using var ms = new MemoryStream(templateBytes);
+        using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
+
+        // 加载母版（按文件名排序）
+        var masterEntries = zip.Entries
+            .Where(e => e.FullName.StartsWith("ppt/slideMasters/", StringComparison.OrdinalIgnoreCase)
+                     && e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
+                     && !e.FullName.Contains("_rels", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(e => e.FullName)
+            .ToList();
+
+        foreach (var entry in masterEntries)
+        {
+            var content = new PptPartContent();
+            using (var sr = new StreamReader(entry.Open(), Encoding.UTF8))
+                content.Xml = sr.ReadToEnd();
+            var relsEntry = zip.GetEntry(GetRelsEntryPath(entry.FullName));
+            if (relsEntry != null)
+            {
+                using var rsr = new StreamReader(relsEntry.Open(), Encoding.UTF8);
+                content.RelsXml = rsr.ReadToEnd();
+            }
+            _masterContents.Add(content);
+        }
+
+        // 加载版式（按文件名排序）
+        var layoutEntries = zip.Entries
+            .Where(e => e.FullName.StartsWith("ppt/slideLayouts/", StringComparison.OrdinalIgnoreCase)
+                     && e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
+                     && !e.FullName.Contains("_rels", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(e => e.FullName)
+            .ToList();
+
+        foreach (var entry in layoutEntries)
+        {
+            var content = new PptPartContent();
+            using (var sr = new StreamReader(entry.Open(), Encoding.UTF8))
+                content.Xml = sr.ReadToEnd();
+            var relsEntry = zip.GetEntry(GetRelsEntryPath(entry.FullName));
+            if (relsEntry != null)
+            {
+                using var rsr = new StreamReader(relsEntry.Open(), Encoding.UTF8);
+                content.RelsXml = rsr.ReadToEnd();
+            }
+            _layoutNames.Add(ExtractLayoutDisplayName(content.Xml));
+            _layoutContents.Add(content);
+        }
+
+        // 加载主题（优先 theme1.xml，否则取第一个）
+        var themeEntry = zip.GetEntry("ppt/theme/theme1.xml")
+            ?? zip.Entries.FirstOrDefault(e =>
+                e.FullName.StartsWith("ppt/theme/", StringComparison.OrdinalIgnoreCase)
+                && e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+        if (themeEntry != null)
+        {
+            using var sr = new StreamReader(themeEntry.Open(), Encoding.UTF8);
+            _templateThemeXml = sr.ReadToEnd();
+        }
+
+        // 加载母版/版式 rels 引用的媒体文件
+        foreach (var entry in zip.Entries)
+        {
+            if (!entry.FullName.StartsWith("ppt/media/", StringComparison.OrdinalIgnoreCase)) continue;
+            var fileName = entry.Name;
+            var isReferenced = _masterContents.Any(c => c.RelsXml.IndexOf(fileName, StringComparison.OrdinalIgnoreCase) >= 0)
+                            || _layoutContents.Any(c => c.RelsXml.IndexOf(fileName, StringComparison.OrdinalIgnoreCase) >= 0);
+            if (!isReferenced) continue;
+            using var buf = new MemoryStream();
+            using (var es = entry.Open()) es.CopyTo(buf);
+            _infraMedia[fileName] = buf.ToArray();
+        }
+
+        // 可选：保留模板原有幻灯片
+        if (keepTemplateSlides)
+        {
+            CopyTemplateSlides(zip);
+        }
+    }
+
+    /// <summary>将模板中的幻灯片复制到 _rawSlides（供 keepTemplateSlides 使用）</summary>
+    private void CopyTemplateSlides(ZipArchive zip)
+    {
+        // 收集模板中所有媒体文件的重命名映射
+        var mediaRename = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in zip.Entries)
+        {
+            if (!entry.FullName.StartsWith("ppt/media/", StringComparison.OrdinalIgnoreCase)) continue;
+            var newName = $"mt{_mediaGlobal++}{Path.GetExtension(entry.Name)}";
+            mediaRename[entry.Name] = newName;
+            using var buf = new MemoryStream();
+            using (var es = entry.Open()) es.CopyTo(buf);
+            _rawSlideMedia.Add((newName, buf.ToArray()));
+        }
+
+        // 按幻灯片编号顺序复制
+        var slideEntries = zip.Entries
+            .Where(e => System.Text.RegularExpressions.Regex.IsMatch(e.FullName, @"^ppt/slides/slide\d+\.xml$"))
+            .OrderBy(e =>
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(e.FullName, @"slide(\d+)\.xml");
+                return m.Success ? Int32.Parse(m.Groups[1].Value) : 0;
+            })
+            .ToList();
+
+        foreach (var slideEntry in slideEntries)
+        {
+            var slideNum = Int32.Parse(
+                System.Text.RegularExpressions.Regex.Match(slideEntry.FullName, @"slide(\d+)\.xml").Groups[1].Value);
+
+            String slideXml;
+            using (var sr = new StreamReader(slideEntry.Open())) slideXml = sr.ReadToEnd();
+            foreach (var kv in mediaRename)
+            {
+                slideXml = slideXml.Replace($"../media/{kv.Key}", $"../media/{kv.Value}");
+            }
+
+            String relsXml;
+            var relsEntry = zip.GetEntry($"ppt/slides/_rels/slide{slideNum}.xml.rels");
+            if (relsEntry != null)
+            {
+                using var sr = new StreamReader(relsEntry.Open()); relsXml = sr.ReadToEnd();
+                foreach (var kv in mediaRename)
+                {
+                    relsXml = relsXml.Replace($"../media/{kv.Key}", $"../media/{kv.Value}");
+                }
+            }
+            else
+            {
+                relsXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                    "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                    "<Relationship Id=\"rLayout1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/>" +
+                    "</Relationships>";
+            }
+
+            _rawSlides.Add((slideXml, relsXml));
+        }
+    }
+
+    /// <summary>获取已加载的版式数量</summary>
+    /// <returns>版式数量（未加载模板且未编程创建时为 1）</returns>
+    public Int32 GetLayoutCount()
+    {
+        if (_layoutContents.Count > 0) return _layoutContents.Count;
+        var progCount = _progMasters.Sum(m => m.Layouts.Count);
+        return Math.Max(1, progCount);
+    }
+
+    /// <summary>获取指定版式的显示名称</summary>
+    /// <param name="layoutIndex">版式索引（0起始）</param>
+    /// <returns>版式名称；超出范围返回空字符串</returns>
+    public String GetLayoutName(Int32 layoutIndex)
+    {
+        if (_layoutNames.Count > 0)
+        {
+            if (layoutIndex < 0 || layoutIndex >= _layoutNames.Count) return String.Empty;
+            return _layoutNames[layoutIndex];
+        }
+        var total = 0;
+        foreach (var m in _progMasters)
+        {
+            foreach (var l in m.Layouts)
+            {
+                if (total == layoutIndex) return l.Name;
+                total++;
+            }
+        }
+        return total == 0 && layoutIndex == 0 ? "blank" : String.Empty;
+    }
+
+    /// <summary>编程式创建一个新母版（Phase 5：无需外部模板文件）</summary>
+    /// <remarks>
+    /// 创建后可向母版添加形状（如公司 Logo），并通过 <see cref="PptMaster.AddLayout"/> 添加自定义版式。
+    /// 保存时自动生成符合 OOXML 规范的母版和版式 XML。
+    /// <para>注意：调用此方法会与 <see cref="LoadMaster(String)"/> 互斥——后者通过模板文件加载，前者纯编程构建。</para>
+    /// </remarks>
+    /// <returns>新创建的母版对象</returns>
+    public PptMaster CreateMaster()
+    {
+        var master = new PptMaster();
+        _progMasters.Add(master);
+        return master;
+    }
+
+    /// <summary>从另一个 pptx 文件复制母版、版式和主题（S04-Master）</summary>
+    /// <remarks>语义等同于 <see cref="LoadMaster(String)"/>，命名更明确地表达跨文件母版复制的意图。</remarks>
+    /// <param name="sourcePath">源 pptx 文件路径</param>
+    public void CopyMasterFrom(String sourcePath) => LoadMaster(sourcePath);
+
     #endregion
 
 }

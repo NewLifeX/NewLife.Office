@@ -300,6 +300,44 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
             yield return info;
         }
     }
+
+    /// <summary>获取指定母版的原始 XML 内容（S04-Master）</summary>
+    /// <param name="index">母版索引（0起始）</param>
+    /// <returns>母版 XML 字符串，不存在则返回 null</returns>
+    public String? GetSlideMasterXml(Int32 index)
+    {
+        ThrowIfDisposed();
+        var entry = _zip.GetEntry($"ppt/slideMasters/slideMaster{index + 1}.xml");
+        if (entry == null) return null;
+        using var sr = new StreamReader(entry.Open(), Encoding.UTF8);
+        return sr.ReadToEnd();
+    }
+
+    /// <summary>获取指定版式的原始 XML 内容（S04-Master）</summary>
+    /// <param name="index">版式索引（0起始）</param>
+    /// <returns>版式 XML 字符串，不存在则返回 null</returns>
+    public String? GetSlideLayoutXml(Int32 index)
+    {
+        ThrowIfDisposed();
+        var entry = _zip.GetEntry($"ppt/slideLayouts/slideLayout{index + 1}.xml");
+        if (entry == null) return null;
+        using var sr = new StreamReader(entry.Open(), Encoding.UTF8);
+        return sr.ReadToEnd();
+    }
+
+    /// <summary>获取主题原始 XML 内容（S04-Master）</summary>
+    /// <returns>主题 XML 字符串，不存在则返回 null</returns>
+    public String? GetThemeXml()
+    {
+        ThrowIfDisposed();
+        var entry = _zip.GetEntry("ppt/theme/theme1.xml")
+            ?? _zip.Entries.FirstOrDefault(e =>
+                e.FullName.StartsWith("ppt/theme/", StringComparison.OrdinalIgnoreCase)
+                && e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+        if (entry == null) return null;
+        using var sr = new StreamReader(entry.Open(), Encoding.UTF8);
+        return sr.ReadToEnd();
+    }
     #endregion
 
     #region 私有方法

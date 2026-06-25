@@ -33,5 +33,8 @@ public class PptSlide
 
     /// <summary>形状组集合（S07-02 组合形状）</summary>
     public List<PptGroup> Groups { get; } = [];
+
+    /// <summary>使用的版式索引（0起始，对应 PptxWriter 加载的版式列表；无模板时只有索引 0）</summary>
+    public Int32 LayoutIndex { get; set; }
     #endregion
 }

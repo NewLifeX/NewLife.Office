@@ -25,6 +25,7 @@ partial class PptxWriter
         WritePresentationRels(za);
         WriteSlideLayout(za);
         WriteSlideMaster(za);
+        WriteInfraMedia(za);
         for (var i = 0; i < Slides.Count; i++)
         {
             WriteSlide(za, i, Slides[i]);
@@ -98,8 +99,14 @@ partial class PptxWriter
         sb.Append("<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>");
         sb.Append("<Default Extension=\"xml\" ContentType=\"application/xml\"/>");
         sb.Append("<Override PartName=\"/ppt/presentation.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/>");
-        sb.Append("<Override PartName=\"/ppt/slideMasters/slideMaster1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml\"/>");
-        sb.Append("<Override PartName=\"/ppt/slideLayouts/slideLayout1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml\"/>");
+        var masterCount = Math.Max(1, _masterContents.Count);
+        for (var i = 1; i <= masterCount; i++)
+            sb.Append($"<Override PartName=\"/ppt/slideMasters/slideMaster{i}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml\"/>");
+        var layoutCount = Math.Max(1, _layoutContents.Count);
+        if (_layoutContents.Count == 0 && _progMasters.Count > 0)
+            layoutCount = Math.Max(1, _progMasters.Sum(m => m.Layouts.Count));
+        for (var i = 1; i <= layoutCount; i++)
+            sb.Append($"<Override PartName=\"/ppt/slideLayouts/slideLayout{i}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml\"/>");
         sb.Append("<Override PartName=\"/ppt/theme/theme1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\"/>");
         for (var i = 0; i < Slides.Count; i++)
         {
@@ -151,7 +158,13 @@ partial class PptxWriter
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
         sb.Append($"<p:presentation xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\" saveSubsetFonts=\"1\">");
         sb.Append($"<p:sldSz cx=\"{SlideWidth}\" cy=\"{SlideHeight}\"/>");
-        sb.Append("<p:sldMasterIdLst><p:sldMasterId id=\"2147483648\" r:id=\"rMaster1\"/></p:sldMasterIdLst>");
+        var masterCount = Math.Max(1, _masterContents.Count);
+        if (_masterContents.Count == 0 && _progMasters.Count > 0)
+            masterCount = Math.Max(1, _progMasters.Count);
+        sb.Append("<p:sldMasterIdLst>");
+        for (var i = 0; i < masterCount; i++)
+            sb.Append($"<p:sldMasterId id=\"{2147483648 + i}\" r:id=\"rMaster{i + 1}\"/>");
+        sb.Append("</p:sldMasterIdLst>");
         sb.Append("<p:sldIdLst>");
         for (var i = 0; i < Slides.Count; i++)
         {
@@ -175,8 +188,15 @@ partial class PptxWriter
         var sb = new StringBuilder();
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
         sb.Append("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
-        sb.Append("<Relationship Id=\"rMaster1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"slideMasters/slideMaster1.xml\"/>");
-        sb.Append("<Relationship Id=\"rTheme1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"theme/theme1.xml\"/>");
+        var masterCount = Math.Max(1, _masterContents.Count);
+        var hasExternalMaster = _masterContents.Count > 0 || _progMasters.Count > 0;
+        if (_masterContents.Count == 0 && _progMasters.Count > 0)
+            masterCount = Math.Max(1, _progMasters.Count);
+        for (var i = 1; i <= masterCount; i++)
+            sb.Append($"<Relationship Id=\"rMaster{i}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"slideMasters/slideMaster{i}.xml\"/>");
+        // 无模板且无编程母版时从 presentation rels 引用 theme；否则 theme 由 master rels 引用
+        if (!hasExternalMaster)
+            sb.Append("<Relationship Id=\"rTheme1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"theme/theme1.xml\"/>");
         for (var i = 0; i < Slides.Count; i++)
         {
             sb.Append($"<Relationship Id=\"rSlide{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide{i + 1}.xml\"/>");
@@ -417,7 +437,12 @@ partial class PptxWriter
         var relsSb = new StringBuilder();
         relsSb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
         relsSb.Append("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
-        relsSb.Append("<Relationship Id=\"rLayout1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout1.xml\"/>");
+        var layoutCount = _layoutContents.Count > 0
+            ? _layoutContents.Count
+            : Math.Max(1, _progMasters.Sum(m => m.Layouts.Count));
+        var layoutIdx = Math.Max(0, Math.Min(slide.LayoutIndex, layoutCount - 1));
+        var layoutNum = layoutIdx + 1;
+        relsSb.Append($"<Relationship Id=\"rLayout1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout{layoutNum}.xml\"/>");
         foreach (var img in slide.Images)
         {
             relsSb.Append($"<Relationship Id=\"{img.RelId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/{img.RelId}.{img.Extension}\"/>");
@@ -575,6 +600,23 @@ partial class PptxWriter
 
     private void WriteSlideLayout(ZipArchive za)
     {
+        if (_layoutContents.Count > 0)
+        {
+            for (var i = 0; i < _layoutContents.Count; i++)
+            {
+                var c = _layoutContents[i];
+                WriteZipEntryText(za, $"ppt/slideLayouts/slideLayout{i + 1}.xml", c.Xml);
+                if (c.RelsXml.Length > 0)
+                    WriteZipEntryText(za, $"ppt/slideLayouts/_rels/slideLayout{i + 1}.xml.rels", c.RelsXml);
+            }
+            return;
+        }
+        if (_progMasters.Count > 0)
+        {
+            WriteProgLayouts(za);
+            return;
+        }
+        // 无模板时写出默认空白版式（向后兼容）
         WriteEntry(za, "ppt/slideLayouts/slideLayout1.xml",
             "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
             "<p:sldLayout xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\" " +
@@ -592,6 +634,23 @@ partial class PptxWriter
 
     private void WriteSlideMaster(ZipArchive za)
     {
+        if (_masterContents.Count > 0)
+        {
+            for (var i = 0; i < _masterContents.Count; i++)
+            {
+                var c = _masterContents[i];
+                WriteZipEntryText(za, $"ppt/slideMasters/slideMaster{i + 1}.xml", c.Xml);
+                if (c.RelsXml.Length > 0)
+                    WriteZipEntryText(za, $"ppt/slideMasters/_rels/slideMaster{i + 1}.xml.rels", c.RelsXml);
+            }
+            return;
+        }
+        if (_progMasters.Count > 0)
+        {
+            WriteProgMasters(za);
+            return;
+        }
+        // 无模板时写出默认空白母版（向后兼容）
         const String P = "http://schemas.openxmlformats.org/presentationml/2006/main";
         const String A = "http://schemas.openxmlformats.org/drawingml/2006/main";
         const String R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -613,7 +672,13 @@ partial class PptxWriter
             "</Relationships>");
     }
 
-    private void WriteTheme(ZipArchive za) =>
+    private void WriteTheme(ZipArchive za)
+    {
+        if (_templateThemeXml != null)
+        {
+            WriteZipEntryText(za, "ppt/theme/theme1.xml", _templateThemeXml);
+            return;
+        }
         WriteEntry(za, "ppt/theme/theme1.xml",
             "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
             "<a:theme xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" name=\"Office Theme\">" +
@@ -622,12 +687,7 @@ partial class PptxWriter
             "<a:lt1><a:sysClr lastClr=\"FFFFFF\" val=\"window\"/></a:lt1>" +
             "<a:dk2><a:srgbClr val=\"1F497D\"/></a:dk2>" +
             "<a:lt2><a:srgbClr val=\"EEECE1\"/></a:lt2>" +
-            $"<a:accent1><a:srgbClr val=\"{AccentColors[0]}\"/></a:accent1>" +
-            $"<a:accent2><a:srgbClr val=\"{AccentColors[1]}\"/></a:accent2>" +
-            $"<a:accent3><a:srgbClr val=\"{AccentColors[2]}\"/></a:accent3>" +
-            $"<a:accent4><a:srgbClr val=\"{AccentColors[3]}\"/></a:accent4>" +
-            $"<a:accent5><a:srgbClr val=\"{AccentColors[4]}\"/></a:accent5>" +
-            $"<a:accent6><a:srgbClr val=\"{AccentColors[5]}\"/></a:accent6>" +
+            AccentColorXml(0) + AccentColorXml(1) + AccentColorXml(2) + AccentColorXml(3) + AccentColorXml(4) + AccentColorXml(5) +
             "<a:hlink><a:srgbClr val=\"0000FF\"/></a:hlink>" +
             "<a:folHlink><a:srgbClr val=\"800080\"/></a:folHlink>" +
             "</a:clrScheme>" +
@@ -638,6 +698,227 @@ partial class PptxWriter
             "<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>" +
             "<a:bgFillStyleLst><a:noFill/><a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill><a:noFill/></a:bgFillStyleLst>" +
             "</a:fmtScheme></a:themeElements></a:theme>");
+    }
+
+    private void WriteInfraMedia(ZipArchive za)
+    {
+        foreach (var kv in _infraMedia)
+        {
+            var entry = za.CreateEntry($"ppt/media/{kv.Key}", CompressionLevel.Fastest);
+            using var es = entry.Open();
+            es.Write(kv.Value, 0, kv.Value.Length);
+        }
+    }
+
+    /// <summary>根据 XML 条目路径计算对应的 rels 条目路径</summary>
+    private static String GetRelsEntryPath(String xmlPath)
+    {
+        var dir = (Path.GetDirectoryName(xmlPath) ?? String.Empty).Replace('\\', '/');
+        return $"{dir}/_rels/{Path.GetFileName(xmlPath)}.rels";
+    }
+
+    /// <summary>从版式 XML 提取显示名称：优先取 cSld/@name，其次取 root/@type</summary>
+    private static String ExtractLayoutDisplayName(String layoutXml)
+    {
+        try
+        {
+            var doc = new System.Xml.XmlDocument();
+            doc.LoadXml(layoutXml);
+            var cSld = doc.DocumentElement?.SelectSingleNode("//*[local-name()='cSld']") as System.Xml.XmlElement;
+            if (cSld != null)
+            {
+                var name = cSld.GetAttribute("name");
+                if (name.Length > 0) return name;
+            }
+            var typeAttr = doc.DocumentElement?.GetAttribute("type") ?? String.Empty;
+            if (typeAttr.Length > 0) return typeAttr;
+        }
+        catch
+        {
+            // 版式 XML 可能格式不符预期或包含非法字符，提取名称失败时静默返回空字符串，
+            // 不影响 pptx 文件的正常保存和 PowerPoint 打开
+        }
+        return String.Empty;
+    }
+
+    /// <summary>写出编程式创建的母版 XML</summary>
+    private void WriteProgMasters(ZipArchive za)
+    {
+        const String P = "http://schemas.openxmlformats.org/presentationml/2006/main";
+        const String A = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        const String R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+
+        for (var mi = 0; mi < _progMasters.Count; mi++)
+        {
+            var master = _progMasters[mi];
+            var masterId = mi + 1;
+            var layoutOffset = GetProgLayoutOffset(mi);
+
+            // 母版 XML
+            var sb = new StringBuilder();
+            sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            sb.Append($"<p:sldMaster xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\">");
+            sb.Append("<p:cSld>");
+            // 背景
+            if (master.BackgroundColor != null)
+            {
+                sb.Append("<p:bg><p:bgPr>");
+                sb.Append($"<a:solidFill><a:srgbClr val=\"{master.BackgroundColor.TrimStart('#')}\"/></a:solidFill>");
+                sb.Append("<a:effectLst/></p:bgPr></p:bg>");
+            }
+            else
+            {
+                sb.Append("<p:bg><p:bgRef idx=\"1001\"><a:schemeClr val=\"bg1\"/></p:bgRef></p:bg>");
+            }
+            // spTree（含母版形状）
+            sb.Append("<p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>");
+            sb.Append("<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>");
+            var mShapeId = 2;
+            foreach (var sp in master.Shapes)
+            {
+                WriteShapeXml(sb, sp, ref mShapeId, A);
+            }
+            sb.Append("</p:spTree></p:cSld>");
+            // txStyles
+            sb.Append("<p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles>");
+            // 版式 ID 列表
+            sb.Append("<p:sldLayoutIdLst>");
+            for (var li = 0; li < master.Layouts.Count; li++)
+            {
+                var layoutGlobalIdx = layoutOffset + li + 1;
+                sb.Append($"<p:sldLayoutId id=\"{2147483649 + layoutGlobalIdx}\" r:id=\"rLayout{layoutGlobalIdx}\"/>");
+            }
+            sb.Append("</p:sldLayoutIdLst>");
+            sb.Append("</p:sldMaster>");
+            WriteZipEntryText(za, $"ppt/slideMasters/slideMaster{masterId}.xml", sb.ToString());
+
+            // 母版 rels
+            var relsSb = new StringBuilder();
+            relsSb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            relsSb.Append("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
+            relsSb.Append("<Relationship Id=\"rTheme1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"../theme/theme1.xml\"/>");
+            for (var li = 0; li < master.Layouts.Count; li++)
+            {
+                var layoutGlobalIdx = layoutOffset + li + 1;
+                relsSb.Append($"<Relationship Id=\"rLayout{layoutGlobalIdx}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout{layoutGlobalIdx}.xml\"/>");
+            }
+            relsSb.Append("</Relationships>");
+            WriteZipEntryText(za, $"ppt/slideMasters/_rels/slideMaster{masterId}.xml.rels", relsSb.ToString());
+        }
+    }
+
+    /// <summary>计算指定母版之前所有母版的版式累计数量</summary>
+    private Int32 GetProgLayoutOffset(Int32 masterIndex)
+    {
+        var offset = 0;
+        for (var i = 0; i < masterIndex; i++)
+        {
+            offset += _progMasters[i].Layouts.Count;
+        }
+        return offset;
+    }
+
+    /// <summary>写出编程式创建的版式 XML（由 WriteSlideLayout 调用）</summary>
+    private void WriteProgLayouts(ZipArchive za)
+    {
+        const String P = "http://schemas.openxmlformats.org/presentationml/2006/main";
+        const String A = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        const String R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+
+        var globalIdx = 0;
+        for (var mi = 0; mi < _progMasters.Count; mi++)
+        {
+            var master = _progMasters[mi];
+            for (var li = 0; li < master.Layouts.Count; li++)
+            {
+                globalIdx++;
+                var layout = master.Layouts[li];
+                var sb = new StringBuilder();
+                sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+                sb.Append($"<p:sldLayout xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\"");
+                sb.Append($" type=\"{EscXml(layout.LayoutType)}\" preserve=\"1\">");
+                sb.Append($"<p:cSld name=\"{EscXml(layout.Name)}\">");
+                sb.Append("<p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>");
+                sb.Append("<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>");
+                var shapeId = 2;
+                foreach (var sp in layout.Shapes)
+                {
+                    WriteShapeXml(sb, sp, ref shapeId, A);
+                }
+                foreach (var tb in layout.TextBoxes)
+                {
+                    WriteTextBoxXml(sb, tb, ref shapeId, A);
+                }
+                sb.Append("</p:spTree></p:cSld></p:sldLayout>");
+                WriteZipEntryText(za, $"ppt/slideLayouts/slideLayout{globalIdx}.xml", sb.ToString());
+
+                // 版式 rels
+                var masterId = mi + 1;
+                var rels = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                    "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                    $"<Relationship Id=\"rMaster1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster\" Target=\"../slideMasters/slideMaster{masterId}.xml\"/>" +
+                    "</Relationships>";
+                WriteZipEntryText(za, $"ppt/slideLayouts/_rels/slideLayout{globalIdx}.xml.rels", rels);
+            }
+        }
+    }
+
+    /// <summary>生成 p:sp 形状 XML 片段（复用于母版、版式、幻灯片）</summary>
+    private static void WriteShapeXml(StringBuilder sb, PptShape sp, ref Int32 shapeId, String aNs)
+    {
+        sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"Shape\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>");
+        sb.Append("<p:spPr>");
+        sb.Append($"<a:xfrm><a:off x=\"{sp.Left}\" y=\"{sp.Top}\"/><a:ext cx=\"{sp.Width}\" cy=\"{sp.Height}\"/></a:xfrm>");
+        if (!String.IsNullOrEmpty(sp.ShapeType))
+            sb.Append($"<a:prstGeom prst=\"{sp.ShapeType}\"><a:avLst/></a:prstGeom>");
+        if (sp.FillColor != null)
+            sb.Append($"<a:solidFill><a:srgbClr val=\"{sp.FillColor.TrimStart('#')}\"/></a:solidFill>");
+        else
+            sb.Append("<a:noFill/>");
+        if (sp.LineColor != null)
+            sb.Append($"<a:ln w=\"{sp.LineWidth}\"><a:solidFill><a:srgbClr val=\"{sp.LineColor.TrimStart('#')}\"/></a:solidFill></a:ln>");
+        sb.Append("</p:spPr>");
+        if (!String.IsNullOrEmpty(sp.Text))
+        {
+            sb.Append("<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r>");
+            sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{sp.FontSize * 100}\"{(sp.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
+            if (sp.FontColor != null)
+                sb.Append($"<a:solidFill><a:srgbClr val=\"{sp.FontColor.TrimStart('#')}\"/></a:solidFill>");
+            sb.Append("</a:rPr>");
+            sb.Append($"<a:t>{EscXml(sp.Text)}</a:t>");
+            sb.Append("</a:r></a:p></p:txBody>");
+        }
+        sb.Append("</p:sp>");
+    }
+
+    /// <summary>生成 p:sp 文本框 XML 片段（复用于版式、幻灯片）</summary>
+    private static void WriteTextBoxXml(StringBuilder sb, PptTextBox tb, ref Int32 shapeId, String aNs)
+    {
+        sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"TextBox\"/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr>");
+        sb.Append("<p:spPr>");
+        sb.Append($"<a:xfrm><a:off x=\"{tb.Left}\" y=\"{tb.Top}\"/><a:ext cx=\"{tb.Width}\" cy=\"{tb.Height}\"/></a:xfrm>");
+        sb.Append("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>");
+        if (tb.BackgroundColor != null)
+            sb.Append($"<a:solidFill><a:srgbClr val=\"{tb.BackgroundColor.TrimStart('#')}\"/></a:solidFill>");
+        else
+            sb.Append("<a:noFill/>");
+        sb.Append("</p:spPr>");
+        sb.Append("<p:txBody><a:bodyPr wrap=\"square\" rtlCol=\"0\"><a:normAutofit/></a:bodyPr><a:lstStyle/>");
+        sb.Append($"<a:p><a:pPr algn=\"{tb.Alignment}\"/><a:r>");
+        sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{tb.FontSize * 100}\"{(tb.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
+        if (tb.FontColor != null)
+            sb.Append($"<a:solidFill><a:srgbClr val=\"{tb.FontColor.TrimStart('#')}\"/></a:solidFill>");
+        sb.Append("</a:rPr>");
+        sb.Append($"<a:t>{EscXml(tb.Text)}</a:t>");
+        sb.Append("</a:r></a:p></p:txBody></p:sp>");
+    }
+
+    /// <summary>生成单个强调色 XML 片段</summary>
+    private String AccentColorXml(Int32 index)
+    {
+        var color = index < AccentColors.Length ? AccentColors[index] : "4F81BD";
+        return $"<a:accent{index + 1}><a:srgbClr val=\"{color}\"/></a:accent{index + 1}>";
+    }
 
     private static String EscXml(String s) =>
         s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
