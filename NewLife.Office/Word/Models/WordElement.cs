@@ -20,4 +20,12 @@ public class WordElement
 
     /// <summary>图片（Type=Image 时有效）</summary>
     public WordImageElement? Image { get; set; }
+
+    /// <summary>
+    /// 元素原始 XML，由 Reader 将对应 <c>w:p</c>/<c>w:tbl</c> 的 OuterXml 存入。
+    /// Writer 在此不为空时<strong>优先直接写入</strong>，完整保留所有内联格式
+    /// （字体/大小/颜色/间距/段落边框/高亮/删除线等未建模属性）。
+    /// 程序化创建的元素（AppendParagraph 等）该属性为 null，使用模型生成 XML。
+    /// </summary>
+    public String? RawXml { get; set; }
 }

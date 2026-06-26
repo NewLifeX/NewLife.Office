@@ -30,6 +30,17 @@ public class WordWriter : IDisposable
     private Int32 _imgCounter = 1;
     private Int32 _bookmarkId = 1;
 
+    // 原始 XML 透传（非空时覆盖生成默认）
+    private String? _stylesXml;
+    private String? _numberingXml;
+    private String? _settingsXml;
+    private String? _sectPrXml;           // sectPr 原始 XML
+    private String? _documentXmlNsDecls;  // document.xml 根元素命名空间声明
+    private String? _documentXml;         // word/document.xml 全文（非空时直接写入，跳过重建）
+
+    // 原样透传的所有 ZIP 部件（除 word/document.xml 外）
+    private Dictionary<String, Byte[]> _otherParts = [];
+
     /// <summary>是否启用只读保护</summary>
     public Boolean ProtectionReadOnly { get; set; }
     #endregion
@@ -231,7 +242,7 @@ public class WordWriter : IDisposable
     /// <param name="path">输出路径</param>
     public void Save(String path)
     {
-        using var fs = new FileStream(path.GetFullPath(), FileMode.Create, FileAccess.Write, FileShare.None);
+        using var fs = new FileStream(path.GetFullPath(), FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
         Save(fs);
     }
 
@@ -240,25 +251,82 @@ public class WordWriter : IDisposable
     public void Save(Stream stream)
     {
         using var za = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true, entryNameEncoding: Encoding);
+
+        // 透传模式：保留所有原始 ZIP 部件（包含 [Content_Types].xml、rels、主题、字体表等），
+        // 仅重新生成 word/document.xml 以支持用户对 Elements 的修改。
+        if (_otherParts.Count > 0)
+        {
+            foreach (var kv in _otherParts)
+                using (var e = za.CreateEntry(kv.Key).Open())
+                    e.Write(kv.Value, 0, kv.Value.Length);
+            WriteDocument(za);
+            return;
+        }
+
+        // 普通模式（程序化创建，没有源 ZIP）：从模型生成全部文件
         WriteContentTypes(za);
         WriteRels(za);
         WriteStyles(za);
         WriteSettings(za);
+        WriteNumbering(za);
         WriteDocumentRels(za);
         WriteDocument(za);
         var psave = PageSettings;
-        if (psave.HeaderText != null || psave.WatermarkText != null)
+        var hdrInOther = _otherParts.ContainsKey("word/header1.xml");
+        var ftrInOther = _otherParts.ContainsKey("word/footer1.xml");
+        if ((psave.HeaderText != null || psave.WatermarkText != null) && !hdrInOther)
             WriteHeaderXml(za);
-        if (psave.FooterText != null)
+        if (psave.FooterText != null && !ftrInOther)
             WriteFooterXml(za);
         if (DocumentProperties.Title != null || DocumentProperties.Author != null)
             WriteCoreProperties(za);
+        WriteOtherParts(za);
         foreach (var (_, ext, data) in _imageRels)
         {
             var relId = _imageRels.First(r => r.Data == data).RelId;
             using var entry = za.CreateEntry($"word/media/{relId}.{ext}").Open();
             entry.Write(data, 0, data.Length);
         }
+    }
+
+    /// <summary>保存文档模型到文件</summary>
+    public void Save(String path, WordDocument document)
+    {
+        using var fs = new FileStream(path.GetFullPath(), FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+        Save(fs, document);
+    }
+
+    /// <summary>保存文档模型到流</summary>
+    public void Save(Stream stream, WordDocument document)
+    {
+        _elements.Clear(); _imageRels.Clear(); _hyperlinkRels.Clear();
+        _relCounter = 1; _imgCounter = 1; _bookmarkId = 1;
+        _stylesXml = document.StylesXml;
+        _numberingXml = document.NumberingXml;
+        _settingsXml = document.SettingsXml;
+        _sectPrXml = document.SectPrXml;
+        _documentXmlNsDecls = document.DocumentXmlNsDecls;
+        _documentXml = document.DocumentXml;
+        _otherParts = document.OtherParts.Count > 0 ? new Dictionary<String, Byte[]>(document.OtherParts) : [];
+        _elements.AddRange(document.Elements);
+        foreach (var kv in document.Images) _imageRels.Add((kv.Key, kv.Value.Extension, kv.Value.Data));
+        foreach (var item in document.Hyperlinks) _hyperlinkRels.Add(item);
+        PageSettings = document.PageSettings;
+        DocumentProperties = document.DocumentProperties;
+        ProtectionReadOnly = document.ProtectionReadOnly;
+        if (document.PageSettings.HeaderText == null && document.HeaderText != null)
+            PageSettings.HeaderText = document.HeaderText;
+        if (document.PageSettings.FooterText == null && document.FooterText != null)
+            PageSettings.FooterText = document.FooterText;
+        Save(stream);
+    }
+
+    /// <summary>追加文档元素</summary>
+    public void AppendDocument(WordDocument document)
+    {
+        _elements.AddRange(document.Elements);
+        foreach (var kv in document.Images) _imageRels.Add((kv.Key, kv.Value.Extension, kv.Value.Data));
+        foreach (var item in document.Hyperlinks) _hyperlinkRels.Add(item);
     }
     #endregion
 
@@ -271,6 +339,41 @@ public class WordWriter : IDisposable
 
     private static String Esc(String? s) => s == null ? String.Empty : (SecurityElement.Escape(s) ?? s);
 
+    /// <summary>写入所有透传部件（主题/字体表/脚注/尾注/页眉页脚 raw XML 等）</summary>
+    private void WriteOtherParts(ZipArchive za)
+    {
+        if (_otherParts.Count == 0) return;
+
+        // 已被显式写入的路径（小写比较）
+        var written = new HashSet<String>(StringComparer.OrdinalIgnoreCase)
+        {
+            "[Content_Types].xml", "_rels/.rels",
+            "word/document.xml", "word/_rels/document.xml.rels",
+            "word/styles.xml", "word/settings.xml", "word/numbering.xml",
+            "docProps/core.xml",
+        };
+        // 如果 Writer 已生成了页眉/页脚（OtherParts中没有，由模型驱动），则不重复写入
+        if ((PageSettings.HeaderText != null || PageSettings.WatermarkText != null) && !_otherParts.ContainsKey("word/header1.xml"))
+        {
+            written.Add("word/header1.xml");
+            written.Add("word/_rels/header1.xml.rels");
+        }
+        if (PageSettings.FooterText != null && !_otherParts.ContainsKey("word/footer1.xml"))
+        {
+            written.Add("word/footer1.xml");
+            written.Add("word/_rels/footer1.xml.rels");
+        }
+
+        foreach (var kv in _otherParts)
+        {
+            if (written.Contains(kv.Key)) continue;
+
+            var entry = za.CreateEntry(kv.Key);
+            using var es = entry.Open();
+            es.Write(kv.Value, 0, kv.Value.Length);
+        }
+    }
+
     private void WriteContentTypes(ZipArchive za)
     {
         var sb = new StringBuilder();
@@ -281,6 +384,8 @@ public class WordWriter : IDisposable
         sb.Append("<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>");
         sb.Append("<Override PartName=\"/word/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml\"/>");
         sb.Append("<Override PartName=\"/word/settings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml\"/>");
+        if (_numberingXml != null)
+            sb.Append("<Override PartName=\"/word/numbering.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml\"/>");
         var ps = PageSettings;
         if (ps.HeaderText != null || ps.WatermarkText != null)
             sb.Append("<Override PartName=\"/word/header1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml\"/>");
@@ -345,6 +450,12 @@ public class WordWriter : IDisposable
 
     private void WriteStyles(ZipArchive za)
     {
+        if (_stylesXml != null)
+        {
+            WriteEntry(za, "word/styles.xml", _stylesXml);
+            return;
+        }
+
         const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
         var sb = new StringBuilder();
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
@@ -352,15 +463,12 @@ public class WordWriter : IDisposable
         sb.Append("<w:docDefaults><w:rPrDefault><w:rPr>");
         sb.Append("<w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\" w:eastAsia=\"SimSun\"/>");
         sb.Append("<w:sz w:val=\"24\"/></w:rPr></w:rPrDefault></w:docDefaults>");
-        // Normal
         sb.Append("<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/></w:style>");
-        // Headings
         int[] headSizes = [40, 32, 28, 26, 24, 22];
         for (var i = 1; i <= 6; i++)
         {
             sb.Append($"<w:style w:type=\"paragraph\" w:styleId=\"Heading{i}\"><w:name w:val=\"heading {i}\"/><w:basedOn w:val=\"Normal\"/><w:pPr><w:outlineLvl w:val=\"{i - 1}\"/></w:pPr><w:rPr><w:b/><w:sz w:val=\"{headSizes[i - 1]}\"/></w:rPr></w:style>");
         }
-        // Table Grid
         sb.Append("<w:style w:type=\"table\" w:styleId=\"TableGrid\"><w:name w:val=\"Table Grid\"/>");
         sb.Append("<w:tblPr><w:tblBorders>");
         foreach (var edge in new[] { "top", "left", "bottom", "right", "insideH", "insideV" })
@@ -374,6 +482,12 @@ public class WordWriter : IDisposable
 
     private void WriteSettings(ZipArchive za)
     {
+        if (_settingsXml != null)
+        {
+            WriteEntry(za, "word/settings.xml", _settingsXml);
+            return;
+        }
+
         var sb = new StringBuilder();
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
         sb.Append("<w:settings xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">");
@@ -384,47 +498,107 @@ public class WordWriter : IDisposable
         WriteEntry(za, "word/settings.xml", sb.ToString());
     }
 
+    private void WriteNumbering(ZipArchive za)
+    {
+        if (_numberingXml != null)
+            WriteEntry(za, "word/numbering.xml", _numberingXml);
+    }
+
     private void WriteDocument(ZipArchive za)
     {
-        const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-        const String R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-        const String WP = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
-        const String A = "http://schemas.openxmlformats.org/drawingml/2006/main";
-        const String PIC = "http://schemas.openxmlformats.org/drawingml/2006/picture";
+        // document.xml 直接透传：保留源文件的全部格式和内容
+        if (_documentXml != null)
+        {
+            // 无 BOM 的 UTF-8，与 Word 生成文件保持一致
+            using var sw = new StreamWriter(za.CreateEntry("word/document.xml").Open(), new UTF8Encoding(false));
+            sw.Write(_documentXml);
+            return;
+        }
+
+        // 必要的 OOXML 命名空间，确保 RawXml 中所有前缀都能解析
+        // 源文件可能将这些命名空间声明在子元素而非根元素上，需要在此补全
+        var required = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["xmlns:w"]   = "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+            ["xmlns:r"]   = "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+            ["xmlns:wp"]  = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+            ["xmlns:a"]   = "http://schemas.openxmlformats.org/drawingml/2006/main",
+            ["xmlns:pic"] = "http://schemas.openxmlformats.org/drawingml/2006/picture",
+            ["xmlns:mc"]  = "http://schemas.openxmlformats.org/markup-compatibility/2006",
+            ["xmlns:v"]   = "urn:schemas-microsoft-com:vml",
+            ["xmlns:o"]   = "urn:schemas-microsoft-com:office:office",
+            ["xmlns:m"]   = "http://schemas.openxmlformats.org/officeDocument/2006/math",
+            ["xmlns:wps"] = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+            ["xmlns:wpg"] = "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup",
+            ["xmlns:wpc"] = "http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas",
+            ["xmlns:w14"] = "http://schemas.microsoft.com/office/word/2010/wordml",
+            ["xmlns:w15"] = "http://schemas.microsoft.com/office/word/2012/wordml",
+        };
+
+        // 合并源文件的命名空间声明（它们可能有更多自定义的）
+        if (!String.IsNullOrEmpty(_documentXmlNsDecls))
+        {
+            var matches = System.Text.RegularExpressions.Regex.Matches(
+                _documentXmlNsDecls,
+                @"(xmlns:[A-Za-z0-9_]+)=\""([^\""]*)\""");
+            foreach (System.Text.RegularExpressions.Match m in matches)
+                required[m.Groups[1].Value] = m.Groups[2].Value;
+        }
+
+        var nsSb = new StringBuilder();
+        foreach (var kv in required)
+            nsSb.Append($" {kv.Key}=\"{kv.Value}\"");
 
         var sb = new StringBuilder();
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-        sb.Append($"<w:document xmlns:w=\"{W}\" xmlns:r=\"{R}\" xmlns:wp=\"{WP}\" xmlns:a=\"{A}\" xmlns:pic=\"{PIC}\">");
+        sb.Append($"<w:document{nsSb}>");
         sb.Append("<w:body>");
 
         foreach (var el in _elements)
         {
-            switch (el.Type)
+            if (el.RawXml != null)
             {
-                case WordElementType.Paragraph when el.Paragraph != null:
-                    BuildParagraphXml(sb, el.Paragraph);
-                    break;
-                case WordElementType.Table when el.TableRows != null:
-                    BuildTableXml(sb, el.TableRows, el.TableFirstRowHeader, el.TableStyle);
-                    break;
-                case WordElementType.Image when el.Image != null:
-                    BuildImageXml(sb, el.Image);
-                    break;
+                // 有原始 XML：直接写入，100% 保留所有格式
+                sb.Append(el.RawXml);
+            }
+            else
+            {
+                switch (el.Type)
+                {
+                    case WordElementType.Paragraph when el.Paragraph != null:
+                        BuildParagraphXml(sb, el.Paragraph);
+                        break;
+                    case WordElementType.Table when el.TableRows != null:
+                        BuildTableXml(sb, el.TableRows, el.TableFirstRowHeader, el.TableStyle);
+                        break;
+                    case WordElementType.Image when el.Image != null:
+                        BuildImageXml(sb, el.Image);
+                        break;
+                }
             }
         }
 
-        var ps = PageSettings;
-        var pgW = ps.Landscape ? ps.PageHeight : ps.PageWidth;
-        var pgH = ps.Landscape ? ps.PageWidth : ps.PageHeight;
-        sb.Append("<w:sectPr>");
-        if (ps.HeaderText != null || ps.WatermarkText != null)
-            sb.Append("<w:headerReference w:type=\"default\" r:id=\"rHdr1\"/>");
-        if (ps.FooterText != null)
-            sb.Append("<w:footerReference w:type=\"default\" r:id=\"rFtr1\"/>");
-        var orientAttr = ps.Landscape ? " w:orient=\"landscape\"" : String.Empty;
-        sb.Append($"<w:pgSz w:w=\"{pgW}\" w:h=\"{pgH}\"{orientAttr}/>");
-        sb.Append($"<w:pgMar w:top=\"{ps.MarginTop}\" w:right=\"{ps.MarginRight}\" w:bottom=\"{ps.MarginBottom}\" w:left=\"{ps.MarginLeft}\" w:header=\"720\" w:footer=\"720\"/>");
-        sb.Append("</w:sectPr>");
+        // 节属性（页面尺寸/页眉页脚引用）
+        if (_sectPrXml != null)
+        {
+            sb.Append(_sectPrXml);
+        }
+        else
+        {
+            var ps = PageSettings;
+            var pgW = ps.Landscape ? ps.PageHeight : ps.PageWidth;
+            var pgH = ps.Landscape ? ps.PageWidth : ps.PageHeight;
+            sb.Append("<w:sectPr>");
+            if (ps.HeaderText != null || ps.WatermarkText != null)
+                sb.Append("<w:headerReference w:type=\"default\" r:id=\"rHdr1\"/>");
+            if (ps.FooterText != null)
+                sb.Append("<w:footerReference w:type=\"default\" r:id=\"rFtr1\"/>");
+            var orientAttr = ps.Landscape ? " w:orient=\"landscape\"" : String.Empty;
+            sb.Append($"<w:pgSz w:w=\"{pgW}\" w:h=\"{pgH}\"{orientAttr}/>");
+            sb.Append($"<w:pgMar w:top=\"{ps.MarginTop}\" w:right=\"{ps.MarginRight}\" w:bottom=\"{ps.MarginBottom}\" w:left=\"{ps.MarginLeft}\" w:header=\"720\" w:footer=\"720\"/>");
+            sb.Append("</w:sectPr>");
+        }
+
         sb.Append("</w:body></w:document>");
         WriteEntry(za, "word/document.xml", sb.ToString());
     }
@@ -498,17 +672,21 @@ public class WordWriter : IDisposable
         }
 
         // paragraph properties
-        var hasPPr = para.Style != WordParagraphStyle.Normal || para.Alignment != null
+        var hasPPr = para.StyleId != null || para.Style != WordParagraphStyle.Normal || para.Alignment != null
             || para.IndentLeft.HasValue || para.IndentRight.HasValue || para.FirstLineIndent.HasValue
             || para.SpaceBefore.HasValue || para.SpaceAfter.HasValue || para.LineSpacingPct.HasValue
-            || para.IsBullet;
+            || para.IsBullet || para.BackgroundColor != null;
         if (hasPPr)
         {
             sb.Append("<w:pPr>");
-            if (para.Style != WordParagraphStyle.Normal)
+            if (para.StyleId != null)
+                sb.Append($"<w:pStyle w:val=\"{Esc(para.StyleId)}\"/>");
+            else if (para.Style != WordParagraphStyle.Normal)
                 sb.Append($"<w:pStyle w:val=\"Heading{(Int32)para.Style}\"/>");
             if (para.Alignment != null)
                 sb.Append($"<w:jc w:val=\"{para.Alignment}\"/>");
+            if (para.BackgroundColor != null)
+                sb.Append($"<w:shd w:fill=\"{para.BackgroundColor.TrimStart('#')}\" w:val=\"clear\"/>");
             if (para.SpaceBefore.HasValue || para.SpaceAfter.HasValue || para.LineSpacingPct.HasValue)
             {
                 sb.Append("<w:spacing");
@@ -666,7 +844,7 @@ public class WordWriter : IDisposable
             }
             sb.Append("</w:tr>");
         }
-        sb.Append("</w:tbl><w:p/>");
+        sb.Append("</w:tbl>");
     }
 
     private static void BuildImageXml(StringBuilder sb, WordImageElement img)

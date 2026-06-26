@@ -1,0 +1,530 @@
+﻿using System.ComponentModel;
+using System.Text;
+using NewLife.Office;
+using Xunit;
+
+namespace XUnitTest.Integration;
+
+/// <summary>Word docx 格式集成测试</summary>
+public class WordDocxTests : IntegrationTestBase
+{
+    [Fact, DisplayName("Word_docx_复杂写入再读取往返")]
+    public void Word_Docx_ComplexWriteAndRead()
+    {
+        var path = Path.Combine(OutputDir, "test_complex.docx");
+
+        using (var w = new WordWriter())
+        {
+            w.DocumentProperties.Title = "集成测试文档";
+            w.DocumentProperties.Author = "NewLife Office";
+
+            w.AppendHeading("第一章 概述", 1);
+            w.AppendParagraph("这是一份由 NewLife.Office 自动生成的测试文档，用于验证 Word 文件的读写功能。");
+            w.AppendParagraph("本文档包含标题、段落、表格、列表等多种元素。");
+
+            w.AppendHeading("第二章 数据表格", 2);
+            w.AppendParagraph("以下是一个示例数据表格：");
+
+            var tableData = new[]
+            {
+                new[] { "产品", "价格", "库存" },
+                new[] { "笔记本", "5999", "100" },
+                new[] { "手机", "3999", "500" },
+                new[] { "平板", "2999", "200" },
+            };
+            w.AppendTable(tableData);
+
+            w.AppendHeading("第三章 格式化文本", 2);
+            w.AppendParagraph("普通段落文本。", WordParagraphStyle.Normal,
+                new WordRunProperties { FontSize = 14f, Bold = true });
+            w.AppendParagraph("这是另一个段落。");
+
+            w.AppendHeading("附录", 3);
+            w.AppendParagraph("文档结束。");
+
+            w.Save(path);
+        }
+
+        Assert.True(File.Exists(path));
+
+        // 读取验证
+        using var reader = new WordReader(path);
+        var paragraphs = reader.ReadParagraphs().ToList();
+        Assert.True(paragraphs.Count >= 5);
+        Assert.Contains("第一章 概述", paragraphs);
+        Assert.Contains("文档结束。", paragraphs);
+
+        // ReadFullText 返回正文文本，Title 属于文档属性不在正文中
+        var fullText = reader.ReadFullText();
+        Assert.Contains("数据表格", fullText);
+        Assert.Contains("格式化文本", fullText);
+
+        // 读取表格
+        var tables = reader.ReadTables().ToList();
+        Assert.True(tables.Count >= 1);
+        Assert.Equal("产品", tables[0][0][0]);
+        Assert.Equal("笔记本", tables[0][1][0]);
+
+        // 工厂创建
+        var factoryReader = OfficeFactory.CreateReader(path);
+        Assert.IsType<WordReader>(factoryReader);
+        (factoryReader as IDisposable)?.Dispose();
+    }
+
+    [Fact, DisplayName("Word_docx转PDF")]
+    public void Word_Docx_To_Pdf()
+    {
+        var docxPath = Path.Combine(OutputDir, "convert_word.docx");
+        var pdfPath = Path.Combine(OutputDir, "converted_from_word.pdf");
+
+        using (var w = new WordWriter())
+        {
+            w.AppendHeading("Word转PDF测试", 1);
+            w.AppendParagraph("这段文字应该出现在PDF中。");
+            w.AppendParagraph("支持多段落转换。");
+            w.Save(docxPath);
+        }
+
+        // 转换
+        var converter = new WordPdfConverter();
+        converter.ConvertToFile(docxPath, pdfPath);
+
+        Assert.True(File.Exists(pdfPath));
+
+        // 验证 PDF
+        using var pdfReader = new PdfReader(pdfPath);
+        var text = pdfReader.ExtractText();
+        Assert.Contains("Word", text);
+        Assert.True(pdfReader.GetPageCount() >= 1);
+    }
+
+    [Fact, DisplayName("Docx_从Bin读取所有文件并往返验证")]
+    public void Docx_RoundTrip_AllFiles()
+    {
+        // 测试程序集在 Bin/UnitTest/，向上一级到 Bin/
+        var binDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, ".."));
+        var docxFiles = Directory.GetFiles(binDir, "*.docx", SearchOption.TopDirectoryOnly);
+
+        if (docxFiles.Length == 0)
+        {
+            Console.WriteLine($"未在 {binDir} 找到 .docx 文件，跳过测试。");
+            return;
+        }
+
+        // 输出目录
+        var outputDir = Path.Combine(binDir, "Output");
+        Directory.CreateDirectory(outputDir);
+
+        var allPassed = true;
+        foreach (var sourcePath in docxFiles)
+        {
+            var fileName = Path.GetFileNameWithoutExtension(sourcePath);
+            var outputPath = Path.Combine(outputDir, $"{fileName}_roundtrip.docx");
+
+            Console.WriteLine($"处理: {Path.GetFileName(sourcePath)}");
+
+            try
+            {
+                // 1. 读取为 WordDocument
+                WordDocument sourceDoc;
+                var sourceBytes = ReadAllBytesShared(sourcePath);
+                using (var ms = new MemoryStream(sourceBytes))
+                using (var reader = new WordReader(ms))
+                {
+                    sourceDoc = reader.ReadDocument();
+                    Assert.True(sourceDoc.Elements.Count > 0, $"源文件 {fileName} 应至少包含 1 个元素");
+                }
+
+                // 2. 写入为新文件
+                using (var writer = new WordWriter())
+                {
+                    writer.Save(outputPath, sourceDoc);
+                }
+                Assert.True(File.Exists(outputPath), $"输出文件 {outputPath} 应存在");
+
+                // 3. 重新读取输出文件
+                WordDocument outDoc;
+                using (var reader = new WordReader(outputPath))
+                {
+                    outDoc = reader.ReadDocument();
+                }
+
+                // 4. 文本级验证（仅正文，页眉页脚由结构比较覆盖）
+                var sourceText = GetDocumentBodyText(sourceDoc);
+                var outText = GetDocumentBodyText(outDoc);
+
+                Assert.Equal(sourceText.Trim(), outText.Trim());
+
+                // 5. 结构化比较
+                AssertDocumentsEqual(sourceDoc, outDoc, fileName);
+
+                Console.WriteLine($"  ✓ {fileName}: {sourceDoc.Elements.Count} 元素, 文本匹配, 结构一致");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"  ✗ {fileName}: {ex.Message}");
+                allPassed = false;
+                throw;
+            }
+        }
+
+        Assert.True(allPassed, "所有 docx 文件往返测试均应通过");
+    }
+
+    [Fact, DisplayName("Docx_往返读写_格式化保真")]
+    public void Docx_RoundTrip_FormattingFidelity()
+    {
+        var path = Path.Combine(OutputDir, "roundtrip_format.docx");
+
+        // ── 写入阶段：构建一个覆盖各种格式的复杂文档 ──
+        using (var w = new WordWriter())
+        {
+            w.DocumentProperties.Title = "格式化保真测试";
+            w.DocumentProperties.Author = "NewLife.Office";
+            w.DocumentProperties.Subject = "往返测试";
+            w.PageSettings.PageWidth = 11906;
+            w.PageSettings.PageHeight = 16838;
+            w.PageSettings.MarginLeft = 1440;
+            w.PageSettings.MarginRight = 1440;
+            w.PageSettings.HeaderText = "格式化保真测试文档";
+            w.PageSettings.FooterText = "第 1 页";
+
+            // 标题
+            w.AppendHeading("格式化往返测试", 1);
+
+            // 带格式的段落
+            w.AppendParagraph("这是粗体文本。", WordParagraphStyle.Normal,
+                new WordRunProperties { Bold = true, FontSize = 12f });
+            w.AppendParagraph("这是斜体文本。", WordParagraphStyle.Normal,
+                new WordRunProperties { Italic = true, FontSize = 12f });
+            w.AppendParagraph("这是红色文本。", WordParagraphStyle.Normal,
+                new WordRunProperties { ForeColor = "FF0000", FontSize = 14f });
+            w.AppendParagraph("这是带下划线的蓝色大字。", WordParagraphStyle.Normal,
+                new WordRunProperties { Underline = true, ForeColor = "0000FF", FontSize = 18f, FontName = "Arial" });
+
+            // 多格式 Run 段落
+            w.AppendFormattedParagraph([
+                new WordRun { Text = "混合格式：", Properties = new WordRunProperties { Bold = true } },
+                new WordRun { Text = "粗体+", Properties = new WordRunProperties { Bold = true, FontSize = 14f } },
+                new WordRun { Text = "红色斜体", Properties = new WordRunProperties { Italic = true, ForeColor = "FF0000" } },
+                new WordRun { Text = " 普通结尾" },
+            ]);
+
+            // 超链接
+            w.AppendHyperlink("访问 NewLife 官网", "https://newlifex.com",
+                new WordRunProperties { FontSize = 12f });
+
+            // 对齐方式
+            var leftPara = w.AppendParagraph("左对齐段落", WordParagraphStyle.Normal,
+                new WordRunProperties { FontSize = 12f });
+            leftPara.Alignment = "left";
+
+            var centerPara = w.AppendParagraph("居中对齐段落", WordParagraphStyle.Normal,
+                new WordRunProperties { FontSize = 12f });
+            centerPara.Alignment = "center";
+
+            var rightPara = w.AppendParagraph("右对齐段落", WordParagraphStyle.Normal,
+                new WordRunProperties { FontSize = 12f });
+            rightPara.Alignment = "right";
+
+            // 二级标题
+            w.AppendHeading("数据表格", 2);
+
+            // 表格
+            var tableStyle = new WordTableStyle
+            {
+                BorderColor = "333333",
+                BorderSize = 6,
+                HeaderBgColor = "4472C4",
+                StripeColor = "D9E2F3",
+            };
+            w.AppendTable([
+                new[] { "产品", "价格", "库存", "状态" },
+                new[] { "笔记本", "5999", "100", "有货" },
+                new[] { "手机", "3999", "500", "有货" },
+                new[] { "平板", "2999", "200", "缺货" },
+            ], firstRowHeader: true, style: tableStyle);
+
+            // 三级标题
+            w.AppendHeading("其他元素", 3);
+
+            // 无序列表
+            w.AppendBulletList(["功能1：格式保真", "功能2：表格往返", "功能3：图片支持"]);
+
+            // 分页
+            w.AppendPageBreak();
+
+            // 分页后的内容
+            w.AppendHeading("第二页内容", 1);
+            w.AppendParagraph("这是分页后的第一段文字。", WordParagraphStyle.Normal,
+                new WordRunProperties { FontSize = 14f, Bold = true });
+
+            // 缩进段落
+            var indentPara = w.AppendParagraph("这是一个带首行缩进的段落，用于测试缩进属性的往返读取。");
+            indentPara.FirstLineIndent = 480; // 约 0.5cm 缩进
+
+            w.Save(path);
+        }
+
+        Assert.True(File.Exists(path));
+
+        // ── 读取阶段 ──
+        WordDocument readDoc;
+        using (var reader = new WordReader(path))
+        {
+            readDoc = reader.ReadDocument();
+        }
+
+        // ── 文本验证 ──
+        using (var reader = new WordReader(path))
+        {
+            var text = reader.ExtractText();
+            Assert.NotNull(text);
+            Assert.Contains("格式化往返测试", text);
+            Assert.Contains("粗体文本", text);
+            Assert.Contains("红色文本", text);
+            Assert.Contains("数据表格", text);
+            Assert.Contains("产品", text);
+            Assert.Contains("第二页内容", text);
+        }
+
+        // ── 往返写入再读取 ──
+        var roundtripPath = Path.Combine(OutputDir, "roundtrip_format_v2.docx");
+        using (var writer = new WordWriter())
+        {
+            writer.Save(roundtripPath, readDoc);
+        }
+
+        WordDocument readDoc2;
+        using (var reader = new WordReader(roundtripPath))
+        {
+            readDoc2 = reader.ReadDocument();
+        }
+
+        // ── 结构化比较 ──
+        AssertDocumentsEqual(readDoc, readDoc2, "程序构造文档");
+
+        // ── 格式专项验证 ──
+        var boldRun = readDoc.Elements
+            .Where(e => e.Type == WordElementType.Paragraph && e.Paragraph != null)
+            .SelectMany(e => e.Paragraph!.Runs)
+            .FirstOrDefault(r => r.Text.Contains("粗体文本"));
+        Assert.NotNull(boldRun);
+        Assert.True(boldRun.Properties?.Bold == true);
+
+        var redRun = readDoc.Elements
+            .Where(e => e.Type == WordElementType.Paragraph && e.Paragraph != null)
+            .SelectMany(e => e.Paragraph!.Runs)
+            .FirstOrDefault(r => r.Text.Contains("红色文本"));
+        Assert.NotNull(redRun);
+        Assert.True(redRun.Properties?.ForeColor != null);
+
+        // 验证超链接关系存在
+        Assert.True(readDoc.Hyperlinks.Count > 0);
+        Assert.Contains(readDoc.Hyperlinks, h => h.Url.Contains("newlifex.com"));
+
+        // 验证表格存在
+        var tableEl = readDoc.Elements.FirstOrDefault(e => e.Type == WordElementType.Table);
+        Assert.NotNull(tableEl);
+        Assert.NotNull(tableEl.TableRows);
+        Assert.True(tableEl.TableRows!.Count >= 4);
+
+        // 验证页眉页脚
+        Assert.Contains("格式化保真测试文档", readDoc.HeaderText);
+    }
+
+    #region 辅助方法
+    /// <summary>以共享读方式读取文件全部字节</summary>
+    private static Byte[] ReadAllBytesShared(String path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var buf = new Byte[fs.Length];
+        fs.ReadExactly(buf, 0, buf.Length);
+        return buf;
+    }
+
+    /// <summary>结构化比较两个 WordDocument</summary>
+    private static void AssertDocumentsEqual(WordDocument a, WordDocument b, String context)
+    {
+        // 元素数量
+        Assert.True(a.Elements.Count == b.Elements.Count,
+            $"[{context}] 元素数量不匹配: 源={a.Elements.Count}, 输出={b.Elements.Count}");
+
+        for (var i = 0; i < a.Elements.Count; i++)
+        {
+            var ae = a.Elements[i];
+            var be = b.Elements[i];
+
+            Assert.Equal(ae.Type, be.Type);
+
+            switch (ae.Type)
+            {
+                case WordElementType.Paragraph:
+                    AssertParagraphEqual(ae.Paragraph, be.Paragraph, context, i);
+                    break;
+                case WordElementType.Table:
+                    AssertTableEqual(ae, be, context, i);
+                    break;
+                case WordElementType.Image:
+                    AssertImageEqual(ae, be, context, i);
+                    break;
+            }
+        }
+
+        // 页面设置
+        Assert.Equal(a.PageSettings.PageWidth, b.PageSettings.PageWidth);
+        Assert.Equal(a.PageSettings.PageHeight, b.PageSettings.PageHeight);
+        Assert.Equal(a.PageSettings.Landscape, b.PageSettings.Landscape);
+
+        // 文档属性
+        Assert.Equal(a.DocumentProperties.Title, b.DocumentProperties.Title);
+        Assert.Equal(a.DocumentProperties.Author, b.DocumentProperties.Author);
+
+        // 超链接数量
+        Assert.Equal(a.Hyperlinks.Count, b.Hyperlinks.Count);
+
+        // 图片数量
+        Assert.Equal(a.Images.Count, b.Images.Count);
+        foreach (var (key, (ext, data)) in a.Images)
+        {
+            Assert.True(b.Images.ContainsKey(key),
+                $"[{context}] 输出缺少图片关系 {key}");
+            var (bExt, bData) = b.Images[key];
+            Assert.Equal(ext, bExt);
+            Assert.Equal(data.Length, bData.Length);
+        }
+    }
+
+    private static void AssertParagraphEqual(WordParagraph? a, WordParagraph? b, String context, Int32 idx)
+    {
+        Assert.NotNull(a);
+        Assert.NotNull(b);
+        if (a == null || b == null) return;
+
+        Assert.Equal(a.Style, b.Style);
+        Assert.Equal(a.Alignment, b.Alignment);
+        Assert.Equal(a.IsBullet, b.IsBullet);
+        Assert.Equal(a.IsPageBreak, b.IsPageBreak);
+        Assert.Equal(a.BookmarkName, b.BookmarkName);
+
+        // Run 比较
+        Assert.True(a.Runs.Count == b.Runs.Count,
+            $"[{context}] 段落[{idx}] Run 数量不匹配: 源={a.Runs.Count}, 输出={b.Runs.Count}");
+
+        for (var ri = 0; ri < a.Runs.Count; ri++)
+        {
+            var ar = a.Runs[ri];
+            var br = b.Runs[ri];
+
+            Assert.Equal(ar.Text, br.Text);
+
+            // 格式属性
+            var ap = ar.Properties;
+            var bp = br.Properties;
+            if (ap == null && bp == null) continue;
+            if (ap == null || bp == null)
+            {
+                Assert.Fail($"[{context}] 段落[{idx}] Run[{ri}] 格式属性不匹配: 一方为 null");
+                continue;
+            }
+
+            Assert.Equal(ap.Bold, bp.Bold);
+            Assert.Equal(ap.Italic, bp.Italic);
+            Assert.Equal(ap.Underline, bp.Underline);
+            Assert.Equal(ap.ForeColor, bp.ForeColor);
+            Assert.Equal(ap.FontSize, bp.FontSize);
+            Assert.Equal(ap.FontName, bp.FontName);
+        }
+
+        // 段落背景色
+        Assert.Equal(a.BackgroundColor, b.BackgroundColor);
+    }
+
+    private static void AssertTableEqual(WordElement a, WordElement b, String context, Int32 idx)
+    {
+        var aRows = a.TableRows;
+        var bRows = b.TableRows;
+        Assert.NotNull(aRows);
+        Assert.NotNull(bRows);
+        if (aRows == null || bRows == null) return;
+
+        Assert.True(aRows.Count == bRows.Count,
+            $"[{context}] 表格[{idx}] 行数不匹配: 源={aRows.Count}, 输出={bRows.Count}");
+
+        Assert.Equal(a.TableFirstRowHeader, b.TableFirstRowHeader);
+
+        for (var ri = 0; ri < aRows.Count; ri++)
+        {
+            var aRow = aRows[ri];
+            var bRow = bRows[ri];
+            Assert.True(aRow.Count == bRow.Count,
+                $"[{context}] 表格[{idx}] 行[{ri}] 列数不匹配: 源={aRow.Count}, 输出={bRow.Count}");
+
+            for (var ci = 0; ci < aRow.Count; ci++)
+            {
+                var aCell = aRow[ci];
+                var bCell = bRow[ci];
+
+                // 单元格文本：拼接所有段落的所有 Run 文本
+                var aText = String.Join("", aCell.Paragraphs.SelectMany(p => p.Runs).Select(r => r.Text));
+                var bText = String.Join("", bCell.Paragraphs.SelectMany(p => p.Runs).Select(r => r.Text));
+                Assert.Equal(aText, bText);
+
+                Assert.Equal(aCell.BackgroundColor, bCell.BackgroundColor);
+            }
+        }
+    }
+
+    private static void AssertImageEqual(WordElement a, WordElement b, String context, Int32 idx)
+    {
+        var ai = a.Image;
+        var bi = b.Image;
+        Assert.NotNull(ai);
+        Assert.NotNull(bi);
+        if (ai == null || bi == null) return;
+
+        Assert.Equal(ai.Extension, bi.Extension);
+        Assert.True(ai.WidthEmu > 0 && bi.WidthEmu > 0,
+            $"[{context}] 图片[{idx}] 宽度应为正数");
+    }
+    /// <summary>从 WordDocument 提取正文文本（仅段落和表格，不含页眉页脚）</summary>
+    private static String GetDocumentBodyText(WordDocument doc)
+    {
+        var sb = new StringBuilder();
+
+        foreach (var el in doc.Elements)
+        {
+            if (el.Type == WordElementType.Paragraph && el.Paragraph != null)
+            {
+                foreach (var run in el.Paragraph.Runs)
+                {
+                    sb.Append(run.Text);
+                }
+                sb.AppendLine();
+            }
+            else if (el.Type == WordElementType.Table && el.TableRows != null)
+            {
+                foreach (var row in el.TableRows)
+                {
+                    foreach (var cell in row)
+                    {
+                        foreach (var para in cell.Paragraphs)
+                        {
+                            foreach (var run in para.Runs)
+                            {
+                                sb.Append(run.Text);
+                            }
+                        }
+                        sb.Append('\t');
+                    }
+                    sb.AppendLine();
+                }
+                sb.AppendLine();
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    #endregion
+}
