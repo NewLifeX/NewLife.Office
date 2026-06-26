@@ -8,12 +8,13 @@ using System.Xml.Linq;
 
 namespace NewLife.Office;
 
-/// <summary>轻量级Excel读取器，仅用于导入数据</summary>
+/// <summary>轻量级Excel读取器，支持读写往返</summary>
 /// <remarks>
 /// 文档 https://newlifex.com/core/excel_reader
 /// 仅支持xlsx格式，本质上是压缩包，内部xml。
-/// 可根据xml格式扩展读取自己想要的内容。
-/// 本类做了最小化实现，仅解析共享字符串、样式与工作表数据。
+/// 支持完整读取：共享字符串、样式（字体/填充/边框/对齐/数字格式）、单元格数据、
+/// 合并区域、超链接、图片、页面设置、条件格式、批注、数据验证、公式等。
+/// 通过 <see cref="ReadExcel"/> 一键获取工作簿完整快照。
 /// </remarks>
 public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
 {
@@ -22,12 +23,55 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
     public String? FileName { get; }
 
     /// <summary>工作表集合（键为工作表名称）</summary>
-    public ICollection<String>? Sheets => _entries?.Keys;
+    public ICollection<String>? Sheets => _orderedSheets;
 
     private ZipArchive _zip;
     private String[]? _sharedStrings;
     private ExcelNumberFormat?[]? _styles;
     private IDictionary<String, ZipArchiveEntry>? _entries;
+    private List<String>? _orderedSheets;
+
+    // 完整样式解析
+    private List<FontInfo>? _fontInfos;
+    private List<FillInfo>? _fillInfos;
+    private List<BorderInfo>? _borderInfos;
+    private List<XfInfo>? _xfInfos;
+    private Dictionary<Int32, String>? _numFmtCodes;
+    #endregion
+
+    #region 内部类型
+    private class FontInfo
+    {
+        public String? Name;
+        public Double Size;
+        public Boolean Bold;
+        public Boolean Italic;
+        public Boolean Underline;
+        public String? Color;
+    }
+
+    private class FillInfo
+    {
+        public String? BgColor;
+        public String? PatternType = "none";
+    }
+
+    private class BorderInfo
+    {
+        public CellBorderStyle Style;
+        public String? Color;
+    }
+
+    private class XfInfo
+    {
+        public Int32 NumFmtId;
+        public Int32 FontId;
+        public Int32 FillId;
+        public Int32 BorderId;
+        public HorizontalAlignment HAlign;
+        public VerticalAlignment VAlign;
+        public Boolean WrapText;
+    }
     #endregion
 
     #region 构造
@@ -85,7 +129,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
             }
         }
 
-        // 读取样式（包含内置 & 自定义数字格式）
+        // 读取样式（含数字格式 + 完整字体/填充/边框/XF）
         {
             var entry = _zip.GetEntry("xl/styles.xml");
             if (entry != null)
@@ -98,6 +142,16 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         // 读取sheet条目索引
         {
             _entries = ReadSheets(_zip);
+        }
+
+        // 二次解析完整样式（需要重新读取 styles.xml，因为流已关闭）
+        {
+            var entry = _zip.GetEntry("xl/styles.xml");
+            if (entry != null)
+            {
+                using var es = entry.Open();
+                ParseFullStyles(es);
+            }
         }
     }
 
@@ -192,6 +246,16 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                             if (st != null) val = ChangeType(val, st);
                         }
                     }
+                    else if (t.IsNullOrEmpty())
+                    {
+                        // OOXML 规定：无 t 属性且无 s 属性时，<v> 值默认为数字（General 格式）
+                        if (val is String rawStr)
+                        {
+                            if (Int32.TryParse(rawStr, out var ni)) val = ni;
+                            else if (Int64.TryParse(rawStr, out var nl)) val = nl;
+                            else if (Double.TryParse(rawStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var nd)) val = nd;
+                        }
+                    }
                 }
 
                 vs.Add(val);
@@ -210,6 +274,98 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
             }
 
             yield return vs.ToArray();
+        }
+    }
+
+    /// <summary>逐行读取数据，同时返回每行的实际 Excel 行号（0基）</summary>
+    private IEnumerable<(Int32 RowIdx, Object?[] Row)> ReadRowsWithIndex(String? sheet = null)
+    {
+        ThrowIfDisposed();
+
+        if (Sheets == null || _entries == null) yield break;
+
+        if (sheet.IsNullOrEmpty()) sheet = Sheets.FirstOrDefault();
+        if (sheet.IsNullOrEmpty()) throw new ArgumentNullException(nameof(sheet));
+
+        if (!_entries.TryGetValue(sheet, out var entry)) yield break;
+
+        using var esheet = entry.Open();
+        var doc = XDocument.Load(esheet);
+        if (doc.Root == null) yield break;
+
+        var dataEl = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sheetData"));
+        if (dataEl == null) yield break;
+
+        var styles = _styles;
+        if (styles != null && styles.Length == 0) styles = null;
+        var headerColumnCount = -1;
+
+        foreach (var row in dataEl.Elements())
+        {
+            var rAttr = row.Attribute("r");
+            if (rAttr == null) continue;
+            var rowIdx = rAttr.Value.ToInt(-1) - 1; // 转为 0 基
+            if (rowIdx < 0) continue;
+
+            var vs = new List<Object?>();
+            var curIndex = 0;
+            foreach (var col in row.Elements())
+            {
+                var r = col.Attribute("r")?.Value;
+                if (!r.IsNullOrEmpty())
+                {
+                    var targetIndex = GetColumnIndex(r!);
+                    while (curIndex < targetIndex) { vs.Add(null); curIndex++; }
+                }
+
+                Object? val = null;
+                var vNode = col.Elements().FirstOrDefault(e => e.Name.LocalName == "v");
+                val = vNode != null ? vNode.Value : col.Value;
+
+                var t = col.Attribute("t")?.Value;
+                if (t == "s")
+                {
+                    if (val is String s2 && Int32.TryParse(s2, out var sharedIndex))
+                        val = _sharedStrings != null && sharedIndex >= 0 && sharedIndex < _sharedStrings.Length ? _sharedStrings[sharedIndex] : null;
+                }
+                else if (t == "b")
+                {
+                    if (val is String sb) val = sb == "1" || sb.EqualIgnoreCase("true");
+                }
+
+                if (val is String && styles != null)
+                {
+                    var sAttr = col.Attribute("s");
+                    if (sAttr != null)
+                    {
+                        var si = sAttr.Value.ToInt();
+                        if (si >= 0 && si < styles.Length)
+                        {
+                            var st = styles[si];
+                            if (st != null) val = ChangeType(val, st);
+                        }
+                    }
+                    else if (t.IsNullOrEmpty())
+                    {
+                        if (val is String rawStr)
+                        {
+                            if (Int32.TryParse(rawStr, out var ni)) val = ni;
+                            else if (Int64.TryParse(rawStr, out var nl)) val = nl;
+                            else if (Double.TryParse(rawStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var nd)) val = nd;
+                        }
+                    }
+                }
+
+                vs.Add(val);
+                curIndex++;
+            }
+
+            if (headerColumnCount == -1)
+                headerColumnCount = vs.Count;
+            else if (headerColumnCount > 0 && vs.Count < headerColumnCount)
+                while (vs.Count < headerColumnCount) vs.Add(null);
+
+            yield return (rowIdx, vs.ToArray());
         }
     }
 
@@ -369,6 +525,186 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         return list.ToArray();
     }
 
+    /// <summary>解析完整样式（字体/填充/边框/XF）</summary>
+    private void ParseFullStyles(Stream ms)
+    {
+        var doc = XDocument.Load(ms);
+        if (doc?.Root == null) return;
+
+        var ns = doc.Root.Name.Namespace;
+
+        // numFmts（自定义数字格式）
+        _numFmtCodes = new Dictionary<Int32, String>
+        {
+            [0] = "General", [1] = "0", [2] = "0.00", [3] = "#,##0", [4] = "#,##0.00",
+            [9] = "0%", [10] = "0.00%", [11] = "0.00E+00", [12] = "# ?/?", [13] = "# ??/??",
+            [14] = "mm-dd-yy", [15] = "d-mmm-yy", [16] = "d-mmm", [17] = "mmm-yy",
+            [18] = "h:mm AM/PM", [19] = "h:mm:ss AM/PM", [20] = "h:mm", [21] = "h:mm:ss",
+            [22] = "m/d/yy h:mm",
+            [37] = "#,##0 ;(#,##0)", [38] = "#,##0 ;[Red](#,##0)",
+            [39] = "#,##0.00;(#,##0.00)", [40] = "#,##0.00;[Red](#,##0.00)",
+            [45] = "mm:ss", [46] = "[h]:mm:ss", [47] = "mmss.0", [48] = "##0.0E+0", [49] = "@"
+        };
+        var numFmts = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "numFmts");
+        if (numFmts != null)
+        {
+            foreach (var item in numFmts.Elements())
+            {
+                var id = item.Attribute("numFmtId");
+                var code = item.Attribute("formatCode");
+                if (id != null && code != null) _numFmtCodes[id.Value.ToInt()] = code.Value;
+            }
+        }
+
+        // fonts
+        _fontInfos = [];
+        var fontsEl = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "fonts");
+        if (fontsEl != null)
+        {
+            foreach (var f in fontsEl.Elements())
+            {
+                var fi = new FontInfo();
+                fi.Bold = f.Element(ns + "b") != null;
+                fi.Italic = f.Element(ns + "i") != null;
+                fi.Underline = f.Element(ns + "u") != null;
+                var sz = f.Element(ns + "sz");
+                if (sz != null) fi.Size = sz.Attribute("val")?.Value.ToDouble() ?? 0;
+                var color = f.Element(ns + "color");
+                if (color != null) fi.Color = NormalizeColorAttr(color);
+                var name = f.Element(ns + "name");
+                if (name != null) fi.Name = name.Attribute("val")?.Value;
+                _fontInfos.Add(fi);
+            }
+        }
+
+        // fills
+        _fillInfos = [];
+        var fillsEl = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "fills");
+        if (fillsEl != null)
+        {
+            foreach (var f in fillsEl.Elements())
+            {
+                var fli = new FillInfo();
+                var pf = f.Element(ns + "patternFill");
+                if (pf != null)
+                {
+                    fli.PatternType = pf.Attribute("patternType")?.Value ?? "none";
+                    var fg = pf.Element(ns + "fgColor");
+                    if (fg != null) fli.BgColor = NormalizeColorAttr(fg);
+                    if (fli.BgColor.IsNullOrEmpty())
+                    {
+                        var bg = pf.Element(ns + "bgColor");
+                        if (bg != null) fli.BgColor = NormalizeColorAttr(bg);
+                    }
+                }
+                _fillInfos.Add(fli);
+            }
+        }
+
+        // borders
+        _borderInfos = [];
+        var bordersEl = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "borders");
+        if (bordersEl != null)
+        {
+            foreach (var b in bordersEl.Elements())
+            {
+                var bi = new BorderInfo();
+                var left = b.Element(ns + "left");
+                if (left != null)
+                {
+                    bi.Style = ParseBorderStyle(left.Attribute("style")?.Value);
+                    var lc = left.Element(ns + "color");
+                    if (lc != null) bi.Color = NormalizeRgb(lc.Attribute("rgb")?.Value);
+                }
+                if (bi.Style == CellBorderStyle.None)
+                {
+                    var bottom = b.Element(ns + "bottom");
+                    if (bottom != null)
+                    {
+                        bi.Style = ParseBorderStyle(bottom.Attribute("style")?.Value);
+                        var bc = bottom.Element(ns + "color");
+                        if (bc != null) bi.Color = NormalizeRgb(bc.Attribute("rgb")?.Value);
+                    }
+                }
+                _borderInfos.Add(bi);
+            }
+        }
+
+        // cellXfs
+        _xfInfos = [];
+        var xfsEl = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "cellXfs");
+        if (xfsEl != null)
+        {
+            foreach (var xf in xfsEl.Elements())
+            {
+                var xi = new XfInfo
+                {
+                    NumFmtId = xf.Attribute("numFmtId")?.Value.ToInt() ?? 0,
+                    FontId = xf.Attribute("fontId")?.Value.ToInt() ?? 0,
+                    FillId = xf.Attribute("fillId")?.Value.ToInt() ?? 0,
+                    BorderId = xf.Attribute("borderId")?.Value.ToInt() ?? 0,
+                };
+                var al = xf.Element(ns + "alignment");
+                if (al != null)
+                {
+                    xi.HAlign = ParseHAlign(al.Attribute("horizontal")?.Value);
+                    xi.VAlign = ParseVAlign(al.Attribute("vertical")?.Value);
+                    var wt = al.Attribute("wrapText")?.Value;
+                    xi.WrapText = wt == "1" || wt == "true";
+                }
+                _xfInfos.Add(xi);
+            }
+        }
+    }
+
+    private static CellBorderStyle ParseBorderStyle(String? style) => style switch
+    {
+        "thin" => CellBorderStyle.Thin,
+        "medium" => CellBorderStyle.Medium,
+        "thick" => CellBorderStyle.Thick,
+        "dashed" => CellBorderStyle.Dashed,
+        "dotted" => CellBorderStyle.Dotted,
+        "double" => CellBorderStyle.DoubleLine,
+        _ => CellBorderStyle.None,
+    };
+
+    /// <summary>规范化 OOXML RGB 颜色值：仅去除前导 FF alpha 前缀，保留实际 RGB</summary>
+    private static String? NormalizeRgb(String? rgb)
+    {
+        if (rgb.IsNullOrEmpty() || rgb!.Length < 6) return rgb;
+        if (rgb.Length >= 8 && rgb.StartsWith("FF"))
+            return rgb[2..];
+        return rgb;
+    }
+
+    /// <summary>规范化颜色 XML 元素：优先读 rgb 属性，无则读 theme 属性存为 "theme:N" 格式</summary>
+    private static String? NormalizeColorAttr(XElement? colorEl)
+    {
+        if (colorEl == null) return null;
+        var rgb = NormalizeRgb(colorEl.Attribute("rgb")?.Value);
+        if (!rgb.IsNullOrEmpty()) return rgb;
+        var theme = colorEl.Attribute("theme")?.Value;
+        if (!theme.IsNullOrEmpty()) return $"theme:{theme}";
+        return null;
+    }
+
+    private static HorizontalAlignment ParseHAlign(String? h) => h switch
+    {
+        "left" => HorizontalAlignment.Left,
+        "center" => HorizontalAlignment.Center,
+        "right" => HorizontalAlignment.Right,
+        "fill" => HorizontalAlignment.Fill,
+        "justify" => HorizontalAlignment.Justify,
+        _ => HorizontalAlignment.General,
+    };
+
+    private static VerticalAlignment ParseVAlign(String? v) => v switch
+    {
+        "center" => VerticalAlignment.Center,
+        "bottom" => VerticalAlignment.Bottom,
+        _ => VerticalAlignment.Top,
+    };
+
     private IDictionary<String, ZipArchiveEntry> ReadSheets(ZipArchive zip)
     {
         var dic = new Dictionary<String, String?>();
@@ -389,6 +725,14 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                         var id = item.Attribute("sheetId");
                         var name = item.Attribute("name");
                         if (id != null) dic[id.Value] = name?.Value;
+                    }
+
+                    // 按 workbook.xml 中 <sheets> 的顺序保存工作表名称列表
+                    _orderedSheets = [];
+                    foreach (var item in sheets.Elements())
+                    {
+                        var name = item.Attribute("name")?.Value;
+                        if (name != null) _orderedSheets.Add(name);
                     }
                 }
             }
@@ -695,6 +1039,898 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         var rowIndex = Int32.Parse(rowStr) - 1;
 
         return (rowIndex, colIndex);
+    }
+
+    /// <summary>打开指定工作表的 XML 文档</summary>
+    private XDocument OpenSheetXml(String sheet)
+    {
+        if (_entries == null || !_entries.TryGetValue(sheet, out var entry))
+            throw new ArgumentOutOfRangeException(nameof(sheet), "Unable to find worksheet");
+        using var es = entry.Open();
+        return XDocument.Load(es);
+    }
+    #endregion
+
+    #region 完整读取
+    /// <summary>读取工作簿完整快照（数据+样式+元数据）</summary>
+    /// <returns>ExcelData 完整快照</returns>
+    public ExcelData ReadExcel()
+    {
+        ThrowIfDisposed();
+
+        var data = new ExcelData();
+        if (Sheets == null) return data;
+
+        // 提取默认字体（font[0]）供 Writer 重建 styles.xml
+        if (_fontInfos != null && _fontInfos.Count > 0)
+        {
+            var f0 = _fontInfos[0];
+            data.DefaultFont = new DefaultFontInfo
+            {
+                Name = f0.Name,
+                Size = f0.Size,
+                Bold = f0.Bold,
+                Color = f0.Color,
+            };
+        }
+
+        foreach (var sheet in Sheets)
+        {
+            data.Sheets.Add(ReadSheet(sheet));
+        }
+
+        // 收集所有未解析的 ZIP 部件，确保往返不丢内容
+        CollectOtherParts(data);
+
+        return data;
+    }
+
+    /// <summary>读取单个工作表的完整快照</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>SheetData 快照</returns>
+    public SheetData ReadSheet(String sheet)
+    {
+        var sd = new SheetData { Name = sheet };
+
+        // 行数据（带实际行号，用于还原跳行结构）
+        var rowNumbers = new List<Int32>();
+        var rows = new List<Object?[]>();
+        foreach (var (rowIdx, rowData) in ReadRowsWithIndex(sheet))
+        {
+            rowNumbers.Add(rowIdx);
+            rows.Add(rowData);
+        }
+        sd.Rows = rows;
+        // 仅当存在跳行时才记录行号映射（优化：连续行不需要）
+        var hasGaps = false;
+        for (var i = 0; i < rowNumbers.Count; i++)
+        {
+            if (rowNumbers[i] != i) { hasGaps = true; break; }
+        }
+        if (hasGaps) sd.ActualRowNumbers = rowNumbers;
+
+        // 单元格样式
+        sd.CellStyles = ReadCellStyles(sheet);
+
+        // 合并区域
+        var merges = GetMergeRanges(sheet);
+        if (merges != null) sd.Merges = merges.ToList();
+
+        // 冻结窗格
+        sd.FreezePane = ReadFreezePanes(sheet);
+
+        // 自动筛选
+        sd.AutoFilter = ReadAutoFilter(sheet);
+
+        // 行高
+        sd.RowHeights = ReadRowHeights(sheet);
+
+        // 列宽
+        sd.ColumnWidths = ReadColumnWidths(sheet);
+
+        // 超链接
+        var links = ReadHyperlinks(sheet);
+        foreach (var kv in links)
+        {
+            var (r, c) = ParseCellRef(kv.Key);
+            sd.Hyperlinks[(r, c)] = (kv.Value, null);
+        }
+
+        // 图片
+        sd.Images = ReadImages(sheet).ToList();
+
+        // 页面设置
+        ReadPageSetup(sheet, sd);
+
+        // 工作表保护
+        sd.ProtectionPassword = ReadSheetProtection(sheet);
+
+        // 条件格式
+        sd.ConditionalFormats = ReadConditionalFormats(sheet).ToList();
+
+        // 批注
+        sd.Comments = ReadComments(sheet);
+
+        // 数据验证
+        sd.Validations = ReadDataValidations(sheet).ToList();
+
+        // 公式
+        sd.Formulas = ReadFormulas(sheet);
+
+        return sd;
+    }
+
+    /// <summary>读取指定工作表每单元格的完整样式</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>(行, 列) → CellStyle 字典，行列均为0基</returns>
+    public Dictionary<(Int32 Row, Int32 Col), CellStyle> ReadCellStyles(String sheet)
+    {
+        var result = new Dictionary<(Int32, Int32), CellStyle>();
+        if (_xfInfos == null) return result;
+
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return result;
+
+        var data = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sheetData"));
+        if (data == null) return result;
+
+        foreach (var row in data.Elements())
+        {
+            var rAttr = row.Attribute("r");
+            if (rAttr == null) continue;
+            var rowIndex = rAttr.Value.ToInt(-1) - 1;
+            foreach (var col in row.Elements())
+            {
+                var r = col.Attribute("r")?.Value;
+                if (r.IsNullOrEmpty()) continue;
+                var (_, colIndex) = ParseCellRef(r!);
+
+                var sAttr = col.Attribute("s");
+                if (sAttr == null) continue;
+
+                var sIdx = sAttr.Value.ToInt(-1);
+                if (sIdx < 0 || sIdx >= _xfInfos.Count) continue;
+
+                var xf = _xfInfos[sIdx];
+                var cs = new CellStyle();
+
+                // 字体
+                if (_fontInfos != null && xf.FontId >= 0 && xf.FontId < _fontInfos.Count)
+                {
+                    var fi = _fontInfos[xf.FontId];
+                    cs.FontName = fi.Name;
+                    cs.FontSize = fi.Size;
+                    cs.Bold = fi.Bold;
+                    cs.Italic = fi.Italic;
+                    cs.Underline = fi.Underline;
+                    cs.FontColor = fi.Color;
+                }
+
+                // 填充
+                if (_fillInfos != null && xf.FillId >= 0 && xf.FillId < _fillInfos.Count)
+                {
+                    var fli = _fillInfos[xf.FillId];
+                    if (fli.PatternType == "solid" && !fli.BgColor.IsNullOrEmpty())
+                        cs.BackgroundColor = fli.BgColor;
+                }
+
+                // 边框
+                if (_borderInfos != null && xf.BorderId >= 0 && xf.BorderId < _borderInfos.Count)
+                {
+                    var bi = _borderInfos[xf.BorderId];
+                    cs.Border = bi.Style;
+                    cs.BorderColor = bi.Color;
+                }
+
+                // 对齐
+                cs.HAlign = xf.HAlign;
+                cs.VAlign = xf.VAlign;
+                cs.WrapText = xf.WrapText;
+
+                // 数字格式
+                if (_numFmtCodes != null && _numFmtCodes.TryGetValue(xf.NumFmtId, out var fmt) && fmt != "General")
+                    cs.NumberFormat = fmt;
+
+                result[(rowIndex, colIndex)] = cs;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>读取指定工作表的列宽</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>0基列号 → 字符宽度</returns>
+    public Dictionary<Int32, Double> ReadColumnWidths(String sheet)
+    {
+        var result = new Dictionary<Int32, Double>();
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return result;
+
+        var cols = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("cols"));
+        if (cols == null) return result;
+
+        foreach (var col in cols.Elements())
+        {
+            var min = col.Attribute("min")?.Value.ToInt(1) ?? 1;
+            var max = col.Attribute("max")?.Value.ToInt(1) ?? 1;
+            var width = col.Attribute("width")?.Value.ToDouble() ?? 0;
+            for (var c = min - 1; c < max; c++)
+                result[c] = width;
+        }
+        return result;
+    }
+
+    /// <summary>读取指定工作表的行高</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>0基行号 → 磅值</returns>
+    public Dictionary<Int32, Double> ReadRowHeights(String sheet)
+    {
+        var result = new Dictionary<Int32, Double>();
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return result;
+
+        var data = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sheetData"));
+        if (data == null) return result;
+
+        foreach (var row in data.Elements())
+        {
+            var ht = row.Attribute("ht");
+            if (ht == null) continue;
+            var rAttr = row.Attribute("r");
+            var r = rAttr != null ? rAttr.Value.ToInt(-1) : -1;
+            if (r < 1) continue;
+            result[r - 1] = ht.Value.ToDouble();
+        }
+        return result;
+    }
+
+    /// <summary>读取指定工作表的冻结窗格</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>冻结(行数, 列数)，null 表示未冻结</returns>
+    public (Int32 Rows, Int32 Cols)? ReadFreezePanes(String sheet)
+    {
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return null;
+
+        var sheetViews = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sheetViews"));
+        if (sheetViews == null) return null;
+
+        var pane = sheetViews.Elements().Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("pane"));
+        if (pane == null) return null;
+
+        var state = pane.Attribute("state")?.Value;
+        if (state != "frozen") return null;
+
+        var ySplit = pane.Attribute("ySplit")?.Value.ToInt() ?? 0;
+        var xSplit = pane.Attribute("xSplit")?.Value.ToInt() ?? 0;
+        return (ySplit, xSplit);
+    }
+
+    /// <summary>读取指定工作表的自动筛选范围</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>筛选范围（如 "A1:F1"），null 表示未设置</returns>
+    public String? ReadAutoFilter(String sheet)
+    {
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return null;
+
+        var af = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("autoFilter"));
+        return af?.Attribute("ref")?.Value;
+    }
+
+    /// <summary>读取指定工作表的图片</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>图片列表</returns>
+    public IEnumerable<ExcelImage> ReadImages(String sheet)
+    {
+        if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry)) yield break;
+
+        // 通过 sheet rels 找到 drawing
+        var sheetIdx = sheetEntry.Name.TrimEnd(".xml").TrimStart("sheet").ToInt(-1);
+        if (sheetIdx < 1) yield break;
+        var relsPath = $"xl/worksheets/_rels/sheet{sheetIdx}.xml.rels";
+        var relsEntry = _zip.GetEntry(relsPath);
+        if (relsEntry == null) yield break;
+
+        String? drawingRId = null;
+        using (var rs = relsEntry.Open())
+        {
+            var relsDoc = XDocument.Load(rs);
+            if (relsDoc.Root != null)
+            {
+                foreach (var rel in relsDoc.Root.Elements())
+                {
+                    var type = rel.Attribute("Type")?.Value ?? String.Empty;
+                    if (type.Contains("drawing", StringComparison.OrdinalIgnoreCase))
+                    {
+                        drawingRId = rel.Attribute("Id")?.Value;
+                        break;
+                    }
+                }
+            }
+        }
+        if (drawingRId == null) yield break;
+
+        // 读 drawing XML 获取图片位置和 rId
+        var drawingPath = $"xl/drawings/drawing{sheetIdx}.xml";
+        var drawingEntry = _zip.GetEntry(drawingPath);
+        if (drawingEntry == null) yield break;
+
+        var images = new List<(Int32 Row, Int32 Col, Int64 FromColOff, Int64 FromRowOff, Int32 ToRow, Int32 ToCol, Int64 ToColOff, Int64 ToRowOff, String EditAs, String ImgRId, Int64 EmuW, Int64 EmuH)>();
+        using (var ds = drawingEntry.Open())
+        {
+            var drawDoc = XDocument.Load(ds);
+            if (drawDoc.Root == null) yield break;
+
+            var xdrNs = drawDoc.Root.Name.Namespace;
+            var aNs = XNamespace.Get("http://schemas.openxmlformats.org/drawingml/2006/main");
+            foreach (var anchor in drawDoc.Root.Elements())
+            {
+                var from = anchor.Element(xdrNs + "from");
+                if (from == null) continue;
+                var colEl = from.Element(xdrNs + "col");
+                var rowEl = from.Element(xdrNs + "row");
+                if (colEl == null || rowEl == null) continue;
+
+                var col = colEl.Value.ToInt();
+                var row = rowEl.Value.ToInt();
+                var fromColOff = Int64.TryParse(from.Element(xdrNs + "colOff")?.Value, out var fco) ? fco : 0L;
+                var fromRowOff = Int64.TryParse(from.Element(xdrNs + "rowOff")?.Value, out var fro) ? fro : 0L;
+
+                var toRow = -1; var toCol = -1; var toColOff = 0L; var toRowOff = 0L;
+                var toEl = anchor.Element(xdrNs + "to");
+                if (toEl != null)
+                {
+                    toCol = toEl.Element(xdrNs + "col")?.Value.ToInt() ?? -1;
+                    toRow = toEl.Element(xdrNs + "row")?.Value.ToInt() ?? -1;
+                    Int64.TryParse(toEl.Element(xdrNs + "colOff")?.Value, out toColOff);
+                    Int64.TryParse(toEl.Element(xdrNs + "rowOff")?.Value, out toRowOff);
+                }
+
+                var editAs = anchor.Attribute("editAs")?.Value ?? "oneCell";
+
+                var pic = anchor.Element(xdrNs + "pic");
+                if (pic == null) continue;
+                var blipFill = pic.Element(xdrNs + "blipFill");
+                if (blipFill == null) continue;
+                var blip = blipFill.Element(aNs + "blip");
+                if (blip == null) continue;
+                var embed = blip.Attributes().FirstOrDefault(a => a.Name.LocalName == "embed");
+                if (embed == null) continue;
+
+                var spPr = pic.Element(xdrNs + "spPr");
+                Int64 emuW = 952500, emuH = 952500;
+                if (spPr != null)
+                {
+                    var xfrm = spPr.Element(aNs + "xfrm");
+                    if (xfrm != null)
+                    {
+                        var ext = xfrm.Element(aNs + "ext");
+                        if (ext != null)
+                        {
+                            emuW = Int64.TryParse(ext.Attribute("cx")?.Value, out var cxVal) ? cxVal : 952500;
+                            emuH = Int64.TryParse(ext.Attribute("cy")?.Value, out var cyVal) ? cyVal : 952500;
+                        }
+                    }
+                }
+
+                images.Add((row, col, fromColOff, fromRowOff, toRow, toCol, toColOff, toRowOff, editAs, embed.Value, emuW, emuH));
+            }
+        }
+
+        // 读 drawing rels 获取图片路径
+        var drawRelsPath = $"xl/drawings/_rels/drawing{sheetIdx}.xml.rels";
+        var drawRelsEntry = _zip.GetEntry(drawRelsPath);
+        var imgPathMap = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+        if (drawRelsEntry != null)
+        {
+            using var drs = drawRelsEntry.Open();
+            var drDoc = XDocument.Load(drs);
+            if (drDoc.Root != null)
+            {
+                foreach (var rel in drDoc.Root.Elements())
+                {
+                    var id = rel.Attribute("Id")?.Value;
+                    var target = rel.Attribute("Target")?.Value;
+                    if (id != null && target != null)
+                    {
+                        // 规范化路径：消除 target 中的 ".."（如 "../media/image1.png" → "media/image1.png"）
+                        var baseDir = "xl/drawings/";
+                        var combined = baseDir + target;
+                        var parts = combined.Split('/');
+                        var normalized = new List<String>();
+                        foreach (var p in parts)
+                        {
+                            if (p == "..")
+                            {
+                                if (normalized.Count > 0) normalized.RemoveAt(normalized.Count - 1);
+                            }
+                            else if (p != "." && !p.IsNullOrEmpty())
+                            {
+                                normalized.Add(p);
+                            }
+                        }
+                        imgPathMap[id] = String.Join("/", normalized);
+                    }
+                }
+            }
+        }
+
+        // 输出图片
+        foreach (var (row, col, fromColOff, fromRowOff, toRow, toCol, toColOff, toRowOff, editAs, imgRId, emuW, emuH) in images)
+        {
+            if (!imgPathMap.TryGetValue(imgRId, out var mediaPath)) continue;
+            var mediaEntry = _zip.GetEntry(mediaPath);
+            if (mediaEntry == null) continue;
+
+            Byte[] data;
+            using (var ms2 = new MemoryStream())
+            {
+                using var mediaStream = mediaEntry.Open();
+                mediaStream.CopyTo(ms2);
+                data = ms2.ToArray();
+            }
+
+            var ext = Path.GetExtension(mediaPath).TrimStart('.').ToLower();
+            if (ext.IsNullOrEmpty()) ext = "png";
+
+            yield return new ExcelImage
+            {
+                Data = data,
+                Extension = ext,
+                Row = row,
+                Col = col,
+                Width = Math.Round(emuW / 9525.0, 1),
+                Height = Math.Round(emuH / 9525.0, 1),
+                FromColOff = fromColOff,
+                FromRowOff = fromRowOff,
+                ToRow = toRow,
+                ToCol = toCol,
+                ToColOff = toColOff,
+                ToRowOff = toRowOff,
+                EditAs = editAs,
+            };
+        }
+    }
+
+    /// <summary>读取页面设置信息并填入 SheetData</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <param name="sd">目标 SheetData</param>
+    public void ReadPageSetup(String sheet, SheetData sd)
+    {
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return;
+
+        // pageMargins
+        var margins = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("pageMargins"));
+        if (margins != null)
+        {
+            sd.MarginTop = margins.Attribute("top")?.Value.ToDouble() ?? 0.75;
+            sd.MarginBottom = margins.Attribute("bottom")?.Value.ToDouble() ?? 0.75;
+            sd.MarginLeft = margins.Attribute("left")?.Value.ToDouble() ?? 0.7;
+            sd.MarginRight = margins.Attribute("right")?.Value.ToDouble() ?? 0.7;
+        }
+
+        // pageSetup
+        var ps = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("pageSetup"));
+        if (ps != null)
+        {
+            var orient = ps.Attribute("orientation")?.Value;
+            sd.Orientation = orient == "landscape" ? PageOrientation.Landscape : PageOrientation.Portrait;
+            var psVal = ps.Attribute("paperSize")?.Value.ToInt() ?? 0;
+            sd.PaperSize = psVal > 0 ? (PaperSize)psVal : PaperSize.Default;
+        }
+
+        // headerFooter
+        var hf = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("headerFooter"));
+        if (hf != null)
+        {
+            sd.HeaderText = hf.Elements().FirstOrDefault(e => e.Name.LocalName == "oddHeader")?.Value;
+            sd.FooterText = hf.Elements().FirstOrDefault(e => e.Name.LocalName == "oddFooter")?.Value;
+        }
+
+        // print titles（需从 workbook.xml 读取 definedNames）
+        try
+        {
+            var wbEntry = _zip.GetEntry("xl/workbook.xml");
+            if (wbEntry != null)
+            {
+                using var ws = wbEntry.Open();
+                var wbDoc = XDocument.Load(ws);
+                if (wbDoc.Root != null)
+                {
+                    var definedNames = wbDoc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("definedNames"));
+                    if (definedNames != null)
+                    {
+                        foreach (var dn in definedNames.Elements())
+                        {
+                            if (dn.Attribute("name")?.Value != "_xlnm.Print_Titles") continue;
+                            var text = dn.Value;
+                            // 格式: 'SheetName'!$1:$1
+                            var parts = text.Split('!');
+                            if (parts.Length == 2)
+                            {
+                                var sn = parts[0].Trim('\'');
+                                if (!sn.EqualIgnoreCase(sheet)) continue;
+                                var range = parts[1].Trim('$').Split(':');
+                                if (range.Length == 2)
+                                {
+                                    sd.PrintTitleStartRow = range[0].ToInt();
+                                    sd.PrintTitleEndRow = range[1].ToInt();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch { /* 非关键 */ }
+    }
+
+    /// <summary>读取工作表保护密码哈希</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>密码哈希，null 表示未保护</returns>
+    public String? ReadSheetProtection(String sheet)
+    {
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return null;
+
+        var sp = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sheetProtection"));
+        return sp?.Attribute("password")?.Value;
+    }
+
+    /// <summary>读取条件格式</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>条件格式列表</returns>
+    public IEnumerable<ConditionalFormatInfo> ReadConditionalFormats(String sheet)
+    {
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) yield break;
+
+        foreach (var cf in doc.Root.Elements().Where(e => e.Name.LocalName.EqualIgnoreCase("conditionalFormatting")))
+        {
+            var range = cf.Attribute("sqref")?.Value;
+            if (range.IsNullOrEmpty()) continue;
+
+            foreach (var rule in cf.Elements())
+            {
+                var type = rule.Attribute("type")?.Value;
+                if (type.IsNullOrEmpty()) continue;
+
+                var info = new ConditionalFormatInfo { Range = range! };
+
+                if (type == "cellIs")
+                {
+                    var op = rule.Attribute("operator")?.Value;
+                    info.Type = op switch
+                    {
+                        "greaterThan" => ConditionalFormatType.GreaterThan,
+                        "lessThan" => ConditionalFormatType.LessThan,
+                        "equal" => ConditionalFormatType.Equal,
+                        "between" => ConditionalFormatType.Between,
+                        _ => ConditionalFormatType.GreaterThan,
+                    };
+                    var formulas = rule.Elements().Where(e => e.Name.LocalName == "formula").ToList();
+                    if (formulas.Count > 0) info.Value = formulas[0].Value;
+                    if (formulas.Count > 1) info.Value2 = formulas[1].Value;
+
+                    // 尝试从 dxf 获取颜色（简化：从 styles.xml 的 dxfs 读取）
+                    var dxfId = rule.Attribute("dxfId")?.Value.ToInt(-1) ?? -1;
+                    if (dxfId >= 0 && _fillInfos != null)
+                    {
+                        // dxf 颜色解析较复杂，暂不处理
+                    }
+                }
+                else if (type == "dataBar")
+                {
+                    info.Type = ConditionalFormatType.DataBar;
+                    var dataBar = rule.Element(rule.Name.Namespace + "dataBar");
+                    var color = dataBar?.Element(rule.Name.Namespace + "color");
+                    info.Color = NormalizeRgb(color?.Attribute("rgb")?.Value);
+                }
+                else if (type == "colorScale")
+                {
+                    info.Type = ConditionalFormatType.ColorScale;
+                }
+
+                yield return info;
+            }
+        }
+    }
+
+    /// <summary>读取批注</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>(行, 列) → (文本, 作者)，行列均为0基</returns>
+    public Dictionary<(Int32 Row, Int32 Col), (String Text, String Author)> ReadComments(String sheet)
+    {
+        var result = new Dictionary<(Int32, Int32), (String, String)>();
+        if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry)) return result;
+
+        var sheetIdx = sheetEntry.Name.TrimEnd(".xml").TrimStart("sheet").ToInt(-1);
+        if (sheetIdx < 1) return result;
+
+        var commentsPath = $"xl/comments{sheetIdx}.xml";
+        var commentsEntry = _zip.GetEntry(commentsPath);
+        if (commentsEntry == null) return result;
+
+        // 读作者列表
+        var authors = new List<String>();
+        using (var cs = commentsEntry.Open())
+        {
+            var doc = XDocument.Load(cs);
+            if (doc.Root == null) return result;
+
+            var authorsEl = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "authors");
+            if (authorsEl != null)
+            {
+                foreach (var a in authorsEl.Elements())
+                    authors.Add(a.Value);
+            }
+
+            var commentList = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "commentList");
+            if (commentList == null) return result;
+
+            foreach (var cmt in commentList.Elements())
+            {
+                var refAttr = cmt.Attribute("ref")?.Value;
+                if (refAttr.IsNullOrEmpty()) continue;
+
+                var (row, col) = ParseCellRef(refAttr!);
+                var authorId = cmt.Attribute("authorId")?.Value.ToInt() ?? 0;
+                var author = authorId >= 0 && authorId < authors.Count ? authors[authorId] : String.Empty;
+
+                var text = String.Empty;
+                var textEl = cmt.Elements().FirstOrDefault(e => e.Name.LocalName == "text");
+                if (textEl != null)
+                {
+                    var rEl = textEl.Elements().FirstOrDefault(e => e.Name.LocalName == "r");
+                    if (rEl != null)
+                    {
+                        var tEl = rEl.Elements().FirstOrDefault(e => e.Name.LocalName == "t");
+                        if (tEl != null) text = tEl.Value;
+                    }
+                }
+
+                result[(row, col)] = (text, author);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>读取数据验证</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>数据验证列表</returns>
+    public IEnumerable<ValidationInfo> ReadDataValidations(String sheet)
+    {
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) yield break;
+
+        var dvs = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("dataValidations"));
+        if (dvs == null) yield break;
+
+        foreach (var dv in dvs.Elements())
+        {
+            var info = new ValidationInfo
+            {
+                CellRange = dv.Attribute("sqref")?.Value ?? String.Empty,
+                ValidationType = dv.Attribute("type")?.Value,
+                Operator = dv.Attribute("operator")?.Value,
+            };
+
+            var formulas = dv.Elements().Where(e => e.Name.LocalName == "formula1" || e.Name.LocalName == "formula2").ToList();
+            foreach (var f in formulas)
+            {
+                if (f.Name.LocalName == "formula1") info.Formula1 = f.Value.Trim('"');
+                else info.Formula2 = f.Value.Trim('"');
+            }
+
+            // 下拉列表
+            if (info.ValidationType == "list" && !info.Formula1.IsNullOrEmpty())
+                info.Items = info.Formula1!.Split(',').Select(e => e.Trim('"')).ToArray();
+
+            yield return info;
+        }
+    }
+
+    /// <summary>读取公式</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>(行, 列) → 公式文本（不含等号），行列均为0基</returns>
+    public Dictionary<(Int32 Row, Int32 Col), String> ReadFormulas(String sheet)
+    {
+        var result = new Dictionary<(Int32, Int32), String>();
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return result;
+
+        var data = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sheetData"));
+        if (data == null) return result;
+
+        // 共享公式字典：si → (基础公式文本, 基础行, 基础列)
+        var sharedFormulas = new Dictionary<Int32, (String Formula, Int32 BaseRow, Int32 BaseCol)>();
+
+        foreach (var row in data.Elements())
+        {
+            var rAttr2 = row.Attribute("r");
+            if (rAttr2 == null) continue;
+            var rowIndex = rAttr2.Value.ToInt(-1) - 1;
+            if (rowIndex < 0) continue;
+
+            foreach (var col in row.Elements())
+            {
+                var r = col.Attribute("r")?.Value;
+                if (r.IsNullOrEmpty()) continue;
+                var (_, colIndex) = ParseCellRef(r!);
+
+                var fEl = col.Elements().FirstOrDefault(e => e.Name.LocalName == "f");
+                if (fEl == null) continue;
+
+                var fType = fEl.Attribute("t")?.Value;
+                var val = fEl.Value;
+
+                if (fType == "shared")
+                {
+                    var siStr = fEl.Attribute("si")?.Value;
+                    if (siStr.IsNullOrEmpty()) continue;
+                    var si = siStr.ToInt(-1);
+                    if (si < 0) continue;
+
+                    if (!val.IsNullOrEmpty())
+                    {
+                        // 定义行：包含公式文本
+                        sharedFormulas[si] = (val, rowIndex, colIndex);
+                        result[(rowIndex, colIndex)] = val;
+                    }
+                    else if (sharedFormulas.TryGetValue(si, out var baseEntry))
+                    {
+                        // 引用行：根据行偏移调整公式
+                        var adjusted = AdjustFormula(baseEntry.Formula, rowIndex - baseEntry.BaseRow, colIndex - baseEntry.BaseCol);
+                        if (!adjusted.IsNullOrEmpty())
+                            result[(rowIndex, colIndex)] = adjusted!;
+                    }
+                }
+                else
+                {
+                    if (val.IsNullOrEmpty()) continue;
+                    result[(rowIndex, colIndex)] = val;
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>按行/列偏移调整公式中的 A1 风格单元格引用</summary>
+    /// <param name="formula">原始公式文本（不含等号）</param>
+    /// <param name="rowDelta">行偏移（正数表示向下）</param>
+    /// <param name="colDelta">列偏移（正数表示向右）</param>
+    private static String? AdjustFormula(String formula, Int32 rowDelta, Int32 colDelta)
+    {
+        if (formula.IsNullOrEmpty()) return formula;
+        if (rowDelta == 0 && colDelta == 0) return formula;
+
+        // 匹配 A1 风格的单元格引用：可选 $ + 列字母 + 可选 $ + 行数字
+        // 使用简单的字符扫描替换，避免引入 Regex
+        var sb = new System.Text.StringBuilder(formula.Length + 8);
+        var i = 0;
+        while (i < formula.Length)
+        {
+            // 寻找单元格引用起始：$字母 或 字母（不在单词中间）
+            var ch = formula[i];
+            var absCol = false;
+            var absRow = false;
+
+            // 检查是否是引用的起始
+            var isStart = ch == '$' || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z');
+            // 排除函数名（后跟'('）和紧跟字母的字母
+            if (isStart && i > 0)
+            {
+                var prev = formula[i - 1];
+                if ((prev >= 'A' && prev <= 'Z') || (prev >= 'a' && prev <= 'z') || (prev >= '0' && prev <= '9') || prev == '_')
+                    isStart = false;
+            }
+
+            if (!isStart)
+            {
+                sb.Append(ch);
+                i++;
+                continue;
+            }
+
+            var start = i;
+            // 解析 $?列字母
+            if (i < formula.Length && formula[i] == '$') { absCol = true; i++; }
+            var colStart = i;
+            while (i < formula.Length && ((formula[i] >= 'A' && formula[i] <= 'Z') || (formula[i] >= 'a' && formula[i] <= 'z'))) i++;
+            var colStr = formula[colStart..i];
+
+            if (colStr.IsNullOrEmpty() || i >= formula.Length)
+            {
+                // 不是引用，还原
+                sb.Append(formula[start..i]);
+                continue;
+            }
+
+            // 解析 $?行数字
+            if (i < formula.Length && formula[i] == '$') { absRow = true; i++; }
+            var rowStart = i;
+            while (i < formula.Length && formula[i] >= '0' && formula[i] <= '9') i++;
+            var rowStr = formula[rowStart..i];
+
+            if (rowStr.IsNullOrEmpty())
+            {
+                // 只有列字母无行数字（可能是列范围引用），不是单元格引用
+                sb.Append(formula[start..i]);
+                continue;
+            }
+
+            // 确认下一个字符不是字母（排除命名范围）
+            if (i < formula.Length && ((formula[i] >= 'A' && formula[i] <= 'Z') || (formula[i] >= 'a' && formula[i] <= 'z') || formula[i] == '_'))
+            {
+                sb.Append(formula[start..i]);
+                continue;
+            }
+
+            // 计算新的行列
+            var colNum = 0;
+            foreach (var c in colStr.ToUpperInvariant()) colNum = colNum * 26 + (c - 'A' + 1);
+            var rowNum = rowStr.ToInt();
+
+            if (!absCol) colNum += colDelta;
+            if (!absRow) rowNum += rowDelta;
+
+            // 确保引用有效（行列 >= 1）
+            if (colNum < 1 || rowNum < 1)
+            {
+                sb.Append(formula[start..i]);
+                continue;
+            }
+
+            // 转回列字母
+            var newColStr = new System.Text.StringBuilder();
+            var cn = colNum;
+            while (cn > 0) { newColStr.Insert(0, (Char)('A' + (cn - 1) % 26)); cn = (cn - 1) / 26; }
+
+            if (absCol) sb.Append('$');
+            sb.Append(newColStr);
+            if (absRow) sb.Append('$');
+            sb.Append(rowNum);
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>收集所有未显式解析的 ZIP 部件，确保往返不丢内容</summary>
+    private void CollectOtherParts(ExcelData data)
+    {
+        // 由 Writer 重新生成的部件，不从原始 ZIP 收集
+        var handled = new HashSet<String>(StringComparer.OrdinalIgnoreCase)
+        {
+            "[Content_Types].xml",
+            "_rels/.rels",
+            "xl/workbook.xml",
+            "xl/_rels/workbook.xml.rels",
+            "xl/styles.xml",
+            "xl/sharedStrings.xml",
+        };
+        // 工作表 XML 由 Writer 根据 SheetData 重建
+        foreach (var sheet in data.Sheets)
+        {
+            var idx = data.Sheets.IndexOf(sheet) + 1;
+            handled.Add($"xl/worksheets/sheet{idx}.xml");
+        }
+
+        foreach (var entry in _zip.Entries)
+        {
+            var name = entry.FullName;
+            if (name.EndsWith("/")) continue;
+            if (handled.Contains(name)) continue;
+
+            using var ms = new MemoryStream();
+            using var es = entry.Open();
+            es.CopyTo(ms);
+            data.OtherParts[name] = ms.ToArray();
+        }
     }
     #endregion
 

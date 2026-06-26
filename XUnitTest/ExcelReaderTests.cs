@@ -86,7 +86,7 @@ public class ExcelReaderTests
         Assert.Equal("Head", arr[0]); // A
         Assert.Null(arr[1]); // B 缺失
         Assert.True(arr[2] is Boolean b && b); // C 布尔
-        Assert.Equal("123", arr[26]); // AA (多字母)
+        Assert.Equal("123", arr[26]?.ToString()); // AA (多字母) — 无 t 无 s 时按 OOXML 规范解析为数字
         Assert.Equal("Tail", arr[27]); // AB SharedString
     }
 

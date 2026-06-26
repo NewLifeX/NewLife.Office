@@ -58,6 +58,13 @@ public partial class ExcelWriter : DisposeBase
         public String Extension { get; set; } = "png";
         public Double Width { get; set; }
         public Double Height { get; set; }
+        public Int64 FromColOff { get; set; }
+        public Int64 FromRowOff { get; set; }
+        public Int32 ToRow { get; set; } = -1;
+        public Int32 ToCol { get; set; } = -1;
+        public Int64 ToColOff { get; set; }
+        public Int64 ToRowOff { get; set; }
+        public String EditAs { get; set; } = "oneCell";
     }
 
     private class SheetPageSetup
@@ -153,6 +160,12 @@ public partial class ExcelWriter : DisposeBase
     private readonly Dictionary<String, List<ConditionalFormatEntry>> _sheetCondFormats = new(StringComparer.OrdinalIgnoreCase);
     // 批注
     private readonly Dictionary<String, List<SheetComment>> _sheetComments = new(StringComparer.OrdinalIgnoreCase);
+
+    // 每单元格样式覆盖（0基行, 0基列）→ CellStyle
+    private readonly Dictionary<String, Dictionary<(Int32 Row, Int32 Col), CellStyle>> _cellStyleOverrides = new(StringComparer.OrdinalIgnoreCase);
+
+    // OtherParts 透传：Reader 收集的原始 ZIP 部件，Save 时原样写回
+    private Dictionary<String, Byte[]> _otherParts = [];
     #endregion
 
     #region 构造
@@ -454,6 +467,14 @@ public partial class ExcelWriter : DisposeBase
     /// <param name="heightPx">图片高度（像素）</param>
     public void AddImage(String? sheet, Int32 row, Int32 col, Byte[] imageData, String extension = "png", Double widthPx = 100, Double heightPx = 100)
     {
+        AddImage(sheet, row, col, imageData, extension, widthPx, heightPx, 0, 0, -1, -1, 0, 0, "oneCell");
+    }
+
+    /// <summary>插入图片（完整锚点信息）</summary>
+    private void AddImage(String? sheet, Int32 fromRow, Int32 fromCol, Byte[] imageData, String extension,
+        Double widthPx, Double heightPx, Int64 fromColOff, Int64 fromRowOff,
+        Int32 toRow, Int32 toCol, Int64 toColOff, Int64 toRowOff, String editAs)
+    {
         if (imageData == null || imageData.Length == 0) throw new ArgumentNullException(nameof(imageData));
         if (sheet.IsNullOrEmpty()) sheet = SheetName;
         EnsureSheet(sheet);
@@ -463,7 +484,16 @@ public partial class ExcelWriter : DisposeBase
             list = [];
             _sheetImages[sheet] = list;
         }
-        list.Add(new SheetImage { Row = row, Col = col, Data = imageData, Extension = extension.ToLower().TrimStart('.'), Width = widthPx, Height = heightPx });
+        list.Add(new SheetImage
+        {
+            Row = fromRow, Col = fromCol,
+            Data = imageData, Extension = extension.ToLower().TrimStart('.'),
+            Width = widthPx, Height = heightPx,
+            FromColOff = fromColOff, FromRowOff = fromRowOff,
+            ToRow = toRow, ToCol = toCol,
+            ToColOff = toColOff, ToRowOff = toRowOff,
+            EditAs = editAs,
+        });
     }
     #endregion
 
@@ -584,6 +614,25 @@ public partial class ExcelWriter : DisposeBase
         }
         list.Add(new SheetComment { Row = row, Col = col, Text = text, Author = author ?? String.Empty });
     }
+
+    /// <summary>设置指定单元格的样式（覆盖行级样式）</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="row">行号（0基）</param>
+    /// <param name="col">列号（0基）</param>
+    /// <param name="style">单元格样式</param>
+    public void SetCellStyle(String? sheet, Int32 row, Int32 col, CellStyle style)
+    {
+        if (style == null) throw new ArgumentNullException(nameof(style));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+
+        if (!_cellStyleOverrides.TryGetValue(sheet, out var dict))
+        {
+            dict = [];
+            _cellStyleOverrides[sheet] = dict;
+        }
+        dict[(row, col)] = style;
+    }
     #endregion
 
     #region 条件格式
@@ -669,6 +718,147 @@ public partial class ExcelWriter : DisposeBase
         foreach (DataRow dr in table.Rows)
         {
             AddRow(sheet, dr.ItemArray);
+        }
+    }
+    #endregion
+
+    #region ExcelData写入
+    /// <summary>从完整快照写入工作簿</summary>
+    /// <param name="data">ExcelData 快照数据</param>
+    public void WriteExcel(ExcelData data)
+    {
+        if (data == null) throw new ArgumentNullException(nameof(data));
+
+        var autoFit = AutoFitColumnWidth;
+        AutoFitColumnWidth = false; // 写 ExcelData 时用预设列宽
+        _otherParts = data.OtherParts.Count > 0 ? new Dictionary<String, Byte[]>(data.OtherParts) : [];
+
+        // 用源文件的默认字体覆盖 font[0]，确保行/列标题字体与原文件一致
+        if (data.DefaultFont != null)
+        {
+            var df = data.DefaultFont;
+            _fonts[0] = new FontEntry(df.Name, df.Size, df.Bold, false, false, df.Color);
+        }
+
+        try
+        {
+            foreach (var sd in data.Sheets)
+            {
+                var sheet = sd.Name;
+                EnsureSheet(sheet);
+
+                // 写入数据行（带每单元格样式）
+                var prevActualRow = -1;
+                for (var r = 0; r < sd.Rows.Count; r++)
+                {
+                    // 计算此行的实际 Excel 行号（0基）
+                    var actualRow = sd.ActualRowNumbers != null ? sd.ActualRowNumbers[r] : r;
+
+                // 若源文件存在跳行（如行 13 为空），推进行号计数器跳过缺失的行，
+                // 确保后续行的 r 属性与原始 Excel 行号一致（不插入空行元素）
+                if (actualRow > prevActualRow + 1)
+                    AdvanceToRow(sheet, actualRow + 1); // actualRow 是 0 基，目标行号 = actualRow+1（1基）
+                prevActualRow = actualRow;
+
+                    // 先设置该行的每单元格样式覆盖（需在 AddRow 之前）
+                    foreach (var kv in sd.CellStyles)
+                    {
+                        var (cr, cc) = kv.Key;
+                        if (cr == actualRow)
+                            SetCellStyle(sheet, actualRow, cc, kv.Value);
+                    }
+
+                    // 检查公式——将公式单元格的值包装为 ExcelFormula（不修改原始数据）
+                    var row = (Object?[])sd.Rows[r].Clone();
+                    for (var c = 0; c < row.Length; c++)
+                    {
+                        if (sd.Formulas.TryGetValue((actualRow, c), out var formula) && !formula.IsNullOrEmpty())
+                        {
+                            row[c] = new ExcelFormula(formula, row[c]);
+                        }
+                    }
+                    AddRow(sheet, row);
+                }
+
+                // 合并区域
+                foreach (var (sr, sc, er, ec) in sd.Merges)
+                {
+                    MergeCell(sheet, sr, sc, er, ec);
+                }
+
+                // 冻结窗格
+                if (sd.FreezePane.HasValue)
+                    FreezePane(sheet, sd.FreezePane.Value.Rows, sd.FreezePane.Value.Cols);
+
+                // 自动筛选
+                if (!sd.AutoFilter.IsNullOrEmpty())
+                    SetAutoFilter(sheet, sd.AutoFilter!);
+
+                // 行高（0基→1基）
+                foreach (var kv in sd.RowHeights)
+                {
+                    SetRowHeight(sheet, kv.Key + 1, kv.Value);
+                }
+
+                // 列宽（已经是0基）
+                foreach (var kv in sd.ColumnWidths)
+                {
+                    SetColumnWidth(sheet, kv.Key, kv.Value);
+                }
+
+                // 超链接（0基行列→1基行）
+                foreach (var kv in sd.Hyperlinks)
+                {
+                    var (r, c) = kv.Key;
+                    AddHyperlink(sheet, r + 1, c, kv.Value.Url, kv.Value.Display);
+                }
+
+                // 图片
+                foreach (var img in sd.Images)
+                {
+                    AddImage(sheet, img.Row, img.Col, img.Data, img.Extension, img.Width, img.Height,
+                        img.FromColOff, img.FromRowOff, img.ToRow, img.ToCol, img.ToColOff, img.ToRowOff, img.EditAs);
+                }
+
+                // 页面设置
+                if (sd.Orientation != PageOrientation.Portrait || sd.PaperSize != PaperSize.Default)
+                    SetPageSetup(sheet, sd.Orientation, sd.PaperSize);
+                SetPageMargins(sheet, sd.MarginTop, sd.MarginBottom, sd.MarginLeft, sd.MarginRight);
+                if (!sd.HeaderText.IsNullOrEmpty() || !sd.FooterText.IsNullOrEmpty())
+                    SetHeaderFooter(sheet, sd.HeaderText, sd.FooterText);
+                if (sd.PrintTitleStartRow > 0)
+                    SetPrintTitleRows(sheet, sd.PrintTitleStartRow, sd.PrintTitleEndRow);
+
+                // 工作表保护
+                if (sd.ProtectionPassword != null)
+                    ProtectSheet(sheet, sd.ProtectionPassword);
+
+                // 条件格式
+                foreach (var cf in sd.ConditionalFormats)
+                {
+                    AddConditionalFormat(sheet, cf.Range, cf.Type, cf.Value, cf.Color, cf.Value2);
+                }
+
+                // 批注（0基→1基行）
+                foreach (var kv in sd.Comments)
+                {
+                    var (r, c) = kv.Key;
+                    AddComment(sheet, r + 1, c, kv.Value.Text, kv.Value.Author);
+                }
+
+                // 数据验证
+                foreach (var v in sd.Validations)
+                {
+                    if (v.Items != null && v.Items.Length > 0)
+                        AddDropdownValidation(sheet, v.CellRange, v.Items);
+                    else if (!v.ValidationType.IsNullOrEmpty())
+                        AddRangeValidation(sheet, v.CellRange, v.ValidationType!, v.Operator ?? "between", v.Formula1 ?? "0", v.Formula2);
+                }
+            }
+        }
+        finally
+        {
+            AutoFitColumnWidth = autoFit;
         }
     }
     #endregion

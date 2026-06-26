@@ -18,6 +18,14 @@ partial class ExcelWriter
         }
     }
 
+    /// <summary>将行号计数器推进到指定行（1基），用于还原源文件中的跳行/空行间隔</summary>
+    private void AdvanceToRow(String sheet, Int32 targetRowIndex1Based)
+    {
+        EnsureSheet(sheet);
+        if (_sheetRowIndex[sheet] < targetRowIndex1Based - 1)
+            _sheetRowIndex[sheet] = targetRowIndex1Based - 1;
+    }
+
     private void AddRow(String sheet, Object?[]? values, CellStyle? rowStyle = null)
     {
         EnsureSheet(sheet);
@@ -31,7 +39,18 @@ partial class ExcelWriter
         for (var i = 0; i < values.Length; i++)
         {
             var val = values[i];
-            if (val == null) continue; // 缺失列：解析时自动补 null
+
+            // 空值但可能被 SetCellStyle 覆盖了样式——需要先查出样式再决定是否跳过
+            CellStyle? overrideStyle = null;
+            if (val == null)
+            {
+                if (_cellStyleOverrides.TryGetValue(sheet, out var ovDict) &&
+                    ovDict.TryGetValue((rowIndex - 1, i), out var ovStyle))
+                {
+                    overrideStyle = ovStyle;
+                }
+                if (overrideStyle == null) continue; // 无值无样式：跳过
+            }
 
             var cellRef = GetColumnName(i) + rowIndex; // A1 / B2 ...
 
@@ -60,6 +79,23 @@ partial class ExcelWriter
                         break;
                 }
                 if (fType != null) sb.Append(" t=\"").Append(fType).Append('"');
+
+                // 检查公式单元格的样式覆盖
+                CellStyle? fCellStyle = null;
+                if (_cellStyleOverrides.TryGetValue(sheet, out var fOverrides) &&
+                    fOverrides.TryGetValue((rowIndex - 1, i), out var fcs))
+                {
+                    fCellStyle = fcs;
+                }
+                if (fCellStyle != null)
+                {
+                    var fNumFmtId = (Int32)ExcelCellStyle.General;
+                    if (!fCellStyle.NumberFormat.IsNullOrEmpty())
+                        fNumFmtId = GetOrCreateNumFmt(fCellStyle.NumberFormat!);
+                    var fSIndex = GetOrCreateXf(fCellStyle, fNumFmtId);
+                    if (fSIndex >= 0) sb.Append(" s=\"").Append(fSIndex).Append('"');
+                }
+
                 sb.Append("><f>").Append(fxml).Append("</f><v>").Append(fInner).Append("</v></c>");
                 continue;
             }
@@ -69,6 +105,16 @@ partial class ExcelWriter
             String? tAttr = null; // t="s" / "b"
             String? inner = null; // <v>值</v>
             var displayLen = 0;   // 估算显示长度用于列宽
+
+            // 空值但有样式覆盖：直接写入自闭合带样式空单元格，跳过值处理
+            if (val == null && overrideStyle != null)
+            {
+                var nullSIndex = GetOrCreateXf(overrideStyle, (Int32)ExcelCellStyle.General);
+                sb.Append("<c r=\"").Append(cellRef).Append('"');
+                if (nullSIndex >= 0) sb.Append(" s=\"").Append(nullSIndex).Append('"');
+                sb.Append("/>");
+                continue;
+            }
 
             switch (val)
             {
@@ -196,14 +242,24 @@ partial class ExcelWriter
 
             // 计算最终 XF 索引
             var sIndex = -1;
-            if (rowStyle != null)
+
+            // 检查每单元格样式覆盖（0基行列）
+            CellStyle? cellStyle = null;
+            if (_cellStyleOverrides.TryGetValue(sheet, out var overrides) &&
+                overrides.TryGetValue((rowIndex - 1, i), out var css))
+            {
+                cellStyle = css;
+            }
+
+            var effectiveStyle = cellStyle ?? rowStyle;
+            if (effectiveStyle != null)
             {
                 // 用户指定了样式：合并自动检测的 numFmtId 与用户样式的字体/填充/边框/对齐
                 var numFmtId = (Int32)autoStyle;
                 // 如果用户样式指定了自定义数字格式，则覆盖自动检测
-                if (!rowStyle.NumberFormat.IsNullOrEmpty())
-                    numFmtId = GetOrCreateNumFmt(rowStyle.NumberFormat!);
-                sIndex = GetOrCreateXf(rowStyle, numFmtId);
+                if (!effectiveStyle.NumberFormat.IsNullOrEmpty())
+                    numFmtId = GetOrCreateNumFmt(effectiveStyle.NumberFormat!);
+                sIndex = GetOrCreateXf(effectiveStyle, numFmtId);
             }
             else if (tAttr == null)
             {
@@ -214,7 +270,16 @@ partial class ExcelWriter
             sb.Append("<c r=\"").Append(cellRef).Append('"');
             if (tAttr != null) sb.Append(' ').Append("t=\"").Append(tAttr).Append('"');
             if (sIndex >= 0) sb.Append(' ').Append("s=\"").Append(sIndex).Append('"');
-            sb.Append("><v>").Append(inner).Append("</v></c>");
+
+            // 空值但有样式覆盖：生成自闭合空单元格（无 <v>）
+            if (val == null && overrideStyle != null)
+            {
+                sb.Append("/>");
+            }
+            else
+            {
+                sb.Append("><v>").Append(inner).Append("</v></c>");
+            }
 
             // 自动列宽
             if (AutoFitColumnWidth && displayLen > 0)

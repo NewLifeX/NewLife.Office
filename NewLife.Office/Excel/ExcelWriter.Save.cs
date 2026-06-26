@@ -100,6 +100,22 @@ partial class ExcelWriter
         CellBorderStyle.DoubleLine => "double",
         _ => "thin",
     };
+
+    /// <summary>将颜色字符串（RGB 六位 或 "theme:N"）写入 StreamWriter 为 &lt;color .../&gt;</summary>
+    private static void WriteColorXml(StreamWriter sw, String? color)
+    {
+        if (color.IsNullOrEmpty()) return;
+        sw.Write($"<color {FormatColorAttr(color)}/>");
+    }
+
+    /// <summary>将颜色字符串格式化为 color 元素的属性片段（不含尖括号）</summary>
+    private static String FormatColorAttr(String? color)
+    {
+        if (color.IsNullOrEmpty()) return String.Empty;
+        if (color!.StartsWith("theme:", StringComparison.Ordinal))
+            return $"theme=\"{color[6..]}\"";
+        return $"rgb=\"FF{color}\"";
+    }
     #endregion
 
     #region 保存
@@ -288,8 +304,8 @@ partial class ExcelWriter
                 sw.Write("</sheetView></sheetViews>");
             }
 
-            // cols（列宽）
-            if (AutoFitColumnWidth && _sheetColWidths.TryGetValue(sheet, out var widths) && widths.Count > 0)
+            // cols（列宽）——有自定义列宽时始终写入
+            if (_sheetColWidths.TryGetValue(sheet, out var widths) && widths.Count > 0)
             {
                 if (widths.Any(e => e > 0))
                 {
@@ -499,8 +515,19 @@ partial class ExcelWriter
                     var img = images[j];
                     var emuW = (Int64)(img.Width * 9525); // px → EMU
                     var emuH = (Int64)(img.Height * 9525);
-                    dsw.Write($"<xdr:twoCellAnchor><xdr:from><xdr:col>{img.Col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>{img.Row - 1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>");
-                    dsw.Write($"<xdr:to><xdr:col>{img.Col + 1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>{img.Row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>");
+                    var editAs = img.EditAs.IsNullOrEmpty() ? "oneCell" : img.EditAs;
+                    dsw.Write($"<xdr:twoCellAnchor editAs=\"{editAs}\">");
+                    // from 锚点
+                    dsw.Write($"<xdr:from><xdr:col>{img.Col}</xdr:col><xdr:colOff>{img.FromColOff}</xdr:colOff><xdr:row>{img.Row}</xdr:row><xdr:rowOff>{img.FromRowOff}</xdr:rowOff></xdr:from>");
+                    // to 锚点：优先使用读取到的精确锚点；否则推算 from+1
+                    if (img.ToRow >= 0 && img.ToCol >= 0)
+                    {
+                        dsw.Write($"<xdr:to><xdr:col>{img.ToCol}</xdr:col><xdr:colOff>{img.ToColOff}</xdr:colOff><xdr:row>{img.ToRow}</xdr:row><xdr:rowOff>{img.ToRowOff}</xdr:rowOff></xdr:to>");
+                    }
+                    else
+                    {
+                        dsw.Write($"<xdr:to><xdr:col>{img.Col + 1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>{img.Row + 1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>");
+                    }
                     dsw.Write($"<xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"{j + 2}\" name=\"Image{globalImageIndex + 1}\"/><xdr:cNvPicPr><a:picLocks noChangeAspect=\"1\"/></xdr:cNvPicPr></xdr:nvPicPr>");
                     dsw.Write($"<xdr:blipFill><a:blip r:embed=\"rImg{j + 1}\"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>");
                     dsw.Write($"<xdr:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{emuW}\" cy=\"{emuH}\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>");
@@ -587,7 +614,60 @@ partial class ExcelWriter
             }
         }
 
+        // 写入 OtherParts（Reader 收集的原始 ZIP 部件，确保往返不丢内容）
+        WriteOtherParts(za);
+
         target.Flush();
+    }
+
+    /// <summary>写入 OtherParts 中未被显式处理过的部件</summary>
+    private void WriteOtherParts(ZipArchive za)
+    {
+        if (_otherParts.Count == 0) return;
+
+        // 已由 Writer 显式生成的部件
+        var generated = new HashSet<String>(StringComparer.OrdinalIgnoreCase)
+        {
+            "[Content_Types].xml",
+            "_rels/.rels",
+            "xl/workbook.xml",
+            "xl/_rels/workbook.xml.rels",
+            "xl/styles.xml",
+            "xl/sharedStrings.xml",
+        };
+        for (var i = 0; i < _sheetNames.Count; i++)
+        {
+            generated.Add($"xl/worksheets/sheet{i + 1}.xml");
+            // 超链接/图片/批注产生的 rels 也跳过
+            if (_sheetHyperlinks.ContainsKey(_sheetNames[i]) ||
+                _sheetImages.ContainsKey(_sheetNames[i]) ||
+                _sheetComments.ContainsKey(_sheetNames[i]))
+            {
+                generated.Add($"xl/worksheets/_rels/sheet{i + 1}.xml.rels");
+            }
+            // 图片 drawing 和 rels
+            if (_sheetImages.TryGetValue(_sheetNames[i], out var imgs) && imgs.Count > 0)
+            {
+                generated.Add($"xl/drawings/drawing{i + 1}.xml");
+                generated.Add($"xl/drawings/_rels/drawing{i + 1}.xml.rels");
+            }
+            // 批注 comments 和 vml
+            if (_sheetComments.TryGetValue(_sheetNames[i], out var cmts) && cmts.Count > 0)
+            {
+                generated.Add($"xl/comments{i + 1}.xml");
+                generated.Add($"xl/drawings/vmlDrawing{i + 1}.vml");
+            }
+        }
+
+        foreach (var kv in _otherParts)
+        {
+            if (generated.Contains(kv.Key)) continue;
+            // 跳过媒体文件（Writer 已写入）
+            if (kv.Key.StartsWith("xl/media/", StringComparison.OrdinalIgnoreCase)) continue;
+
+            using var e = za.CreateEntry(kv.Key).Open();
+            e.Write(kv.Value, 0, kv.Value.Length);
+        }
     }
 
     /// <summary>生成完整的 styles.xml</summary>
@@ -616,7 +696,7 @@ partial class ExcelWriter
             if (f.Italic) sw.Write("<i/>");
             if (f.Underline) sw.Write("<u/>");
             if (f.Size > 0) sw.Write($"<sz val=\"{f.Size}\"/>");
-            if (!f.Color.IsNullOrEmpty()) sw.Write($"<color rgb=\"FF{f.Color}\"/>");
+            WriteColorXml(sw, f.Color);
             if (!f.Name.IsNullOrEmpty()) sw.Write($"<name val=\"{SecurityElement.Escape(f.Name)}\"/>");
             sw.Write("</font>");
         }
@@ -632,7 +712,7 @@ partial class ExcelWriter
             else if (f.PatternType == "gray125")
                 sw.Write("<patternFill patternType=\"gray125\"/>");
             else
-                sw.Write($"<patternFill patternType=\"solid\"><fgColor rgb=\"FF{f.BgColor}\"/></patternFill>");
+                sw.Write($"<patternFill patternType=\"solid\"><fgColor {FormatColorAttr(f.BgColor)}/></patternFill>");
             sw.Write("</fill>");
         }
         sw.Write("</fills>");
@@ -648,7 +728,7 @@ partial class ExcelWriter
             else
             {
                 var sn = GetBorderStyleName(b.Style);
-                var ca = b.Color.IsNullOrEmpty() ? "" : $"<color rgb=\"FF{b.Color}\"/>";
+                var ca = b.Color.IsNullOrEmpty() ? "" : $"<color {FormatColorAttr(b.Color)}/>";
                 sw.Write($"<border><left style=\"{sn}\">{ca}</left><right style=\"{sn}\">{ca}</right><top style=\"{sn}\">{ca}</top><bottom style=\"{sn}\">{ca}</bottom><diagonal/></border>");
             }
         }
