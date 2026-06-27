@@ -92,5 +92,8 @@ public class PptTextBox
 
     /// <summary>旋转角度（S15-02），以 60000 分之一度为单位</summary>
     public Int32 Rotation { get; set; }
+
+    /// <summary>替换文本/无障碍描述（对应 OOXML descr 属性）</summary>
+    public String? AltText { get; set; }
     #endregion
 }

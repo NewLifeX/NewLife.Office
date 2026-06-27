@@ -201,4 +201,81 @@ public class PptxEnhancementTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
     #endregion
+
+    #region Alt Text (S15-new)
+    [Fact(DisplayName = "PPT—形状Alt Text写入+读取")]
+    public void AltText_Shape_WriteAndRead()
+    {
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            writer.Slides[0].Shapes.Add(new PptShape
+            {
+                ShapeType = "rect",
+                Left = 1000000, Top = 1000000, Width = 3000000, Height = 2000000,
+                AltText = "红色矩形装饰",
+                Text = null // No text → treated as shape, not text box
+            });
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotEmpty(doc.Slides[0].Shapes);
+            Assert.Equal("红色矩形装饰", doc.Slides[0].Shapes[0].AltText);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "PPT—文本框Alt Text写入+读取")]
+    public void AltText_TextBox_WriteAndRead()
+    {
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            var tb = new PptTextBox
+            {
+                Left = 1000000, Top = 1000000, Width = 5000000, Height = 1000000,
+                AltText = "标题文本框"
+            };
+            tb.Runs.Add(new PptTextRun { Text = "标题", FontSize = 24 });
+            writer.Slides[0].TextBoxes.Add(tb);
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotEmpty(doc.Slides[0].TextBoxes);
+            Assert.Equal("标题文本框", doc.Slides[0].TextBoxes[0].AltText);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "PPT—圆角矩形CornerRadius写入+读取")]
+    public void RoundRect_CornerRadius_WriteAndRead()
+    {
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            writer.Slides[0].Shapes.Add(new PptShape
+            {
+                ShapeType = "roundRect",
+                Left = 1000000, Top = 1000000, Width = 5000000, Height = 3000000,
+                CornerRadius = 300000,
+                Text = null
+            });
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotEmpty(doc.Slides[0].Shapes);
+            Assert.True(doc.Slides[0].Shapes[0].CornerRadius > 0);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
 }

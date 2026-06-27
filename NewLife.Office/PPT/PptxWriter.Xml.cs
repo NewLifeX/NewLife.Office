@@ -363,7 +363,8 @@ partial class PptxWriter
                 hlRelId = $"rHlk{_hlinkGlobal++}";
                 hlinkMap[hlRelId] = tb.HyperlinkUrl;
             }
-            sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"TextBox\"/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr>");
+            var descr = tb.AltText != null ? $" descr=\"{EscXml(tb.AltText)}\"" : "";
+            sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"TextBox\"{descr}/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr>");
             sb.Append("<p:spPr>");
             sb.Append($"<a:xfrm><a:off x=\"{tb.Left}\" y=\"{tb.Top}\"/><a:ext cx=\"{tb.Width}\" cy=\"{tb.Height}\"/>");
             if (tb.Rotation != 0) sb.Append($" rot=\"{tb.Rotation}\"");
@@ -455,12 +456,20 @@ partial class PptxWriter
         // shapes（基本图形）
         foreach (var sp in slide.Shapes)
         {
-            sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"Shape\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>");
+            var descr = sp.AltText != null ? $" descr=\"{EscXml(sp.AltText)}\"" : "";
+            sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"Shape\"{descr}/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>");
             sb.Append("<p:spPr>");
             sb.Append($"<a:xfrm><a:off x=\"{sp.Left}\" y=\"{sp.Top}\"/><a:ext cx=\"{sp.Width}\" cy=\"{sp.Height}\"/>");
             if (sp.Rotation != 0) sb.Append($" rot=\"{sp.Rotation}\"");
             sb.Append("</a:xfrm>");
-            sb.Append($"<a:prstGeom prst=\"{sp.ShapeType}\"><a:avLst/></a:prstGeom>");
+            // 圆角矩形：写入 adj 调整值（CornerRadius=EMU，转换为 OOXML adj 值占宽度百分比*50000）
+            if (sp.ShapeType == "roundRect" && sp.CornerRadius > 0)
+            {
+                var adjVal = sp.CornerRadius * 50000 / sp.Width;
+                sb.Append($"<a:prstGeom prst=\"roundRect\"><a:avLst><a:gd name=\"adj\" fmla=\"val {adjVal}\"/></a:avLst></a:prstGeom>");
+            }
+            else
+                sb.Append($"<a:prstGeom prst=\"{sp.ShapeType}\"><a:avLst/></a:prstGeom>");
             if (sp.FillColor != null)
                 sb.Append($"<a:solidFill><a:srgbClr val=\"{sp.FillColor.TrimStart('#')}\"/></a:solidFill>");
             else

@@ -57,5 +57,11 @@ public class PptShape
 
     /// <summary>旋转角度（S15-02），以 60000 分之一度为单位（如 5400000=90°）</summary>
     public Int32 Rotation { get; set; }
+
+    /// <summary>替换文本/无障碍描述（对应 OOXML descr 属性）</summary>
+    public String? AltText { get; set; }
+
+    /// <summary>圆角半径（仅 roundRect 形状有效，EMU）</summary>
+    public Int64 CornerRadius { get; set; }
     #endregion
 }

@@ -689,13 +689,29 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         var (left, top, width, height) = ParseXfrm(sp.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement);
         var rotation = ParseRotation(sp.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement);
         var shapeType = sp.SelectSingleNode(".//*[local-name()='prstGeom']")?.Attributes?["prst"]?.Value ?? "textBox";
+        // Alt Text（cNvPr descr）
+        var cNvPr = sp.SelectSingleNode(".//*[local-name()='cNvPr']") as XmlElement;
+        var altText = cNvPr?.GetAttribute("descr");
+        // Corner radius（仅 roundRect）
+        Int64 cornerRadius = 0;
+        if (shapeType == "roundRect")
+        {
+            var gd = sp.SelectSingleNode(".//*[local-name()='prstGeom']/*[local-name()='avLst']/*[local-name()='gd']") as XmlElement;
+            if (gd != null)
+            {
+                var fmla = gd.GetAttribute("fmla") ?? "";
+                var valStr = fmla.StartsWith("val ") ? fmla[4..] : fmla;
+                if (Int64.TryParse(valStr, out var adjVal) && adjVal > 0)
+                    cornerRadius = adjVal * width / 50000; // reverse the adj value back to EMU
+            }
+        }
         var spPr = sp.SelectSingleNode(".//*[local-name()='spPr']") as XmlElement;
         var fillColor = ParseFillColor(spPr);
         var (lineColor, lineWidth) = ParseLine(spPr);
 
         if (hasTxBody)
         {
-            var tb = new PptTextBox { Left = left, Top = top, Width = width, Height = height, Rotation = rotation };
+            var tb = new PptTextBox { Left = left, Top = top, Width = width, Height = height, Rotation = rotation, AltText = altText };
             if (fillColor != null) tb.BackgroundColor = fillColor;
 
             var txBody = sp.SelectSingleNode(".//*[local-name()='txBody']") as XmlElement;
@@ -837,6 +853,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                 tb.SpaceBeforePt = fp.SpaceBeforePt;
             }
             tb.Text = allText.ToString();
+            tb.AltText = altText;
             slide.TextBoxes.Add(tb);
         }
         else
@@ -845,6 +862,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
             {
                 ShapeType = shapeType, Left = left, Top = top, Width = width, Height = height,
                 FillColor = fillColor, LineColor = lineColor, LineWidth = (Int32)lineWidth,
+                AltText = altText, CornerRadius = cornerRadius,
             });
         }
     }
