@@ -420,6 +420,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         var para = new WordParagraph();
         var isPageBreak = false;
         var isBullet = false;
+        var isOrderedList = false;
 
         var bmStart = pEl.SelectSingleNode("w:bookmarkStart", ns);
         if (bmStart is XmlElement bmEl)
@@ -484,7 +485,13 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
             if (pPrEl.SelectSingleNode("w:numPr", ns) != null)
             {
-                isBullet = true;
+                var numIdEl = pPrEl.SelectSingleNode("w:numPr/w:numId", ns) as XmlElement;
+                var numId = numIdEl?.GetAttribute("w:val") ?? numIdEl?.GetAttribute("val");
+                if (numId == "2")
+                    isOrderedList = true;
+                else
+                    isBullet = true;
+
                 var ilvl = pPrEl.SelectSingleNode("w:numPr/w:ilvl", ns) as XmlElement;
                 if (ilvl != null)
                 {
@@ -533,6 +540,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         }
 
         para.IsBullet = isBullet;
+        para.IsOrderedList = isOrderedList;
         para.IsPageBreak = isPageBreak;
 
         if (!isPageBreak)

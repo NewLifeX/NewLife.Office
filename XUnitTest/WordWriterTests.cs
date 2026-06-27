@@ -292,6 +292,102 @@ public class WordWriterTests
     }
     #endregion
 
+    #region 有序（编号）列表
+    [Fact(DisplayName = "有序列表写入—decimal编号，往返验证")]
+    public void WriteOrderedList_DecimalNumbering()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendOrderedList([
+                "第一项",
+                "第二项",
+                "第三项",
+            ]);
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.Equal(3, doc.Elements.Count);
+            // 验证三个段落都是 IsOrderedList，非 IsBullet
+            for (var i = 0; i < 3; i++)
+            {
+                Assert.True(doc.Elements[i].Paragraph!.IsOrderedList);
+                Assert.False(doc.Elements[i].Paragraph!.IsBullet);
+            }
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "有序列表写入—与无序列表混合")]
+    public void WriteOrderedList_MixedWithBullets()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendParagraph("标题段落");
+            writer.AppendOrderedList(["任务A", "任务B"]);
+            writer.AppendMultiLevelBulletList([("要点一", 0)]);
+            writer.AppendOrderedList(["任务C", "任务D"]);
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.Equal(6, doc.Elements.Count);
+
+            // 标题段落
+            Assert.False(doc.Elements[0].Paragraph!.IsOrderedList);
+            Assert.False(doc.Elements[0].Paragraph!.IsBullet);
+
+            // 有序列表第1组
+            Assert.True(doc.Elements[1].Paragraph!.IsOrderedList);
+            Assert.True(doc.Elements[2].Paragraph!.IsOrderedList);
+
+            // 无序列表
+            Assert.True(doc.Elements[3].Paragraph!.IsBullet);
+
+            // 有序列表第2组
+            Assert.True(doc.Elements[4].Paragraph!.IsOrderedList);
+            Assert.True(doc.Elements[5].Paragraph!.IsOrderedList);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "有序列表写入—多级编号列表（decimal/lowerLetter/lowerRoman）")]
+    public void WriteOrderedList_MultiLevel()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            var para0 = new WordParagraph { IsOrderedList = true, ListLevel = 0 };
+            para0.Runs.Add(new WordRun { Text = "一级条目" });
+            writer.AppendParagraph(para0);
+
+            var para1 = new WordParagraph { IsOrderedList = true, ListLevel = 1 };
+            para1.Runs.Add(new WordRun { Text = "二级条目" });
+            writer.AppendParagraph(para1);
+
+            var para2 = new WordParagraph { IsOrderedList = true, ListLevel = 2 };
+            para2.Runs.Add(new WordRun { Text = "三级条目" });
+            writer.AppendParagraph(para2);
+
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.Equal(3, doc.Elements.Count);
+            Assert.Equal(0, doc.Elements[0].Paragraph!.ListLevel);
+            Assert.Equal(1, doc.Elements[1].Paragraph!.ListLevel);
+            Assert.Equal(2, doc.Elements[2].Paragraph!.ListLevel);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
+
     #region 辅助方法
     /// <summary>构建包含指定 SDT 元素的最小合法 docx 文件</summary>
     private static Byte[] BuildDocxWithSdt(String sdtXml)

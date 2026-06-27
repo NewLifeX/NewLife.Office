@@ -54,6 +54,15 @@ public class WordWriter : IDisposable
     #endregion
 
     #region 段落方法
+    /// <summary>追加段落（WordParagraph 对象）</summary>
+    /// <param name="para">段落对象</param>
+    /// <returns>段落对象</returns>
+    public WordParagraph AppendParagraph(WordParagraph para)
+    {
+        _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
+        return para;
+    }
+
     /// <summary>追加普通段落</summary>
     /// <param name="text">文本内容</param>
     /// <param name="style">段落样式</param>
@@ -165,11 +174,10 @@ public class WordWriter : IDisposable
     /// <param name="items">列表项</param>
     public void AppendOrderedList(IEnumerable<String> items)
     {
-        var idx = 1;
         foreach (var item in items)
         {
-            var para = new WordParagraph();
-            para.Runs.Add(new WordRun { Text = $"{idx++}. {item}" });
+            var para = new WordParagraph { IsOrderedList = true };
+            para.Runs.Add(new WordRun { Text = item });
             _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
         }
     }
@@ -519,7 +527,9 @@ public class WordWriter : IDisposable
         }
 
         // 检查是否有任何列表项需要编号定义
-        if (!_elements.Any(e => e.Type == WordElementType.Paragraph && e.Paragraph?.IsBullet == true)) return;
+        var hasBullets = _elements.Any(e => e.Type == WordElementType.Paragraph && e.Paragraph?.IsBullet == true);
+        var hasOrdered = _elements.Any(e => e.Type == WordElementType.Paragraph && e.Paragraph?.IsOrderedList == true);
+        if (!hasBullets && !hasOrdered) return;
 
         const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
         var hasMultiLevel = _elements.Any(e => e.Type == WordElementType.Paragraph && e.Paragraph?.ListLevel > 0);
@@ -527,21 +537,44 @@ public class WordWriter : IDisposable
 
         var sb = new StringBuilder();
         sb.Append($"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><w:numbering xmlns:w=\"{W}\">");
-        // 抽象编号定义：bullet 字符按层级不同
-        sb.Append("<w:abstractNum w:abstractNumId=\"0\">");
-        sb.Append("<w:multiLevelType w:val=\"hybridMultilevel\"/>");
-        var bullets = new[] { "\uF0B7", "\uF0D8", "\uF0A7" }; // • → ◆ → §
-        for (var l = 0; l < maxLevel; l++)
+
+        // 抽象编号定义0：bullet列表
+        if (hasBullets)
         {
-            sb.Append($"<w:lvl w:ilvl=\"{l}\"><w:start w:val=\"1\"/><w:numFmt w:val=\"bullet\"/>");
-            sb.Append($"<w:lvlText w:val=\"{bullets[l]}\"/><w:lvlJc w:val=\"left\"/>");
-            var indent = 720 + l * 720;
-            sb.Append($"<w:pPr><w:ind w:left=\"{indent}\" w:hanging=\"360\"/></w:pPr>");
-            sb.Append("<w:rPr><w:rFonts w:ascii=\"Symbol\" w:hAnsi=\"Symbol\" w:hint=\"default\"/></w:rPr>");
-            sb.Append("</w:lvl>");
+            sb.Append("<w:abstractNum w:abstractNumId=\"0\">");
+            sb.Append("<w:multiLevelType w:val=\"hybridMultilevel\"/>");
+            var bullets = new[] { "\uF0B7", "\uF0D8", "\uF0A7" }; // • → ◆ → §
+            for (var l = 0; l < maxLevel; l++)
+            {
+                sb.Append($"<w:lvl w:ilvl=\"{l}\"><w:start w:val=\"1\"/><w:numFmt w:val=\"bullet\"/>");
+                sb.Append($"<w:lvlText w:val=\"{bullets[l]}\"/><w:lvlJc w:val=\"left\"/>");
+                var indent = 720 + l * 720;
+                sb.Append($"<w:pPr><w:ind w:left=\"{indent}\" w:hanging=\"360\"/></w:pPr>");
+                sb.Append("<w:rPr><w:rFonts w:ascii=\"Symbol\" w:hAnsi=\"Symbol\" w:hint=\"default\"/></w:rPr>");
+                sb.Append("</w:lvl>");
+            }
+            sb.Append("</w:abstractNum>");
+            sb.Append("<w:num w:numId=\"1\"><w:abstractNumId w:val=\"0\"/></w:num>");
         }
-        sb.Append("</w:abstractNum>");
-        sb.Append("<w:num w:numId=\"1\"><w:abstractNumId w:val=\"0\"/></w:num>");
+
+        // 抽象编号定义1：ordered列表（decimal/lowerLetter/lowerRoman 层级）
+        if (hasOrdered)
+        {
+            sb.Append("<w:abstractNum w:abstractNumId=\"1\">");
+            sb.Append("<w:multiLevelType w:val=\"hybridMultilevel\"/>");
+            for (var l = 0; l < maxLevel; l++)
+            {
+                var fmt = new[] { "decimal", "lowerLetter", "lowerRoman" }[Math.Min(l, 2)];
+                sb.Append($"<w:lvl w:ilvl=\"{l}\"><w:start w:val=\"1\"/><w:numFmt w:val=\"{fmt}\"/>");
+                sb.Append($"<w:lvlText w:val=\"%{l + 1}.\"/><w:lvlJc w:val=\"left\"/>");
+                var indent = 720 + l * 720;
+                sb.Append($"<w:pPr><w:ind w:left=\"{indent}\" w:hanging=\"360\"/></w:pPr>");
+                sb.Append("</w:lvl>");
+            }
+            sb.Append("</w:abstractNum>");
+            sb.Append("<w:num w:numId=\"2\"><w:abstractNumId w:val=\"1\"/></w:num>");
+        }
+
         sb.Append("</w:numbering>");
         WriteEntry(za, "word/numbering.xml", sb.ToString());
     }
@@ -725,7 +758,7 @@ public class WordWriter : IDisposable
         var hasPPr = para.StyleId != null || para.Style != WordParagraphStyle.Normal || para.Alignment != null
             || para.IndentLeft.HasValue || para.IndentRight.HasValue || para.FirstLineIndent.HasValue
             || para.SpaceBefore.HasValue || para.SpaceAfter.HasValue || para.LineSpacingPct.HasValue
-            || para.IsBullet || para.BackgroundColor != null
+            || para.IsBullet || para.IsOrderedList || para.BackgroundColor != null
             || para.Borders != null || (para.TabStops != null && para.TabStops.Count > 0);
         if (hasPPr)
         {
@@ -767,6 +800,8 @@ public class WordWriter : IDisposable
             }
             if (para.IsBullet)
                 sb.Append($"<w:numPr><w:ilvl w:val=\"{para.ListLevel}\"/><w:numId w:val=\"1\"/></w:numPr>");
+            else if (para.IsOrderedList)
+                sb.Append($"<w:numPr><w:ilvl w:val=\"{para.ListLevel}\"/><w:numId w:val=\"2\"/></w:numPr>");
             // 段落边框
             if (para.Borders != null)
             {
