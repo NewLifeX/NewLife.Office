@@ -38,11 +38,23 @@ public class WordDocument
     /// <summary>超链接关系列表（关系ID, URL）</summary>
     public List<(String RelId, String Url)> Hyperlinks { get; set; } = [];
 
-    /// <summary>页眉文本</summary>
+    /// <summary>页眉文本（简单纯文本页眉，与 Headers 二选一）</summary>
     public String? HeaderText { get; set; }
 
-    /// <summary>页脚文本</summary>
+    /// <summary>页脚文本（简单纯文本页脚，与 Footers 二选一）</summary>
     public String? FooterText { get; set; }
+
+    /// <summary>富文本页眉列表（default/first/even 三种类型），Writer 优先使用，为空时回退到 HeaderText</summary>
+    public List<WordHeader> Headers { get; set; } = [];
+
+    /// <summary>富文本页脚列表（default/first/even 三种类型），Writer 优先使用，为空时回退到 FooterText</summary>
+    public List<WordFooter> Footers { get; set; } = [];
+
+    /// <summary>文档批注列表（审阅评论）</summary>
+    public List<WordComment> Comments { get; set; } = [];
+
+    /// <summary>编号/列表定义（程序化创建列表时使用，与 NumberingXml 二选一）</summary>
+    public WordNumbering? Numbering { get; set; }
 
     /// <summary>是否启用只读保护</summary>
     public Boolean ProtectionReadOnly { get; set; }

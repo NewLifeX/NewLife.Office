@@ -41,5 +41,8 @@ public class PptDocument
 
     /// <summary>文档属性（标题、作者、主题等）</summary>
     public PptDocumentProperties Properties { get; set; } = new();
+
+    /// <summary>页眉页脚设置（幻灯片编号/日期/页脚文本），null 表示不显示</summary>
+    public PptHeaderFooter? HeaderFooter { get; set; }
     #endregion
 }

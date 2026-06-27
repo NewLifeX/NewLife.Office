@@ -18,6 +18,10 @@ public class WordElement
     /// <summary>表格样式（Type=Table 时有效）</summary>
     public WordTableStyle? TableStyle { get; set; }
 
+    /// <summary>表格模型（Type=Table 时使用，比 TableRows 更丰富支持行级属性）</summary>
+    /// <remarks>Table 与 TableRows 二选一，Writer 优先使用 Table。</remarks>
+    public WordTable? Table { get; set; }
+
     /// <summary>图片（Type=Image 时有效）</summary>
     public WordImage? Image { get; set; }
 

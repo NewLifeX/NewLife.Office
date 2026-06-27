@@ -46,5 +46,14 @@ public class PptSlide
     /// <summary>LayoutEngine 自动排版布局策略，null 表示不启用自动排版</summary>
     /// <remarks>支持：title_content（默认）/title_only/two_column/chart_only/blank</remarks>
     public String? Layout { get; set; }
+
+    /// <summary>连接线/连接器集合（流程图简头等）</summary>
+    public List<PptConnector> Connectors { get; } = [];
+
+    /// <summary>元素动画列表（进入/强调/退出动画）</summary>
+    public List<PptAnimation> Animations { get; } = [];
+
+    /// <summary>幻灯片批注列表（审阅注释）</summary>
+    public List<PptComment> Comments { get; } = [];
     #endregion
 }

@@ -35,5 +35,8 @@ public class PdfDocument
 
     /// <summary>权限标志位（-1 表示全部允许）</summary>
     public Int32 Permissions { get; set; } = -1;
+
+    /// <summary>PDF 注释集合（超链接/高亮/便签/图章等）</summary>
+    public List<PdfAnnotation> Annotations { get; set; } = [];
     #endregion
 }
