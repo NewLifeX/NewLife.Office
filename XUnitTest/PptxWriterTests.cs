@@ -825,4 +825,43 @@ public class PptxWriterTests
         Assert.Null(ex);
         Assert.True(ms.Length > 0);
     }
+
+    [Fact, System.ComponentModel.DisplayName("DuplicateShape克隆形状")]
+    public void DuplicateShape_ClonesShape()
+    {
+        var writer = new PptxWriter();
+        writer.AddSlide(0);
+        var src = writer.AddShape(0, "rect", 1, 2, 5, 3, "FF0000");
+        src.Text = "原始形状";
+        src.FontSize = 18;
+        src.Bold = true;
+
+        var clone = writer.DuplicateShape(0, 0);
+        Assert.NotNull(clone);
+        Assert.Equal("原始形状", clone.Text);
+        Assert.Equal("rect", clone.ShapeType);
+        Assert.Equal(PptxWriter.CmToEmu(1), clone.Left);
+        Assert.Equal(PptxWriter.CmToEmu(5), clone.Width);
+        Assert.Equal(PptxWriter.CmToEmu(3), clone.Height);
+        Assert.Equal("FF0000", clone.FillColor);
+        Assert.Equal(18, clone.FontSize);
+        Assert.True(clone.Bold);
+        // 验证偏移
+        Assert.True(clone.Top > src.Top);
+
+        // 验证写入不抛异常
+        using var ms = new MemoryStream();
+        var ex = Record.Exception(() => writer.Save(ms));
+        Assert.Null(ex);
+        Assert.True(ms.Length > 0);
+    }
+
+    [Fact, System.ComponentModel.DisplayName("DuplicateShape索引越界抛异常")]
+    public void DuplicateShape_InvalidIndex_Throws()
+    {
+        var writer = new PptxWriter();
+        writer.AddSlide(0);
+        Assert.Throws<ArgumentOutOfRangeException>(() => writer.DuplicateShape(0, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => writer.DuplicateShape(0, -1));
+    }
 }

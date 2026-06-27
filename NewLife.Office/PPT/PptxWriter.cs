@@ -311,6 +311,44 @@ public partial class PptxWriter : IDisposable
         return sp;
     }
 
+    /// <summary>克隆指定幻灯片上的形状，返回新形状对象</summary>
+    /// <param name="slideIndex">幻灯片索引</param>
+    /// <param name="shapeIndex">形状索引</param>
+    /// <returns>克隆后的形状</returns>
+    public PptShape DuplicateShape(Int32 slideIndex, Int32 shapeIndex)
+    {
+        var slide = EnsureSlide(slideIndex);
+        if (shapeIndex < 0 || shapeIndex >= slide.Shapes.Count)
+            throw new ArgumentOutOfRangeException(nameof(shapeIndex));
+
+        var src = slide.Shapes[shapeIndex];
+        var clone = new PptShape
+        {
+            Id = 0, // 写入时自动分配新 ID
+            Text = src.Text,
+            ShapeType = src.ShapeType,
+            Left = src.Left,
+            Top = src.Top + CmToEmu(1.0), // 默认向下偏移 1cm 以可见区别
+            Width = src.Width,
+            Height = src.Height,
+            FillColor = src.FillColor,
+            LineColor = src.LineColor,
+            LineWidth = src.LineWidth,
+            FontSize = src.FontSize,
+            FontColor = src.FontColor,
+            Bold = src.Bold,
+            LatinFontName = src.LatinFontName,
+            EastAsianFontName = src.EastAsianFontName,
+            ComplexScriptFontName = src.ComplexScriptFontName,
+            SymbolFontName = src.SymbolFontName,
+            Rotation = src.Rotation,
+            AltText = src.AltText,
+            CornerRadius = src.CornerRadius,
+        };
+        slide.Shapes.Add(clone);
+        return clone;
+    }
+
     /// <summary>向幻灯片添加柱状图</summary>
     /// <param name="slideIndex">幻灯片索引</param>
     /// <param name="categories">分类轴标签</param>
