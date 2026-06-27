@@ -497,6 +497,54 @@ public class BiffWriterTests
 
     #endregion
 
+    #region 冻结窗格
+    [Fact, DisplayName("冻结窗格—冻结首行")]
+    public void FreezePane_TopRow()
+    {
+        var tempFile = Path.GetTempFileName() + ".xls";
+        try
+        {
+            using var writer = new BiffWriter();
+            writer.WriteHeader(["姓名", "年龄", "城市"]);
+            writer.WriteRow(["Alice", 28, "Beijing"]);
+            writer.WriteRow(["Bob", 35, "Shanghai"]);
+            writer.SetFreezePane(1, 0); // 冻结首行
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            Assert.True(new FileInfo(tempFile).Length > 0);
+            // 读回验证数据完整
+            using var reader = new BiffReader(tempFile);
+            var rows = reader.ReadSheet().ToList();
+            Assert.Equal(3, rows.Count);
+            Assert.Equal("Alice", rows[1][0]);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact, DisplayName("冻结窗格—冻结首行首列")]
+    public void FreezePane_RowAndColumn()
+    {
+        var tempFile = Path.GetTempFileName() + ".xls";
+        try
+        {
+            using var writer = new BiffWriter();
+            writer.WriteHeader(["A", "B", "C"]);
+            writer.WriteRow([1, 2, 3]);
+            writer.WriteRow([4, 5, 6]);
+            writer.SetFreezePane(1, 1); // 冻结首行+首列
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var reader = new BiffReader(tempFile);
+            var rows = reader.ReadSheet().ToList();
+            Assert.Equal(3, rows.Count);
+            Assert.Equal(2.0, rows[1][1]); // B2 = 2
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
+
     #region 辅助类型
 
     private class SampleModel

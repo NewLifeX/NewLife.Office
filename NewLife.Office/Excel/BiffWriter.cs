@@ -41,6 +41,7 @@ public sealed class BiffWriter : IDisposable
     private const UInt16 RecColInfo = 0x007D;
     private const UInt16 RecFormula = 0x0006;
     private const UInt16 RecString = 0x0207;
+    private const UInt16 RecWindow2 = 0x023E;
     private const Int32 MaxRecordDataSize = 8224;
 
     // BIFF8 日期纪元：1900-01-01（含 1900 闰年兼容性偏移 +1）
@@ -82,6 +83,9 @@ public sealed class BiffWriter : IDisposable
 
     // 列数字格式：Key = sheetName, Value = (colIndex → formatString)
     private readonly Dictionary<String, Dictionary<Int32, String>> _columnFormats = new(StringComparer.Ordinal);
+
+    // 冻结窗格：Key = sheetName, Value = (freezeRow, freezeCol)
+    private readonly Dictionary<String, (Int32 Row, Int32 Col)> _sheetFreezePanes = new(StringComparer.Ordinal);
 
     private String _currentSheet = "Sheet1";
     private Boolean _disposed;
@@ -194,6 +198,15 @@ public sealed class BiffWriter : IDisposable
             _columnFormats[_currentSheet] = colMap;
         }
         colMap[columnIndex] = format;
+    }
+
+    /// <summary>设置当前工作表的冻结窗格</summary>
+    /// <param name="freezeRow">冻结行数（0 不冻结行），标题行下方的行数</param>
+    /// <param name="freezeCol">冻结列数（0 不冻结列），左侧的列数</param>
+    /// <remarks>例如 SetFreezePane(1, 0) 冻结首行；SetFreezePane(1, 2) 冻结首行和前两列</remarks>
+    public void SetFreezePane(Int32 freezeRow, Int32 freezeCol)
+    {
+        _sheetFreezePanes[_currentSheet] = (freezeRow, freezeCol);
     }
 
     #endregion
@@ -368,6 +381,12 @@ public sealed class BiffWriter : IDisposable
         var rowCount = rows.Count;
         var colCount = rows.Count > 0 ? rows.Max(r2 => r2.Values.Count) : 0;
         WriteRecord(bw, RecDimensions, BuildDimensionsData(rowCount, colCount));
+
+        // WINDOW2 — 冻结窗格
+        if (_sheetFreezePanes.TryGetValue(sheetName, out var freeze))
+            WriteRecord(bw, RecWindow2, BuildWindow2Data(freeze.Row, freeze.Col));
+        else
+            WriteRecord(bw, RecWindow2, BuildWindow2Data(0, 0));
 
         // COLINFO — 列宽
         if (_sheetColWidths.TryGetValue(sheetName, out var colWidths))
@@ -605,6 +624,26 @@ public sealed class BiffWriter : IDisposable
         writer.Write((UInt16)row);
         writer.Write((UInt16)col);
         writer.Write((UInt16)xfIndex);
+        return buf;
+    }
+
+    /// <summary>构建 WINDOW2 记录（含冻结窗格信息）</summary>
+    /// <param name="freezeRow">冻结行数（0=不冻结）</param>
+    /// <param name="freezeCol">冻结列数（0=不冻结）</param>
+    private static Byte[] BuildWindow2Data(Int32 freezeRow, Int32 freezeCol)
+    {
+        var buf = new Byte[18];
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        // grbit: bit3(0x08)=frozen, bit4(0x10)=no split panes
+        var flags = freezeRow > 0 || freezeCol > 0 ? (UInt16)0x0018 : (UInt16)0x0000;
+        writer.Write(flags);
+        writer.Write((UInt16)freezeRow);  // top row visible in frozen pane
+        writer.Write((UInt16)freezeCol);  // left column visible in frozen pane
+        writer.Write((UInt16)0x0040);     // color index (default: system foreground)
+        writer.Write((UInt16)0x0000);     // reserved
+        writer.Write((UInt16)0x0000);     // frozen scroll row (0 = not split)
+        writer.Write((UInt16)0x0000);     // frozen scroll column
+        writer.Write((UInt16)0x0040);     // Use gridline color
         return buf;
     }
 
