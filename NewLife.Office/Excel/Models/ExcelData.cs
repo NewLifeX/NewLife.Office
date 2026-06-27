@@ -19,6 +19,12 @@ public class ExcelDocument
     public Dictionary<String, Byte[]> OtherParts { get; set; } = [];
 
     /// <summary>
+    /// 用户自定义命名范围（排除 _xlnm.* 系统名如打印标题）。
+    /// Key 为名称，Value 为公式/范围引用（如 "Sheet1!$A$1:$B$10"）。
+    /// </summary>
+    public Dictionary<String, String> DefinedNames { get; set; } = [];
+
+    /// <summary>
     /// 默认字体（对应 styles.xml 中 fonts[0]，用于行/列标题渲染）。
     /// 由 Reader 从源文件中读取，Writer 用于生成 font[0]，确保标题字体与原文件一致。
     /// </summary>

@@ -267,6 +267,46 @@ partial class ExcelWriter
                 sIndex = Array.IndexOf(_cellStyles, autoStyle);
             }
 
+            // 富文本覆盖：写 inline string <is> 结构
+            if (effectiveStyle?.RichTextRuns != null && effectiveStyle.RichTextRuns.Count > 0)
+            {
+                sb.Append("<c r=\"").Append(cellRef).Append('"');
+                if (sIndex >= 0) sb.Append(" s=\"").Append(sIndex).Append('"');
+                sb.Append(" t=\"inlineStr\"><is>");
+                foreach (var run in effectiveStyle.RichTextRuns)
+                {
+                    sb.Append("<r>");
+                    var hasRPr = run.Bold || run.Italic || run.Underline || run.Strike ||
+                                 !run.Color.IsNullOrEmpty() || run.FontSize > 0 || !run.FontName.IsNullOrEmpty();
+                    if (hasRPr)
+                    {
+                        sb.Append("<rPr>");
+                        if (run.Bold) sb.Append("<b/>");
+                        if (run.Italic) sb.Append("<i/>");
+                        if (run.Underline) sb.Append("<u/>");
+                        if (run.Strike) sb.Append("<strike/>");
+                        if (run.FontSize > 0) sb.Append("<sz val=\"").Append(run.FontSize).Append("\"/>");
+                        if (!run.Color.IsNullOrEmpty()) sb.Append("<color rgb=\"FF").Append(run.Color).Append("\"/>");
+                        if (!run.FontName.IsNullOrEmpty()) sb.Append("<rFont val=\"").Append(SecurityElement.Escape(run.FontName)).Append("\"/>");
+                        sb.Append("</rPr>");
+                    }
+                    sb.Append("<t xml:space=\"preserve\">").Append(SecurityElement.Escape(run.Text) ?? run.Text).Append("</t></r>");
+                }
+                sb.Append("</is></c>");
+                if (AutoFitColumnWidth)
+                {
+                    var rtLen = effectiveStyle.RichTextRuns.Sum(r => r.Text.Length);
+                    if (rtLen > 0)
+                    {
+                        var rtList = _sheetColWidths[sheet];
+                        while (rtList.Count <= i) rtList.Add(0);
+                        var rw = Math.Min(rtLen + 2, 80);
+                        if (rw > rtList[i]) rtList[i] = rw;
+                    }
+                }
+                continue;
+            }
+
             sb.Append("<c r=\"").Append(cellRef).Append('"');
             if (tAttr != null) sb.Append(' ').Append("t=\"").Append(tAttr).Append('"');
             if (sIndex >= 0) sb.Append(' ').Append("s=\"").Append(sIndex).Append('"');

@@ -93,5 +93,8 @@ public class ExcelSheet
 
     /// <summary>图表集合（嵌入工作表的图表，由 ExcelWriter.AddChart 写入）</summary>
     public List<ExcelChart> Charts { get; set; } = [];
+
+    /// <summary>结构化表格集合（由 ExcelWriter.AddTable 写入）</summary>
+    public List<ExcelTableInfo> Tables { get; set; } = [];
     #endregion
 }

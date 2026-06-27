@@ -58,8 +58,18 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
 
     private class BorderInfo
     {
-        public ExcelCellBorderStyle Style;
-        public String? Color;
+        public ExcelCellBorderStyle LeftStyle;
+        public String? LeftColor;
+        public ExcelCellBorderStyle RightStyle;
+        public String? RightColor;
+        public ExcelCellBorderStyle TopStyle;
+        public String? TopColor;
+        public ExcelCellBorderStyle BottomStyle;
+        public String? BottomColor;
+
+        // 向后兼容快捷访问
+        public ExcelCellBorderStyle Style => LeftStyle != ExcelCellBorderStyle.None ? LeftStyle : BottomStyle;
+        public String? Color => LeftColor ?? BottomColor;
     }
 
     private class XfInfo
@@ -609,22 +619,33 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
             foreach (var b in bordersEl.Elements())
             {
                 var bi = new BorderInfo();
-                var left = b.Element(ns + "left");
+                var left   = b.Element(ns + "left");
+                var right  = b.Element(ns + "right");
+                var top    = b.Element(ns + "top");
+                var bottom = b.Element(ns + "bottom");
                 if (left != null)
                 {
-                    bi.Style = ParseBorderStyle(left.Attribute("style")?.Value);
+                    bi.LeftStyle = ParseBorderStyle(left.Attribute("style")?.Value);
                     var lc = left.Element(ns + "color");
-                    if (lc != null) bi.Color = NormalizeRgb(lc.Attribute("rgb")?.Value);
+                    if (lc != null) bi.LeftColor = NormalizeRgb(lc.Attribute("rgb")?.Value);
                 }
-                if (bi.Style == ExcelCellBorderStyle.None)
+                if (right != null)
                 {
-                    var bottom = b.Element(ns + "bottom");
-                    if (bottom != null)
-                    {
-                        bi.Style = ParseBorderStyle(bottom.Attribute("style")?.Value);
-                        var bc = bottom.Element(ns + "color");
-                        if (bc != null) bi.Color = NormalizeRgb(bc.Attribute("rgb")?.Value);
-                    }
+                    bi.RightStyle = ParseBorderStyle(right.Attribute("style")?.Value);
+                    var rc = right.Element(ns + "color");
+                    if (rc != null) bi.RightColor = NormalizeRgb(rc.Attribute("rgb")?.Value);
+                }
+                if (top != null)
+                {
+                    bi.TopStyle = ParseBorderStyle(top.Attribute("style")?.Value);
+                    var tc = top.Element(ns + "color");
+                    if (tc != null) bi.TopColor = NormalizeRgb(tc.Attribute("rgb")?.Value);
+                }
+                if (bottom != null)
+                {
+                    bi.BottomStyle = ParseBorderStyle(bottom.Attribute("style")?.Value);
+                    var bc = bottom.Element(ns + "color");
+                    if (bc != null) bi.BottomColor = NormalizeRgb(bc.Attribute("rgb")?.Value);
                 }
                 _borderInfos.Add(bi);
             }
@@ -1082,6 +1103,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         // 收集所有未解析的 ZIP 部件，确保往返不丢内容
         CollectOtherParts(data);
 
+        // 读取用户自定义命名范围
+        data.DefinedNames = ReadDefinedNames();
+
         return data;
     }
 
@@ -1218,6 +1242,16 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                 if (_borderInfos != null && xf.BorderId >= 0 && xf.BorderId < _borderInfos.Count)
                 {
                     var bi = _borderInfos[xf.BorderId];
+                    // 四边独立属性
+                    cs.LeftBorder   = bi.LeftStyle;
+                    cs.LeftBorderColor   = bi.LeftColor;
+                    cs.RightBorder  = bi.RightStyle;
+                    cs.RightBorderColor  = bi.RightColor;
+                    cs.TopBorder    = bi.TopStyle;
+                    cs.TopBorderColor    = bi.TopColor;
+                    cs.BottomBorder = bi.BottomStyle;
+                    cs.BottomBorderColor = bi.BottomColor;
+                    // 向后兼容快捷属性：取任意非空的单边样式
                     cs.Border = bi.Style;
                     cs.BorderColor = bi.Color;
                 }
@@ -1732,6 +1766,118 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
 
             yield return info;
         }
+    }
+
+    /// <summary>读取工作簿中所有用户自定义命名范围（排除 _xlnm.* 系统名）</summary>
+    /// <returns>名称 → 公式/范围引用 字典（大小写不敏感）</returns>
+    public Dictionary<String, String> ReadDefinedNames()
+    {
+        var result = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            var wbEntry = _zip.GetEntry("xl/workbook.xml");
+            if (wbEntry == null) return result;
+            using var ws = wbEntry.Open();
+            var wbDoc = XDocument.Load(ws);
+            if (wbDoc.Root == null) return result;
+            var definedNamesEl = wbDoc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("definedNames"));
+            if (definedNamesEl == null) return result;
+            foreach (var dn in definedNamesEl.Elements())
+            {
+                var name = dn.Attribute("name")?.Value;
+                if (name.IsNullOrEmpty()) continue;
+                if (name!.StartsWith("_xlnm.", StringComparison.OrdinalIgnoreCase)) continue; // 排除系统名
+                result[name] = dn.Value;
+            }
+        }
+        catch { /* 非关键，忽略 */ }
+        return result;
+    }
+
+    /// <summary>读取指定工作表中的结构化表格（OOXML table 元素）</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>表格信息列表</returns>
+    public List<ExcelTableInfo> ReadTables(String sheet)
+    {
+        var result = new List<ExcelTableInfo>();
+        if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry)) return result;
+
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return result;
+
+        // 找 tableParts 元素
+        var tableParts = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("tableParts"));
+        if (tableParts == null) return result;
+
+        // 读取工作表关系文件
+        var sheetIdx = sheetEntry.Name.TrimEnd(".xml").TrimStart("sheet").ToInt(-1);
+        if (sheetIdx < 1) return result;
+        var relsPath = $"xl/worksheets/_rels/sheet{sheetIdx}.xml.rels";
+        var relsEntry = _zip.GetEntry(relsPath);
+        if (relsEntry == null) return result;
+
+        // 解析关系
+        var rels = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase); // rId → target
+        using (var rs = relsEntry.Open())
+        {
+            var relsDoc = XDocument.Load(rs);
+            if (relsDoc.Root != null)
+            {
+                foreach (var rel in relsDoc.Root.Elements())
+                {
+                    var relId = rel.Attribute("Id")?.Value;
+                    var target = rel.Attribute("Target")?.Value;
+                    if (!relId.IsNullOrEmpty() && !target.IsNullOrEmpty())
+                        rels[relId!] = target!;
+                }
+            }
+        }
+
+        // 对每个 tablePart，读取对应 table XML
+        foreach (var tp in tableParts.Elements())
+        {
+            var rId = tp.Attribute("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")?.Value
+                   ?? tp.Attributes().FirstOrDefault(a => a.Name.LocalName == "id")?.Value;
+            if (rId.IsNullOrEmpty() || !rels.TryGetValue(rId!, out var target)) continue;
+
+            // target 是相对于 xl/worksheets/ 的路径，如 "../tables/table1.xml"
+            var tblPath = target.TrimStart('.', '/').Replace("../", "xl/");
+            var tblEntry = _zip.GetEntry(tblPath);
+            if (tblEntry == null) continue;
+
+            using var ts = tblEntry.Open();
+            var tblDoc = XDocument.Load(ts);
+            if (tblDoc.Root == null) continue;
+
+            var tblInfo = new ExcelTableInfo
+            {
+                Name = tblDoc.Root.Attribute("name")?.Value ?? String.Empty,
+                Range = tblDoc.Root.Attribute("ref")?.Value ?? String.Empty,
+            };
+
+            // 样式
+            var styleEl = tblDoc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("tableStyleInfo"));
+            if (styleEl != null)
+            {
+                tblInfo.StyleName = styleEl.Attribute("name")?.Value;
+                tblInfo.ShowFirstColumn = styleEl.Attribute("showFirstColumn")?.Value == "1";
+                tblInfo.ShowLastColumn = styleEl.Attribute("showLastColumn")?.Value == "1";
+                tblInfo.ShowRowStripes = styleEl.Attribute("showRowStripes")?.Value != "0";
+                tblInfo.ShowColumnStripes = styleEl.Attribute("showColumnStripes")?.Value == "1";
+            }
+
+            // 列名
+            var tableColsEl = tblDoc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("tableColumns"));
+            if (tableColsEl != null)
+            {
+                var cols = tableColsEl.Elements().Select(c => c.Attribute("name")?.Value ?? String.Empty).ToArray();
+                tblInfo.ColumnNames = cols;
+            }
+
+            result.Add(tblInfo);
+        }
+
+        return result;
     }
 
     /// <summary>读取公式</summary>

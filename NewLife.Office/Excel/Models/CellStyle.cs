@@ -38,14 +38,56 @@ public class ExcelCellStyle
     /// <summary>是否自动换行</summary>
     public Boolean WrapText { get; set; }
 
-    /// <summary>边框样式</summary>
+    /// <summary>边框样式（快捷方式：同时设置四边，单边属性优先级更高）</summary>
     public ExcelCellBorderStyle Border { get; set; }
 
-    /// <summary>边框颜色（RGB十六进制）</summary>
+    /// <summary>边框颜色（快捷方式：同时设置四边颜色，单边颜色属性优先级更高）</summary>
     public String? BorderColor { get; set; }
+
+    /// <summary>左边框样式（优先级高于 Border）</summary>
+    public ExcelCellBorderStyle LeftBorder { get; set; }
+
+    /// <summary>左边框颜色（RGB十六进制，优先级高于 BorderColor）</summary>
+    public String? LeftBorderColor { get; set; }
+
+    /// <summary>右边框样式（优先级高于 Border）</summary>
+    public ExcelCellBorderStyle RightBorder { get; set; }
+
+    /// <summary>右边框颜色（RGB十六进制，优先级高于 BorderColor）</summary>
+    public String? RightBorderColor { get; set; }
+
+    /// <summary>上边框样式（优先级高于 Border）</summary>
+    public ExcelCellBorderStyle TopBorder { get; set; }
+
+    /// <summary>上边框颜色（RGB十六进制，优先级高于 BorderColor）</summary>
+    public String? TopBorderColor { get; set; }
+
+    /// <summary>下边框样式（优先级高于 Border）</summary>
+    public ExcelCellBorderStyle BottomBorder { get; set; }
+
+    /// <summary>下边框颜色（RGB十六进制，优先级高于 BorderColor）</summary>
+    public String? BottomBorderColor { get; set; }
 
     /// <summary>自定义数字格式（如 "#,##0.00"、"yyyy-MM-dd"）</summary>
     public String? NumberFormat { get; set; }
+
+    /// <summary>是否删除线</summary>
+    public Boolean Strike { get; set; }
+
+    /// <summary>上下标（"superscript"/"subscript"，null 表示无）</summary>
+    public String? VerticalAlign { get; set; }
+
+    /// <summary>文本旋转角度（0-180，0 表示不旋转）</summary>
+    public Int32 TextRotation { get; set; }
+
+    /// <summary>水平缩进级别（1 级 ≈ 3 字符宽）</summary>
+    public Int32 Indent { get; set; }
+
+    /// <summary>是否缩小以填充（当文字超出列宽时自动缩小字号）</summary>
+    public Boolean ShrinkToFit { get; set; }
+
+    /// <summary>富文本段落列表；不为 null 时优先使用富文本，忽略普通文本内容</summary>
+    public List<RichTextRun>? RichTextRuns { get; set; }
     #endregion
 
     #region 静态

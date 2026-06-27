@@ -27,10 +27,14 @@ public partial class ExcelWriter : DisposeBase
 
     private static readonly ExcelCellStyle[] _cellStyles = (ExcelCellStyle[])Enum.GetValues(typeof(ExcelCellStyle));
 
-    private record FontEntry(String? Name, Double Size, Boolean Bold, Boolean Italic, Boolean Underline, String? Color);
+    private record FontEntry(String? Name, Double Size, Boolean Bold, Boolean Italic, Boolean Underline, String? Color, Boolean Strike, String? VerticalAlign);
     private record FillEntry(String? BgColor, String PatternType);
-    private record BorderEntry(ExcelCellBorderStyle Style, String? Color);
-    private record XfEntry(Int32 NumFmtId, Int32 FontId, Int32 FillId, Int32 BorderId, ExcelHorizontalAlignment HAlign, ExcelVerticalAlignment VAlign, Boolean WrapText);
+    private record BorderEntry(
+        ExcelCellBorderStyle Left, String? LeftColor,
+        ExcelCellBorderStyle Right, String? RightColor,
+        ExcelCellBorderStyle Top, String? TopColor,
+        ExcelCellBorderStyle Bottom, String? BottomColor);
+    private record XfEntry(Int32 NumFmtId, Int32 FontId, Int32 FillId, Int32 BorderId, ExcelHorizontalAlignment HAlign, ExcelVerticalAlignment VAlign, Boolean WrapText, Int32 TextRotation, Int32 Indent, Boolean ShrinkToFit);
 
     private class SheetHyperlink
     {
@@ -88,6 +92,10 @@ public partial class ExcelWriter : DisposeBase
         public String? Value { get; set; }
         public String? Value2 { get; set; }
         public String? Color { get; set; }
+        /// <summary>图标集类型名（如 "3Arrows"、"3Flags"、"5Rating"），仅 IconSet 使用</summary>
+        public String? IconSetType { get; set; }
+        /// <summary>自定义公式字符串（不含 = 号），仅 Expression 使用</summary>
+        public String? Formula { get; set; }
     }
 
     private class SheetComment
@@ -130,9 +138,9 @@ public partial class ExcelWriter : DisposeBase
     private Int32 _sharedCount; // 总引用次数（含重复）
 
     // 样式管理（字体/填充/边框/XF 去重）
-    private readonly List<FontEntry> _fonts = [new(null, 0, false, false, false, null)]; // index 0 = 默认字体
+    private readonly List<FontEntry> _fonts = [new(null, 0, false, false, false, null, false, null)]; // index 0 = 默认字体
     private readonly List<FillEntry> _fills = [new(null, "none"), new(null, "gray125")]; // 0=none, 1=gray125 (Excel 要求)
-    private readonly List<BorderEntry> _borders = [new(ExcelCellBorderStyle.None, null)]; // index 0 = 无边框
+    private readonly List<BorderEntry> _borders = [new(ExcelCellBorderStyle.None, null, ExcelCellBorderStyle.None, null, ExcelCellBorderStyle.None, null, ExcelCellBorderStyle.None, null)]; // index 0 = 无边框
     private readonly Dictionary<String, Int32> _numFmtMap = new(StringComparer.Ordinal); // formatCode → numFmtId
     private Int32 _nextNumFmtId = 164; // 自定义 numFmt 从 164 开始
     private readonly List<XfEntry> _xfEntries;
@@ -146,6 +154,16 @@ public partial class ExcelWriter : DisposeBase
     private readonly Dictionary<String, String> _sheetAutoFilters = new(StringComparer.OrdinalIgnoreCase);
     // 行高：sheet -> { rowIndex(1基) -> height }
     private readonly Dictionary<String, Dictionary<Int32, Double>> _sheetRowHeights = new(StringComparer.OrdinalIgnoreCase);
+    // 列大纲：sheet -> { colIndex(0基) -> (level, collapsed) }
+    private readonly Dictionary<String, Dictionary<Int32, (Int32 Level, Boolean Collapsed)>> _sheetColOutlines = new(StringComparer.OrdinalIgnoreCase);
+    // 行大纲：sheet -> { rowIndex(1基) -> (level, collapsed) }
+    private readonly Dictionary<String, Dictionary<Int32, (Int32 Level, Boolean Collapsed)>> _sheetRowOutlines = new(StringComparer.OrdinalIgnoreCase);
+    // 工作表标签颜色：sheet -> RGB六位十六进制
+    private readonly Dictionary<String, String> _sheetTabColors = new(StringComparer.OrdinalIgnoreCase);
+    // 工作簿保护密码哈希（null 表示不保护）
+    private String? _workbookProtectionHash;
+    private Boolean _workbookLockStructure;
+    private Boolean _workbookLockWindows;
     // 超链接
     private readonly Dictionary<String, List<SheetHyperlink>> _sheetHyperlinks = new(StringComparer.OrdinalIgnoreCase);
     // 数据验证
@@ -166,6 +184,12 @@ public partial class ExcelWriter : DisposeBase
 
     // OtherParts 透传：Reader 收集的原始 ZIP 部件，Save 时原样写回
     private Dictionary<String, Byte[]> _otherParts = [];
+
+    // 用户自定义命名范围（排除 _xlnm.* 系统名）
+    private readonly List<(String Name, String Formula)> _definedNames = [];
+
+    // 结构化表格：sheet → 表格列表
+    private readonly Dictionary<String, List<ExcelTableInfo>> _sheetTables = new(StringComparer.OrdinalIgnoreCase);
     #endregion
 
     #region 构造
@@ -199,7 +223,7 @@ public partial class ExcelWriter : DisposeBase
         var list = new List<XfEntry>();
         foreach (var st in _cellStyles)
         {
-            list.Add(new XfEntry((Int32)st, 0, 0, 0, ExcelHorizontalAlignment.General, ExcelVerticalAlignment.Top, false));
+            list.Add(new XfEntry((Int32)st, 0, 0, 0, ExcelHorizontalAlignment.General, ExcelVerticalAlignment.Top, false, 0, 0, false));
         }
         return list;
     }
@@ -379,6 +403,89 @@ public partial class ExcelWriter : DisposeBase
         }
         dict[row] = height;
     }
+
+    /// <summary>设置列大纲/分组级别（用于折叠展开列）</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="columnIndex">列号（0基）</param>
+    /// <param name="level">大纲级别（1-8，0 表示取消分组）</param>
+    /// <param name="collapsed">是否默认折叠</param>
+    public void SetColumnOutlineLevel(String? sheet, Int32 columnIndex, Int32 level, Boolean collapsed = false)
+    {
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        if (!_sheetColOutlines.TryGetValue(sheet, out var dict))
+        {
+            dict = [];
+            _sheetColOutlines[sheet] = dict;
+        }
+        dict[columnIndex] = (level, collapsed);
+    }
+
+    /// <summary>设置行大纲/分组级别（用于折叠展开行）</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="row">行号（1基）</param>
+    /// <param name="level">大纲级别（1-8，0 表示取消分组）</param>
+    /// <param name="collapsed">是否默认折叠</param>
+    public void SetRowOutlineLevel(String? sheet, Int32 row, Int32 level, Boolean collapsed = false)
+    {
+        if (row < 1) throw new ArgumentOutOfRangeException(nameof(row));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        if (!_sheetRowOutlines.TryGetValue(sheet, out var dict))
+        {
+            dict = [];
+            _sheetRowOutlines[sheet] = dict;
+        }
+        dict[row] = (level, collapsed);
+    }
+
+    /// <summary>设置工作表标签颜色</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="color">RGB 六位十六进制（如 "FF0000"），null 表示清除颜色</param>
+    public void SetSheetTabColor(String? sheet, String? color)
+    {
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        if (color.IsNullOrEmpty())
+            _sheetTabColors.Remove(sheet!);
+        else
+            _sheetTabColors[sheet!] = color!;
+    }
+
+    /// <summary>设置工作簿保护（防止结构/窗口被修改）</summary>
+    /// <param name="password">保护密码（null 表示无密码保护）</param>
+    /// <param name="lockStructure">是否锁定工作表结构（添加/移动/删除/重命名）</param>
+    /// <param name="lockWindows">是否锁定窗口位置和大小</param>
+    public void ProtectWorkbook(String? password, Boolean lockStructure = true, Boolean lockWindows = false)
+    {
+        _workbookLockStructure = lockStructure;
+        _workbookLockWindows = lockWindows;
+        if (password.IsNullOrEmpty())
+        {
+            _workbookProtectionHash = String.Empty; // 无密码但启用保护
+        }
+        else
+        {
+            // 使用 xor + count 算法（与 Excel 97-2003 兼容的简单哈希）
+            // 注：xlsx 实际支持更安全的哈希算法，这里使用最简单的兼容实现
+            _workbookProtectionHash = ComputeXorHash(password!);
+        }
+    }
+
+    private static String ComputeXorHash(String password)
+    {
+        // Excel 97-2003 式密码保护哈希（xor 算法），与 ProtectSheet 复用同一实现
+        var hash = 0;
+        if (password.Length == 0) return "0000";
+        for (var i = password.Length - 1; i >= 0; i--)
+        {
+            hash = ((hash >> 14) & 0x01) | ((hash << 1) & 0x7fff);
+            hash ^= password[i];
+        }
+        hash = ((hash >> 14) & 0x01) | ((hash << 1) & 0x7fff);
+        hash ^= (password.Length + 0x8000);
+        return hash.ToString("X4");
+    }
     #endregion
 
     #region 超链接
@@ -554,6 +661,66 @@ public partial class ExcelWriter : DisposeBase
         ps.PrintTitleEndRow = endRow;
     }
 
+    /// <summary>添加用户自定义命名范围</summary>
+    /// <param name="name">名称（须符合 Excel 命名规则，不可以 _xlnm. 开头）</param>
+    /// <param name="formula">公式或范围引用（如 "Sheet1!$A$1:$B$10" 或 "'数据'!$C:$C"）</param>
+    public void AddDefinedName(String name, String formula)
+    {
+        if (name.IsNullOrEmpty()) throw new ArgumentNullException(nameof(name));
+        if (formula.IsNullOrEmpty()) throw new ArgumentNullException(nameof(formula));
+        _definedNames.Add((name, formula));
+    }
+
+    /// <summary>在当前工作表中添加结构化表格（OOXML table 元素）</summary>
+    /// <param name="range">表格范围（Excel 记法，如 "A1:E10"，含表头行）</param>
+    /// <param name="name">表格名称（同时作为表格引用标识）</param>
+    /// <param name="style">表格样式名称（如 "TableStyleMedium9"，默认不传时使用 Medium9）</param>
+    /// <param name="columnNames">列名集合；null 时从范围列位置自动生成 Column1/Column2...</param>
+    public void AddTable(String range, String name, String? style = null, String[]? columnNames = null)
+    {
+        if (range.IsNullOrEmpty()) throw new ArgumentNullException(nameof(range));
+        if (name.IsNullOrEmpty()) throw new ArgumentNullException(nameof(name));
+        EnsureSheet(SheetName);
+        if (!_sheetTables.TryGetValue(SheetName, out var tables))
+        {
+            tables = [];
+            _sheetTables[SheetName] = tables;
+        }
+        tables.Add(new ExcelTableInfo
+        {
+            Range = range,
+            Name = name,
+            StyleName = style ?? "TableStyleMedium9",
+            ColumnNames = columnNames,
+        });
+    }
+
+    /// <summary>在指定工作表中添加结构化表格（OOXML table 元素）</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <param name="range">表格范围</param>
+    /// <param name="name">表格名称</param>
+    /// <param name="style">表格样式名称</param>
+    /// <param name="columnNames">列名集合</param>
+    public void AddTable(String sheet, String range, String name, String? style = null, String[]? columnNames = null)
+    {
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        if (range.IsNullOrEmpty()) throw new ArgumentNullException(nameof(range));
+        if (name.IsNullOrEmpty()) throw new ArgumentNullException(nameof(name));
+        EnsureSheet(sheet);
+        if (!_sheetTables.TryGetValue(sheet, out var tables))
+        {
+            tables = [];
+            _sheetTables[sheet] = tables;
+        }
+        tables.Add(new ExcelTableInfo
+        {
+            Range = range,
+            Name = name,
+            StyleName = style ?? "TableStyleMedium9",
+            ColumnNames = columnNames,
+        });
+    }
+
     private SheetPageSetup GetOrCreatePageSetup(String sheet)
     {
         if (!_sheetPageSetups.TryGetValue(sheet, out var ps))
@@ -656,6 +823,42 @@ public partial class ExcelWriter : DisposeBase
         }
         list.Add(new ConditionalFormatEntry { Range = range, Type = type, Value = value, Value2 = value2, Color = color });
     }
+
+    /// <summary>添加图标集条件格式</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="range">应用范围（如 "A1:A100"）</param>
+    /// <param name="iconSetType">图标集类型（如 "3Arrows"、"3Flags"、"3TrafficLights1"、"4Rating"、"5Rating"）</param>
+    public void AddIconSetConditionalFormat(String? sheet, String range, String iconSetType = "3Arrows")
+    {
+        if (range.IsNullOrEmpty()) throw new ArgumentNullException(nameof(range));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        if (!_sheetCondFormats.TryGetValue(sheet, out var list))
+        {
+            list = [];
+            _sheetCondFormats[sheet] = list;
+        }
+        list.Add(new ConditionalFormatEntry { Range = range, Type = ExcelConditionalFormatType.IconSet, IconSetType = iconSetType });
+    }
+
+    /// <summary>添加自定义公式条件格式</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="range">应用范围（如 "A1:A100"）</param>
+    /// <param name="formula">Excel 公式（不含 = 号，如 "A1>100"、"AND(A1>0,B1<10)"）</param>
+    /// <param name="color">满足条件时的背景色（RGB十六进制）</param>
+    public void AddExpressionConditionalFormat(String? sheet, String range, String formula, String? color)
+    {
+        if (range.IsNullOrEmpty()) throw new ArgumentNullException(nameof(range));
+        if (formula.IsNullOrEmpty()) throw new ArgumentNullException(nameof(formula));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        if (!_sheetCondFormats.TryGetValue(sheet, out var list))
+        {
+            list = [];
+            _sheetCondFormats[sheet] = list;
+        }
+        list.Add(new ConditionalFormatEntry { Range = range, Type = ExcelConditionalFormatType.Expression, Formula = formula, Color = color });
+    }
     #endregion
 
     #region 对象映射
@@ -737,7 +940,7 @@ public partial class ExcelWriter : DisposeBase
         if (data.DefaultFont != null)
         {
             var df = data.DefaultFont;
-            _fonts[0] = new FontEntry(df.Name, df.Size, df.Bold, false, false, df.Color);
+            _fonts[0] = new FontEntry(df.Name, df.Size, df.Bold, false, false, df.Color, false, null);
         }
 
         try
@@ -854,6 +1057,18 @@ public partial class ExcelWriter : DisposeBase
                     else if (!v.ValidationType.IsNullOrEmpty())
                         AddRangeValidation(sheet, v.CellRange, v.ValidationType!, v.Operator ?? "between", v.Formula1 ?? "0", v.Formula2);
                 }
+
+                // 结构化表格
+                foreach (var tbl in sd.Tables)
+                {
+                    AddTable(sheet, tbl.Range, tbl.Name, tbl.StyleName, tbl.ColumnNames);
+                }
+            }
+
+            // 用户自定义命名范围
+            foreach (var kv in data.DefinedNames)
+            {
+                AddDefinedName(kv.Key, kv.Value);
             }
         }
         finally
