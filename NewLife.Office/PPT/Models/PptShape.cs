@@ -73,4 +73,41 @@ public class PptShape
     /// <summary>圆角半径（仅 roundRect 形状有效，EMU）</summary>
     public Int64 CornerRadius { get; set; }
     #endregion
+
+    #region 方法
+    /// <summary>深拷贝形状（含新 ID）</summary>
+    /// <param name="newId">新形状 ID</param>
+    /// <param name="offsetX">X 偏移量（EMU，添加到现有位置）</param>
+    /// <param name="offsetY">Y 偏移量（EMU）</param>
+    /// <returns>新形状实例</returns>
+    public PptShape Clone(Int32 newId, Int64 offsetX = 0, Int64 offsetY = 0)
+    {
+        var clone = new PptShape
+        {
+            Id = newId,
+            Text = Text,
+            ShapeType = ShapeType,
+            Left = Left + offsetX,
+            Top = Top + offsetY,
+            Width = Width,
+            Height = Height,
+            FillColor = FillColor,
+            FillImage = FillImage != null ? (Byte[])FillImage.Clone() : null,
+            FillImageExt = FillImageExt,
+            LineColor = LineColor,
+            LineWidth = LineWidth,
+            FontSize = FontSize,
+            FontColor = FontColor,
+            Bold = Bold,
+            LatinFontName = LatinFontName,
+            EastAsianFontName = EastAsianFontName,
+            ComplexScriptFontName = ComplexScriptFontName,
+            SymbolFontName = SymbolFontName,
+            Rotation = Rotation,
+            AltText = AltText,
+            CornerRadius = CornerRadius,
+        };
+        return clone;
+    }
+    #endregion
 }

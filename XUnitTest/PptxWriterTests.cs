@@ -926,4 +926,39 @@ public class PptxWriterTests
         Assert.Contains("p:morph", xml);
         Assert.Contains("byObject", xml);
     }
+
+    [Fact, System.ComponentModel.DisplayName("形状克隆—模型级Clone含新ID和偏移")]
+    public void ShapeClone_ModelLevel_WithOffset()
+    {
+        var src = new PptShape
+        {
+            Id = 1,
+            Text = "原始文本",
+            ShapeType = "rect",
+            Left = 1000000, Top = 2000000,
+            Width = 5000000, Height = 3000000,
+            FillColor = "FF0000",
+            LineColor = "0000FF",
+            FontSize = 16,
+            Bold = true,
+            Rotation = 5400000,
+            AltText = "描述文本",
+        };
+
+        var clone = src.Clone(newId: 2, offsetX: 500000, offsetY: 300000);
+
+        Assert.Equal(2, clone.Id);
+        Assert.Equal("原始文本", clone.Text);
+        Assert.Equal("rect", clone.ShapeType);
+        Assert.Equal(1500000, clone.Left);  // 1000000 + 500000
+        Assert.Equal(2300000, clone.Top);   // 2000000 + 300000
+        Assert.Equal(5000000, clone.Width);
+        Assert.Equal(3000000, clone.Height);
+        Assert.Equal("FF0000", clone.FillColor);
+        Assert.Equal("0000FF", clone.LineColor);
+        Assert.Equal(16, clone.FontSize);
+        Assert.True(clone.Bold);
+        Assert.Equal(5400000, clone.Rotation);
+        Assert.Equal("描述文本", clone.AltText);
+    }
 }
