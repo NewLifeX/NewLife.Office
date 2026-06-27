@@ -238,6 +238,50 @@ public class WordDocxTests : IntegrationTestBase
             var indentPara = w.AppendParagraph("首行缩进段落");
             indentPara.FirstLineIndent = 480;
 
+            // W09-01: 删除线
+            w.AppendParagraph("删除线文本", WordParagraphStyle.Normal, new WordRunProperties { Strikethrough = true });
+
+            // W09-02: 上标（X²）
+            var supPara = w.AppendFormattedParagraph(new[]
+            {
+                new WordRun { Text = "X" },
+                new WordRun { Text = "2", Properties = new WordRunProperties { Superscript = true } },
+            });
+
+            // W09-02: 下标（H₂O）
+            var subPara = w.AppendFormattedParagraph(new[]
+            {
+                new WordRun { Text = "H" },
+                new WordRun { Text = "2", Properties = new WordRunProperties { Subscript = true } },
+                new WordRun { Text = "O" },
+            });
+
+            // W09-01: 下划线样式（波浪线）
+            w.AppendParagraph("波浪下划线", WordParagraphStyle.Normal, new WordRunProperties { UnderlineStyle = WordUnderlineStyles.Wave });
+
+            // W09-04: 字符间距加宽
+            w.AppendParagraph("加宽字符间距", WordParagraphStyle.Normal, new WordRunProperties { CharacterSpacing = 40f });
+
+            // W09-04: 字符缩放
+            w.AppendParagraph("字符缩放150%", WordParagraphStyle.Normal, new WordRunProperties { CharacterScaling = 150 });
+
+            // W09-03: 段落边框（上下边框）
+            var borderPara = w.AppendParagraph("带边框段落");
+            borderPara.Borders = new WordParagraphBorders
+            {
+                Top    = new WordBorder { Style = WordBorderStyle.Single, Color = "FF0000", Width = 12 },
+                Bottom = new WordBorder { Style = WordBorderStyle.Double, Color = "0000FF", Width = 8 },
+                Left   = new WordBorder { Style = WordBorderStyle.Dotted, Color = "00AA00", Width = 4 },
+            };
+
+            // W09-01: 制表位
+            var tabPara = w.AppendParagraph("姓名\t部门\t薪资");
+            tabPara.TabStops = new List<WordTabStop>
+            {
+                new WordTabStop { Position = 3600, Alignment = "left" },
+                new WordTabStop { Position = 7200, Alignment = "right", Leader = "dot" },
+            };
+
             w.Save(path);
         }
 
@@ -261,6 +305,8 @@ public class WordDocxTests : IntegrationTestBase
         // 专项验证
         Assert.Contains("一级标题", GetBodyText(doc1));
         Assert.Contains("红色文本", GetBodyText(doc1));
+        Assert.Contains("删除线文本", GetBodyText(doc1));
+        Assert.Contains("带边框段落", GetBodyText(doc1));
         Assert.True(doc1.Hyperlinks.Any(h => h.Url.Contains("newlifex")));
     }
 
@@ -465,6 +511,42 @@ public class WordDocxTests : IntegrationTestBase
         Assert.True(a.BookmarkName == b.BookmarkName,
             $"[{context}] 段落[{idx}] 书签不匹配");
 
+        // W09: 制表位比较
+        if (a.TabStops != null || b.TabStops != null)
+        {
+            Assert.NotNull(a.TabStops);
+            Assert.NotNull(b.TabStops);
+            if (a.TabStops != null && b.TabStops != null)
+            {
+                Assert.True(a.TabStops.Count == b.TabStops.Count,
+                    $"[{context}] 段落[{idx}] TabStops 数量不匹配: 源={a.TabStops.Count}, 输出={b.TabStops.Count}");
+                for (var ti = 0; ti < a.TabStops.Count; ti++)
+                {
+                    var at = a.TabStops[ti];
+                    var bt = b.TabStops[ti];
+                    Assert.Equal(at.Position, bt.Position);
+                    Assert.True(at.Alignment == bt.Alignment,
+                        $"[{context}] 段落[{idx}] TabStop[{ti}] 对齐不匹配");
+                    Assert.True(at.Leader == bt.Leader,
+                        $"[{context}] 段落[{idx}] TabStop[{ti}] 前导符不匹配");
+                }
+            }
+        }
+
+        // W09: 段落边框比较
+        if (a.Borders != null || b.Borders != null)
+        {
+            Assert.NotNull(a.Borders);
+            Assert.NotNull(b.Borders);
+            if (a.Borders != null && b.Borders != null)
+            {
+                AssertBorderEqual(a.Borders.Top,    b.Borders.Top,    context, idx, "上边框");
+                AssertBorderEqual(a.Borders.Bottom, b.Borders.Bottom, context, idx, "下边框");
+                AssertBorderEqual(a.Borders.Left,   b.Borders.Left,   context, idx, "左边框");
+                AssertBorderEqual(a.Borders.Right,  b.Borders.Right,  context, idx, "右边框");
+            }
+        }
+
         // Run 逐一严格比较
         Assert.True(a.Runs.Count == b.Runs.Count,
             $"[{context}] 段落[{idx}] Run 数量不匹配: 源={a.Runs.Count}, 输出={b.Runs.Count}");
@@ -499,7 +581,39 @@ public class WordDocxTests : IntegrationTestBase
                 $"[{context}] 段落[{idx}] Run[{ri}] 字号不匹配: 源={arp.FontSize}, 输出={brp.FontSize}");
             Assert.True(arp.FontName == brp.FontName,
                 $"[{context}] 段落[{idx}] Run[{ri}] 字体不匹配: 源={arp.FontName}, 输出={brp.FontName}");
+
+            // W09: 删除线
+            Assert.True(arp.Strikethrough == brp.Strikethrough,
+                $"[{context}] 段落[{idx}] Run[{ri}] 删除线不匹配");
+            // W09: 上标/下标
+            Assert.True(arp.Superscript == brp.Superscript,
+                $"[{context}] 段落[{idx}] Run[{ri}] 上标不匹配");
+            Assert.True(arp.Subscript == brp.Subscript,
+                $"[{context}] 段落[{idx}] Run[{ri}] 下标不匹配");
+            // W09: 下划线样式
+            Assert.True(arp.UnderlineStyle == brp.UnderlineStyle,
+                $"[{context}] 段落[{idx}] Run[{ri}] 下划线样式不匹配: 源={arp.UnderlineStyle}, 输出={brp.UnderlineStyle}");
+            // W09: 字符间距
+            Assert.True(arp.CharacterSpacing == brp.CharacterSpacing,
+                $"[{context}] 段落[{idx}] Run[{ri}] 字符间距不匹配: 源={arp.CharacterSpacing}, 输出={brp.CharacterSpacing}");
+            // W09: 字符缩放
+            Assert.True(arp.CharacterScaling == brp.CharacterScaling,
+                $"[{context}] 段落[{idx}] Run[{ri}] 字符缩放不匹配: 源={arp.CharacterScaling}, 输出={brp.CharacterScaling}");
         }
+    }
+
+    /// <summary>比较单边边框</summary>
+    private static void AssertBorderEqual(WordBorder? a, WordBorder? b, String context, Int32 idx, String edge)
+    {
+        if (a == null && b == null) return;
+        Assert.True(a != null && b != null,
+            $"[{context}] 段落[{idx}] {edge} 边框不匹配: 一方为 null");
+        if (a == null || b == null) return;
+        Assert.True(a.Style == b.Style,
+            $"[{context}] 段落[{idx}] {edge} 线型不匹配: 源={a.Style}, 输出={b.Style}");
+        Assert.True(a.Color == b.Color,
+            $"[{context}] 段落[{idx}] {edge} 颜色不匹配: 源={a.Color}, 输出={b.Color}");
+        Assert.Equal(a.Width, b.Width);
     }
 
     private static void AssertTablesEqual(WordElement a, WordElement b, String context, Int32 idx)

@@ -46,5 +46,11 @@ public class WordParagraph
 
     /// <summary>段落背景色（16进制 RGB，如 "FF0000"）</summary>
     public String? BackgroundColor { get; set; }
+
+    /// <summary>制表位集合，null 表示未设置（对应 OOXML w:tabs）</summary>
+    public List<WordTabStop>? TabStops { get; set; }
+
+    /// <summary>段落边框，null 表示无边框（对应 OOXML w:pBdr）</summary>
+    public WordParagraphBorders? Borders { get; set; }
     #endregion
 }

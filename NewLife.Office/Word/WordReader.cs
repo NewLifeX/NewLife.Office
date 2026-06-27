@@ -474,6 +474,37 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
             if (pPrEl.SelectSingleNode("w:numPr", ns) != null)
                 isBullet = true;
+
+            // 段落边框：<w:pBdr>
+            var pBdr = pPrEl.SelectSingleNode("w:pBdr", ns) as XmlElement;
+            if (pBdr != null)
+            {
+                var borders = new WordParagraphBorders();
+                borders.Top    = ParseSingleBorder(pBdr.SelectSingleNode("w:top", ns) as XmlElement);
+                borders.Bottom = ParseSingleBorder(pBdr.SelectSingleNode("w:bottom", ns) as XmlElement);
+                borders.Left   = ParseSingleBorder(pBdr.SelectSingleNode("w:left", ns) as XmlElement);
+                borders.Right  = ParseSingleBorder(pBdr.SelectSingleNode("w:right", ns) as XmlElement);
+                if (borders.Top != null || borders.Bottom != null || borders.Left != null || borders.Right != null)
+                    para.Borders = borders;
+            }
+
+            // 制表位：<w:tabs>
+            var tabsEl = pPrEl.SelectSingleNode("w:tabs", ns) as XmlElement;
+            if (tabsEl != null)
+            {
+                var list = new List<WordTabStop>();
+                foreach (XmlElement tabEl in tabsEl.SelectNodes("w:tab", ns)!)
+                {
+                    var pos = tabEl.GetAttribute("w:pos") ?? tabEl.GetAttribute("pos");
+                    if (!Int32.TryParse(pos, out var pv)) continue;
+                    var ts = new WordTabStop { Position = pv };
+                    ts.Alignment = tabEl.GetAttribute("w:val") ?? tabEl.GetAttribute("val") ?? "left";
+                    var leader = tabEl.GetAttribute("w:leader") ?? tabEl.GetAttribute("leader");
+                    if (!String.IsNullOrEmpty(leader) && leader != "none") ts.Leader = leader;
+                    list.Add(ts);
+                }
+                if (list.Count > 0) para.TabStops = list;
+            }
         }
 
         var br = pEl.SelectSingleNode("w:r/w:br", ns) as XmlElement;
@@ -550,6 +581,43 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         if (rFonts != null)
             p.FontName = rFonts.GetAttribute("w:ascii") ?? rFonts.GetAttribute("ascii")
                 ?? rFonts.GetAttribute("w:hAnsi") ?? rFonts.GetAttribute("hAnsi");
+        // 删除线：<w:strike/> 或 <w:dstrike/>（双删除线同归 Strikethrough）
+        if (rPrEl.SelectSingleNode("w:strike", ns) != null || rPrEl.SelectSingleNode("w:dstrike", ns) != null)
+            p.Strikethrough = true;
+        // 上标/下标：<w:vertAlign w:val="superscript"/> / subscript
+        var vertAlign = rPrEl.SelectSingleNode("w:vertAlign", ns) as XmlElement;
+        if (vertAlign != null)
+        {
+            var va = vertAlign.GetAttribute("w:val") ?? vertAlign.GetAttribute("val");
+            if (va == "superscript") p.Superscript = true;
+            else if (va == "subscript") p.Subscript = true;
+        }
+        // 下划线样式：重新解析 w:u 并记录样式值
+        var uEl = rPrEl.SelectSingleNode("w:u", ns) as XmlElement;
+        if (uEl != null)
+        {
+            var uVal = uEl.GetAttribute("w:val") ?? uEl.GetAttribute("val");
+            if (uVal == null || uVal == "single" || (uVal != "none" && uVal != "nil"))
+            {
+                p.Underline = true;
+                if (!String.IsNullOrEmpty(uVal) && uVal != "single")
+                    p.UnderlineStyle = uVal;
+            }
+        }
+        // 字符间距：<w:spacing w:val="..."/>
+        var spEl = rPrEl.SelectSingleNode("w:spacing", ns) as XmlElement;
+        if (spEl != null)
+        {
+            var spVal = spEl.GetAttribute("w:val") ?? spEl.GetAttribute("val");
+            if (Single.TryParse(spVal, out var sv)) p.CharacterSpacing = sv;
+        }
+        // 字符缩放：<w:w w:val="..."/>
+        var wScaleEl = rPrEl.SelectSingleNode("w:w", ns) as XmlElement;
+        if (wScaleEl != null)
+        {
+            var wVal = wScaleEl.GetAttribute("w:val") ?? wScaleEl.GetAttribute("val");
+            if (Int32.TryParse(wVal, out var wv)) p.CharacterScaling = wv;
+        }
         if (isHyperlink && p.ForeColor == null)
         {
             p.ForeColor = "0563C1";
@@ -583,6 +651,34 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
             if (rp.FontSize == null) rp.FontSize = defaults.FontSize;
             if (rp.FontName == null) rp.FontName = defaults.FontName;
         }
+    }
+
+    /// <summary>解析单边边框 XML 元素（w:top / w:bottom / w:left / w:right）</summary>
+    private static WordBorder? ParseSingleBorder(XmlElement? el)
+    {
+        if (el == null) return null;
+        var val = el.GetAttribute("w:val") ?? el.GetAttribute("val");
+        if (String.IsNullOrEmpty(val) || val == "none" || val == "nil") return null;
+        var border = new WordBorder
+        {
+            Style = val switch
+            {
+                "single"     => WordBorderStyle.Single,
+                "thick"      => WordBorderStyle.Thick,
+                "double"     => WordBorderStyle.Double,
+                "dotted"     => WordBorderStyle.Dotted,
+                "dashed"     => WordBorderStyle.Dashed,
+                "dotDash"    => WordBorderStyle.DotDash,
+                "dotDotDash" => WordBorderStyle.DotDotDash,
+                _            => WordBorderStyle.Single,
+            }
+        };
+        border.Color = el.GetAttribute("w:color") ?? el.GetAttribute("color");
+        var sz = el.GetAttribute("w:sz") ?? el.GetAttribute("sz");
+        if (Int32.TryParse(sz, out var s)) border.Width = s;
+        var shadow = el.GetAttribute("w:shadow") ?? el.GetAttribute("shadow");
+        if (shadow == "1" || shadow == "true") border.Shadow = true;
+        return border;
     }
     #endregion
 

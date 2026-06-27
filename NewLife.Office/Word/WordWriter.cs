@@ -675,7 +675,8 @@ public class WordWriter : IDisposable
         var hasPPr = para.StyleId != null || para.Style != WordParagraphStyle.Normal || para.Alignment != null
             || para.IndentLeft.HasValue || para.IndentRight.HasValue || para.FirstLineIndent.HasValue
             || para.SpaceBefore.HasValue || para.SpaceAfter.HasValue || para.LineSpacingPct.HasValue
-            || para.IsBullet || para.BackgroundColor != null;
+            || para.IsBullet || para.BackgroundColor != null
+            || para.Borders != null || (para.TabStops != null && para.TabStops.Count > 0);
         if (hasPPr)
         {
             sb.Append("<w:pPr>");
@@ -716,6 +717,28 @@ public class WordWriter : IDisposable
             }
             if (para.IsBullet)
                 sb.Append("<w:numPr><w:ilvl w:val=\"0\"/><w:numId w:val=\"1\"/></w:numPr>");
+            // 段落边框
+            if (para.Borders != null)
+            {
+                sb.Append("<w:pBdr>");
+                AppendBorderXml(sb, "top",    para.Borders.Top);
+                AppendBorderXml(sb, "left",   para.Borders.Left);
+                AppendBorderXml(sb, "bottom", para.Borders.Bottom);
+                AppendBorderXml(sb, "right",  para.Borders.Right);
+                sb.Append("</w:pBdr>");
+            }
+            // 制表位
+            if (para.TabStops != null && para.TabStops.Count > 0)
+            {
+                sb.Append("<w:tabs>");
+                foreach (var ts in para.TabStops)
+                {
+                    sb.Append($"<w:tab w:val=\"{Esc(ts.Alignment)}\" w:pos=\"{ts.Position}\"");
+                    if (ts.Leader != null) sb.Append($" w:leader=\"{Esc(ts.Leader)}\"");
+                    sb.Append("/>");
+                }
+                sb.Append("</w:tabs>");
+            }
             sb.Append("</w:pPr>");
         }
         if (para.IsPageBreak)
@@ -744,9 +767,19 @@ public class WordWriter : IDisposable
             sb.Append("<w:rPr>");
             if (p.Bold) sb.Append("<w:b/>");
             if (p.Italic) sb.Append("<w:i/>");
-            if (p.Underline) sb.Append("<w:u w:val=\"single\"/>");
+            if (p.Strikethrough) sb.Append("<w:strike/>");
+            if (p.Superscript) sb.Append("<w:vertAlign w:val=\"superscript\"/>");
+            else if (p.Subscript) sb.Append("<w:vertAlign w:val=\"subscript\"/>");
+            // 下划线（支持样式）
+            if (p.Underline || p.UnderlineStyle != null)
+            {
+                var uVal = p.UnderlineStyle ?? "single";
+                sb.Append($"<w:u w:val=\"{uVal}\"/>");
+            }
             if (p.ForeColor != null) sb.Append($"<w:color w:val=\"{p.ForeColor.TrimStart('#')}\"/>");
             if (p.FontSize.HasValue) sb.Append($"<w:sz w:val=\"{(Int32)(p.FontSize.Value * 2)}\"/>");
+            if (p.CharacterSpacing.HasValue) sb.Append($"<w:spacing w:val=\"{p.CharacterSpacing.Value}\"/>");
+            if (p.CharacterScaling.HasValue) sb.Append($"<w:w w:val=\"{p.CharacterScaling.Value}\"/>");
             if (p.FontName != null) sb.Append($"<w:rFonts w:ascii=\"{Esc(p.FontName)}\" w:hAnsi=\"{Esc(p.FontName)}\" w:eastAsia=\"{Esc(p.FontName)}\"/>");
             if (run.HyperlinkRelId != null) sb.Append("<w:rStyle w:val=\"Hyperlink\"/><w:color w:val=\"0563C1\"/><w:u w:val=\"single\"/>");
             sb.Append("</w:rPr>");
@@ -758,6 +791,28 @@ public class WordWriter : IDisposable
 
         if (run.HyperlinkRelId != null)
             sb.Append("</w:hyperlink>");
+    }
+
+    /// <summary>生成单边段落边框 XML（w:top / w:left / w:bottom / w:right）</summary>
+    private static void AppendBorderXml(StringBuilder sb, String edge, WordBorder? border)
+    {
+        if (border == null || border.Style == WordBorderStyle.None) return;
+        var val = border.Style switch
+        {
+            WordBorderStyle.Single     => "single",
+            WordBorderStyle.Thick      => "thick",
+            WordBorderStyle.Double     => "double",
+            WordBorderStyle.Dotted     => "dotted",
+            WordBorderStyle.Dashed     => "dashed",
+            WordBorderStyle.DotDash    => "dotDash",
+            WordBorderStyle.DotDotDash => "dotDotDash",
+            _                          => "single",
+        };
+        sb.Append($"<w:{edge} w:val=\"{val}\" w:sz=\"{border.Width}\" w:space=\"1\"");
+        if (!String.IsNullOrEmpty(border.Color)) sb.Append($" w:color=\"{border.Color!.TrimStart('#')}\"");
+        if (!String.IsNullOrEmpty(border.ThemeColor)) sb.Append($" w:themeColor=\"{border.ThemeColor}\"");
+        if (border.Shadow) sb.Append(" w:shadow=\"1\"");
+        sb.Append("/>");
     }
 
     private void BuildTableXml(StringBuilder sb, List<List<WordCell>> tableRows, Boolean firstRowHeader, WordTableStyle? style = null)
