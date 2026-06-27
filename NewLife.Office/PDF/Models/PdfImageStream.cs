@@ -3,7 +3,7 @@ using System.Text;
 namespace NewLife.Office;
 
 /// <summary>PDF 嵌入图片流</summary>
-public class PdfImageStream
+public class PdfImage
 {
     #region 属性
     /// <summary>图片在文档中的顺序索引（从 0 开始）</summary>

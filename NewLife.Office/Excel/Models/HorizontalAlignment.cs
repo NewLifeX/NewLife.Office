@@ -1,7 +1,7 @@
 ﻿namespace NewLife.Office;
 
 /// <summary>水平对齐方式</summary>
-public enum HorizontalAlignment
+public enum ExcelHorizontalAlignment
 {
     /// <summary>常规</summary>
     General = 0,

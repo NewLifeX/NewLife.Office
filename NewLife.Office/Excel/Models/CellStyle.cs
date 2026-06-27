@@ -5,7 +5,7 @@ namespace NewLife.Office;
 /// 用于控制单元格的字体、填充、边框、对齐、数字格式等外观属性。
 /// 在写入时通过 WriteHeader/WriteRow 等方法传入。
 /// </remarks>
-public class CellStyle
+public class ExcelCellStyle
 {
     #region 属性
     /// <summary>字体名称</summary>
@@ -30,16 +30,16 @@ public class CellStyle
     public String? BackgroundColor { get; set; }
 
     /// <summary>水平对齐</summary>
-    public HorizontalAlignment HAlign { get; set; }
+    public ExcelHorizontalAlignment HAlign { get; set; }
 
     /// <summary>垂直对齐</summary>
-    public VerticalAlignment VAlign { get; set; }
+    public ExcelVerticalAlignment VAlign { get; set; }
 
     /// <summary>是否自动换行</summary>
     public Boolean WrapText { get; set; }
 
     /// <summary>边框样式</summary>
-    public CellBorderStyle Border { get; set; }
+    public ExcelCellBorderStyle Border { get; set; }
 
     /// <summary>边框颜色（RGB十六进制）</summary>
     public String? BorderColor { get; set; }
@@ -50,9 +50,9 @@ public class CellStyle
 
     #region 静态
     /// <summary>默认表头样式（粗体）</summary>
-    public static CellStyle Header => new() { Bold = true };
+    public static ExcelCellStyle Header => new() { Bold = true };
 
     /// <summary>标题样式（粗体、大字、居中）</summary>
-    public static CellStyle Title => new() { Bold = true, FontSize = 14, HAlign = HorizontalAlignment.Center };
+    public static ExcelCellStyle Title => new() { Bold = true, FontSize = 14, HAlign = ExcelHorizontalAlignment.Center };
     #endregion
 }

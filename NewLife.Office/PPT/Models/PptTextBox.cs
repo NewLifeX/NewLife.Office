@@ -85,5 +85,9 @@ public class PptTextBox
 
     /// <summary>文本框下内边距（EMU，bodyPr bIns），0 表示使用默认值</summary>
     public Int32 BottomInset { get; set; }
+
+    /// <summary>语义角色，供 LayoutEngine 自动排版使用，null 表示不参与自动排版</summary>
+    /// <remarks>支持：title/subtitle/body/kpi/caption</remarks>
+    public String? Role { get; set; }
     #endregion
 }

@@ -27,7 +27,7 @@ public class ExcelPivotBuilder
     public String TargetCell { get; set; } = "A1";
 
     /// <summary>字段配置列表</summary>
-    public List<PivotField> Fields { get; } = [];
+    public List<ExcelPivotField> Fields { get; } = [];
 
     /// <summary>文本编码</summary>
     public Encoding Encoding { get; set; } = Encoding.UTF8;
@@ -57,7 +57,7 @@ public class ExcelPivotBuilder
     /// <param name="fieldName">字段名称</param>
     public ExcelPivotBuilder AddRowField(String fieldName)
     {
-        Fields.Add(new PivotField { Name = fieldName, IsRowField = true });
+        Fields.Add(new ExcelPivotField { Name = fieldName, IsRowField = true });
         return this;
     }
 
@@ -65,7 +65,7 @@ public class ExcelPivotBuilder
     /// <param name="fieldName">字段名称</param>
     public ExcelPivotBuilder AddColumnField(String fieldName)
     {
-        Fields.Add(new PivotField { Name = fieldName, IsColumnField = true });
+        Fields.Add(new ExcelPivotField { Name = fieldName, IsColumnField = true });
         return this;
     }
 
@@ -73,9 +73,9 @@ public class ExcelPivotBuilder
     /// <param name="fieldName">字段名称</param>
     /// <param name="func">汇总函数</param>
     /// <param name="caption">显示标题（可空，空时自动生成）</param>
-    public ExcelPivotBuilder AddDataField(String fieldName, PivotSummaryFunction func = PivotSummaryFunction.Sum, String? caption = null)
+    public ExcelPivotBuilder AddDataField(String fieldName, ExcelPivotSummaryFunction func = ExcelPivotSummaryFunction.Sum, String? caption = null)
     {
-        Fields.Add(new PivotField { Name = fieldName, IsDataField = true, SummaryFunction = func, Caption = caption });
+        Fields.Add(new ExcelPivotField { Name = fieldName, IsDataField = true, SummaryFunction = func, Caption = caption });
         return this;
     }
 
@@ -393,12 +393,12 @@ public class ExcelPivotBuilder
         return sb.ToString();
     }
 
-    private static String FuncName(PivotSummaryFunction f) => f switch
+    private static String FuncName(ExcelPivotSummaryFunction f) => f switch
     {
-        PivotSummaryFunction.Count => "Count",
-        PivotSummaryFunction.Average => "Average",
-        PivotSummaryFunction.Max => "Max",
-        PivotSummaryFunction.Min => "Min",
+        ExcelPivotSummaryFunction.Count => "Count",
+        ExcelPivotSummaryFunction.Average => "Average",
+        ExcelPivotSummaryFunction.Max => "Max",
+        ExcelPivotSummaryFunction.Min => "Min",
         _ => "Sum",
     };
     #endregion

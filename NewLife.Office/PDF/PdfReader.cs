@@ -98,11 +98,11 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
     /// 注意：对加密或使用自定义字体映射的 PDF，文本内容可能不准确。
     /// </remarks>
     /// <returns>文本项序列，每项含文本内容和近似 (X, Y) 坐标</returns>
-    public IEnumerable<PdfTextItem> ExtractTextWithPositions()
+    public IEnumerable<PdfText> ExtractTextWithPositions()
     {
         var latin1 = Encoding.GetEncoding(1252);
         var pdf = latin1.GetString(_data);
-        var results = new List<PdfTextItem>();
+        var results = new List<PdfText>();
         var pos = 0;
         while (pos < pdf.Length)
         {
@@ -124,10 +124,10 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
     /// <remarks>
     /// 扫描所有流字典，找到类型为 /Subtype /Image 的 XObject 流并提取原始字节。
     /// 对 /Filter /DCTDecode（JPEG）图片返回直接可用的 JPEG 字节。
-    /// 其他编码格式返回原始压缩字节，可结合 <see cref="PdfImageStream.Filter"/> 判断。
+    /// 其他编码格式返回原始压缩字节，可结合 <see cref="PdfImage.Filter"/> 判断。
     /// </remarks>
     /// <returns>图片流对象序列</returns>
-    public IEnumerable<PdfImageStream> ExtractImageStreams()
+    public IEnumerable<PdfImage> ExtractImageStreams()
     {
         var latin1 = Encoding.GetEncoding(1252);
         var text = latin1.GetString(_data);
@@ -161,7 +161,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     if (dataEnd > dataStart && widthTok > 0 && heightTok > 0)
                     {
                         var rawBytes = _data.AsSpan(dataStart, Math.Min(dataEnd - dataStart, _data.Length - dataStart)).ToArray();
-                        yield return new PdfImageStream
+                        yield return new PdfImage
                         {
                             Index = imgIdx++,
                             Width = widthTok,
@@ -176,6 +176,17 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
             }
             pos = dictEnd + 2;
         }
+    }
+
+    /// <summary>读取整个 PDF 文档为 PdfDocument 数据模型</summary>
+    /// <returns>包含元数据和页数信息的 PdfDocument</returns>
+    public PdfDocument ReadDocument()
+    {
+        var meta = ReadMetadata();
+        return new PdfDocument
+        {
+            Metadata = meta,
+        };
     }
     #endregion
 
@@ -538,7 +549,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
     /// <summary>从 PDF 内容流中提取带位置信息的文本</summary>
     /// <param name="content">内容流字符串</param>
     /// <param name="results">结果列表</param>
-    private static void ExtractPositionedText(String content, List<PdfTextItem> results)
+    private static void ExtractPositionedText(String content, List<PdfText> results)
     {
         var curX = 0f;
         var curY = 0f;
@@ -575,7 +586,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     {
                         var decoded = DecodePdfString(s);
                         if (decoded.Length > 0)
-                            results.Add(new PdfTextItem { Text = decoded, X = curX, Y = curY, FontSize = fontSize });
+                            results.Add(new PdfText { Text = decoded, X = curX, Y = curY, FontSize = fontSize });
                         i = peek + 2;
                         numStack.Clear();
                         continue;
@@ -610,7 +621,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
                             SkipWhitespace(content, ref peek);
                             if (peek + 1 < content.Length && content[peek] == 'T' && content[peek + 1] == 'j')
                             {
-                                results.Add(new PdfTextItem { Text = decoded, X = curX, Y = curY, FontSize = fontSize });
+                                results.Add(new PdfText { Text = decoded, X = curX, Y = curY, FontSize = fontSize });
                                 i = peek + 2;
                                 numStack.Clear();
                                 continue;
@@ -652,7 +663,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     }
                     var txt = arrSb.ToString();
                     if (txt.Length > 0)
-                        results.Add(new PdfTextItem { Text = txt, X = curX, Y = curY, FontSize = fontSize });
+                        results.Add(new PdfText { Text = txt, X = curX, Y = curY, FontSize = fontSize });
                     i = arrEnd + 1;
                     SkipWhitespace(content, ref i);
                     if (i + 1 < content.Length && content[i] == 'T' && content[i + 1] == 'J')

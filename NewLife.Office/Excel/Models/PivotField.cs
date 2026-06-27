@@ -1,7 +1,7 @@
 ﻿namespace NewLife.Office;
 
 /// <summary>Excel 数据透视表字段配置</summary>
-public class PivotField
+public class ExcelPivotField
 {
     #region 属性
     /// <summary>字段名称（对应源数据表头）</summary>
@@ -20,7 +20,7 @@ public class PivotField
     public Boolean IsFilterField { get; set; }
 
     /// <summary>数据字段汇总函数（仅 IsDataField=true 时有效）</summary>
-    public PivotSummaryFunction SummaryFunction { get; set; } = PivotSummaryFunction.Sum;
+    public ExcelPivotSummaryFunction SummaryFunction { get; set; } = ExcelPivotSummaryFunction.Sum;
 
     /// <summary>数据字段显示名称（可空，空时自动生成）</summary>
     public String? Caption { get; set; }

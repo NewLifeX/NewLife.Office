@@ -42,5 +42,9 @@ public class PptSlide
 
     /// <summary>使用的版式索引（0起始，对应 PptxWriter 加载的版式列表；无模板时只有索引 0）</summary>
     public Int32 LayoutIndex { get; set; }
+
+    /// <summary>LayoutEngine 自动排版布局策略，null 表示不启用自动排版</summary>
+    /// <remarks>支持：title_content（默认）/title_only/two_column/chart_only/blank</remarks>
+    public String? Layout { get; set; }
     #endregion
 }

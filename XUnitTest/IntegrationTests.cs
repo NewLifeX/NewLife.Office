@@ -25,19 +25,19 @@ public class IntegrationTests
 
         using (var w = new ExcelWriter(path))
         {
-            var headerStyle = new CellStyle
+            var headerStyle = new ExcelCellStyle
             {
                 Bold = true,
                 FontSize = 11,
                 BackgroundColor = "4472C4",
                 FontColor = "FFFFFF",
-                HAlign = HorizontalAlignment.Center,
-                Border = CellBorderStyle.Thin
+                HAlign = ExcelHorizontalAlignment.Center,
+                Border = ExcelCellBorderStyle.Thin
             };
 
             w.WriteHeader("Data", new[] { "编号", "姓名", "年龄", "入职日期", "薪资", "在职" }, headerStyle);
 
-            var dataStyle = new CellStyle { Border = CellBorderStyle.Thin };
+            var dataStyle = new ExcelCellStyle { Border = ExcelCellBorderStyle.Thin };
             w.WriteRow("Data", new Object?[] { 1, "张三", 28, new DateTime(2020, 1, 15), 8500.50m, true }, dataStyle);
             w.WriteRow("Data", new Object?[] { 2, "李四", 35, new DateTime(2018, 6, 1), 12000m, true }, dataStyle);
             w.WriteRow("Data", new Object?[] { 3, "王五", 42, new DateTime(2015, 3, 20), 15000.75m, false }, dataStyle);
@@ -52,13 +52,13 @@ public class IntegrationTests
             w.SetColumnWidth("Data", 1, 12);
             w.AddHyperlink("Data", 2, 1, "https://example.com/zhangsan", "张三主页");
             w.AddDropdownValidation("Data", "F2:F100", new[] { "是", "否" });
-            w.SetPageSetup("Data", PageOrientation.Landscape, PaperSize.A4);
+            w.SetPageSetup("Data", ExcelPageOrientation.Landscape, ExcelPaperSize.A4);
             w.SetPageMargins("Data", 1.0, 1.0, 0.75, 0.75);
             w.SetHeaderFooter("Data", "员工信息表", "第&P页/共&N页");
             w.SetPrintTitleRows("Data", 1, 1);
             w.ProtectSheet("Data", "pass123");
-            w.AddConditionalFormat("Data", "E2:E4", ConditionalFormatType.GreaterThan, "10000", "92D050");
-            w.AddConditionalFormat("Data", "C2:C4", ConditionalFormatType.Between, "25", "FFFF00", "40");
+            w.AddConditionalFormat("Data", "E2:E4", ExcelConditionalFormatType.GreaterThan, "10000", "92D050");
+            w.AddConditionalFormat("Data", "C2:C4", ExcelConditionalFormatType.Between, "25", "FFFF00", "40");
 
             var products = new[]
             {
@@ -66,7 +66,7 @@ public class IntegrationTests
                 new ProductInfo { Name = "Phone", Price = 3999m, Stock = 500 },
                 new ProductInfo { Name = "Tablet", Price = 2999.50m, Stock = 200 },
             };
-            w.WriteObjects("Products", products, CellStyle.Header);
+            w.WriteObjects("Products", products, ExcelCellStyle.Header);
 
             var dt = new DataTable();
             dt.Columns.Add("Region", typeof(String));
@@ -75,8 +75,8 @@ public class IntegrationTests
             dt.Rows.Add("East", 150000m, "Q1");
             dt.Rows.Add("West", 120000m, "Q2");
             dt.Rows.Add("North", 90000m, "Q3");
-            w.WriteDataTable("Sales", dt, CellStyle.Header);
-            w.AddConditionalFormat("Sales", "B2:B4", ConditionalFormatType.DataBar, null, "4472C4");
+            w.WriteDataTable("Sales", dt, ExcelCellStyle.Header);
+            w.AddConditionalFormat("Sales", "B2:B4", ExcelConditionalFormatType.DataBar, null, "4472C4");
 
             w.WriteHeader("Images", new[] { "Description", "Photo" });
             w.WriteRow("Images", new Object?[] { "Test Image", "" });
@@ -101,19 +101,19 @@ public class IntegrationTests
         var w = new ExcelWriter(ms);
 
         // === Sheet1: 数据表 ===
-        var headerStyle = new CellStyle
+        var headerStyle = new ExcelCellStyle
         {
             Bold = true,
             FontSize = 11,
             BackgroundColor = "4472C4",
             FontColor = "FFFFFF",
-            HAlign = HorizontalAlignment.Center,
-            Border = CellBorderStyle.Thin
+            HAlign = ExcelHorizontalAlignment.Center,
+            Border = ExcelCellBorderStyle.Thin
         };
 
         w.WriteHeader("Data", new[] { "编号", "姓名", "年龄", "入职日期", "薪资", "在职" }, headerStyle);
 
-        var dataStyle = new CellStyle { Border = CellBorderStyle.Thin };
+        var dataStyle = new ExcelCellStyle { Border = ExcelCellBorderStyle.Thin };
         w.WriteRow("Data", new Object?[] { 1, "张三", 28, new DateTime(2020, 1, 15), 8500.50m, true }, dataStyle);
         w.WriteRow("Data", new Object?[] { 2, "李四", 35, new DateTime(2018, 6, 1), 12000m, true }, dataStyle);
         w.WriteRow("Data", new Object?[] { 3, "王五", 42, new DateTime(2015, 3, 20), 15000.75m, false }, dataStyle);
@@ -144,7 +144,7 @@ public class IntegrationTests
         w.AddDropdownValidation("Data", "F2:F100", new[] { "是", "否" });
 
         // 页面设置
-        w.SetPageSetup("Data", PageOrientation.Landscape, PaperSize.A4);
+        w.SetPageSetup("Data", ExcelPageOrientation.Landscape, ExcelPaperSize.A4);
         w.SetPageMargins("Data", 1.0, 1.0, 0.75, 0.75);
         w.SetHeaderFooter("Data", "员工信息表", "第&P页/共&N页");
         w.SetPrintTitleRows("Data", 1, 1);
@@ -153,10 +153,10 @@ public class IntegrationTests
         w.ProtectSheet("Data", "pass123");
 
         // 条件格式：薪资>10000 绿色
-        w.AddConditionalFormat("Data", "E2:E4", ConditionalFormatType.GreaterThan, "10000", "92D050");
+        w.AddConditionalFormat("Data", "E2:E4", ExcelConditionalFormatType.GreaterThan, "10000", "92D050");
 
         // 条件格式：年龄在 25-40 之间 黄色
-        w.AddConditionalFormat("Data", "C2:C4", ConditionalFormatType.Between, "25", "FFFF00", "40");
+        w.AddConditionalFormat("Data", "C2:C4", ExcelConditionalFormatType.Between, "25", "FFFF00", "40");
 
         // === Sheet2: 对象映射导出 ===
         var products = new[]
@@ -165,7 +165,7 @@ public class IntegrationTests
             new ProductInfo { Name = "Phone", Price = 3999m, Stock = 500 },
             new ProductInfo { Name = "Tablet", Price = 2999.50m, Stock = 200 },
         };
-        w.WriteObjects("Products", products, CellStyle.Header);
+        w.WriteObjects("Products", products, ExcelCellStyle.Header);
 
         // === Sheet3: DataTable 导出 ===
         var dt = new DataTable();
@@ -175,10 +175,10 @@ public class IntegrationTests
         dt.Rows.Add("East", 150000m, "Q1");
         dt.Rows.Add("West", 120000m, "Q2");
         dt.Rows.Add("North", 90000m, "Q3");
-        w.WriteDataTable("Sales", dt, CellStyle.Header);
+        w.WriteDataTable("Sales", dt, ExcelCellStyle.Header);
 
         // DataBar 条件格式
-        w.AddConditionalFormat("Sales", "B2:B4", ConditionalFormatType.DataBar, null, "4472C4");
+        w.AddConditionalFormat("Sales", "B2:B4", ExcelConditionalFormatType.DataBar, null, "4472C4");
 
         // === Sheet4: 图片 ===
         w.WriteHeader("Images", new[] { "Description", "Photo" });
@@ -295,7 +295,7 @@ public class IntegrationTests
             // 写入
             using (var w = new ExcelWriter(path))
             {
-                w.WriteHeader("Sheet1", new[] { "Id", "Name", "Score" }, CellStyle.Header);
+                w.WriteHeader("Sheet1", new[] { "Id", "Name", "Score" }, ExcelCellStyle.Header);
                 w.WriteRow("Sheet1", new Object?[] { 1, "Alice", 95.5 });
                 w.WriteRow("Sheet1", new Object?[] { 2, "Bob", 87.0 });
                 w.FreezePane("Sheet1", 1);

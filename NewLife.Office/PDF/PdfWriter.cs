@@ -534,6 +534,34 @@ public class PdfWriter : IDisposable
         Save(fs);
     }
 
+    /// <summary>从 PdfDocument 模型保存到文件</summary>
+    /// <param name="path">输出路径</param>
+    /// <param name="document">PDF 文档数据模型</param>
+    public void Save(String path, PdfDocument document)
+    {
+        using var fs = new FileStream(path.GetFullPath(), FileMode.Create, FileAccess.Write, FileShare.None);
+        Save(fs, document);
+    }
+
+    /// <summary>从 PdfDocument 模型保存到流</summary>
+    /// <param name="stream">目标流</param>
+    /// <param name="document">PDF 文档数据模型</param>
+    public void Save(Stream stream, PdfDocument document)
+    {
+        HeaderText       = document.HeaderText;
+        FooterText       = document.FooterText;
+        ShowPageNumbers  = document.ShowPageNumbers;
+        DocumentTitle    = document.Metadata.Title;
+        DocumentAuthor   = document.Metadata.Author;
+        DocumentSubject  = document.Metadata.Subject;
+        UserPassword     = document.UserPassword;
+        OwnerPassword    = document.OwnerPassword;
+        Permissions      = document.Permissions;
+        if (document.Bookmarks.Count > 0)
+            Bookmarks.AddRange(document.Bookmarks);
+        Save(stream);
+    }
+
     /// <summary>保存到流</summary>
     /// <param name="stream">目标流</param>
     public void Save(Stream stream)

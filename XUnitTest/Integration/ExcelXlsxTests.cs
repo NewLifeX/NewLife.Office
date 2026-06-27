@@ -15,19 +15,19 @@ public class ExcelXlsxTests : IntegrationTestBase
 
         using (var w = new ExcelWriter(path))
         {
-            var headerStyle = new CellStyle
+            var headerStyle = new ExcelCellStyle
             {
                 Bold = true,
                 FontSize = 12,
                 BackgroundColor = "1F4E79",
                 FontColor = "FFFFFF",
-                HAlign = HorizontalAlignment.Center,
-                Border = CellBorderStyle.Thin,
+                HAlign = ExcelHorizontalAlignment.Center,
+                Border = ExcelCellBorderStyle.Thin,
             };
 
             // Sheet1: 员工数据
             w.WriteHeader("员工表", new[] { "编号", "姓名", "年龄", "入职日期", "薪资", "在职" }, headerStyle);
-            var dataStyle = new CellStyle { Border = CellBorderStyle.Thin };
+            var dataStyle = new ExcelCellStyle { Border = ExcelCellBorderStyle.Thin };
             w.WriteRow("员工表", new Object?[] { 1, "张三", 28, new DateTime(2020, 1, 15), 8500.50m, true }, dataStyle);
             w.WriteRow("员工表", new Object?[] { 2, "李四", 35, new DateTime(2018, 6, 1), 12000m, true }, dataStyle);
             w.WriteRow("员工表", new Object?[] { 3, "王五", 42, new DateTime(2015, 3, 20), 15000.75m, false }, dataStyle);
@@ -45,8 +45,8 @@ public class ExcelXlsxTests : IntegrationTestBase
             w.WriteRow("员工表", new Object?[] { "汇总行（合并单元格）" });
             w.AddHyperlink("员工表", 2, 1, "https://example.com/zhangsan", "张三主页");
             w.AddDropdownValidation("员工表", "F2:F100", new[] { "TRUE", "FALSE" });
-            w.AddConditionalFormat("员工表", "E2:E6", ConditionalFormatType.GreaterThan, "10000", "92D050");
-            w.SetPageSetup("员工表", PageOrientation.Landscape, PaperSize.A4);
+            w.AddConditionalFormat("员工表", "E2:E6", ExcelConditionalFormatType.GreaterThan, "10000", "92D050");
+            w.SetPageSetup("员工表", ExcelPageOrientation.Landscape, ExcelPaperSize.A4);
 
             // Sheet2: 产品
             w.WriteHeader("产品表", new[] { "产品", "价格", "库存", "状态" }, headerStyle);
@@ -65,8 +65,8 @@ public class ExcelXlsxTests : IntegrationTestBase
             dt.Rows.Add("华西", 120000m, "Q2");
             dt.Rows.Add("华北", 90000m, "Q3");
             dt.Rows.Add("华南", 180000m, "Q4");
-            w.WriteDataTable("销售统计", dt, CellStyle.Header);
-            w.AddConditionalFormat("销售统计", "B2:B5", ConditionalFormatType.DataBar, null, "4472C4");
+            w.WriteDataTable("销售统计", dt, ExcelCellStyle.Header);
+            w.AddConditionalFormat("销售统计", "B2:B5", ExcelConditionalFormatType.DataBar, null, "4472C4");
 
             w.Save();
         }

@@ -14,6 +14,39 @@ partial class PptxWriter
         Save(fs);
     }
 
+    /// <summary>从 PptDocument 模型保存到文件</summary>
+    /// <param name="path">输出路径</param>
+    /// <param name="document">演示文稿数据模型</param>
+    public void Save(String path, PptDocument document)
+    {
+        using var fs = new FileStream(path.GetFullPath(), FileMode.Create, FileAccess.Write, FileShare.None);
+        Save(fs, document);
+    }
+
+    /// <summary>从 PptDocument 模型保存到流</summary>
+    /// <param name="stream">目标流</param>
+    /// <param name="document">演示文稿数据模型</param>
+    public void Save(Stream stream, PptDocument document)
+    {
+        // 将文档模型属性应用到 writer
+        SlideWidth  = document.SlideWidth;
+        SlideHeight = document.SlideHeight;
+        if (document.AccentColors is { Length: > 0 })
+            SetAccentColors(document.AccentColors);
+        if (document.Master != null)
+        {
+            _progMasters.Clear();
+            _progMasters.Add(document.Master);
+        }
+        // 幻灯片：清空现有后逐一添加
+        Slides.Clear();
+        foreach (var slide in document.Slides)
+            Slides.Add(slide);
+        if (!document.Properties.Password.IsNullOrEmpty())
+            SetProtection(document.Properties.Password);
+        Save(stream);
+    }
+
     /// <summary>保存到流</summary>
     /// <param name="stream">目标流</param>
     public void Save(Stream stream)

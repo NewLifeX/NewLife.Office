@@ -6,7 +6,7 @@ namespace NewLife.Office;
 /// <remarks>
 /// 坐标系以页面左下角为原点，单位为 PDF 用户空间单位（通常约等于磅/pt）。
 /// </remarks>
-public class PdfTextItem
+public class PdfText
 {
     #region 属性
     /// <summary>文本内容</summary>

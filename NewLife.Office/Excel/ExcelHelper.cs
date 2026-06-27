@@ -18,7 +18,7 @@ public static class ExcelHelper
     /// <param name="data">对象集合</param>
     /// <param name="sheetName">工作表名称，默认 "Sheet1"</param>
     /// <param name="headerStyle">可选表头样式</param>
-    public static void SaveAs<T>(String path, IEnumerable<T> data, String sheetName = "Sheet1", CellStyle? headerStyle = null) where T : class
+    public static void SaveAs<T>(String path, IEnumerable<T> data, String sheetName = "Sheet1", ExcelCellStyle? headerStyle = null) where T : class
     {
         if (path.IsNullOrEmpty()) throw new ArgumentNullException(nameof(path));
         if (data == null) throw new ArgumentNullException(nameof(data));
@@ -35,7 +35,7 @@ public static class ExcelHelper
     /// <param name="data">对象集合</param>
     /// <param name="sheetName">工作表名称，默认 "Sheet1"</param>
     /// <param name="headerStyle">可选表头样式</param>
-    public static void SaveAs<T>(Stream stream, IEnumerable<T> data, String sheetName = "Sheet1", CellStyle? headerStyle = null) where T : class
+    public static void SaveAs<T>(Stream stream, IEnumerable<T> data, String sheetName = "Sheet1", ExcelCellStyle? headerStyle = null) where T : class
     {
         if (stream == null) throw new ArgumentNullException(nameof(stream));
         if (data == null) throw new ArgumentNullException(nameof(data));
@@ -51,7 +51,7 @@ public static class ExcelHelper
     /// <param name="table">DataTable</param>
     /// <param name="sheetName">工作表名称，默认 "Sheet1"</param>
     /// <param name="headerStyle">可选表头样式</param>
-    public static void SaveAs(String path, DataTable table, String sheetName = "Sheet1", CellStyle? headerStyle = null)
+    public static void SaveAs(String path, DataTable table, String sheetName = "Sheet1", ExcelCellStyle? headerStyle = null)
     {
         if (path.IsNullOrEmpty()) throw new ArgumentNullException(nameof(path));
         if (table == null) throw new ArgumentNullException(nameof(table));

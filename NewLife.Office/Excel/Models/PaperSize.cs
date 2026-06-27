@@ -1,7 +1,7 @@
 ﻿namespace NewLife.Office;
 
 /// <summary>纸张大小</summary>
-public enum PaperSize
+public enum ExcelPaperSize
 {
     /// <summary>默认</summary>
     Default = 0,

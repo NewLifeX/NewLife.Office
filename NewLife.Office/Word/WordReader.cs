@@ -713,7 +713,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return new WordElement
         {
             Type = WordElementType.Image,
-            Image = new WordImageElement
+            Image = new WordImage
             {
                 RelId = rId,
                 WidthEmu = cx > 0 ? cx : 3600000,

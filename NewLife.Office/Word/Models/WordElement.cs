@@ -19,7 +19,7 @@ public class WordElement
     public WordTableStyle? TableStyle { get; set; }
 
     /// <summary>图片（Type=Image 时有效）</summary>
-    public WordImageElement? Image { get; set; }
+    public WordImage? Image { get; set; }
 
     /// <summary>
     /// 元素原始 XML，由 Reader 将对应 <c>w:p</c>/<c>w:tbl</c> 的 OuterXml 存入。

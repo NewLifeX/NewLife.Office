@@ -1,7 +1,7 @@
 ﻿namespace NewLife.Office;
 
 /// <summary>页面方向</summary>
-public enum PageOrientation
+public enum ExcelPageOrientation
 {
     /// <summary>纵向</summary>
     Portrait = 0,

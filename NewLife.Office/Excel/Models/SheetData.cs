@@ -5,7 +5,7 @@ namespace NewLife.Office;
 /// 包含工作表的行数据、单元格样式和全部元数据。
 /// 所有行列索引均为 0 基。
 /// </remarks>
-public class SheetData
+public class ExcelSheet
 {
     #region 属性
     /// <summary>工作表名称</summary>
@@ -23,7 +23,7 @@ public class SheetData
     public List<Int32>? ActualRowNumbers { get; set; }
 
     /// <summary>单元格样式映射（行, 列）→ 样式</summary>
-    public Dictionary<(Int32 Row, Int32 Col), CellStyle> CellStyles { get; set; } = [];
+    public Dictionary<(Int32 Row, Int32 Col), ExcelCellStyle> CellStyles { get; set; } = [];
 
     /// <summary>合并单元格区域（起始行, 起始列, 结束行, 结束列），均为0基</summary>
     public List<(Int32 StartRow, Int32 StartCol, Int32 EndRow, Int32 EndCol)> Merges { get; set; } = [];
@@ -47,10 +47,10 @@ public class SheetData
     public List<ExcelImage> Images { get; set; } = [];
 
     /// <summary>页面方向</summary>
-    public PageOrientation Orientation { get; set; } = PageOrientation.Portrait;
+    public ExcelPageOrientation Orientation { get; set; } = ExcelPageOrientation.Portrait;
 
     /// <summary>纸张大小</summary>
-    public PaperSize PaperSize { get; set; } = PaperSize.Default;
+    public ExcelPaperSize PaperSize { get; set; } = ExcelPaperSize.Default;
 
     /// <summary>上边距（英寸）</summary>
     public Double MarginTop { get; set; } = 0.75;
@@ -80,15 +80,18 @@ public class SheetData
     public String? ProtectionPassword { get; set; }
 
     /// <summary>条件格式集合</summary>
-    public List<ConditionalFormatInfo> ConditionalFormats { get; set; } = [];
+    public List<ExcelConditionalFormat> ConditionalFormats { get; set; } = [];
 
     /// <summary>批注（0基行, 0基列）→ (文本, 作者)</summary>
     public Dictionary<(Int32 Row, Int32 Col), (String Text, String Author)> Comments { get; set; } = [];
 
     /// <summary>数据验证集合</summary>
-    public List<ValidationInfo> Validations { get; set; } = [];
+    public List<ExcelValidation> Validations { get; set; } = [];
 
     /// <summary>公式（0基行, 0基列）→ 公式文本（不含等号）</summary>
     public Dictionary<(Int32 Row, Int32 Col), String> Formulas { get; set; } = [];
+
+    /// <summary>图表集合（嵌入工作表的图表，由 ExcelWriter.AddChart 写入）</summary>
+    public List<ExcelChart> Charts { get; set; } = [];
     #endregion
 }

@@ -1,7 +1,7 @@
 ﻿namespace NewLife.Office;
 
 /// <summary>图片元素</summary>
-public class WordImageElement
+public class WordImage
 {
     #region 属性
     /// <summary>图片数据</summary>

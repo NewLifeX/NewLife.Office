@@ -29,8 +29,8 @@ public partial class ExcelWriter : DisposeBase
 
     private record FontEntry(String? Name, Double Size, Boolean Bold, Boolean Italic, Boolean Underline, String? Color);
     private record FillEntry(String? BgColor, String PatternType);
-    private record BorderEntry(CellBorderStyle Style, String? Color);
-    private record XfEntry(Int32 NumFmtId, Int32 FontId, Int32 FillId, Int32 BorderId, HorizontalAlignment HAlign, VerticalAlignment VAlign, Boolean WrapText);
+    private record BorderEntry(ExcelCellBorderStyle Style, String? Color);
+    private record XfEntry(Int32 NumFmtId, Int32 FontId, Int32 FillId, Int32 BorderId, ExcelHorizontalAlignment HAlign, ExcelVerticalAlignment VAlign, Boolean WrapText);
 
     private class SheetHyperlink
     {
@@ -69,8 +69,8 @@ public partial class ExcelWriter : DisposeBase
 
     private class SheetPageSetup
     {
-        public PageOrientation Orientation { get; set; }
-        public PaperSize PaperSize { get; set; }
+        public ExcelPageOrientation Orientation { get; set; }
+        public ExcelPaperSize PaperSize { get; set; }
         public Double MarginTop { get; set; } = 0.75;
         public Double MarginBottom { get; set; } = 0.75;
         public Double MarginLeft { get; set; } = 0.7;
@@ -84,7 +84,7 @@ public partial class ExcelWriter : DisposeBase
     private class ConditionalFormatEntry
     {
         public String Range { get; set; } = null!;
-        public ConditionalFormatType Type { get; set; }
+        public ExcelConditionalFormatType Type { get; set; }
         public String? Value { get; set; }
         public String? Value2 { get; set; }
         public String? Color { get; set; }
@@ -132,7 +132,7 @@ public partial class ExcelWriter : DisposeBase
     // 样式管理（字体/填充/边框/XF 去重）
     private readonly List<FontEntry> _fonts = [new(null, 0, false, false, false, null)]; // index 0 = 默认字体
     private readonly List<FillEntry> _fills = [new(null, "none"), new(null, "gray125")]; // 0=none, 1=gray125 (Excel 要求)
-    private readonly List<BorderEntry> _borders = [new(CellBorderStyle.None, null)]; // index 0 = 无边框
+    private readonly List<BorderEntry> _borders = [new(ExcelCellBorderStyle.None, null)]; // index 0 = 无边框
     private readonly Dictionary<String, Int32> _numFmtMap = new(StringComparer.Ordinal); // formatCode → numFmtId
     private Int32 _nextNumFmtId = 164; // 自定义 numFmt 从 164 开始
     private readonly List<XfEntry> _xfEntries;
@@ -162,7 +162,7 @@ public partial class ExcelWriter : DisposeBase
     private readonly Dictionary<String, List<SheetComment>> _sheetComments = new(StringComparer.OrdinalIgnoreCase);
 
     // 每单元格样式覆盖（0基行, 0基列）→ CellStyle
-    private readonly Dictionary<String, Dictionary<(Int32 Row, Int32 Col), CellStyle>> _cellStyleOverrides = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<String, Dictionary<(Int32 Row, Int32 Col), Office.ExcelCellStyle>> _cellStyleOverrides = new(StringComparer.OrdinalIgnoreCase);
 
     // OtherParts 透传：Reader 收集的原始 ZIP 部件，Save 时原样写回
     private Dictionary<String, Byte[]> _otherParts = [];
@@ -199,7 +199,7 @@ public partial class ExcelWriter : DisposeBase
         var list = new List<XfEntry>();
         foreach (var st in _cellStyles)
         {
-            list.Add(new XfEntry((Int32)st, 0, 0, 0, HorizontalAlignment.General, VerticalAlignment.Top, false));
+            list.Add(new XfEntry((Int32)st, 0, 0, 0, ExcelHorizontalAlignment.General, ExcelVerticalAlignment.Top, false));
         }
         return list;
     }
@@ -224,7 +224,7 @@ public partial class ExcelWriter : DisposeBase
     /// <param name="sheet">工作表名称（可空，空时使用 <see cref="SheetName"/>）</param>
     /// <param name="headers">列头文本集合</param>
     /// <param name="style">表头单元格样式</param>
-    public void WriteHeader(String sheet, IEnumerable<String> headers, CellStyle? style)
+    public void WriteHeader(String sheet, IEnumerable<String> headers, Office.ExcelCellStyle? style)
     {
         if (sheet.IsNullOrEmpty()) sheet = SheetName;
         if (headers == null) throw new ArgumentNullException(nameof(headers));
@@ -259,7 +259,7 @@ public partial class ExcelWriter : DisposeBase
     /// <param name="sheet">工作表名称（可空，空时使用 <see cref="SheetName"/>）</param>
     /// <param name="data">数据集合，每行一个对象数组</param>
     /// <param name="style">统一单元格样式</param>
-    public void WriteRows(String? sheet, IEnumerable<Object?[]> data, CellStyle? style)
+    public void WriteRows(String? sheet, IEnumerable<Object?[]> data, Office.ExcelCellStyle? style)
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
 
@@ -280,7 +280,7 @@ public partial class ExcelWriter : DisposeBase
     /// <param name="sheet">工作表名称（可空）</param>
     /// <param name="values">单行数据</param>
     /// <param name="style">单元格样式</param>
-    public void WriteRow(String? sheet, Object?[] values, CellStyle? style = null)
+    public void WriteRow(String? sheet, Object?[] values, Office.ExcelCellStyle? style = null)
     {
         if (sheet.IsNullOrEmpty()) sheet = SheetName;
         EnsureSheet(sheet);
@@ -502,7 +502,7 @@ public partial class ExcelWriter : DisposeBase
     /// <param name="sheet">工作表名称（可空）</param>
     /// <param name="orientation">页面方向</param>
     /// <param name="paperSize">纸张大小</param>
-    public void SetPageSetup(String? sheet, PageOrientation orientation, PaperSize paperSize = PaperSize.A4)
+    public void SetPageSetup(String? sheet, ExcelPageOrientation orientation, ExcelPaperSize paperSize = ExcelPaperSize.A4)
     {
         if (sheet.IsNullOrEmpty()) sheet = SheetName;
         EnsureSheet(sheet);
@@ -620,7 +620,7 @@ public partial class ExcelWriter : DisposeBase
     /// <param name="row">行号（0基）</param>
     /// <param name="col">列号（0基）</param>
     /// <param name="style">单元格样式</param>
-    public void SetCellStyle(String? sheet, Int32 row, Int32 col, CellStyle style)
+    public void SetCellStyle(String? sheet, Int32 row, Int32 col, Office.ExcelCellStyle style)
     {
         if (style == null) throw new ArgumentNullException(nameof(style));
         if (sheet.IsNullOrEmpty()) sheet = SheetName;
@@ -643,7 +643,7 @@ public partial class ExcelWriter : DisposeBase
     /// <param name="value">条件值</param>
     /// <param name="color">满足条件时的背景色（RGB十六进制）</param>
     /// <param name="value2">第二个条件值（仅 Between 类型使用）</param>
-    public void AddConditionalFormat(String? sheet, String range, ConditionalFormatType type, String? value, String? color, String? value2 = null)
+    public void AddConditionalFormat(String? sheet, String range, ExcelConditionalFormatType type, String? value, String? color, String? value2 = null)
     {
         if (range.IsNullOrEmpty()) throw new ArgumentNullException(nameof(range));
         if (sheet.IsNullOrEmpty()) sheet = SheetName;
@@ -664,7 +664,7 @@ public partial class ExcelWriter : DisposeBase
     /// <param name="sheet">工作表名称（可空）</param>
     /// <param name="data">对象集合</param>
     /// <param name="headerStyle">表头样式</param>
-    public void WriteObjects<T>(String? sheet, IEnumerable<T> data, CellStyle? headerStyle = null) where T : class
+    public void WriteObjects<T>(String? sheet, IEnumerable<T> data, Office.ExcelCellStyle? headerStyle = null) where T : class
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
         if (sheet.IsNullOrEmpty()) sheet = SheetName;
@@ -702,7 +702,7 @@ public partial class ExcelWriter : DisposeBase
     /// <param name="sheet">工作表名称（可空）</param>
     /// <param name="table">DataTable</param>
     /// <param name="headerStyle">表头样式</param>
-    public void WriteDataTable(String? sheet, DataTable table, CellStyle? headerStyle = null)
+    public void WriteDataTable(String? sheet, DataTable table, Office.ExcelCellStyle? headerStyle = null)
     {
         if (table == null) throw new ArgumentNullException(nameof(table));
         if (sheet.IsNullOrEmpty()) sheet = SheetName;
@@ -725,7 +725,7 @@ public partial class ExcelWriter : DisposeBase
     #region ExcelData写入
     /// <summary>从完整快照写入工作簿</summary>
     /// <param name="data">ExcelData 快照数据</param>
-    public void WriteExcel(ExcelData data)
+    public void WriteExcel(ExcelDocument data)
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
 
@@ -821,7 +821,7 @@ public partial class ExcelWriter : DisposeBase
                 }
 
                 // 页面设置
-                if (sd.Orientation != PageOrientation.Portrait || sd.PaperSize != PaperSize.Default)
+                if (sd.Orientation != ExcelPageOrientation.Portrait || sd.PaperSize != ExcelPaperSize.Default)
                     SetPageSetup(sheet, sd.Orientation, sd.PaperSize);
                 SetPageMargins(sheet, sd.MarginTop, sd.MarginBottom, sd.MarginLeft, sd.MarginRight);
                 if (!sd.HeaderText.IsNullOrEmpty() || !sd.FooterText.IsNullOrEmpty())

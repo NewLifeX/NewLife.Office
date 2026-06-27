@@ -416,6 +416,22 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         for (var i = 0; i < count; i++)
             yield return ReadSlide(i);
     }
+
+    /// <summary>读取整个演示文稿为 PptDocument 数据模型</summary>
+    /// <returns>包含全部幻灯片和文档属性的 PptDocument</returns>
+    public PptDocument ReadDocument()
+    {
+        var doc = new PptDocument
+        {
+            SlideWidth  = SlideWidth,
+            SlideHeight = SlideHeight,
+            AccentColors = [.. AccentColors],
+        };
+        var count = GetSlideCount();
+        for (var i = 0; i < count; i++)
+            doc.Slides.Add(ReadSlide(i));
+        return doc;
+    }
     #endregion
 
     #region 私有方法

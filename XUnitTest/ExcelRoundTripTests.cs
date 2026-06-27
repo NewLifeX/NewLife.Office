@@ -75,7 +75,7 @@ public class ExcelRoundTripTests
     #region 比较引擎
 
     /// <summary>深度比较两个 ExcelData 快照</summary>
-    private static void AssertExcelDataEqual(ExcelData expected, ExcelData actual, String? label = null)
+    private static void AssertExcelDataEqual(ExcelDocument expected, ExcelDocument actual, String? label = null)
     {
         var prefix = label != null ? $"[{label}] " : String.Empty;
 
@@ -275,7 +275,7 @@ public class ExcelRoundTripTests
                 Console.WriteLine($"--- 处理: {fileName} ---");
 
                 // ① 读取源文件为 ExcelData
-                ExcelData sourceData;
+                ExcelDocument sourceData;
                 using (var reader = new ExcelReader(sourcePath))
                 {
                     sourceData = reader.ReadExcel();
@@ -305,7 +305,7 @@ public class ExcelRoundTripTests
                 Assert.True(File.Exists(outputPath), $"{fileName}: 输出文件未生成");
 
                 // ③ 重新读回输出文件
-                ExcelData outputData;
+                ExcelDocument outputData;
                 using (var reader = new ExcelReader(outputPath))
                 {
                     outputData = reader.ReadExcel();
@@ -337,19 +337,19 @@ public class ExcelRoundTripTests
             // ① 程序化构造全功能 xlsx（用临时文件）
             using (var w = new ExcelWriter(tempFile))
             {
-            var headerStyle = new CellStyle
+            var headerStyle = new ExcelCellStyle
             {
                 Bold = true,
                 FontSize = 12,
                 BackgroundColor = "4472C4",
                 FontColor = "FFFFFF",
-                HAlign = HorizontalAlignment.Center,
-                Border = CellBorderStyle.Thin,
+                HAlign = ExcelHorizontalAlignment.Center,
+                Border = ExcelCellBorderStyle.Thin,
             };
 
             // Sheet1: 包含各种数据类型
             w.WriteHeader("Data", new[] { "编号", "名称", "日期", "金额", "比率", "状态" }, headerStyle);
-            var dataStyle = new CellStyle { Border = CellBorderStyle.Thin };
+            var dataStyle = new ExcelCellStyle { Border = ExcelCellBorderStyle.Thin };
             w.WriteRow("Data", new Object?[] { 1, "测试项目A", new DateTime(2025, 6, 15), 15000.50m, 0.85, true }, dataStyle);
             w.WriteRow("Data", new Object?[] { 2, "测试项目B", new DateTime(2025, 7, 1), 23000m, 0.92, false }, dataStyle);
             w.WriteRow("Data", new Object?[] { 3, "测试项目C", new DateTime(2025, 8, 20), 8750.25m, 0.73, true }, dataStyle);
@@ -371,13 +371,13 @@ public class ExcelRoundTripTests
             w.AddDropdownValidation("Data", "F2:F100", new[] { "TRUE", "FALSE" });
 
             // 页面设置
-            w.SetPageSetup("Data", PageOrientation.Landscape, PaperSize.A4);
+            w.SetPageSetup("Data", ExcelPageOrientation.Landscape, ExcelPaperSize.A4);
             w.SetPageMargins("Data", 1.0, 1.0, 0.75, 0.75);
             w.SetHeaderFooter("Data", "测试报表", "第&P页/共&N页");
             w.SetPrintTitleRows("Data", 1, 1);
 
             // 条件格式
-            w.AddConditionalFormat("Data", "D2:D4", ConditionalFormatType.GreaterThan, "10000", "92D050");
+            w.AddConditionalFormat("Data", "D2:D4", ExcelConditionalFormatType.GreaterThan, "10000", "92D050");
 
             // 批注
             w.AddComment("Data", 2, 1, "这是项目A的批注", "测试员");
@@ -394,7 +394,7 @@ public class ExcelRoundTripTests
         }
 
         // ② 读回为 ExcelData
-        ExcelData readData;
+        ExcelDocument readData;
         using (var reader = new ExcelReader(tempFile))
         {
             readData = reader.ReadExcel();
@@ -422,7 +422,7 @@ public class ExcelRoundTripTests
         Assert.True(dataSheet.Comments.Count > 0, "应有批注");
         Assert.True(dataSheet.ConditionalFormats.Count > 0, "应有条件格式");
         Assert.True(dataSheet.Validations.Count > 0, "应有数据验证");
-        Assert.Equal(PageOrientation.Landscape, dataSheet.Orientation);
+        Assert.Equal(ExcelPageOrientation.Landscape, dataSheet.Orientation);
         Assert.Equal("测试报表", dataSheet.HeaderText);
 
         // ④ 重新写入再读回比较
@@ -435,7 +435,7 @@ public class ExcelRoundTripTests
                 w2.Save();
             }
 
-            ExcelData roundTripData;
+            ExcelDocument roundTripData;
             using (var reader2 = new ExcelReader(tempFile2))
             {
                 roundTripData = reader2.ReadExcel();

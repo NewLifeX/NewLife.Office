@@ -26,7 +26,7 @@ partial class ExcelWriter
             _sheetRowIndex[sheet] = targetRowIndex1Based - 1;
     }
 
-    private void AddRow(String sheet, Object?[]? values, CellStyle? rowStyle = null)
+    private void AddRow(String sheet, Object?[]? values, Office.ExcelCellStyle? rowStyle = null)
     {
         EnsureSheet(sheet);
 
@@ -41,7 +41,7 @@ partial class ExcelWriter
             var val = values[i];
 
             // 空值但可能被 SetCellStyle 覆盖了样式——需要先查出样式再决定是否跳过
-            CellStyle? overrideStyle = null;
+            Office.ExcelCellStyle? overrideStyle = null;
             if (val == null)
             {
                 if (_cellStyleOverrides.TryGetValue(sheet, out var ovDict) &&
@@ -81,7 +81,7 @@ partial class ExcelWriter
                 if (fType != null) sb.Append(" t=\"").Append(fType).Append('"');
 
                 // 检查公式单元格的样式覆盖
-                CellStyle? fCellStyle = null;
+                Office.ExcelCellStyle? fCellStyle = null;
                 if (_cellStyleOverrides.TryGetValue(sheet, out var fOverrides) &&
                     fOverrides.TryGetValue((rowIndex - 1, i), out var fcs))
                 {
@@ -244,7 +244,7 @@ partial class ExcelWriter
             var sIndex = -1;
 
             // 检查每单元格样式覆盖（0基行列）
-            CellStyle? cellStyle = null;
+            Office.ExcelCellStyle? cellStyle = null;
             if (_cellStyleOverrides.TryGetValue(sheet, out var overrides) &&
                 overrides.TryGetValue((rowIndex - 1, i), out var css))
             {

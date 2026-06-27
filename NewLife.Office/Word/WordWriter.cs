@@ -225,7 +225,7 @@ public class WordWriter : IDisposable
         var relId = $"rImg{_imgCounter++}";
         var ext = extension.TrimStart('.').ToLowerInvariant();
         _imageRels.Add((relId, ext, imageData));
-        var img = new WordImageElement
+        var img = new WordImage
         {
             ImageData = imageData,
             Extension = ext,
@@ -847,7 +847,7 @@ public class WordWriter : IDisposable
         sb.Append("</w:tbl>");
     }
 
-    private static void BuildImageXml(StringBuilder sb, WordImageElement img)
+    private static void BuildImageXml(StringBuilder sb, WordImage img)
     {
         var id = Math.Abs(img.RelId.GetHashCode());
         sb.Append("<w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">");

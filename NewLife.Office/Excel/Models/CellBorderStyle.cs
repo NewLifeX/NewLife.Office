@@ -1,7 +1,7 @@
 ﻿namespace NewLife.Office;
 
 /// <summary>边框样式</summary>
-public enum CellBorderStyle
+public enum ExcelCellBorderStyle
 {
     /// <summary>无边框</summary>
     None = 0,

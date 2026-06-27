@@ -9,7 +9,7 @@ public class CellStyleTests
     [Fact, DisplayName("默认CellStyle属性值")]
     public void Default_Properties()
     {
-        var style = new CellStyle();
+        var style = new ExcelCellStyle();
         Assert.Null(style.FontName);
         Assert.Equal(0, style.FontSize);
         Assert.False(style.Bold);
@@ -17,10 +17,10 @@ public class CellStyleTests
         Assert.False(style.Underline);
         Assert.Null(style.FontColor);
         Assert.Null(style.BackgroundColor);
-        Assert.Equal(HorizontalAlignment.General, style.HAlign);
-        Assert.Equal(VerticalAlignment.Top, style.VAlign);
+        Assert.Equal(ExcelHorizontalAlignment.General, style.HAlign);
+        Assert.Equal(ExcelVerticalAlignment.Top, style.VAlign);
         Assert.False(style.WrapText);
-        Assert.Equal(CellBorderStyle.None, style.Border);
+        Assert.Equal(ExcelCellBorderStyle.None, style.Border);
         Assert.Null(style.BorderColor);
         Assert.Null(style.NumberFormat);
     }
@@ -28,25 +28,25 @@ public class CellStyleTests
     [Fact, DisplayName("Header静态样式")]
     public void Header_StaticStyle()
     {
-        var style = CellStyle.Header;
+        var style = ExcelCellStyle.Header;
         Assert.True(style.Bold);
         Assert.Equal(0, style.FontSize);
-        Assert.Equal(HorizontalAlignment.General, style.HAlign);
+        Assert.Equal(ExcelHorizontalAlignment.General, style.HAlign);
     }
 
     [Fact, DisplayName("Title静态样式")]
     public void Title_StaticStyle()
     {
-        var style = CellStyle.Title;
+        var style = ExcelCellStyle.Title;
         Assert.True(style.Bold);
         Assert.Equal(14, style.FontSize);
-        Assert.Equal(HorizontalAlignment.Center, style.HAlign);
+        Assert.Equal(ExcelHorizontalAlignment.Center, style.HAlign);
     }
 
     [Fact, DisplayName("设置所有属性")]
     public void Set_All_Properties()
     {
-        var style = new CellStyle
+        var style = new ExcelCellStyle
         {
             FontName = "Consolas",
             FontSize = 16,
@@ -55,10 +55,10 @@ public class CellStyleTests
             Underline = true,
             FontColor = "FF0000",
             BackgroundColor = "00FF00",
-            HAlign = HorizontalAlignment.Right,
-            VAlign = VerticalAlignment.Bottom,
+            HAlign = ExcelHorizontalAlignment.Right,
+            VAlign = ExcelVerticalAlignment.Bottom,
             WrapText = true,
-            Border = CellBorderStyle.Medium,
+            Border = ExcelCellBorderStyle.Medium,
             BorderColor = "0000FF",
             NumberFormat = "yyyy-MM-dd"
         };
@@ -70,10 +70,10 @@ public class CellStyleTests
         Assert.True(style.Underline);
         Assert.Equal("FF0000", style.FontColor);
         Assert.Equal("00FF00", style.BackgroundColor);
-        Assert.Equal(HorizontalAlignment.Right, style.HAlign);
-        Assert.Equal(VerticalAlignment.Bottom, style.VAlign);
+        Assert.Equal(ExcelHorizontalAlignment.Right, style.HAlign);
+        Assert.Equal(ExcelVerticalAlignment.Bottom, style.VAlign);
         Assert.True(style.WrapText);
-        Assert.Equal(CellBorderStyle.Medium, style.Border);
+        Assert.Equal(ExcelCellBorderStyle.Medium, style.Border);
         Assert.Equal("0000FF", style.BorderColor);
         Assert.Equal("yyyy-MM-dd", style.NumberFormat);
     }
@@ -82,33 +82,33 @@ public class CellStyleTests
     public void Enum_Values()
     {
         // HorizontalAlignment
-        Assert.Equal(6, Enum.GetValues(typeof(HorizontalAlignment)).Length);
+        Assert.Equal(6, Enum.GetValues(typeof(ExcelHorizontalAlignment)).Length);
 
         // VerticalAlignment
-        Assert.Equal(3, Enum.GetValues(typeof(VerticalAlignment)).Length);
+        Assert.Equal(3, Enum.GetValues(typeof(ExcelVerticalAlignment)).Length);
 
         // CellBorderStyle
-        Assert.Equal(7, Enum.GetValues(typeof(CellBorderStyle)).Length);
+        Assert.Equal(7, Enum.GetValues(typeof(ExcelCellBorderStyle)).Length);
 
         // PageOrientation
-        Assert.Equal(2, Enum.GetValues(typeof(PageOrientation)).Length);
+        Assert.Equal(2, Enum.GetValues(typeof(ExcelPageOrientation)).Length);
 
         // PaperSize
-        Assert.Equal(4, Enum.GetValues(typeof(PaperSize)).Length);
+        Assert.Equal(4, Enum.GetValues(typeof(ExcelPaperSize)).Length);
 
         // ConditionalFormatType
-        Assert.Equal(6, Enum.GetValues(typeof(ConditionalFormatType)).Length);
+        Assert.Equal(6, Enum.GetValues(typeof(ExcelConditionalFormatType)).Length);
     }
 
     [Fact, DisplayName("Header和Title每次返回新实例")]
     public void Header_Title_NewInstance()
     {
-        var h1 = CellStyle.Header;
-        var h2 = CellStyle.Header;
+        var h1 = ExcelCellStyle.Header;
+        var h2 = ExcelCellStyle.Header;
         Assert.NotSame(h1, h2);
 
-        var t1 = CellStyle.Title;
-        var t2 = CellStyle.Title;
+        var t1 = ExcelCellStyle.Title;
+        var t2 = ExcelCellStyle.Title;
         Assert.NotSame(t1, t2);
     }
 }
