@@ -287,6 +287,8 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
                 ParseBoolErr(data, cells, ref maxCol);
             else if (type == RecLabel)
                 ParseLabel(data, cells, ref maxCol);
+            else if (type == RecFormula)
+                ParseFormula(data, cells, ref maxCol);
             // RecBlank / RecMulBlank：空单元格，跳过
         }
 
@@ -440,6 +442,27 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
         SetCell(cells, row, col, (Object?)value, ref maxCol);
     }
 
+    private static void ParseFormula(Byte[] data, SortedDictionary<Int32, SortedDictionary<Int32, Object?>> cells, ref Int32 maxCol)
+    {
+        // row(2)+col(2)+xf(2)+num(8)+grbit(2)+chn(4)+formulaLen(2)+formulaBytes
+        if (data.Length < 22) return;
+        var reader = new SpanReader(data, 0, data.Length);
+        var row = (Int32)reader.ReadUInt16();
+        var col = (Int32)reader.ReadUInt16();
+        reader.Advance(12); // skip xf(2)+num(8)+grbit(2)
+        reader.Advance(4);  // skip chn(4)
+        var formulaLen = (Int32)reader.ReadUInt16();
+        if (formulaLen > 0 && 22 + formulaLen <= data.Length)
+        {
+            var formulaText = Encoding.UTF8.GetString(data, 22, formulaLen);
+            SetCell(cells, row, col, (Object?)formulaText, ref maxCol);
+        }
+        else
+        {
+            SetCell(cells, row, col, (Object?)"=?", ref maxCol);
+        }
+    }
+
     private static void SetCell(SortedDictionary<Int32, SortedDictionary<Int32, Object?>> cells,
         Int32 row, Int32 col, Object? value, ref Int32 maxCol)
     {
@@ -570,6 +593,7 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     private const UInt16 RecBoolErr = 0x0205;
     private const UInt16 RecLabel = 0x0204;
     private const UInt16 RecBlank = 0x0201;
+    private const UInt16 RecFormula = 0x0006;
     private const UInt16 RecMulBlank = 0x00BF;
     #endregion
 

@@ -442,6 +442,61 @@ public class BiffWriterTests
 
     #endregion
 
+    #region 公式写入
+
+    [Fact]
+    [DisplayName("公式写入—简单算术公式")]
+    public void WriteFormula_SimpleArithmetic()
+    {
+        using var writer = new BiffWriter();
+        writer.WriteHeader(["数值1", "数值2", "合计"]);
+        writer.WriteRow([10.0, 20.0, "=A2+B2"]);
+
+        var bytes = writer.ToBytes();
+        Assert.True(bytes.Length > 512);
+
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        var rows = reader.ReadSheet().ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal("=A2+B2", rows[1][2]);
+    }
+
+    [Fact]
+    [DisplayName("公式写入—SUM函数公式")]
+    public void WriteFormula_SumFunction()
+    {
+        using var writer = new BiffWriter();
+        writer.WriteRow([10.0, 20.0, 30.0]);
+        writer.WriteRow(["=SUM(A1:C1)"]);
+
+        var bytes = writer.ToBytes();
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        var rows = reader.ReadSheet().ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal("=SUM(A1:C1)", rows[1][0]);
+    }
+
+    [Fact]
+    [DisplayName("公式写入—混合数据和公式")]
+    public void WriteFormula_Mixed()
+    {
+        using var writer = new BiffWriter();
+        writer.WriteHeader(["商品", "单价", "数量", "金额"]);
+        writer.WriteRow(["苹果", 5.0, 10.0, "=B2*C2"]);
+        writer.WriteRow(["香蕉", 3.0, 20.0, "=B3*C3"]);
+
+        var bytes = writer.ToBytes();
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        var rows = reader.ReadSheet().ToList();
+        Assert.Equal(3, rows.Count);
+        Assert.Equal("苹果", rows[1][0]);
+        Assert.Equal(5.0, rows[1][1]);
+        Assert.Equal("=B2*C2", rows[1][3]);
+        Assert.Equal("=B3*C3", rows[2][3]);
+    }
+
+    #endregion
+
     #region 辅助类型
 
     private class SampleModel

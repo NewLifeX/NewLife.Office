@@ -39,6 +39,8 @@ public sealed class BiffWriter : IDisposable
     private const UInt16 RecFormat = 0x041E;
     private const UInt16 RecContinue = 0x003C;
     private const UInt16 RecColInfo = 0x007D;
+    private const UInt16 RecFormula = 0x0006;
+    private const UInt16 RecString = 0x0207;
     private const Int32 MaxRecordDataSize = 8224;
 
     // BIFF8 日期纪元：1900-01-01（含 1900 闰年兼容性偏移 +1）
@@ -245,6 +247,8 @@ public sealed class BiffWriter : IDisposable
                 {
                     if (cell is String s && !_sstIndex.ContainsKey(s))
                     {
+                        // 公式不加入 SST（以 = 开头）
+                        if (s.Length > 0 && s[0] == '=') continue;
                         _sstIndex[s] = _sst.Count;
                         _sst.Add(s);
                     }
@@ -406,8 +410,16 @@ public sealed class BiffWriter : IDisposable
                 }
                 else if (cell is String strVal)
                 {
-                    var sstIdx = _sstIndex.TryGetValue(strVal, out var idx) ? idx : 0;
-                    WriteRecord(bw, RecLabelSst, BuildLabelSstData(ri, ci, sstIdx, cellXf));
+                    // 检测公式：以 = 开头的字符串视为公式
+                    if (strVal.Length > 0 && strVal[0] == '=')
+                    {
+                        WriteRecord(bw, RecFormula, BuildFormulaData(ri, ci, cellXf, strVal));
+                    }
+                    else
+                    {
+                        var sstIdx = _sstIndex.TryGetValue(strVal, out var idx) ? idx : 0;
+                        WriteRecord(bw, RecLabelSst, BuildLabelSstData(ri, ci, sstIdx, cellXf));
+                    }
                 }
                 else if (cell is Boolean boolVal)
                 {
@@ -511,6 +523,30 @@ public sealed class BiffWriter : IDisposable
         writer.Write((UInt16)0x000F);    // XF index (default=15)
         writer.Write((UInt16)0x0000);    // grbit (not hidden, default)
         return buf;
+    }
+
+    private static Byte[] BuildFormulaData(Int32 row, Int32 col, Int32 xfIndex, String formula)
+    {
+        // 将公式字符串编码为字节
+        var formulaBytes = Encoding.UTF8.GetBytes(formula);
+        using var ms = new MemoryStream();
+        var bw = new BinaryWriter(ms);
+
+        bw.Write((UInt16)row);
+        bw.Write((UInt16)col);
+        bw.Write((UInt16)xfIndex);
+        // Result: 8 bytes (0 = string/empty result)
+        bw.Write(0L);
+        // Options: 0x0001 = recalc always
+        bw.Write((UInt16)0x0001);
+        // Not used (4 bytes)
+        bw.Write(0u);
+        // Formula expression length (2 bytes) + raw formula bytes
+        bw.Write((UInt16)formulaBytes.Length);
+        bw.Write(formulaBytes);
+
+        bw.Flush();
+        return ms.ToArray();
     }
 
     private static Byte[] BuildRowData(Int32 row, Int32 firstCol, Int32 lastCol)
