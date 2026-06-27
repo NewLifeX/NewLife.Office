@@ -670,6 +670,7 @@ partial class PptxWriter
                 "zoom" => "<p:zoom/>",
                 "split" => "<p:split/>",
                 "cut" => "<p:cut/>",
+                "morph" => "<p:morph option=\"byObject\"/>",
                 _ => "<p:fade/>",
             });
             sb.Append("</p:transition>");

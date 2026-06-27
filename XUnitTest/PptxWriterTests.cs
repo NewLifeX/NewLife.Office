@@ -906,4 +906,24 @@ public class PptxWriterTests
         Assert.Contains("a:blipFill", xml);
         Assert.Contains("r:embed=\"rImg1\"", xml);
     }
+
+    [Fact, System.ComponentModel.DisplayName("Morph切换—写入并验证")]
+    public void MorphTransition_WritesCorrectXml()
+    {
+        var writer = new PptxWriter();
+        writer.AddSlide(0);
+        writer.SetTransition(0, "morph", 1000);
+
+        using var ms = new MemoryStream();
+        writer.Save(ms);
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true);
+        var slideEntry = za.GetEntry("ppt/slides/slide1.xml");
+        Assert.NotNull(slideEntry);
+        using var sr = new StreamReader(slideEntry!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("p:morph", xml);
+        Assert.Contains("byObject", xml);
+    }
 }

@@ -4,7 +4,7 @@
 public class PptTransition
 {
     #region 属性
-    /// <summary>切换类型（fade/push/wipe/zoom/split/cut）</summary>
+    /// <summary>切换类型（fade/push/wipe/zoom/split/cut/morph）</summary>
     public String Type { get; set; } = "fade";
 
     /// <summary>切换时长（毫秒）</summary>
