@@ -313,6 +313,73 @@ public class BiffWriterTests
 
     #endregion
 
+    #region 列宽
+
+    [Fact]
+    [DisplayName("设置列宽—单列")]
+    public void SetColumnWidth_SingleColumn()
+    {
+        using var writer = new BiffWriter();
+        writer.WriteHeader(["A", "B", "C"]);
+        writer.SetColumnWidth(1, 20.0); // B列20字符宽
+        writer.WriteRow([1, "Long text in column B", 3.14]);
+
+        var bytes = writer.ToBytes();
+        Assert.True(bytes.Length > 512);
+
+        // 验证数据能正确读回
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        var rows = reader.ReadSheet().ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(1.0, rows[1][0]);
+        Assert.Equal("Long text in column B", rows[1][1]);
+    }
+
+    [Fact]
+    [DisplayName("设置列宽—多列")]
+    public void SetColumnWidth_MultiColumn()
+    {
+        using var writer = new BiffWriter();
+        writer.WriteHeader(["名称", "描述", "数量", "单价"]);
+        writer.SetColumnWidth(0, 12.0);
+        writer.SetColumnWidth(1, 40.0);
+        writer.SetColumnWidth(2, 8.0);
+        writer.SetColumnWidth(3, 10.0);
+        writer.WriteRow(["产品A", "这是一个很长的产品描述文本", 100, 25.5]);
+
+        var bytes = writer.ToBytes();
+        Assert.True(bytes.Length > 512);
+
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        var rows = reader.ReadSheet().ToList();
+        Assert.Equal(2, rows.Count);
+    }
+
+    [Fact]
+    [DisplayName("设置列宽—多工作表独立列宽")]
+    public void SetColumnWidth_MultiSheet()
+    {
+        using var writer = new BiffWriter();
+        writer.WriteRow(["Sheet1 Col0"]);
+        writer.SetColumnWidth(0, 15.0);
+
+        writer.SheetName = "Sheet2";
+        writer.WriteRow(["Sheet2 Col0"]);
+        writer.SetColumnWidth(0, 30.0);
+
+        var bytes = writer.ToBytes();
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        Assert.Equal(2, reader.SheetNames.Count);
+
+        // 两个工作表都能正确读回数据
+        var s1 = reader.ReadSheet("Sheet1").ToList();
+        Assert.Single(s1);
+        var s2 = reader.ReadSheet("Sheet2").ToList();
+        Assert.Single(s2);
+    }
+
+    #endregion
+
     #region 辅助类型
 
     private class SampleModel

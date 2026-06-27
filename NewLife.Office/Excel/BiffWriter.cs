@@ -38,6 +38,7 @@ public sealed class BiffWriter : IDisposable
     private const UInt16 RecFont = 0x0031;
     private const UInt16 RecFormat = 0x041E;
     private const UInt16 RecContinue = 0x003C;
+    private const UInt16 RecColInfo = 0x007D;
     private const Int32 MaxRecordDataSize = 8224;
 
     // BIFF8 日期纪元：1900-01-01（含 1900 闰年兼容性偏移 +1）
@@ -73,6 +74,9 @@ public sealed class BiffWriter : IDisposable
     // 共享字符串表
     private readonly List<String> _sst = [];
     private readonly Dictionary<String, Int32> _sstIndex = new(StringComparer.Ordinal);
+
+    // 列宽：Key = sheetName, Value = (colIndex → width)
+    private readonly Dictionary<String, Dictionary<Int32, Int32>> _sheetColWidths = new(StringComparer.Ordinal);
 
     private String _currentSheet = "Sheet1";
     private Boolean _disposed;
@@ -154,6 +158,24 @@ public sealed class BiffWriter : IDisposable
         {
             WriteRow(row.ItemArray.Cast<Object?>());
         }
+    }
+
+    /// <summary>设置当前工作表中指定列的宽度</summary>
+    /// <param name="columnIndex">列索引（0基）</param>
+    /// <param name="width">列宽（单位：字符宽度，约等于默认字体字符宽度）</param>
+    /// <remarks>
+    /// 列宽以最大字符宽度（256分之一的字符宽度）为单位存储。
+    /// 例如 width=10 表示约 10 个字符宽度，内部存储为 10*256=2560。
+    /// </remarks>
+    public void SetColumnWidth(Int32 columnIndex, Double width)
+    {
+        if (!_sheetColWidths.TryGetValue(_currentSheet, out var colMap))
+        {
+            colMap = [];
+            _sheetColWidths[_currentSheet] = colMap;
+        }
+        // BIFF8 COLINFO 使用 1/256 字符宽度为单位
+        colMap[columnIndex] = (Int32)(width * 256);
     }
 
     #endregion
@@ -296,6 +318,15 @@ public sealed class BiffWriter : IDisposable
         var colCount = rows.Count > 0 ? rows.Max(r2 => r2.Values.Count) : 0;
         WriteRecord(bw, RecDimensions, BuildDimensionsData(rowCount, colCount));
 
+        // COLINFO — 列宽
+        if (_sheetColWidths.TryGetValue(sheetName, out var colWidths))
+        {
+            foreach (var kv in colWidths.OrderBy(kv => kv.Key))
+            {
+                WriteRecord(bw, RecColInfo, BuildColInfoData(kv.Key, kv.Key, kv.Value));
+            }
+        }
+
         // ROW + 单元格记录
         for (var ri = 0; ri < rows.Count; ri++)
         {
@@ -407,6 +438,19 @@ public sealed class BiffWriter : IDisposable
         writer.Write((UInt16)0); // first col
         writer.Write((UInt16)Math.Max(colCount, 1)); // last col + 1
         writer.Write((UInt16)0); // reserved
+        return buf;
+    }
+
+    private static Byte[] BuildColInfoData(Int32 firstCol, Int32 lastCol, Int32 width)
+    {
+        // COLINFO 记录：colFirst(2) + colLast(2) + coldx(2) + ixfe(2) + grbit(2)
+        var buf = new Byte[12];
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)firstCol);
+        writer.Write((UInt16)lastCol);
+        writer.Write((UInt16)width);     // 1/256 字符宽度
+        writer.Write((UInt16)0x000F);    // XF index (default=15)
+        writer.Write((UInt16)0x0000);    // grbit (not hidden, default)
         return buf;
     }
 
