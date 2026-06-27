@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -625,7 +625,7 @@ var x = 1;
         using var zip = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Read);
         var entry = zip.GetEntry("word/document.xml");
         Assert.NotNull(entry);
-        using var sr = new System.IO.StreamReader(entry.Open());
+        using var sr = new StreamReader(entry.Open());
         var xml = sr.ReadToEnd();
         Assert.Contains("My Title", xml);
         Assert.Contains("Body text here", xml);

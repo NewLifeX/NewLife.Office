@@ -428,7 +428,7 @@ public class IntegrationTests
 
         using var ms = new MemoryStream();
         var writer = new OdsWriter();
-        writer.AddSheet<ProductInfo>("Products", items);
+        writer.AddSheet("Products", items);
         writer.Save(ms);
 
         ms.Position = 0;
@@ -455,7 +455,7 @@ public class IntegrationTests
         var entry = zip.GetEntry("word/document.xml");
         Assert.NotNull(entry);
 
-        using var sr = new System.IO.StreamReader(entry!.Open());
+        using var sr = new StreamReader(entry!.Open());
         var xml = sr.ReadToEnd();
         Assert.Contains("Integration", xml);
     }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -339,7 +339,7 @@ public class RtfTests
         using var ms = new MemoryStream();
         writer.Save(ms);
         ms.Position = 0;
-        var content = new System.IO.StreamReader(ms).ReadToEnd();
+        var content = new StreamReader(ms).ReadToEnd();
         Assert.Contains("Stream Test", content);
     }
     #endregion

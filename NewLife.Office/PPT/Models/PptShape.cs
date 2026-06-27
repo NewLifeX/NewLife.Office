@@ -42,5 +42,17 @@ public class PptShape
 
     /// <summary>文字粗体（写入时使用）</summary>
     public Boolean Bold { get; set; }
+
+    /// <summary>拉丁/西文字体名称（如"Arial"），null 表示使用默认字体</summary>
+    public String? LatinFontName { get; set; }
+
+    /// <summary>东亚/中文字体名称（如"微软雅黑"），null 表示使用默认字体</summary>
+    public String? EastAsianFontName { get; set; }
+
+    /// <summary>复杂脚本字体名称（如阿拉伯/泰文），null 表示使用默认字体</summary>
+    public String? ComplexScriptFontName { get; set; }
+
+    /// <summary>符号字体名称，null 表示使用默认字体</summary>
+    public String? SymbolFontName { get; set; }
     #endregion
 }

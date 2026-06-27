@@ -19,8 +19,11 @@ public class PptSlide
     /// <summary>图表集合</summary>
     public List<PptChart> Charts { get; } = [];
 
-    /// <summary>背景色（16进制 RGB），null 表示白色</summary>
+    /// <summary>背景色（16进制 RGB），null 表示白色或使用背景图</summary>
     public String? BackgroundColor { get; set; }
+
+    /// <summary>背景图片，null 表示纯色背景</summary>
+    public PptImage? BackgroundImage { get; set; }
 
     /// <summary>演讲者备注</summary>
     public String? Notes { get; set; }
@@ -30,6 +33,9 @@ public class PptSlide
 
     /// <summary>图片关系计数器</summary>
     internal Int32 ImageCounter { get; set; } = 1;
+
+    /// <summary>视频/音频媒体集合</summary>
+    public List<PptVideo> Videos { get; } = [];
 
     /// <summary>形状组集合（S07-02 组合形状）</summary>
     public List<PptGroup> Groups { get; } = [];

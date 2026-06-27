@@ -696,7 +696,7 @@ public class ExcelWriterTests
             new TestUser { Id = 1, Name = "Alice", Age = 30 },
             new TestUser { Id = 2, Name = "Bob", Age = 25 },
         };
-        w.WriteObjects<TestUser>(null, users, CellStyle.Header);
+        w.WriteObjects(null, users, CellStyle.Header);
         w.Save();
 
         ms.Position = 0;

@@ -33,6 +33,7 @@ public partial class PptxWriter : IDisposable
     private Int32 _chartGlobal = 1;
     private Int32 _hlinkGlobal = 1;
     private Int32 _mediaGlobal = 1;
+    private Int32 _videoGlobal = 1;
     private String? _protectionHash;
     private String? _protectionSalt;
     // 跨文件复制的原始幻灯片（S10-04）：(幻灯片XML, rels XML)
@@ -47,6 +48,18 @@ public partial class PptxWriter : IDisposable
     private readonly Dictionary<String, Byte[]> _infraMedia = [];
     // 编程式创建的母版（Phase 5：无需模板文件）
     private readonly List<PptMaster> _progMasters = [];
+    // 嵌入字体：文件名→字节数据（ppt/fonts/*.fntdata）
+    private readonly Dictionary<String, Byte[]> _embeddedFonts = [];
+
+    /// <summary>最小有效 PNG（1×1 黑色像素，67 字节），用作视频无缩略图时的占位</summary>
+    private static readonly Byte[] MinimalPng =
+    [
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+        0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0x60, 0x60, 0x60, 0x00,
+        0x00, 0x00, 0x04, 0x00, 0x01, 0x27, 0x34, 0x27, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+        0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
     #endregion
 
     #region 构造
@@ -126,6 +139,35 @@ public partial class PptxWriter : IDisposable
         };
         slide.Images.Add(img);
         return img;
+    }
+
+    /// <summary>向幻灯片添加视频/音频</summary>
+    /// <param name="slideIndex">幻灯片索引</param>
+    /// <param name="mediaData">媒体字节</param>
+    /// <param name="extension">扩展名</param>
+    /// <param name="leftCm">左边距（厘米）</param>
+    /// <param name="topCm">上边距（厘米）</param>
+    /// <param name="widthCm">宽度（厘米）</param>
+    /// <param name="heightCm">高度（厘米）</param>
+    /// <returns>视频对象</returns>
+    public PptVideo AddVideo(Int32 slideIndex, Byte[] mediaData, String extension,
+        Double leftCm, Double topCm, Double widthCm, Double heightCm)
+    {
+        var slide = EnsureSlide(slideIndex);
+        var vid = new PptVideo
+        {
+            Data = mediaData,
+            Extension = extension.TrimStart('.').ToLowerInvariant(),
+            Left = CmToEmu(leftCm),
+            Top = CmToEmu(topCm),
+            Width = CmToEmu(widthCm),
+            Height = CmToEmu(heightCm),
+            RelId = $"rVid{_videoGlobal}",
+            ThumbnailRelId = $"rVidThumb{_videoGlobal}",
+        };
+        _videoGlobal++;
+        slide.Videos.Add(vid);
+        return vid;
     }
 
     /// <summary>向幻灯片添加表格</summary>
@@ -842,6 +884,17 @@ public partial class PptxWriter : IDisposable
             using var buf = new MemoryStream();
             using (var es = entry.Open()) es.CopyTo(buf);
             _infraMedia[fileName] = buf.ToArray();
+        }
+
+        // 加载嵌入字体（ppt/fonts/*.fntdata）
+        _embeddedFonts.Clear();
+        foreach (var entry in zip.Entries)
+        {
+            if (!entry.FullName.StartsWith("ppt/fonts/", StringComparison.OrdinalIgnoreCase)) continue;
+            if (entry.FullName.EndsWith("/", StringComparison.Ordinal)) continue; // 跳过目录条目
+            using var buf = new MemoryStream();
+            using (var es = entry.Open()) es.CopyTo(buf);
+            _embeddedFonts[entry.Name] = buf.ToArray();
         }
 
         // 可选：保留模板原有幻灯片

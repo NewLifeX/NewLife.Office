@@ -45,6 +45,13 @@ partial class PptxWriter
             using var es = entry.Open();
             es.Write(data, 0, data.Length);
         }
+        // 写入嵌入字体（ppt/fonts/）
+        foreach (var kv in _embeddedFonts)
+        {
+            var fontEntry = za.CreateEntry($"ppt/fonts/{kv.Key}", CompressionLevel.Fastest);
+            using var es = fontEntry.Open();
+            es.Write(kv.Value, 0, kv.Value.Length);
+        }
         WriteTheme(za);
     }
     #endregion
@@ -133,11 +140,16 @@ partial class PptxWriter
             {
                 if (addedExt.Add(img.Extension))
                 {
-                    var ct = img.Extension is "jpg" or "jpeg" ? "image/jpeg" : "image/png";
+                    var ct = img.Extension is "jpg" or "jpeg" ? "image/jpeg"
+                           : img.Extension == "svg" ? "image/svg+xml"
+                           : "image/png";
                     sb.Append($"<Default Extension=\"{img.Extension}\" ContentType=\"{ct}\"/>");
                 }
             }
         }
+        // 嵌入字体类型
+        if (_embeddedFonts.Count > 0)
+            sb.Append("<Default Extension=\"fntdata\" ContentType=\"application/vnd.ms-office.activeX+xml\"/>");
         sb.Append("</Types>");
         WriteEntry(za, "[Content_Types].xml", sb.ToString());
     }
@@ -224,7 +236,17 @@ partial class PptxWriter
         sb.Append($"<p:sld xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\">");
 
         // background
-        if (slide.BackgroundColor != null)
+        if (slide.BackgroundImage != null)
+        {
+            var bgImg = slide.BackgroundImage;
+            sb.Append("<p:bg><p:bgPr>");
+            sb.Append("<a:blipFill dpi=\"0\" rotWithShape=\"1\">");
+            sb.Append($"<a:blip r:embed=\"rBg{idx + 1}\"/>");
+            sb.Append("<a:stretch><a:fillRect/></a:stretch></a:blipFill>");
+            sb.Append("<a:effectLst/></p:bgPr></p:bg>");
+            // 背景图片 rel 和媒体写在后面
+        }
+        else if (slide.BackgroundColor != null)
         {
             sb.Append("<p:bg><p:bgPr>");
             sb.Append($"<a:solidFill><a:srgbClr val=\"{slide.BackgroundColor.TrimStart('#')}\"/></a:solidFill>");
@@ -254,44 +276,82 @@ partial class PptxWriter
             else
                 sb.Append("<a:noFill/>");
             sb.Append("</p:spPr>");
-            sb.Append("<p:txBody><a:bodyPr wrap=\"square\" rtlCol=\"0\"><a:normAutofit/></a:bodyPr><a:lstStyle/>");
-            sb.Append($"<a:p><a:pPr algn=\"{tb.Alignment}\"/>");
-            if (tb.Runs.Count > 0)
+            // bodyPr auto-fit + 内边距 + anchor
+            var fitTag = tb.AutoFit switch { 1 => "<a:spAutoFit/>", 2 => "<a:noAutofit/>", _ => "<a:normAutofit/>" };
+            var insets = new StringBuilder();
+            if (tb.LeftInset > 0) insets.Append($" lIns=\"{tb.LeftInset}\"");
+            if (tb.RightInset > 0) insets.Append($" rIns=\"{tb.RightInset}\"");
+            if (tb.TopInset > 0) insets.Append($" tIns=\"{tb.TopInset}\"");
+            if (tb.BottomInset > 0) insets.Append($" bIns=\"{tb.BottomInset}\"");
+            var anchorAttr = tb.Anchor.Length > 0 ? $" anchor=\"{tb.Anchor}\"" : "";
+            sb.Append($"<p:txBody><a:bodyPr wrap=\"square\" rtlCol=\"0\"{insets}{anchorAttr}>{fitTag}</a:bodyPr><a:lstStyle/>");
+
+            // 段落写入：优先使用 Paragraphs（多段结构），回退到 Runs（单段兼容）
+            if (tb.Paragraphs.Count > 0)
             {
-                foreach (var run in tb.Runs)
+                foreach (var pp in tb.Paragraphs)
                 {
-                    String? runHlRelId = null;
-                    if (run.HyperlinkUrl != null)
+                    var hasPPrChildren = pp.LineSpacingPct > 0 || pp.LineSpacingPts > 0 || pp.SpaceBeforePt > 0 || pp.SpaceAfterPt > 0 || pp.BulletChar != null || pp.BulletNone;
+                    sb.Append($"<a:p><a:pPr{(pp.Alignment.Length > 0 && pp.Alignment != "l" ? " algn=\"" + pp.Alignment + "\"" : "")}");
+                    if (pp.Level > 0)
+                        sb.Append($" lvl=\"{pp.Level}\"");
+                    if (hasPPrChildren)
                     {
-                        runHlRelId = $"rHlk{_hlinkGlobal++}";
-                        hlinkMap[runHlRelId] = run.HyperlinkUrl;
+                        sb.Append('>');
+                        if (pp.LineSpacingPct > 0)
+                            sb.Append($"<a:lnSpc><a:spcPct val=\"{pp.LineSpacingPct}\"/></a:lnSpc>");
+                        else if (pp.LineSpacingPts > 0)
+                            sb.Append($"<a:lnSpc><a:spcPts val=\"{pp.LineSpacingPts}\"/></a:lnSpc>");
+                        if (pp.SpaceBeforePt > 0)
+                            sb.Append($"<a:spcBef><a:spcPts val=\"{pp.SpaceBeforePt * 100}\"/></a:spcBef>");
+                        if (pp.SpaceAfterPt > 0)
+                            sb.Append($"<a:spcAft><a:spcPts val=\"{pp.SpaceAfterPt * 100}\"/></a:spcAft>");
+                        if (pp.BulletChar != null)
+                            sb.Append($"<a:buChar char=\"{EscXml(pp.BulletChar)}\"/>");
+                        else if (pp.BulletNone)
+                            sb.Append("<a:buNone/>");
+                        sb.Append("</a:pPr>");
                     }
-                    var runSz = run.FontSize > 0 ? run.FontSize : tb.FontSize;
-                    var runFc = run.FontColor ?? tb.FontColor;
-                    sb.Append("<a:r>");
-                    sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{runSz * 100}\"{(run.Bold ? " b=\"1\"" : "")}{(run.Italic ? " i=\"1\"" : "")} dirty=\"0\">");
-                    if (runFc != null)
-                        sb.Append($"<a:solidFill><a:srgbClr val=\"{runFc.TrimStart('#')}\"/></a:solidFill>");
-                    if (runHlRelId != null)
-                        sb.Append($"<a:hlinkClick r:id=\"{runHlRelId}\"/>");
-                    sb.Append("</a:rPr>");
-                    sb.Append($"<a:t>{EscXml(run.Text)}</a:t>");
-                    sb.Append("</a:r>");
+                    else
+                        sb.Append("/>");
+
+                    foreach (var run in pp.Runs)
+                    {
+                        WriteTextRun(sb, run, tb, ref _hlinkGlobal, hlinkMap);
+                    }
+                    sb.Append("</a:p>");
                 }
             }
             else
             {
-                sb.Append("<a:r>");
-                sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{tb.FontSize * 100}\"{(tb.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
-                if (tb.FontColor != null)
-                    sb.Append($"<a:solidFill><a:srgbClr val=\"{tb.FontColor.TrimStart('#')}\"/></a:solidFill>");
-                if (hlRelId != null)
-                    sb.Append($"<a:hlinkClick r:id=\"{hlRelId}\"/>");
-                sb.Append("</a:rPr>");
-                sb.Append($"<a:t>{EscXml(tb.Text)}</a:t>");
-                sb.Append("</a:r>");
+                // 向后兼容：Runs 单段模式
+                var hasPPrChildren = tb.LineSpacingPct > 0 || tb.SpaceBeforePt > 0;
+                sb.Append($"<a:p><a:pPr{(tb.Alignment.Length > 0 ? " algn=\"" + tb.Alignment + "\"" : "")}");
+                if (hasPPrChildren)
+                {
+                    sb.Append('>');
+                    if (tb.LineSpacingPct > 0)
+                        sb.Append($"<a:lnSpc><a:spcPct val=\"{tb.LineSpacingPct}\"/></a:lnSpc>");
+                    if (tb.SpaceBeforePt > 0)
+                        sb.Append($"<a:spcBef><a:spcPts val=\"{tb.SpaceBeforePt * 100}\"/></a:spcBef>");
+                    sb.Append("</a:pPr>");
+                }
+                else
+                    sb.Append("/>");
+                if (tb.Runs.Count > 0)
+                {
+                    foreach (var run in tb.Runs)
+                    {
+                        WriteTextRun(sb, run, tb, ref _hlinkGlobal, hlinkMap);
+                    }
+                }
+                else
+                {
+                    WriteSingleLineTextRun(sb, tb, hlRelId);
+                }
+                sb.Append("</a:p>");
             }
-            sb.Append("</a:p></p:txBody></p:sp>");
+            sb.Append("</p:txBody></p:sp>");
         }
 
         // shapes（基本图形）
@@ -314,8 +374,8 @@ partial class PptxWriter
             {
                 sb.Append("<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r>");
                 sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{sp.FontSize * 100}\"{(sp.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
-                if (sp.FontColor != null)
-                    sb.Append($"<a:solidFill><a:srgbClr val=\"{sp.FontColor.TrimStart('#')}\"/></a:solidFill>");
+                WriteFontColor(sb, sp.FontColor);
+                WriteFontElements(sb, sp.LatinFontName, sp.EastAsianFontName, sp.ComplexScriptFontName, sp.SymbolFontName);
                 sb.Append("</a:rPr>");
                 sb.Append($"<a:t>{EscXml(sp.Text)}</a:t>");
                 sb.Append("</a:r></a:p></p:txBody>");
@@ -332,6 +392,27 @@ partial class PptxWriter
             sb.Append("<a:stretch><a:fillRect/></a:stretch></p:blipFill>");
             sb.Append("<p:spPr>");
             sb.Append($"<a:xfrm><a:off x=\"{img.Left}\" y=\"{img.Top}\"/><a:ext cx=\"{img.Width}\" cy=\"{img.Height}\"/></a:xfrm>");
+            sb.Append("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></p:spPr></p:pic>");
+        }
+
+        // videos
+        foreach (var vid in slide.Videos)
+        {
+            // 确保视频有缩略图 RelId（若 AddVideo 未分配则补充）
+            if (vid.ThumbnailRelId.Length == 0)
+                vid.ThumbnailRelId = $"rVidThumb{_videoGlobal}";
+            // 若无缩略图数据，生成最小 PNG 占位
+            if (vid.ThumbnailData == null || vid.ThumbnailData.Length == 0)
+            {
+                vid.ThumbnailData = MinimalPng;
+                vid.ThumbnailExtension = "png";
+            }
+            sb.Append($"<p:pic><p:nvPicPr><p:cNvPr id=\"{shapeId++}\" name=\"Video\"><a:hlinkClick action=\"ppaction://media\"/></p:cNvPr>");
+            sb.Append("<p:cNvPicPr><a:picLocks noChangeAspect=\"1\"/></p:cNvPicPr>");
+            sb.Append($"<p:nvPr><a:videoFile r:link=\"{vid.RelId}\"/></p:nvPr></p:nvPicPr>");
+            sb.Append($"<p:blipFill><a:blip r:embed=\"{vid.ThumbnailRelId}\"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>");
+            sb.Append("<p:spPr>");
+            sb.Append($"<a:xfrm><a:off x=\"{vid.Left}\" y=\"{vid.Top}\"/><a:ext cx=\"{vid.Width}\" cy=\"{vid.Height}\"/></a:xfrm>");
             sb.Append("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></p:spPr></p:pic>");
         }
 
@@ -374,7 +455,10 @@ partial class PptxWriter
                 if (sp.Text != null)
                 {
                     sb.Append("<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r>");
-                    sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{sp.FontSize * 100}\" dirty=\"0\"/>");
+                    sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{sp.FontSize * 100}\"{(sp.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
+                    WriteFontColor(sb, sp.FontColor);
+                    WriteFontElements(sb, sp.LatinFontName, sp.EastAsianFontName, sp.ComplexScriptFontName, sp.SymbolFontName);
+                    sb.Append("</a:rPr>");
                     sb.Append($"<a:t>{EscXml(sp.Text)}</a:t>");
                     sb.Append("</a:r></a:p></p:txBody>");
                 }
@@ -391,8 +475,8 @@ partial class PptxWriter
                 sb.Append("<p:txBody><a:bodyPr wrap=\"square\" rtlCol=\"0\"><a:normAutofit/></a:bodyPr><a:lstStyle/>");
                 sb.Append($"<a:p><a:pPr algn=\"{tb.Alignment}\"/><a:r>");
                 sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{tb.FontSize * 100}\"{(tb.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
-                if (tb.FontColor != null)
-                    sb.Append($"<a:solidFill><a:srgbClr val=\"{tb.FontColor.TrimStart('#')}\"/></a:solidFill>");
+                WriteFontColor(sb, tb.FontColor);
+                WriteFontElements(sb, tb.LatinFontName, tb.EastAsianFontName, tb.ComplexScriptFontName, tb.SymbolFontName);
                 sb.Append("</a:rPr>");
                 sb.Append($"<a:t>{EscXml(tb.Text)}</a:t>");
                 sb.Append("</a:r></a:p></p:txBody></p:sp>");
@@ -455,6 +539,17 @@ partial class PptxWriter
         {
             relsSb.Append($"<Relationship Id=\"{chart.RelId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart\" Target=\"../charts/chart{chart.ChartNumber}.xml\"/>");
         }
+        foreach (var vid in slide.Videos)
+        {
+            relsSb.Append($"<Relationship Id=\"{vid.RelId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/video\" Target=\"../media/{vid.RelId}.{vid.Extension}\"/>");
+            // 视频缩略图关系
+            if (vid.ThumbnailRelId.Length > 0)
+                relsSb.Append($"<Relationship Id=\"{vid.ThumbnailRelId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/{vid.ThumbnailRelId}.{vid.ThumbnailExtension}\"/>");
+        }
+        if (slide.BackgroundImage != null)
+        {
+            relsSb.Append($"<Relationship Id=\"rBg{idx + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/bg{idx + 1}.{slide.BackgroundImage.Extension}\"/>");
+        }
         relsSb.Append("</Relationships>");
         WriteEntry(za, $"ppt/slides/_rels/slide{idx + 1}.xml.rels", relsSb.ToString());
 
@@ -463,6 +558,28 @@ partial class PptxWriter
         {
             using var entry = za.CreateEntry($"ppt/media/{img.RelId}.{img.Extension}").Open();
             entry.Write(img.Data, 0, img.Data.Length);
+        }
+
+        // write video media
+        foreach (var vid in slide.Videos)
+        {
+            using (var entry = za.CreateEntry($"ppt/media/{vid.RelId}.{vid.Extension}").Open())
+            {
+                entry.Write(vid.Data, 0, vid.Data.Length);
+            }
+            // 写入缩略图（在视频流关闭后）
+            if (vid.ThumbnailData != null && vid.ThumbnailData.Length > 0 && vid.ThumbnailRelId.Length > 0)
+            {
+                using var thumbEntry = za.CreateEntry($"ppt/media/{vid.ThumbnailRelId}.{vid.ThumbnailExtension}").Open();
+                thumbEntry.Write(vid.ThumbnailData, 0, vid.ThumbnailData.Length);
+            }
+        }
+
+        // write background image media
+        if (slide.BackgroundImage != null)
+        {
+            using var entry = za.CreateEntry($"ppt/media/bg{idx + 1}.{slide.BackgroundImage.Extension}").Open();
+            entry.Write(slide.BackgroundImage.Data, 0, slide.BackgroundImage.Data.Length);
         }
 
         // write chart XMLs
@@ -548,6 +665,79 @@ partial class PptxWriter
         sb.Append("<c:legend><c:legendPos val=\"b\"/></c:legend>");
         sb.Append("</c:chart></c:chartSpace>");
         WriteEntry(za, $"ppt/charts/chart{chart.ChartNumber}.xml", sb.ToString());
+    }
+
+    /// <summary>写入单个富文本 Run（供 Paragraphs 和 Runs 模式共用）</summary>
+    private void WriteTextRun(StringBuilder sb, PptTextRun run, PptTextBox tb, ref Int32 hlinkGlobal, Dictionary<String, String> hlinkMap)
+    {
+        String? runHlRelId = null;
+        if (run.HyperlinkUrl != null)
+        {
+            runHlRelId = $"rHlk{hlinkGlobal++}";
+            hlinkMap[runHlRelId] = run.HyperlinkUrl;
+        }
+        var runSz = run.FontSize > 0 ? run.FontSize : tb.FontSize;
+        var runFc = run.FontColor ?? tb.FontColor;
+        var runLatinFn = run.LatinFontName ?? tb.LatinFontName;
+        var runEaFn = run.EastAsianFontName ?? tb.EastAsianFontName;
+        var runCsFn = run.ComplexScriptFontName ?? tb.ComplexScriptFontName;
+        var runSymFn = run.SymbolFontName ?? tb.SymbolFontName;
+        if (runLatinFn == null && runEaFn == null)
+        {
+            var fn = run.FontName ?? tb.FontName;
+            runLatinFn = fn;
+            runEaFn = fn;
+        }
+        sb.Append("<a:r>");
+        sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{runSz * 100}\"{(run.Bold ? " b=\"1\"" : "")}{(run.Italic ? " i=\"1\"" : "")}{(run.Underline ? " u=\"sng\"" : "")} dirty=\"0\">");
+        if (run.GradFillColors?.Length >= 2)
+            WriteGradFill(sb, run.GradFillColors, run.GradAngle);
+        else
+            WriteFontColor(sb, runFc);
+        if (runLatinFn != null)
+            sb.Append($"<a:latin typeface=\"{EscXml(runLatinFn)}\"/>");
+        if (runEaFn != null)
+            sb.Append($"<a:ea typeface=\"{EscXml(runEaFn)}\"/>");
+        if (runCsFn != null)
+            sb.Append($"<a:cs typeface=\"{EscXml(runCsFn)}\"/>");
+        if (runSymFn != null)
+            sb.Append($"<a:sym typeface=\"{EscXml(runSymFn)}\"/>");
+        if (runHlRelId != null)
+            sb.Append($"<a:hlinkClick r:id=\"{runHlRelId}\"/>");
+        sb.Append("</a:rPr>");
+        sb.Append($"<a:t>{EscXml(run.Text)}</a:t>");
+        sb.Append("</a:r>");
+    }
+
+    /// <summary>写入单行非 Run 模式文本（向后兼容）</summary>
+    private void WriteSingleLineTextRun(StringBuilder sb, PptTextBox tb, String? hlRelId)
+    {
+        sb.Append("<a:r>");
+        sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{tb.FontSize * 100}\"{(tb.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
+        WriteFontColor(sb, tb.FontColor);
+        var tbLatinFn = tb.LatinFontName;
+        var tbEaFn = tb.EastAsianFontName;
+        var tbCsFn = tb.ComplexScriptFontName;
+        var tbSymFn = tb.SymbolFontName;
+        if (tbLatinFn == null && tbEaFn == null)
+        {
+            var fn = tb.FontName;
+            tbLatinFn = fn;
+            tbEaFn = fn;
+        }
+        if (tbLatinFn != null)
+            sb.Append($"<a:latin typeface=\"{EscXml(tbLatinFn)}\"/>");
+        if (tbEaFn != null)
+            sb.Append($"<a:ea typeface=\"{EscXml(tbEaFn)}\"/>");
+        if (tbCsFn != null)
+            sb.Append($"<a:cs typeface=\"{EscXml(tbCsFn)}\"/>");
+        if (tbSymFn != null)
+            sb.Append($"<a:sym typeface=\"{EscXml(tbSymFn)}\"/>");
+        if (hlRelId != null)
+            sb.Append($"<a:hlinkClick r:id=\"{hlRelId}\"/>");
+        sb.Append("</a:rPr>");
+        sb.Append($"<a:t>{EscXml(tb.Text)}</a:t>");
+        sb.Append("</a:r>");
     }
 
     private static void BuildPptTableXml(StringBuilder sb, PptTable tbl, ref Int32 shapeId)
@@ -882,8 +1072,8 @@ partial class PptxWriter
         {
             sb.Append("<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r>");
             sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{sp.FontSize * 100}\"{(sp.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
-            if (sp.FontColor != null)
-                sb.Append($"<a:solidFill><a:srgbClr val=\"{sp.FontColor.TrimStart('#')}\"/></a:solidFill>");
+            WriteFontColor(sb, sp.FontColor);
+            WriteFontElements(sb, sp.LatinFontName, sp.EastAsianFontName, sp.ComplexScriptFontName, sp.SymbolFontName);
             sb.Append("</a:rPr>");
             sb.Append($"<a:t>{EscXml(sp.Text)}</a:t>");
             sb.Append("</a:r></a:p></p:txBody>");
@@ -906,8 +1096,8 @@ partial class PptxWriter
         sb.Append("<p:txBody><a:bodyPr wrap=\"square\" rtlCol=\"0\"><a:normAutofit/></a:bodyPr><a:lstStyle/>");
         sb.Append($"<a:p><a:pPr algn=\"{tb.Alignment}\"/><a:r>");
         sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{tb.FontSize * 100}\"{(tb.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
-        if (tb.FontColor != null)
-            sb.Append($"<a:solidFill><a:srgbClr val=\"{tb.FontColor.TrimStart('#')}\"/></a:solidFill>");
+        WriteFontColor(sb, tb.FontColor);
+        WriteFontElements(sb, tb.LatinFontName, tb.EastAsianFontName, tb.ComplexScriptFontName, tb.SymbolFontName);
         sb.Append("</a:rPr>");
         sb.Append($"<a:t>{EscXml(tb.Text)}</a:t>");
         sb.Append("</a:r></a:p></p:txBody></p:sp>");
@@ -922,6 +1112,49 @@ partial class PptxWriter
 
     private static String EscXml(String s) =>
         s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
-         .Replace("\"", "&quot;").Replace("'", "&apos;");
+         .Replace("\"", "&quot;").Replace("'", "&apos;")
+         .Replace("\r", "&#xD;");
+
+    /// <summary>写出渐变填充</summary>
+    private static void WriteGradFill(StringBuilder sb, String[] colors, Int32 angle)
+    {
+        sb.Append("<a:gradFill><a:gsLst>");
+        var step = colors.Length > 1 ? 100000 / (colors.Length - 1) : 0;
+        for (var i = 0; i < colors.Length; i++)
+        {
+            var pos = i == colors.Length - 1 ? 100000 : step * i;
+            sb.Append($"<a:gs pos=\"{pos}\"><a:srgbClr val=\"{colors[i].TrimStart('#')}\"/></a:gs>");
+        }
+        sb.Append($"</a:gsLst><a:lin ang=\"{angle}\" scaled=\"0\"/></a:gradFill>");
+    }
+
+    /// <summary>写出字体颜色（srgbClr 或 schemeClr）</summary>
+    private static void WriteFontColor(StringBuilder sb, String? fontColor)
+    {
+        if (fontColor == null) return;
+        if (fontColor.StartsWith("scheme:", StringComparison.OrdinalIgnoreCase))
+        {
+            var val = fontColor.Substring(7);
+            sb.Append($"<a:solidFill><a:schemeClr val=\"{val}\"/></a:solidFill>");
+        }
+        else
+        {
+            sb.Append($"<a:solidFill><a:srgbClr val=\"{fontColor.TrimStart('#')}\"/></a:solidFill>");
+        }
+    }
+
+    /// <summary>写出字体元素（latin/ea/cs/sym）</summary>
+    /// <param name="sb">输出构建器</param>
+    /// <param name="latinFn">拉丁/西文字体名称</param>
+    /// <param name="eaFn">东亚/中文字体名称</param>
+    /// <param name="csFn">复杂脚本字体名称</param>
+    /// <param name="symFn">符号字体名称</param>
+    private static void WriteFontElements(StringBuilder sb, String? latinFn, String? eaFn, String? csFn, String? symFn)
+    {
+        if (latinFn != null) sb.Append($"<a:latin typeface=\"{EscXml(latinFn)}\"/>");
+        if (eaFn != null) sb.Append($"<a:ea typeface=\"{EscXml(eaFn)}\"/>");
+        if (csFn != null) sb.Append($"<a:cs typeface=\"{EscXml(csFn)}\"/>");
+        if (symFn != null) sb.Append($"<a:sym typeface=\"{EscXml(symFn)}\"/>");
+    }
     #endregion
 }
