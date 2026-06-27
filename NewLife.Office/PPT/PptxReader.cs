@@ -732,6 +732,9 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                 // 垂直锁定方式
                 var anchor = bodyPr.GetAttribute("anchor");
                 if (anchor.Length > 0) tb.Anchor = anchor;
+                // 文本方向（vert 属性）
+                var vert = bodyPr.GetAttribute("vert");
+                if (vert.Length > 0) tb.TextDirection = vert;
             }
 
             var lstDefaults = ParseListStyleDefaults(txBody);

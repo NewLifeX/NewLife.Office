@@ -383,7 +383,8 @@ partial class PptxWriter
             if (tb.TopInset > 0) insets.Append($" tIns=\"{tb.TopInset}\"");
             if (tb.BottomInset > 0) insets.Append($" bIns=\"{tb.BottomInset}\"");
             var anchorAttr = tb.Anchor.Length > 0 ? $" anchor=\"{tb.Anchor}\"" : "";
-            sb.Append($"<p:txBody><a:bodyPr wrap=\"square\" rtlCol=\"0\"{insets}{anchorAttr}>{fitTag}</a:bodyPr><a:lstStyle/>");
+            var vertAttr = tb.TextDirection != null ? $" vert=\"{tb.TextDirection}\"" : "";
+            sb.Append($"<p:txBody><a:bodyPr wrap=\"square\" rtlCol=\"0\"{insets}{anchorAttr}{vertAttr}>{fitTag}</a:bodyPr><a:lstStyle/>");
 
             // 段落写入：优先使用 Paragraphs（多段结构），回退到 Runs（单段兼容）
             if (tb.Paragraphs.Count > 0)

@@ -95,5 +95,8 @@ public class PptTextBox
 
     /// <summary>替换文本/无障碍描述（对应 OOXML descr 属性）</summary>
     public String? AltText { get; set; }
+
+    /// <summary>文本方向（vert 属性值：horz=水平/vert=垂直/vert270=旋转270°/eaVert=东亚竖排），null 表示默认水平</summary>
+    public String? TextDirection { get; set; }
     #endregion
 }

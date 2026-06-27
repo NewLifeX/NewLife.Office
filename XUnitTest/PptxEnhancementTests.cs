@@ -311,5 +311,62 @@ public class PptxEnhancementTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact(DisplayName = "PPT—文本框东亚竖排(eaVert) TextDirection")]
+    public void TextDirection_EaVert_WriteAndRead()
+    {
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            using var writer = new PptxWriter();
+            var slide = writer.AddSlide();
+            var tb = writer.AddTextBox(0, "竖排文本", 1, 1, 10, 5);
+            tb.TextDirection = "eaVert";
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotEmpty(doc.Slides[0].TextBoxes);
+            Assert.Equal("eaVert", doc.Slides[0].TextBoxes[0].TextDirection);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "PPT—文本框垂直旋转270°(vert270)")]
+    public void TextDirection_Vert270_WriteAndRead()
+    {
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            using var writer = new PptxWriter();
+            var slide = writer.AddSlide();
+            var tb = writer.AddTextBox(0, "旋转文本", 1, 1, 10, 5);
+            tb.TextDirection = "vert270";
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.Equal("vert270", doc.Slides[0].TextBoxes[0].TextDirection);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "PPT—文本框默认水平方向(null)")]
+    public void TextDirection_DefaultHorz()
+    {
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            using var writer = new PptxWriter();
+            var slide = writer.AddSlide();
+            writer.AddTextBox(0, "默认水平", 1, 1, 10, 2);
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.Null(doc.Slides[0].TextBoxes[0].TextDirection);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
     #endregion
 }
