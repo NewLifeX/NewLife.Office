@@ -28,6 +28,15 @@ public class PptShape
     /// <summary>填充色（16进制 RGB），null 表示无填充（写入时使用）</summary>
     public String? FillColor { get; set; }
 
+    /// <summary>图片填充数据（写入时使用），设置后覆盖 FillColor，使用 blipFill 替代 solidFill</summary>
+    public Byte[]? FillImage { get; set; }
+
+    /// <summary>图片填充扩展名（默认 "png"），配合 FillImage 使用</summary>
+    public String FillImageExt { get; set; } = "png";
+
+    /// <summary>形状图片填充的关系 ID（内部用）</summary>
+    public String? ShapeImageRelId { get; set; }
+
     /// <summary>线条颜色（16进制 RGB），null 表示无线条（写入时使用）</summary>
     public String? LineColor { get; set; }
 

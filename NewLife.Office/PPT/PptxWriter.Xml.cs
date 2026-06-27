@@ -490,7 +490,14 @@ partial class PptxWriter
             }
             else
                 sb.Append($"<a:prstGeom prst=\"{sp.ShapeType}\"><a:avLst/></a:prstGeom>");
-            if (sp.FillColor != null)
+            if (sp.FillImage != null && sp.FillImage.Length > 0)
+            {
+                sp.ShapeImageRelId ??= "rImgFill1";
+                sb.Append($"<a:blipFill dpi=\"0\" rotWithShape=\"1\">");
+                sb.Append($"<a:blip r:embed=\"{sp.ShapeImageRelId}\"/>");
+                sb.Append("<a:stretch><a:fillRect/></a:stretch></a:blipFill>");
+            }
+            else if (sp.FillColor != null)
                 sb.Append($"<a:solidFill><a:srgbClr val=\"{sp.FillColor.TrimStart('#')}\"/></a:solidFill>");
             else
                 sb.Append("<a:noFill/>");

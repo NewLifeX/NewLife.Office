@@ -884,4 +884,26 @@ public class PptxWriterTests
         Assert.Single(slides[0].Images);
         Assert.Equal(5400000, slides[0].Images[0].Rotation);
     }
+
+    [Fact, System.ComponentModel.DisplayName("形状图片填充生成blipFill")]
+    public void ShapeImageFill_WritesBlipFill()
+    {
+        var writer = new PptxWriter();
+        writer.AddSlide(0);
+        var sp = writer.AddShape(0, "rect", 1, 2, 5, 3, null);
+        sp.FillImage = new Byte[] { 1, 2, 3 };
+        sp.ShapeImageRelId = "rImg1";
+
+        using var ms = new MemoryStream();
+        writer.Save(ms);
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true);
+        var slideEntry = za.GetEntry("ppt/slides/slide1.xml");
+        Assert.NotNull(slideEntry);
+        using var sr = new StreamReader(slideEntry!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("a:blipFill", xml);
+        Assert.Contains("r:embed=\"rImg1\"", xml);
+    }
 }
