@@ -146,6 +146,58 @@ public class WordWriter : IDisposable
         _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
     }
 
+    /// <summary>追加内容控件（SDT）</summary>
+    /// <param name="sdt">SDT 内容控件元素</param>
+    public void AppendSdt(WordSdtElement sdt)
+    {
+        _elements.Add(new WordElement { Type = WordElementType.Sdt, Sdt = sdt });
+    }
+
+    /// <summary>追加纯文本内容控件</summary>
+    /// <param name="content">控件内容文本</param>
+    /// <param name="tag">标签（可选，用于标识控件）</param>
+    /// <param name="alias">别名（可选，用于展示名称）</param>
+    public void AppendPlainTextSdt(String content, String? tag = null, String? alias = null)
+    {
+        AppendSdt(new WordSdtElement
+        {
+            SdtType = WordSdtType.PlainText,
+            Content = content,
+            Tag = tag,
+            Alias = alias
+        });
+    }
+
+    /// <summary>追加日期选择器内容控件</summary>
+    /// <param name="dateText">日期显示文本</param>
+    /// <param name="dateFormat">日期格式（如 yyyy-MM-dd）</param>
+    /// <param name="tag">标签</param>
+    public void AppendDateSdt(String dateText, String dateFormat = "yyyy-MM-dd", String? tag = null)
+    {
+        AppendSdt(new WordSdtElement
+        {
+            SdtType = WordSdtType.Date,
+            Content = dateText,
+            DateFormat = dateFormat,
+            Tag = tag
+        });
+    }
+
+    /// <summary>追加下拉列表内容控件</summary>
+    /// <param name="selectedText">选中项文本</param>
+    /// <param name="items">下拉列表项</param>
+    /// <param name="tag">标签</param>
+    public void AppendDropDownListSdt(String selectedText, IEnumerable<String> items, String? tag = null)
+    {
+        AppendSdt(new WordSdtElement
+        {
+            SdtType = WordSdtType.DropDownList,
+            Content = selectedText,
+            ListItems = items.ToList(),
+            Tag = tag
+        });
+    }
+
     /// <summary>追加无序列表</summary>
     /// <param name="items">列表项</param>
     public void AppendBulletList(IEnumerable<String> items)
@@ -650,9 +702,10 @@ public class WordWriter : IDisposable
                         BuildImageXml(sb, el.Image);
                         break;
                     case WordElementType.Sdt:
-                        // SDT 通过 RawXml 透传，不单独生成 XML
                         if (el.RawXml != null)
                             sb.Append(el.RawXml);
+                        else if (el.Sdt != null)
+                            BuildSdtXml(sb, el.Sdt);
                         break;
                 }
             }
@@ -838,6 +891,87 @@ public class WordWriter : IDisposable
             }
         }
         sb.Append("</w:p>");
+    }
+
+    private static void BuildSdtXml(StringBuilder sb, WordSdtElement sdt)
+    {
+        const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+
+        sb.Append("<w:sdt>");
+        sb.Append("<w:sdtPr>");
+
+        // 别名和标签
+        if (sdt.Alias != null)
+            sb.Append($"<w:alias w:val=\"{Esc(sdt.Alias)}\"/>");
+        if (sdt.Tag != null)
+            sb.Append($"<w:tag w:val=\"{Esc(sdt.Tag)}\"/>");
+
+        // 唯一 ID（负值随机数，符合 OOXML 惯例）
+        var id = unchecked((Int32)((UInt32)(sdt.GetHashCode() & 0x7FFFFFFF) + 0x80000000));
+        sb.Append($"<w:id w:val=\"{id}\"/>");
+
+        // 占位符文本
+        var placeholder = sdt.SdtType switch
+        {
+            WordSdtType.PlainText => "单击或点击输入文字",
+            WordSdtType.RichText => "单击或点击输入文字",
+            WordSdtType.Date => "单击或点击输入日期",
+            WordSdtType.DropDownList => "选择一项",
+            WordSdtType.ComboBox => "选择或输入一项",
+            _ => "单击或点击输入文字"
+        };
+        sb.Append($"<w:placeholder><w:docPart w:val=\"{Esc(placeholder)}\"/></w:placeholder>");
+
+        // 类型特定属性
+        switch (sdt.SdtType)
+        {
+            case WordSdtType.PlainText:
+                sb.Append("<w:text/>");
+                break;
+            case WordSdtType.RichText:
+                sb.Append("<w:richText/>");
+                break;
+            case WordSdtType.Date:
+                sb.Append("<w:date>");
+                var fmt = sdt.DateFormat ?? "yyyy-MM-dd";
+                sb.Append($"<w:dateFormat w:val=\"{Esc(fmt)}\"/>");
+                sb.Append("<w:lid w:val=\"zh-CN\"/>");
+                sb.Append("<w:storeMappedDataAs w:val=\"dateTime\"/>");
+                sb.Append("<w:calendar w:val=\"gregorian\"/>");
+                sb.Append("</w:date>");
+                break;
+            case WordSdtType.DropDownList:
+                sb.Append("<w:dropDownList>");
+                if (sdt.ListItems != null)
+                {
+                    foreach (var item in sdt.ListItems)
+                        sb.Append($"<w:listItem w:displayText=\"{Esc(item)}\" w:value=\"{Esc(item)}\"/>");
+                }
+                sb.Append("</w:dropDownList>");
+                break;
+            case WordSdtType.ComboBox:
+                sb.Append("<w:comboBox>");
+                if (sdt.ListItems != null)
+                {
+                    foreach (var item in sdt.ListItems)
+                        sb.Append($"<w:listItem w:displayText=\"{Esc(item)}\" w:value=\"{Esc(item)}\"/>");
+                }
+                sb.Append("</w:comboBox>");
+                break;
+            case WordSdtType.CheckBox:
+                sb.Append("<w:checkbox><w:checked w:val=\"0\"/><w:checkedState w:val=\"☒\"/><w:uncheckedState w:val=\"☐\"/></w:checkbox>");
+                break;
+        }
+
+        sb.Append("</w:sdtPr>");
+        sb.Append("<w:sdtContent>");
+
+        // 内容段落
+        var content = sdt.Content ?? "";
+        sb.Append($"<w:p><w:r><w:rPr><w:rFonts w:ascii=\"等线\" w:hAnsi=\"等线\" w:eastAsia=\"等线\"/></w:rPr><w:t xml:space=\"preserve\">{Esc(content)}</w:t></w:r></w:p>");
+
+        sb.Append("</w:sdtContent>");
+        sb.Append("</w:sdt>");
     }
 
     private static void BuildRunXml(StringBuilder sb, WordRun run)

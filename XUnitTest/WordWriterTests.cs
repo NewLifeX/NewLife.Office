@@ -388,6 +388,96 @@ public class WordWriterTests
     }
     #endregion
 
+    #region SDT 内容控件写入
+    [Fact(DisplayName = "SDT写入—纯文本内容控件")]
+    public void Sdt_PlainText_WriteAndRead()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendPlainTextSdt("默认文本内容", tag: "field1", alias: "字段1");
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotEmpty(doc.Elements);
+            Assert.NotNull(doc.Elements[0].Sdt);
+            Assert.Equal(WordSdtType.PlainText, doc.Elements[0].Sdt!.SdtType);
+            Assert.Equal("field1", doc.Elements[0].Sdt!.Tag);
+            Assert.Equal("字段1", doc.Elements[0].Sdt!.Alias);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "SDT写入—日期选择器")]
+    public void Sdt_Date_WriteAndRead()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendDateSdt("2025-01-15", "yyyy-MM-dd", tag: "birthDate");
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotNull(doc.Elements[0].Sdt);
+            Assert.Equal(WordSdtType.Date, doc.Elements[0].Sdt!.SdtType);
+            Assert.Equal("birthDate", doc.Elements[0].Sdt!.Tag);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "SDT写入—下拉列表控件")]
+    public void Sdt_DropDownList_WriteAndRead()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendDropDownListSdt("选项B", new[] { "选项A", "选项B", "选项C" }, tag: "choice");
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotNull(doc.Elements[0].Sdt);
+            Assert.Equal(WordSdtType.DropDownList, doc.Elements[0].Sdt!.SdtType);
+            Assert.Equal("choice", doc.Elements[0].Sdt!.Tag);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "SDT写入—多个控件混合")]
+    public void Sdt_MultipleControls()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendParagraph("表单标题");
+            writer.AppendPlainTextSdt("请输入姓名", tag: "name", alias: "姓名");
+            writer.AppendDateSdt("2025-06-01", "yyyy-MM-dd", tag: "date");
+            writer.AppendDropDownListSdt("中", new[] { "高", "中", "低" }, tag: "priority");
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.Equal(4, doc.Elements.Count);
+
+            // 常规段落
+            Assert.Null(doc.Elements[0].Sdt);
+            // SDT 纯文本
+            Assert.Equal(WordSdtType.PlainText, doc.Elements[1].Sdt!.SdtType);
+            // SDT 日期
+            Assert.Equal(WordSdtType.Date, doc.Elements[2].Sdt!.SdtType);
+            // SDT 下拉
+            Assert.Equal(WordSdtType.DropDownList, doc.Elements[3].Sdt!.SdtType);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
+
     #region 辅助方法
     /// <summary>构建包含指定 SDT 元素的最小合法 docx 文件</summary>
     private static Byte[] BuildDocxWithSdt(String sdtXml)

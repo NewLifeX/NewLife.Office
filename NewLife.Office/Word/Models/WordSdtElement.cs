@@ -3,8 +3,7 @@ namespace NewLife.Office;
 /// <summary>内容控件（SDT）元素，对应 OOXML <c>w:sdt</c></summary>
 /// <remarks>
 /// 结构化文档标签（Structured Document Tag），用于在 Word 文档中嵌入
-/// 表单控件或受约束的内容区域。
-/// 当前仅支持读取，写入通过 RawXml 透传兜底。
+/// 表单控件或受约束的内容区域。支持读写双向。
 /// </remarks>
 public class WordSdtElement
 {
@@ -20,6 +19,12 @@ public class WordSdtElement
 
     /// <summary>内容文本</summary>
     public String? Content { get; set; }
+
+    /// <summary>下拉列表/组合框的列表项</summary>
+    public List<String>? ListItems { get; set; }
+
+    /// <summary>日期格式（仅 Date 类型有效，如 yyyy-MM-dd）</summary>
+    public String? DateFormat { get; set; }
 
     /// <summary>原始 XML（<c>w:sdt</c> 的 OuterXml），用于往返透传</summary>
     public String? RawXml { get; set; }
