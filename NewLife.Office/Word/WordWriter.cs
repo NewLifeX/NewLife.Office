@@ -139,6 +139,21 @@ public class WordWriter : IDisposable
         return para;
     }
 
+    /// <summary>追加交叉引用域（引用书签，显示为页码或文本）</summary>
+    /// <param name="bookmarkName">被引用的书签名称</param>
+    /// <param name="displayText">显示文本（通常为页码数字，如 "1"）</param>
+    public void AppendCrossRef(String bookmarkName, String displayText = "1")
+    {
+        var xml = "<w:p>"
+            + "<w:r><w:fldChar w:fldCharType=\"begin\"/></w:r>"
+            + $"<w:r><w:instrText xml:space=\"preserve\"> REF {Esc(bookmarkName)} \\h </w:instrText></w:r>"
+            + "<w:r><w:fldChar w:fldCharType=\"separate\"/></w:r>"
+            + $"<w:r><w:t>{Esc(displayText)}</w:t></w:r>"
+            + "<w:r><w:fldChar w:fldCharType=\"end\"/></w:r>"
+            + "</w:p>";
+        _elements.Add(new WordElement { Type = WordElementType.Paragraph, RawXml = xml });
+    }
+
     /// <summary>追加分页符</summary>
     public void AppendPageBreak()
     {

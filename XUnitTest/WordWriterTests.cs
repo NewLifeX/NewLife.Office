@@ -753,4 +753,27 @@ public class WordWriterTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
     #endregion
+
+    #region 交叉引用
+    [Fact(DisplayName = "交叉引用写入—REF域含书签引用")]
+    public void CrossRef_AppendAndVerify()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendBookmarkedParagraph("被引用的章节", "Chapter1", WordParagraphStyle.Heading1);
+            writer.AppendCrossRef("Chapter1", "1");
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            // 读取验证文档包含两个元素
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotEmpty(doc.Elements);
+            Assert.True(doc.Elements.Count >= 2);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
 }
