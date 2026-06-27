@@ -207,6 +207,9 @@ public partial class ExcelWriter : DisposeBase
     // 垂直分页符：sheet → 列号列表（0基，此列开始新页）
     private readonly Dictionary<String, List<Int32>> _sheetColPageBreaks = new(StringComparer.OrdinalIgnoreCase);
 
+    // 迷你图组：sheet → 迷你图组列表
+    private readonly Dictionary<String, List<SparklineGroup>> _sheetSparklineGroups = new(StringComparer.OrdinalIgnoreCase);
+
     // 每单元格样式覆盖（0基行, 0基列）→ CellStyle
     private readonly Dictionary<String, Dictionary<(Int32 Row, Int32 Col), Office.ExcelCellStyle>> _cellStyleOverrides = new(StringComparer.OrdinalIgnoreCase);
 
@@ -723,6 +726,47 @@ public partial class ExcelWriter : DisposeBase
             range = $"'{sheet}'!{range}";
         _definedNames.RemoveAll(dn => dn.Name.EqualIgnoreCase("_xlnm.Print_Area") && dn.Formula.Contains($"'{sheet}'!"));
         AddDefinedName("_xlnm.Print_Area", range);
+    }
+
+    /// <summary>添加迷你图组（行内微型图表）</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="dataRange">数据区域（如 "Sheet1!B2:F2"）</param>
+    /// <param name="cellRange">放置迷你图的单元格区域（如 "Sheet1!G2:G2"）</param>
+    /// <param name="type">类型：line/column/stacked</param>
+    /// <param name="lineColor">线条/柱颜色（16进制RGB）</param>
+    /// <param name="markerColor">标记点颜色（可空）</param>
+    /// <returns>迷你图组对象</returns>
+    public SparklineGroup AddSparklineGroup(String? sheet, String dataRange, String cellRange, String type = "line", String? lineColor = "FF0000", String? markerColor = null)
+    {
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        var sg = new SparklineGroup
+        {
+            Type = type,
+            DataRange = dataRange,
+            CellRange = cellRange,
+            LineColor = lineColor ?? "FF0000",
+            MarkerColor = markerColor
+        };
+        if (!_sheetSparklineGroups.TryGetValue(sheet, out var list))
+            _sheetSparklineGroups[sheet] = list = [];
+        list.Add(sg);
+        return sg;
+    }
+
+    /// <summary>迷你图组定义</summary>
+    public class SparklineGroup
+    {
+        /// <summary>类型：line/column/stacked</summary>
+        public String Type { get; set; } = "line";
+        /// <summary>数据区域</summary>
+        public String DataRange { get; set; } = String.Empty;
+        /// <summary>放置单元格区域</summary>
+        public String CellRange { get; set; } = String.Empty;
+        /// <summary>线条/柱颜色（16进制RGB）</summary>
+        public String LineColor { get; set; } = "FF0000";
+        /// <summary>标记点颜色</summary>
+        public String? MarkerColor { get; set; }
     }
 
     /// <summary>设置水平分页符</summary>

@@ -780,6 +780,40 @@ partial class ExcelWriter
                 sw.Write("</tableParts>");
             }
 
+            // sparklineGroups（迷你图）
+            if (_sheetSparklineGroups.TryGetValue(sheet, out var sparkGroups) && sparkGroups.Count > 0)
+            {
+                sw.Write("<x14:sparklineGroups xmlns:x14=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\" xmlns:xm=\"http://schemas.microsoft.com/office/excel/2006/main\">");
+                foreach (var sg in sparkGroups)
+                {
+                    sw.Write($"<x14:sparklineGroup displayEmptyCellsAs=\"gap\"");
+                    if (sg.MarkerColor != null) sw.Write($" markers=\"1\"");
+                    sw.Write(">");
+                    sw.Write($"<x14:colorSeries theme=\"4\"/>");
+                    sw.Write($"<x14:colorNegative theme=\"5\"/>");
+                    sw.Write($"<x14:colorAxis theme=\"4\" luminance=\"42\"/>");
+                    sw.Write($"<x14:colorMarkers theme=\"4\" luminance=\"42\"/>");
+                    sw.Write($"<x14:colorFirst theme=\"4\" luminance=\"42\"/>");
+                    sw.Write($"<x14:colorLast theme=\"4\" luminance=\"42\"/>");
+                    sw.Write($"<x14:colorHigh theme=\"4\"/>");
+                    sw.Write($"<x14:colorLow theme=\"4\"/>");
+                    // 数据系列
+                    sw.Write($"<xm:sqref>{XmlEscape(sg.DataRange)}</xm:sqref>");
+                    // 迷你图位置
+                    sw.Write("<x14:sparklines>");
+                    // 单个单元格或多个单元格
+                    var cells = sg.CellRange.Split(',', ' ');
+                    foreach (var cell in cells)
+                    {
+                        if (cell.Trim().Length == 0) continue;
+                        sw.Write($"<x14:sparkline><xm:f>{XmlEscape(cell.Trim())}</xm:f></x14:sparkline>");
+                    }
+                    sw.Write("</x14:sparklines>");
+                    sw.Write($"</x14:sparklineGroup>");
+                }
+                sw.Write("</x14:sparklineGroups>");
+            }
+
             sw.Write("</worksheet>");
             sw.Dispose();
 

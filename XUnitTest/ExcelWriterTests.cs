@@ -882,6 +882,31 @@ public class ExcelWriterTests
     }
     #endregion
 
+    #region 迷你图测试
+    [Fact(DisplayName = "AddSparklineGroup写入x14:sparklineGroups")]
+    public void AddSparklineGroup_WritesSparklineXml()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A", "B", "C", "D", "E", "F" });
+        w.WriteRow(null, new Object?[] { 1, 2, 3, 4, 5, 6 });
+        w.AddSparklineGroup(null, "Sheet1!B2:F2", "Sheet1!G2", "line", "FF0000");
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        var sheetEntry = za.GetEntry("xl/worksheets/sheet1.xml");
+        using var sr = new StreamReader(sheetEntry!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("x14:sparklineGroups", xml);
+        Assert.Contains("x14:sparklineGroup", xml);
+        Assert.Contains("xm:sqref", xml);
+        Assert.Contains("B2:F2", xml);
+        Assert.Contains("x14:sparkline", xml);
+        Assert.Contains("G2", xml);
+    }
+    #endregion
+
     #region 辅助类
     private class TestUser
     {
