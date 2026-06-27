@@ -127,6 +127,90 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return Int32.TryParse(numStr.Trim(), out var count) ? count : 0;
     }
 
+    /// <summary>读取 PDF 中所有嵌入/引用的字体信息</summary>
+    /// <returns>字体信息列表</returns>
+    public List<PdfFontInfo> ReadFonts()
+    {
+        var fonts = new List<PdfFontInfo>();
+        var pdf = _latin1.GetString(_data);
+        var visited = new HashSet<String>();
+
+        // 扫描所有字体字典：查找 /BaseFont 或 /FontName
+        var pos = 0;
+        while (true)
+        {
+            var found = FindToken(pdf.Substring(pos), "/BaseFont");
+            if (found < 0) break;
+            pos += found + 9;
+            var name = ExtractNameValue(pdf, ref pos);
+            if (name == null || !visited.Add(name)) continue;
+
+            var info = new PdfFontInfo { Name = name };
+
+            // 回溯查找字体类型和编码
+            var searchBack = Math.Max(0, pos - 200);
+            var context = pdf.Substring(searchBack, pos - searchBack);
+
+            // 检测类型：/Type /Font 附近或 /Subtype
+            var typeIdx = context.LastIndexOf("/Subtype");
+            if (typeIdx >= 0)
+            {
+                var subtype = ExtractNextToken(context, typeIdx + 8).Trim();
+                if (subtype.Length > 0 && subtype[0] == '/') subtype = subtype.Substring(1);
+                info.Type = subtype;
+            }
+
+            // 检测编码
+            var encIdx = context.LastIndexOf("/Encoding");
+            if (encIdx >= 0)
+            {
+                var encoding = ExtractNextToken(context, encIdx + 9).Trim();
+                if (encoding.Length > 0 && encoding[0] == '/') encoding = encoding.Substring(1);
+                info.Encoding = encoding;
+            }
+
+            // 排除重复的字体描述符（字体名过短且以 F 开头的通常不是真实字体）
+            if (info.Name != null && (info.Name.Length > 3 || !info.Name.StartsWith("F")))
+                fonts.Add(info);
+        }
+
+        // 如果找到太多（包括 FontDescriptor 等），去重过滤
+        var result = fonts.Where(f => f.Name?.Length > 1).GroupBy(f => f.Name).Select(g => g.First()).ToList();
+        return result;
+    }
+
+    /// <summary>提取 PDF name 值（/xxx 格式）</summary>
+    private static String? ExtractNameValue(String pdf, ref Int32 pos)
+    {
+        while (pos < pdf.Length && pdf[pos] == ' ') pos++;
+        if (pos >= pdf.Length) return null;
+
+        // 跳过 #XX 十六进制转义
+        if (pos + 1 < pdf.Length && pdf[pos] == '#') { pos += 3; }
+
+        var start = pos;
+        if (start < pdf.Length && pdf[start] == '/') start++;
+
+        while (pos < pdf.Length && !IsPdfDelimiter(pdf[pos]))
+            pos++;
+
+        if (start >= pos) return null;
+
+        var len = pos - start;
+        if (start + len > pdf.Length) len = pdf.Length - start;
+        if (len <= 0) return null;
+
+        var name = pdf.Substring(start, len);
+        name = name.Trim();
+        if (name.StartsWith("/")) name = name.Substring(1);
+        return name.Length > 0 ? name : null;
+    }
+
+    private static Boolean IsPdfDelimiter(Char c)
+    {
+        return c == ' ' || c == '\r' || c == '\n' || c == '\t' || c == '/' || c == '<' || c == '>' || c == '[' || c == ']' || c == '(' || c == ')';
+    }
+
     /// <summary>提取全部文本（基于 xref + 解压缩内容流）</summary>
     /// <returns>合并后的文本</returns>
     public String ExtractText()
