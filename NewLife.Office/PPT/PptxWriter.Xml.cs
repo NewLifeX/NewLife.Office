@@ -497,7 +497,16 @@ partial class PptxWriter
         {
             sb.Append($"<p:pic><p:nvPicPr><p:cNvPr id=\"{shapeId++}\" name=\"Image\"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>");
             sb.Append("<p:blipFill>");
-            sb.Append($"<a:blip r:embed=\"{img.RelId}\"/>");
+            sb.Append($"<a:blip r:embed=\"{img.RelId}\"");
+            if (img.IsSvg)
+            {
+                // SVG: 在 <a:blip> 内嵌套 <asvg:svgBlip>，SEO/兼容性更好
+                sb.Append($" xmlns:asvg=\"http://schemas.microsoft.com/office/drawing/2016/SVG/main\"><asvg:svgBlip r:embed=\"{img.RelId}\"/></a:blip>");
+            }
+            else
+            {
+                sb.Append("/>");
+            }
             sb.Append("<a:stretch><a:fillRect/></a:stretch></p:blipFill>");
             sb.Append("<p:spPr>");
             sb.Append($"<a:xfrm><a:off x=\"{img.Left}\" y=\"{img.Top}\"/><a:ext cx=\"{img.Width}\" cy=\"{img.Height}\"/></a:xfrm>");

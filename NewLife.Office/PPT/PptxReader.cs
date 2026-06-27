@@ -1135,7 +1135,31 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         Byte[] idata;
         using (var ms = new MemoryStream())
         using (var es = ientry.Open()) { es.CopyTo(ms); idata = ms.ToArray(); }
-        slide.Images.Add(new PptImage { Data = idata, Extension = iext, Left = left, Top = top, Width = width, Height = height, IsSvg = iext == "svg" });
+
+        var isSvg = iext == "svg";
+
+        // 检测 asvg:svgBlip（PowerPoint 2016+ SVG 标准格式），使用 SVG 数据覆盖 PNG 缩略图
+        var svgBlip = blip.SelectSingleNode("*[local-name()='svgBlip']") as XmlElement;
+        if (svgBlip != null)
+        {
+            var svgEmbedId = svgBlip.GetAttribute("r:embed") ?? svgBlip.GetAttribute("embed");
+            if (svgEmbedId != null && rels.TryGetValue(svgEmbedId, out var svgRel))
+            {
+                var svgName = Path.GetFileName(svgRel.Target);
+                var svgEntry = _zip.GetEntry($"ppt/media/{svgName}");
+                if (svgEntry != null)
+                {
+                    using var svgMs = new MemoryStream();
+                    using var svgEs = svgEntry.Open();
+                    svgEs.CopyTo(svgMs);
+                    idata = svgMs.ToArray();
+                    iext = "svg";
+                    isSvg = true;
+                }
+            }
+        }
+
+        slide.Images.Add(new PptImage { Data = idata, Extension = iext, Left = left, Top = top, Width = width, Height = height, IsSvg = isSvg });
     }
 
     private void ParseGraphicFrame(XmlElement gf, PptSlide slide, Dictionary<String, (String Target, String Type)> rels)

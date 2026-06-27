@@ -200,6 +200,40 @@ public class PptxEnhancementTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact(DisplayName = "PPT—SVG图片 asvg:svgBlip XML生成验证")]
+    public void SvgImage_AsvgSvgBlipXml()
+    {
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            using var writer = new PptxWriter();
+            var slide = writer.AddSlide();
+            var svgData = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"50\" height=\"50\"><circle r=\"20\" fill=\"blue\"/></svg>"u8.ToArray();
+            slide.Images.Add(new PptImage
+            {
+                Data = svgData,
+                Extension = "svg",
+                IsSvg = true,
+                Left = 0, Top = 0, Width = 2000000, Height = 2000000
+            });
+            writer.Save(tempFile);
+
+            // 验证 PPTX 文件中包含 asvg:svgBlip 元素
+            using var archive = System.IO.Compression.ZipFile.OpenRead(tempFile);
+            var slideEntry = archive.GetEntry("ppt/slides/slide1.xml");
+            Assert.NotNull(slideEntry);
+            using var sr = new StreamReader(slideEntry!.Open());
+            var slideXml = sr.ReadToEnd();
+            Assert.Contains("asvg:svgBlip", slideXml);
+
+            // 同时验证往返读取
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.True(doc.Slides[0].Images[0].IsSvg);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
     #endregion
 
     #region Alt Text (S15-new)
