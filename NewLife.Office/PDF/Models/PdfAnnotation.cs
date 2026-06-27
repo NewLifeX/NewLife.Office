@@ -32,6 +32,18 @@ public enum PdfAnnotationType
 
     /// <summary>图章注释（如"已批准"印章）</summary>
     Stamp,
+
+    /// <summary>插入符号（Caret，指示文本插入位置）</summary>
+    Caret,
+
+    /// <summary>多边形注释</summary>
+    Polygon,
+
+    /// <summary>折线注释</summary>
+    PolyLine,
+
+    /// <summary>波浪下划线（Squiggly）</summary>
+    Squiggly,
 }
 
 /// <summary>PDF 页面注释</summary>

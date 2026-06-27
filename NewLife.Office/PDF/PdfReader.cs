@@ -296,6 +296,102 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return results;
     }
 
+    /// <summary>读取 AcroForm 表单字段及当前值</summary>
+    /// <returns>表单对象（含字段列表和值），null 表示无表单</returns>
+    public PdfForm? ReadFormFields()
+    {
+        if (XRefTable == null || !XRefTable.Trailer.TryGetValue("Root", out var rv) || rv is not PdfRef rootRef)
+            return null;
+
+        var rootObj = PdfObjectParser.ReadObject(_data, XRefTable, rootRef.ObjNum);
+        if (rootObj is not PdfDictObj rootDictObj) return null;
+        if (!rootDictObj.Value.TryGetValue("AcroForm", out var acroVal)) return null;
+
+        PdfRef acroRef;
+        if (acroVal is PdfRef ar) acroRef = ar;
+        else return null;
+
+        var acroObj = PdfObjectParser.ReadObject(_data, XRefTable, acroRef.ObjNum);
+        if (acroObj is not PdfDictObj acroDictObj) return null;
+
+        var form = new PdfForm();
+        var dict = acroDictObj.Value;
+
+        if (dict.TryGetValue("NeedAppearances", out var naVal) && naVal is PdfBoolean na)
+            form.NeedAppearances = na.Value;
+
+        if (dict.TryGetValue("Fields", out var fieldsVal))
+        {
+            var fieldRefs = new List<PdfRef>();
+            if (fieldsVal is PdfRef fr) fieldRefs.Add(fr);
+            else if (fieldsVal is PdfArray fa) fieldRefs.AddRange(fa.Items.OfType<PdfRef>());
+
+            foreach (var fref in fieldRefs)
+            {
+                var field = ReadFormField(fref);
+                if (field != null) form.Fields.Add(field);
+            }
+        }
+
+        return form;
+    }
+
+    private PdfFormField? ReadFormField(PdfRef fref)
+    {
+        var fobj = PdfObjectParser.ReadObject(_data, XRefTable!, fref.ObjNum);
+        if (fobj is not PdfDictObj fdictObj) return null;
+        var dict = fdictObj.Value;
+
+        var field = new PdfFormField();
+
+        if (dict.TryGetValue("T", out var tVal) && tVal is PdfString ts)
+            field.FullName = ts.Value;
+
+        if (dict.TryGetValue("FT", out var ftVal) && ftVal is PdfName ftn)
+            field.FieldType = ftn.Value switch { "Tx" => PdfFormFieldType.Tx, "Btn" => PdfFormFieldType.Btn, "Ch" => PdfFormFieldType.Ch, "Sig" => PdfFormFieldType.Sig, _ => PdfFormFieldType.Tx };
+
+        if (dict.TryGetValue("V", out var vVal))
+            field.Value = vVal switch { PdfString vs => vs.Value, PdfName vn => vn.Value, _ => vVal.ToString() };
+
+        if (dict.TryGetValue("DV", out var dvVal) && dvVal is PdfString dvs)
+            field.DefaultValue = dvs.Value;
+
+        // 解析 Rect（[x1 y1 x2 y2]）
+        if (dict.TryGetValue("Rect", out var rectVal) && rectVal is PdfArray rectArr && rectArr.Items.Count >= 4)
+        {
+            if (rectArr.Items[0] is PdfNumber rx) field.X = (Single)rx.Value;
+            if (rectArr.Items[1] is PdfNumber ry) field.Y = (Single)ry.Value;
+            if (rectArr.Items[2] is PdfNumber rw) field.Width = (Single)rw.Value - field.X;
+            if (rectArr.Items[3] is PdfNumber rh) field.Height = (Single)rh.Value - field.Y;
+        }
+
+        // Kids（子字段，递归读取）
+        if (dict.TryGetValue("Kids", out var kidsVal))
+        {
+            var kidRefs = new List<PdfRef>();
+            if (kidsVal is PdfRef kr) kidRefs.Add(kr);
+            else if (kidsVal is PdfArray ka) kidRefs.AddRange(ka.Items.OfType<PdfRef>());
+
+            foreach (var kref in kidRefs)
+            {
+                var kid = ReadFormField(kref);
+                if (kid != null) field.Kids.Add(kid);
+            }
+        }
+
+        // Opt（下拉/列表选项）
+        if (dict.TryGetValue("Opt", out var optVal) && optVal is PdfArray optArr)
+        {
+            foreach (var oi in optArr.Items)
+            {
+                if (oi is PdfString os) field.Options.Add(os.Value);
+                else if (oi is PdfArray oa && oa.Items.Count > 0 && oa.Items[0] is PdfString oas) field.Options.Add(oas.Value);
+            }
+        }
+
+        return field;
+    }
+
     /// <summary>从 PDF 中提取嵌入图片</summary>
     /// <returns>图片流对象序列</returns>
     public IEnumerable<PdfImage> ExtractImageStreams()

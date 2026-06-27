@@ -643,6 +643,19 @@ public class PdfWriter : IDisposable
     {
         Form ??= new PdfForm();
     }
+
+    /// <summary>设置表单字段值（用于填充已有表单）</summary>
+    /// <param name="fieldName">字段名（完全限定名）</param>
+    /// <param name="value">字段值（复选框用 "/Yes" 或 "/Off"，文本框为文本内容）</param>
+    /// <returns>true 表示找到并设置了字段值</returns>
+    public Boolean SetFormFieldValue(String fieldName, String value)
+    {
+        EnsureForm();
+        var field = Form!.Fields.FirstOrDefault(f => f.FullName == fieldName);
+        if (field == null) return false;
+        field.Value = value;
+        return true;
+    }
     #endregion
 
     #region 保存方法
@@ -1179,6 +1192,10 @@ public class PdfWriter : IDisposable
                 PdfAnnotationType.Circle => "Circle",
                 PdfAnnotationType.Line => "Line",
                 PdfAnnotationType.Stamp => "Stamp",
+                PdfAnnotationType.Caret => "Caret",
+                PdfAnnotationType.Polygon => "Polygon",
+                PdfAnnotationType.PolyLine => "PolyLine",
+                PdfAnnotationType.Squiggly => "Squiggly",
                 _ => "Text",
             };
 
