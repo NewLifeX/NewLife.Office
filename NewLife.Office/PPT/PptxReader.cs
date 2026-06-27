@@ -378,6 +378,10 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         var doc = LoadXml(entry);
         var rels = ReadSlideRels(slideIndex);
 
+        // 解析幻灯片隐藏属性（S12-04）
+        var show = doc.DocumentElement?.GetAttribute("show");
+        if (show == "0") slide.Hidden = true;
+
         // 解析版式索引：从 slide rels 中查找 slideLayout 关系的 Target（如 ../slideLayouts/slideLayout{N}.xml），提取 N-1
         ParseLayoutIndex(slide, rels);
 
@@ -663,6 +667,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     {
         var hasTxBody = sp.SelectSingleNode(".//*[local-name()='txBody']") != null;
         var (left, top, width, height) = ParseXfrm(sp.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement);
+        var rotation = ParseRotation(sp.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement);
         var shapeType = sp.SelectSingleNode(".//*[local-name()='prstGeom']")?.Attributes?["prst"]?.Value ?? "textBox";
         var spPr = sp.SelectSingleNode(".//*[local-name()='spPr']") as XmlElement;
         var fillColor = ParseFillColor(spPr);
@@ -670,7 +675,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
         if (hasTxBody)
         {
-            var tb = new PptTextBox { Left = left, Top = top, Width = width, Height = height };
+            var tb = new PptTextBox { Left = left, Top = top, Width = width, Height = height, Rotation = rotation };
             if (fillColor != null) tb.BackgroundColor = fillColor;
 
             var txBody = sp.SelectSingleNode(".//*[local-name()='txBody']") as XmlElement;
@@ -1130,6 +1135,28 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     var ct = new StringBuilder();
                     foreach (XmlElement t in tc.SelectNodes(".//*[local-name()='t']")!) ct.Append(t.InnerText);
                     rd[ci] = ct.ToString();
+                    // 解析合并单元格（S11-01 Reader 侧）
+                    var gs = tc.GetAttribute("gridSpan");
+                    var rs = tc.GetAttribute("rowSpan");
+                    var vm = tc.GetAttribute("vMerge");
+                    var colSpan = gs.Length > 0 && Int32.TryParse(gs, out var csv) ? csv : 1;
+                    var rowSpan = rs.Length > 0 && Int32.TryParse(rs, out var rsv) ? rsv : 1;
+                    if (colSpan > 1 || rowSpan > 1 || vm == "1")
+                    {
+                        if (vm == "1")
+                        {
+                            for (var pr = ri - 1; pr >= 0; pr--)
+                            {
+                                if (table.MergedCells.TryGetValue((pr, ci), out var prev))
+                                {
+                                    table.MergedCells[(pr, ci)] = (prev.ColSpan, prev.RowSpan + 1);
+                                    break;
+                                }
+                            }
+                        }
+                        else
+                            table.MergedCells[(ri, ci)] = (colSpan, rowSpan);
+                    }
                     var tpr2 = tc.SelectSingleNode(".//*[local-name()='tcPr']") as XmlElement;
                     var rpr2 = tc.SelectSingleNode(".//*[local-name()='rPr']") as XmlElement;
                     if (tpr2 != null || rpr2 != null)
@@ -1146,6 +1173,28 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                             if (fc != null) cs.FontColor = fc.GetAttribute("val");
                         }
                         table.CellStyles[(ri, ci)] = cs;
+                    }
+                    // 解析表格边框（S11-02 Reader 侧）
+                    if (tpr2 != null)
+                    {
+                        var border = new PptCellBorder();
+                        var hasBorder = false;
+                        var lnL = tpr2.SelectSingleNode("*[local-name()='lnL']") as XmlElement;
+                        var lnR = tpr2.SelectSingleNode("*[local-name()='lnR']") as XmlElement;
+                        var lnT = tpr2.SelectSingleNode("*[local-name()='lnT']") as XmlElement;
+                        var lnB = tpr2.SelectSingleNode("*[local-name()='lnB']") as XmlElement;
+                        void ParseOneBorder(XmlElement ln, Action<String?> setColor, Action<Int32> setWidth)
+                        {
+                            var wv = ln.GetAttribute("w");
+                            if (wv.Length > 0 && Int32.TryParse(wv, out var w)) setWidth(w);
+                            var clr = ln.SelectSingleNode(".//*[local-name()='srgbClr']") as XmlElement;
+                            setColor(clr?.GetAttribute("val"));
+                        }
+                        if (lnL != null) { ParseOneBorder(lnL, c => border.LeftColor = c, w => border.LeftWidth = w); hasBorder = true; }
+                        if (lnR != null) { ParseOneBorder(lnR, c => border.RightColor = c, w => border.RightWidth = w); hasBorder = true; }
+                        if (lnT != null) { ParseOneBorder(lnT, c => border.TopColor = c, w => border.TopWidth = w); hasBorder = true; }
+                        if (lnB != null) { ParseOneBorder(lnB, c => border.BottomColor = c, w => border.BottomWidth = w); hasBorder = true; }
+                        if (hasBorder) table.CellBorders[(ri, ci)] = border;
                     }
                     ci++;
                 }
@@ -1534,6 +1583,14 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
             ext != null && Int64.TryParse(ext.GetAttribute("cx"), out var cx) ? cx : 0,
             ext != null && Int64.TryParse(ext.GetAttribute("cy"), out var cy) ? cy : 0
         );
+    }
+
+    /// <summary>解析旋转角度（S15-02 Reader 侧）</summary>
+    private static Int32 ParseRotation(XmlElement? xfrm)
+    {
+        if (xfrm == null) return 0;
+        var rot = xfrm.GetAttribute("rot");
+        return rot.Length > 0 && Int32.TryParse(rot, out var r) ? r : 0;
     }
     #endregion
 

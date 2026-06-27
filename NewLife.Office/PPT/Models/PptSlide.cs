@@ -55,5 +55,8 @@ public class PptSlide
 
     /// <summary>幻灯片批注列表（审阅注释）</summary>
     public List<PptComment> Comments { get; } = [];
+
+    /// <summary>是否隐藏幻灯片（S12-04），对应 <c>p:sld show="0"</c></summary>
+    public Boolean Hidden { get; set; }
     #endregion
 }

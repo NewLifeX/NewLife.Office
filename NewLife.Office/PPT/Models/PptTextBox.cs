@@ -89,5 +89,8 @@ public class PptTextBox
     /// <summary>语义角色，供 LayoutEngine 自动排版使用，null 表示不参与自动排版</summary>
     /// <remarks>支持：title/subtitle/body/kpi/caption</remarks>
     public String? Role { get; set; }
+
+    /// <summary>旋转角度（S15-02），以 60000 分之一度为单位</summary>
+    public Int32 Rotation { get; set; }
     #endregion
 }

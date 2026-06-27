@@ -307,7 +307,9 @@ partial class PptxWriter
         var hlinkMap = new Dictionary<String, String>();
         var sb = new StringBuilder();
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-        sb.Append($"<p:sld xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\">");
+        sb.Append($"<p:sld xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\"");
+        if (slide.Hidden) sb.Append(" show=\"0\"");
+        sb.Append('>');
 
         // background
         if (slide.BackgroundImage != null)
@@ -343,7 +345,9 @@ partial class PptxWriter
             }
             sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"TextBox\"/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr>");
             sb.Append("<p:spPr>");
-            sb.Append($"<a:xfrm><a:off x=\"{tb.Left}\" y=\"{tb.Top}\"/><a:ext cx=\"{tb.Width}\" cy=\"{tb.Height}\"/></a:xfrm>");
+            sb.Append($"<a:xfrm><a:off x=\"{tb.Left}\" y=\"{tb.Top}\"/><a:ext cx=\"{tb.Width}\" cy=\"{tb.Height}\"/>");
+            if (tb.Rotation != 0) sb.Append($" rot=\"{tb.Rotation}\"");
+            sb.Append("</a:xfrm>");
             sb.Append("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>");
             if (tb.BackgroundColor != null)
                 sb.Append($"<a:solidFill><a:srgbClr val=\"{tb.BackgroundColor.TrimStart('#')}\"/></a:solidFill>");
@@ -433,7 +437,9 @@ partial class PptxWriter
         {
             sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"Shape\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>");
             sb.Append("<p:spPr>");
-            sb.Append($"<a:xfrm><a:off x=\"{sp.Left}\" y=\"{sp.Top}\"/><a:ext cx=\"{sp.Width}\" cy=\"{sp.Height}\"/></a:xfrm>");
+            sb.Append($"<a:xfrm><a:off x=\"{sp.Left}\" y=\"{sp.Top}\"/><a:ext cx=\"{sp.Width}\" cy=\"{sp.Height}\"/>");
+            if (sp.Rotation != 0) sb.Append($" rot=\"{sp.Rotation}\"");
+            sb.Append("</a:xfrm>");
             sb.Append($"<a:prstGeom prst=\"{sp.ShapeType}\"><a:avLst/></a:prstGeom>");
             if (sp.FillColor != null)
                 sb.Append($"<a:solidFill><a:srgbClr val=\"{sp.FillColor.TrimStart('#')}\"/></a:solidFill>");
@@ -601,6 +607,68 @@ partial class PptxWriter
                 _ => "<p:fade/>",
             });
             sb.Append("</p:transition>");
+        }
+
+        // 元素动画（S12-01）
+        if (slide.Animations.Count > 0)
+        {
+            var animId = 1;
+            sb.Append("<p:timing><p:tnLst><p:par><p:cTn id=\"1\" dur=\"indefinite\" fill=\"hold\">");
+            sb.Append("<p:stCondLst><p:cond delay=\"0\"/></p:stCondLst></p:cTn><p:childTnLst>");
+            foreach (var anim in slide.Animations.OrderBy(a => a.Order))
+            {
+                var nodeName = anim.Category switch
+                {
+                    PptAnimationCategory.Entrance => "animEffect",
+                    PptAnimationCategory.Emphasis => "animEmph",
+                    PptAnimationCategory.Exit => "animEffect",
+                    PptAnimationCategory.MotionPath => "animMotion",
+                    _ => "animEffect",
+                };
+                var animType = anim.Category switch
+                {
+                    PptAnimationCategory.Entrance => "entr",
+                    PptAnimationCategory.Emphasis => "emph",
+                    PptAnimationCategory.Exit => "exit",
+                    _ => "entr",
+                };
+                var trigger = anim.Trigger switch
+                {
+                    PptAnimationTrigger.WithPrevious => "withPrev",
+                    PptAnimationTrigger.AfterPrevious => "afterPrev",
+                    _ => "onClick",
+                };
+                sb.Append($"<p:par><p:cTn nodeType=\"{trigger}\" fill=\"hold\">");
+                sb.Append("<p:stCondLst>");
+                sb.Append(anim.Trigger switch
+                {
+                    PptAnimationTrigger.OnClick => "<p:cond delay=\"indefinite\"/>",
+                    PptAnimationTrigger.WithPrevious => "<p:cond delay=\"0\"/>",
+                    PptAnimationTrigger.AfterPrevious => "<p:cond delay=\"0\"/>",
+                    _ => "<p:cond delay=\"indefinite\"/>",
+                });
+                sb.Append("</p:stCondLst></p:cTn><p:childTnLst>");
+                sb.Append($"<p:{nodeName} filter=\"{EscXml(anim.Effect)}\"{(anim.Category == PptAnimationCategory.Exit ? " exit=\"1\"" : "")}>");
+                sb.Append("<p:cBhvr><p:cTn");
+                if (anim.DurationMs > 0)
+                    sb.Append($" dur=\"{anim.DurationMs}\"");
+                if (anim.DelayMs > 0)
+                    sb.Append($" st=\"{(anim.Trigger == PptAnimationTrigger.AfterPrevious ? anim.DelayMs : 0)}\"");
+                sb.Append($">");
+                if (anim.DelayMs > 0)
+                    sb.Append($"<p:stCondLst><p:cond delay=\"{anim.DelayMs}\"/></p:stCondLst>");
+                sb.Append("</p:cTn>");
+                // 目标元素：按 TargetType 和 TargetIndex 定位
+                sb.Append("<p:tgtEl>");
+                var spTargetType = anim.TargetType switch { "shape" => "spTgt", "chart" => "chartTgt", "table" => "oleChartTgt", _ => "spTgt" };
+                var targetId = anim.TargetIndex + 2; // shapeId 从 2 开始
+                sb.Append($"<p:{spTargetType} spid=\"{targetId}\"/>");
+                sb.Append("</p:tgtEl>");
+                sb.Append($"<p:attrNameLst><p:attrName>style.{animType}Effect</p:attrName></p:attrNameLst>");
+                sb.Append("</p:cBhvr></p:animEffect>");
+                sb.Append("</p:childTnLst></p:par>");
+            }
+            sb.Append("</p:childTnLst></p:par></p:tnLst></p:timing>");
         }
 
         sb.Append("</p:sld>");
@@ -820,11 +888,17 @@ partial class PptxWriter
             "line" => "lineChart",
             "pie" => "pieChart",
             "area" => "areaChart",
+            "scatter" => "scatterChart",
+            "bubble" => "bubbleChart",
             _ => "barChart",
         };
         sb.Append($"<c:{chartElem}>");
         if (chart.ChartType == "bar")
             sb.Append("<c:barDir val=\"col\"/><c:grouping val=\"clustered\"/>");
+        if (chart.ChartType == "scatter")
+            sb.Append("<c:scatterStyle val=\"lineMarker\"/>");
+        if (chart.ChartType == "bubble")
+            sb.Append("<c:bubbleScale val=\"100\"/>");
 
         var serColors = new[] { "4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F79646" };
         for (var si = 0; si < chart.Series.Count; si++)
@@ -863,7 +937,12 @@ partial class PptxWriter
             // category axis
             sb.Append("<c:catAx><c:axId val=\"1\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"b\"/><c:crossAx val=\"2\"/></c:catAx>");
             // value axis
-            sb.Append("<c:valAx><c:axId val=\"2\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"l\"/><c:crossAx val=\"1\"/></c:valAx>");
+            sb.Append("<c:valAx><c:axId val=\"2\"/><c:scaling><c:orientation val=\"minMax\"/>");
+            if (chart.AxisMinValue.HasValue)
+                sb.Append($"<c:min val=\"{chart.AxisMinValue.Value}\"/>");
+            if (chart.AxisMaxValue.HasValue)
+                sb.Append($"<c:max val=\"{chart.AxisMaxValue.Value}\"/>");
+            sb.Append("</c:scaling><c:delete val=\"0\"/><c:axPos val=\"l\"/><c:crossAx val=\"1\"/></c:valAx>");
         }
         else
         {

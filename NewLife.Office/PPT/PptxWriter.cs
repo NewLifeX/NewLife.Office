@@ -147,6 +147,22 @@ public partial class PptxWriter : IDisposable
         return img;
     }
 
+    /// <summary>替换幻灯片中已有图片的字节数据（S15-01）</summary>
+    /// <param name="slideIndex">幻灯片索引</param>
+    /// <param name="imageIndex">图片在幻灯片中的索引（0起始）</param>
+    /// <param name="newData">新图片字节</param>
+    /// <param name="newExtension">新扩展名（如 "png"/"jpg"），null 表示保持原扩展名</param>
+    public void ReplaceImage(Int32 slideIndex, Int32 imageIndex, Byte[] newData, String? newExtension = null)
+    {
+        var slide = EnsureSlide(slideIndex);
+        if (imageIndex < 0 || imageIndex >= slide.Images.Count)
+            throw new ArgumentOutOfRangeException(nameof(imageIndex), $"图片索引 {imageIndex} 超出范围（共 {slide.Images.Count} 张）");
+        var img = slide.Images[imageIndex];
+        img.Data = newData;
+        if (newExtension != null && newExtension.Length > 0)
+            img.Extension = newExtension.TrimStart('.').ToLowerInvariant();
+    }
+
     /// <summary>向幻灯片添加视频/音频</summary>
     /// <param name="slideIndex">幻灯片索引</param>
     /// <param name="mediaData">媒体字节</param>
@@ -327,6 +343,30 @@ public partial class PptxWriter : IDisposable
     public PptChart AddPieChart(Int32 slideIndex, String[] categories,
         Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
         => AddChart(slideIndex, "pie", categories, leftCm, topCm, widthCm, heightCm);
+
+    /// <summary>向幻灯片添加散点图（S06 扩展）</summary>
+    /// <param name="slideIndex">幻灯片索引</param>
+    /// <param name="categories">X 轴分类标签</param>
+    /// <param name="leftCm">左边距（厘米）</param>
+    /// <param name="topCm">上边距（厘米）</param>
+    /// <param name="widthCm">宽度（厘米）</param>
+    /// <param name="heightCm">高度（厘米）</param>
+    /// <returns>图表对象</returns>
+    public PptChart AddScatterChart(Int32 slideIndex, String[] categories,
+        Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
+        => AddChart(slideIndex, "scatter", categories, leftCm, topCm, widthCm, heightCm);
+
+    /// <summary>向幻灯片添加气泡图（S06 扩展）</summary>
+    /// <param name="slideIndex">幻灯片索引</param>
+    /// <param name="categories">X 轴分类标签</param>
+    /// <param name="leftCm">左边距（厘米）</param>
+    /// <param name="topCm">上边距（厘米）</param>
+    /// <param name="widthCm">宽度（厘米）</param>
+    /// <param name="heightCm">高度（厘米）</param>
+    /// <returns>图表对象</returns>
+    public PptChart AddBubbleChart(Int32 slideIndex, String[] categories,
+        Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
+        => AddChart(slideIndex, "bubble", categories, leftCm, topCm, widthCm, heightCm);
 
     private PptChart AddChart(Int32 slideIndex, String chartType, String[] categories,
         Double leftCm, Double topCm, Double widthCm, Double heightCm)

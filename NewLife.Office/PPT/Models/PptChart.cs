@@ -33,5 +33,11 @@ public class PptChart
 
     /// <summary>图表文件编号（由写入器内部设置）</summary>
     internal Int32 ChartNumber { get; set; }
+
+    /// <summary>数值轴最小值（仅数值轴，分类轴无效），null 表示自动</summary>
+    public Double? AxisMinValue { get; set; }
+
+    /// <summary>数值轴最大值（仅数值轴，分类轴无效），null 表示自动</summary>
+    public Double? AxisMaxValue { get; set; }
     #endregion
 }
