@@ -202,6 +202,11 @@ public partial class ExcelWriter : DisposeBase
     // 批注
     private readonly Dictionary<String, List<SheetComment>> _sheetComments = new(StringComparer.OrdinalIgnoreCase);
 
+    // 分页符：sheet → 行号列表（1基，此行开始新页）
+    private readonly Dictionary<String, List<Int32>> _sheetPageBreaks = new(StringComparer.OrdinalIgnoreCase);
+    // 垂直分页符：sheet → 列号列表（0基，此列开始新页）
+    private readonly Dictionary<String, List<Int32>> _sheetColPageBreaks = new(StringComparer.OrdinalIgnoreCase);
+
     // 每单元格样式覆盖（0基行, 0基列）→ CellStyle
     private readonly Dictionary<String, Dictionary<(Int32 Row, Int32 Col), Office.ExcelCellStyle>> _cellStyleOverrides = new(StringComparer.OrdinalIgnoreCase);
 
@@ -705,6 +710,32 @@ public partial class ExcelWriter : DisposeBase
             if (n.EqualIgnoreCase(name)) return f;
         }
         return null;
+    }
+
+    /// <summary>设置打印区域</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="range">区域引用（如 "A1:F50"）</param>
+    public void SetPrintArea(String? sheet, String range)
+    {
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        if (!range.Contains('!'))
+            range = $"'{sheet}'!{range}";
+        _definedNames.RemoveAll(dn => dn.Name.EqualIgnoreCase("_xlnm.Print_Area") && dn.Formula.Contains($"'{sheet}'!"));
+        AddDefinedName("_xlnm.Print_Area", range);
+    }
+
+    /// <summary>设置水平分页符</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="row">分页符所在行（1基，此行开始新页）</param>
+    public void SetPageBreak(String? sheet, Int32 row)
+    {
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        if (!_sheetPageBreaks.TryGetValue(sheet, out var breaks))
+            _sheetPageBreaks[sheet] = breaks = [];
+        if (!breaks.Contains(row))
+            breaks.Add(row);
     }
 
     /// <summary>在当前工作表中添加结构化表格（OOXML table 元素）</summary>

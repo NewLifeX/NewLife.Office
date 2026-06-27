@@ -839,6 +839,49 @@ public class ExcelWriterTests
     }
     #endregion
 
+    #region 分页符/打印区域测试
+    [Fact(DisplayName = "SetPageBreak写入rowBreaks")]
+    public void SetPageBreak_WritesRowBreaks()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A", "B" });
+        w.WriteRow(null, new Object?[] { 1, 2 });
+        w.WriteRow(null, new Object?[] { 3, 4 });
+        w.WriteRow(null, new Object?[] { 5, 6 });
+        w.SetPageBreak(null, 2);
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        var sheetEntry = za.GetEntry("xl/worksheets/sheet1.xml");
+        using var sr = new StreamReader(sheetEntry!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("<rowBreaks", xml);
+        Assert.Contains("manualBreakCount=\"1\"", xml);
+        Assert.Contains("<brk id=\"1\"", xml);
+    }
+
+    [Fact(DisplayName = "SetPrintArea写入_xlnm.Print_Area")]
+    public void SetPrintArea_WritesDefinedName()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A" });
+        w.WriteRow(null, new Object?[] { 1 });
+        w.SetPrintArea(null, "A1:A10");
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        var wbEntry = za.GetEntry("xl/workbook.xml");
+        using var sr = new StreamReader(wbEntry!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("_xlnm.Print_Area", xml);
+        Assert.Contains("A1:A10", xml);
+    }
+    #endregion
+
     #region 辅助类
     private class TestUser
     {

@@ -628,6 +628,26 @@ partial class ExcelWriter
                 sw.Write("</mergeCells>");
             }
 
+            // rowBreaks（水平分页符）
+            if (_sheetPageBreaks.TryGetValue(sheet, out var rowBreaks) && rowBreaks.Count > 0)
+            {
+                rowBreaks.Sort();
+                sw.Write($"<rowBreaks count=\"{rowBreaks.Count}\" manualBreakCount=\"{rowBreaks.Count}\">");
+                foreach (var r in rowBreaks)
+                    sw.Write($"<brk id=\"{r - 1}\" max=\"16383\" man=\"1\"/>");
+                sw.Write("</rowBreaks>");
+            }
+
+            // colBreaks（垂直分页符）
+            if (_sheetColPageBreaks.TryGetValue(sheet, out var colBreaks) && colBreaks.Count > 0)
+            {
+                colBreaks.Sort();
+                sw.Write($"<colBreaks count=\"{colBreaks.Count}\" manualBreakCount=\"{colBreaks.Count}\">");
+                foreach (var c in colBreaks)
+                    sw.Write($"<brk id=\"{c}\" max=\"1048575\" man=\"1\"/>");
+                sw.Write("</colBreaks>");
+            }
+
             // conditionalFormatting
             if (_sheetCondFormats.TryGetValue(sheet, out var conds) && conds.Count > 0)
             {
