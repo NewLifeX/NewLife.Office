@@ -525,6 +525,109 @@ public class PdfWriter : IDisposable
     }
     #endregion
 
+    #region 表单 (AcroForm)
+    /// <summary>当前文档的表单对象（在首次调用 AddFormField 时自动创建）</summary>
+    public PdfForm? Form { get; private set; }
+
+    /// <summary>添加文本框表单字段</summary>
+    /// <param name="name">字段名</param>
+    /// <param name="x">X 坐标（从左下角量起，单位磅）</param>
+    /// <param name="y">Y 坐标（从左下角量起，单位磅）</param>
+    /// <param name="width">宽度</param>
+    /// <param name="height">高度</param>
+    /// <param name="value">初始值</param>
+    /// <param name="fontSize">字号</param>
+    /// <returns>表单字段对象</returns>
+    public PdfFormField AddTextField(String name, Single x, Single y, Single width, Single height, String? value = null, Single fontSize = 12f)
+    {
+        EnsureForm();
+        var field = new PdfFormField
+        {
+            FullName = name,
+            FieldType = PdfFormFieldType.Tx,
+            Value = value,
+            PageIndex = Pages.Count,
+            X = x, Y = y, Width = width, Height = height,
+            FontSize = fontSize,
+        };
+        Form!.Fields.Add(field);
+        return field;
+    }
+
+    /// <summary>添加复选框表单字段</summary>
+    /// <param name="name">字段名</param>
+    /// <param name="x">X 坐标</param>
+    /// <param name="y">Y 坐标</param>
+    /// <param name="size">复选框大小（默认 12pt）</param>
+    /// <param name="checked">初始选中状态</param>
+    /// <returns>表单字段对象</returns>
+    public PdfFormField AddCheckBox(String name, Single x, Single y, Single size = 12f, Boolean @checked = false)
+    {
+        EnsureForm();
+        var field = new PdfFormField
+        {
+            FullName = name,
+            FieldType = PdfFormFieldType.Btn,
+            Value = @checked ? "/Yes" : "/Off",
+            PageIndex = Pages.Count,
+            X = x, Y = y, Width = size, Height = size,
+        };
+        Form!.Fields.Add(field);
+        return field;
+    }
+
+    /// <summary>添加下拉选择框表单字段</summary>
+    /// <param name="name">字段名</param>
+    /// <param name="x">X 坐标</param>
+    /// <param name="y">Y 坐标</param>
+    /// <param name="width">宽度</param>
+    /// <param name="height">高度</param>
+    /// <param name="options">选项列表</param>
+    /// <param name="selectedIndex">默认选中索引（-1 表示无）</param>
+    /// <returns>表单字段对象</returns>
+    public PdfFormField AddComboBox(String name, Single x, Single y, Single width, Single height, List<String> options, Int32 selectedIndex = -1)
+    {
+        EnsureForm();
+        var field = new PdfFormField
+        {
+            FullName = name,
+            FieldType = PdfFormFieldType.Ch,
+            Value = selectedIndex >= 0 && selectedIndex < options.Count ? options[selectedIndex] : null,
+            PageIndex = Pages.Count,
+            X = x, Y = y, Width = width, Height = height,
+            Options = options,
+        };
+        Form!.Fields.Add(field);
+        return field;
+    }
+
+    /// <summary>添加签名字段</summary>
+    /// <param name="name">字段名</param>
+    /// <param name="x">X 坐标</param>
+    /// <param name="y">Y 坐标</param>
+    /// <param name="width">宽度</param>
+    /// <param name="height">高度</param>
+    /// <returns>表单字段对象</returns>
+    public PdfFormField AddSignatureField(String name, Single x, Single y, Single width, Single height)
+    {
+        EnsureForm();
+        var field = new PdfFormField
+        {
+            FullName = name,
+            FieldType = PdfFormFieldType.Sig,
+            PageIndex = Pages.Count,
+            X = x, Y = y, Width = width, Height = height,
+        };
+        Form!.Fields.Add(field);
+        return field;
+    }
+
+    private void EnsureForm()
+    {
+        Form ??= new PdfForm();
+    }
+    #endregion
+
     #region 保存方法
     /// <summary>保存到文件</summary>
     /// <param name="path">输出路径</param>
@@ -683,6 +786,16 @@ public class PdfWriter : IDisposable
         if (UserPassword != null || OwnerPassword != null)
             encryptObjId = NextId();
 
+        // ── AcroForm 表单对象 ID ──
+        var acroFormObjId = 0;
+        var fieldObjIds = new List<Int32>();
+        if (Form != null && Form.Fields.Count > 0)
+        {
+            acroFormObjId = NextId();
+            // 每个字段需要一个对象（含 Kids 递归）
+            fieldObjIds = AllocateFormFieldIds(Form.Fields, NextId);
+        }
+
         var totalObjs = nextId;
         while (offsets.Count < totalObjs) offsets.Add(0);
 
@@ -702,11 +815,77 @@ public class PdfWriter : IDisposable
             return enc.EncryptString(text, objId, 0);
         }
 
+        // 表单字段递归写入（局部函数，可访问 WriteObj）
+        void WriteFormFieldObjs(List<PdfFormField> fields, List<Int32> fIds, Int32 startIdx)
+        {
+            var idx = startIdx;
+            foreach (var field in fields)
+            {
+                var objId = fIds[idx++];
+                var sb = new StringBuilder();
+                sb.Append("<< /Type /Annot /Subtype /Widget\n");
+                sb.Append($"/FT /{field.FieldType}\n");
+                sb.Append($"/T ({EscapePdfText(field.FullName)})\n");
+
+                if (field.Value != null)
+                    sb.Append($"/V ({EscapePdfText(field.Value)})\n");
+                if (field.DefaultValue != null)
+                    sb.Append($"/DV ({EscapePdfText(field.DefaultValue)})\n");
+
+                var flags = (Int32)field.Flags;
+                if (flags != 0) sb.Append($"/Ff {flags}\n");
+
+                var rect = $"[{field.X:F2} {field.Y:F2} {(field.X + field.Width):F2} {(field.Y + field.Height):F2}]";
+                sb.Append($"/Rect {rect}\n");
+                sb.Append("/Border [0 0 1]\n");
+                sb.Append($"/DA (/Helvetica {field.FontSize:F1} Tf 0 g)\n");
+
+                var pageObjId = field.PageIndex < allPages.Count ? allPages[field.PageIndex].PageObjId : 1;
+                sb.Append($"/P {pageObjId} 0 R\n");
+
+                if (field.Options.Count > 0)
+                {
+                    sb.Append("/Opt [");
+                    foreach (var opt in field.Options)
+                        sb.Append($"({EscapePdfText(opt)}) ");
+                    sb.Append("]\n");
+                }
+
+                if (field.MaxLength > 0) sb.Append($"/MaxLen {field.MaxLength}\n");
+                if (!field.Tooltip.IsNullOrEmpty())
+                    sb.Append($"/TU ({EscapePdfText(field.Tooltip!)})\n");
+
+                sb.Append(">>");
+                WriteObj(objId, sb.ToString());
+
+                // 递归写入子字段
+                if (field.Kids.Count > 0)
+                    WriteFormFieldObjs(field.Kids, fIds, idx);
+            }
+        }
+
+        void CollectFormPageAnnotsInline(List<PdfFormField> fields, List<Int32> fIds, ref Int32 fidx, Dictionary<Int32, List<Int32>> map)
+        {
+            foreach (var field in fields)
+            {
+                var objId = fIds[fidx++];
+                if (field.PageIndex >= 0 && field.PageIndex < allPages.Count)
+                {
+                    var pId = allPages[field.PageIndex].PageObjId;
+                    if (!map.ContainsKey(pId)) map[pId] = [];
+                    map[pId].Add(objId);
+                }
+                if (field.Kids.Count > 0)
+                    CollectFormPageAnnotsInline(field.Kids, fIds, ref fidx, map);
+            }
+        }
+
         // ── 写入 Catalog (obj 1) ──
         var catalogSb = new StringBuilder();
         catalogSb.Append("<< /Type /Catalog\n/Pages 2 0 R");
         if (outlineObjId > 0) catalogSb.Append($"\n/Outlines {outlineObjId} 0 R\n/PageMode /UseOutlines");
         if (encryptObjId > 0) catalogSb.Append($"\n/Encrypt {encryptObjId} 0 R");
+        if (acroFormObjId > 0) catalogSb.Append($"\n/AcroForm {acroFormObjId} 0 R");
         catalogSb.Append("\n>>");
         WriteObj(1, catalogSb.ToString());
 
@@ -912,6 +1091,27 @@ public class PdfWriter : IDisposable
             WriteObj(infoObjId, infoSb.ToString());
         }
 
+        // ── 写入 AcroForm 表单字典和字段 ──
+        var formPageAnnotMap = new Dictionary<Int32, List<Int32>>(); // pageObjId → [field annot objIds]
+        if (acroFormObjId > 0 && Form != null)
+        {
+            // 写入每个字段对象
+            WriteFormFieldObjs(Form.Fields, fieldObjIds, 0);
+
+            // 构建 AcroForm 字典
+            var afSb = new StringBuilder();
+            afSb.Append("<< /Fields [");
+            afSb.Append(String.Join(" ", fieldObjIds.Select(id => $"{id} 0 R")));
+            afSb.Append("]\n");
+            if (Form.NeedAppearances) afSb.Append("/NeedAppearances true\n");
+            afSb.Append(">>");
+            WriteObj(acroFormObjId, afSb.ToString());
+
+            // 收集每个页面的表单字段注释
+            var fidx = 0;
+            CollectFormPageAnnotsInline(Form.Fields, fieldObjIds, ref fidx, formPageAnnotMap);
+        }
+
         // ── 写入页面和内容流 ──
         var needHdrFtr = HeaderText != null || FooterText != null || ShowPageNumbers;
         for (var pi = 0; pi < allPages.Count; pi++)
@@ -928,10 +1128,16 @@ public class PdfWriter : IDisposable
             if (imgRefs.Length > 0) { resSb.Append("\n/XObject << "); resSb.Append(imgRefs); resSb.Append(" >>"); }
             resSb.Append(" >>");
 
-            // 超链接注释引用
-            var annotStr = String.Empty;
-            if (pageAnnotObjIds.TryGetValue(page.PageObjId, out var annotIds2))
-                annotStr = $"\n/Annots [{String.Join(" ", annotIds2.Select(id => $"{id} 0 R"))}]";
+            // 合并超链接和表单注释引用
+            var allAnnotIds = new List<Int32>();
+            if (pageAnnotObjIds.TryGetValue(page.PageObjId, out var linkAnnotIds))
+                allAnnotIds.AddRange(linkAnnotIds);
+            if (formPageAnnotMap.TryGetValue(page.PageObjId, out var formAnnotIds))
+                allAnnotIds.AddRange(formAnnotIds);
+
+            var annotStr = allAnnotIds.Count > 0
+                ? $"\n/Annots [{String.Join(" ", allAnnotIds.Select(id => $"{id} 0 R"))}]"
+                : String.Empty;
 
             // 旋转
             var rotateStr = page.Rotation != 0 ? $"\n/Rotate {page.Rotation}" : String.Empty;
@@ -1383,6 +1589,34 @@ public class PdfWriter : IDisposable
         var rgb = new Byte[w * h * 3];
         for (var i = 0; i < rgb.Length; i++) rgb[i] = 255; // white
         return rgb;
+    }
+    #endregion
+
+    #region 表单辅助
+    /// <summary>为表单字段树分配对象 ID</summary>
+    private static List<Int32> AllocateFormFieldIds(List<PdfFormField> fields, Func<Int32> nextId)
+    {
+        var ids = new List<Int32>();
+        foreach (var field in fields)
+        {
+            ids.Add(nextId());
+            if (field.Kids.Count > 0)
+                ids.AddRange(AllocateFormFieldIds(field.Kids, nextId));
+        }
+        return ids;
+    }
+
+    /// <summary>转义 PDF 文本中的特殊字符（括号和反斜杠）</summary>
+    private static String EscapePdfText(String text)
+    {
+        var sb = new StringBuilder(text.Length);
+        foreach (var c in text)
+        {
+            if (c == '(' || c == ')' || c == '\\')
+                sb.Append('\\');
+            sb.Append(c);
+        }
+        return sb.ToString();
     }
     #endregion
 }
