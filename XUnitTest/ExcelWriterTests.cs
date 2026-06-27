@@ -758,6 +758,87 @@ public class ExcelWriterTests
     }
     #endregion
 
+    #region 文档属性测试
+    [Fact, DisplayName("DocumentProperties写入core.xml")]
+    public void DocumentProperties_WriteCoreXml()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.DocumentProperties = new ExcelWriter.ExcelDocumentProperties
+        {
+            Title = "测试标题",
+            Creator = "测试作者",
+            Subject = "测试主题",
+            Description = "测试描述 & <> 特殊字符"
+        };
+        w.WriteHeader(null!, new[] { "A" });
+        w.WriteRow(null, new Object?[] { "data" });
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+
+        // 验证 core.xml 存在
+        var coreEntry = za.GetEntry("docProps/core.xml");
+        Assert.NotNull(coreEntry);
+
+        using var sr = new StreamReader(coreEntry!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("<dc:title>测试标题</dc:title>", xml);
+        Assert.Contains("<dc:creator>测试作者</dc:creator>", xml);
+        Assert.Contains("<dc:subject>测试主题</dc:subject>", xml);
+        Assert.Contains("<dc:description>测试描述 &amp; &lt;&gt; 特殊字符</dc:description>", xml);
+        Assert.Contains("<dcterms:created xsi:type=\"dcterms:W3CDTF\">", xml);
+        Assert.Contains("</cp:coreProperties>", xml);
+
+        // 验证 .rels 包含 core.xml 关系
+        var relsEntry = za.GetEntry("_rels/.rels");
+        Assert.NotNull(relsEntry);
+        using var sr2 = new StreamReader(relsEntry!.Open(), Encoding.UTF8);
+        var relsXml = sr2.ReadToEnd();
+        Assert.Contains("docProps/core.xml", relsXml);
+    }
+
+    [Fact, DisplayName("DocumentProperties为空时不写core.xml")]
+    public void DocumentProperties_Null_NoCoreXml()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A" });
+        w.WriteRow(null, new Object?[] { "data" });
+        w.Save();
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        Assert.Null(za.GetEntry("docProps/core.xml"));
+    }
+
+    [Fact, DisplayName("DocumentProperties往返读取")]
+    public void DocumentProperties_Roundtrip()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.DocumentProperties = new ExcelWriter.ExcelDocumentProperties
+        {
+            Title = "往返测试",
+            Creator = "NewLife",
+            Subject = "Test",
+            Description = "Roundtrip test"
+        };
+        w.WriteHeader(null!, new[] { "A" });
+        w.WriteRow(null, new Object?[] { "hello" });
+        w.Save();
+
+        ms.Position = 0;
+        var reader = new ExcelReader(ms, Encoding.UTF8);
+        Assert.NotNull(reader.DocumentProperties);
+        Assert.Equal("往返测试", reader.DocumentProperties!.Title);
+        Assert.Equal("NewLife", reader.DocumentProperties.Creator);
+        Assert.Equal("Test", reader.DocumentProperties.Subject);
+        Assert.Equal("Roundtrip test", reader.DocumentProperties.Description);
+    }
+    #endregion
+
     #region 辅助类
     private class TestUser
     {

@@ -343,10 +343,17 @@ partial class ExcelWriter
 
         using var za = new ZipArchive(target, ZipArchiveMode.Create, leaveOpen: Stream != null, entryNameEncoding: Encoding);
 
+        // docProps/core.xml (document properties)
+        var props = DocumentProperties;
+        var hasProps = props != null && (props.Title != null || props.Creator != null || props.Subject != null || props.Description != null);
+
         // _rels/.rels
         using (var sw = new StreamWriter(za.CreateEntry("_rels/.rels").Open(), Encoding))
         {
-            sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/></Relationships>");
+            sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"xl/workbook.xml\"/>");
+            if (hasProps)
+                sw.Write("<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties\" Target=\"docProps/core.xml\"/>");
+            sw.Write("</Relationships>");
         }
 
         // [Content_Types].xml
@@ -407,7 +414,23 @@ partial class ExcelWriter
                     sw.Write($"<Override PartName=\"/xl/charts/chart{++globalChartId}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawingml.chart+xml\"/>");
             }
             globalChartId = 0; // 重置
+            if (hasProps)
+                sw.Write("<Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/>");
             sw.Write("</Types>");
+        }
+
+        // docProps/core.xml
+        if (hasProps)
+        {
+            using var sw = new StreamWriter(za.CreateEntry("docProps/core.xml").Open(), Encoding);
+            sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            sw.Write("<cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">");
+            if (props!.Title != null) sw.Write($"<dc:title>{XmlEscape(props.Title)}</dc:title>");
+            if (props.Creator != null) sw.Write($"<dc:creator>{XmlEscape(props.Creator)}</dc:creator>");
+            if (props.Subject != null) sw.Write($"<dc:subject>{XmlEscape(props.Subject)}</dc:subject>");
+            if (props.Description != null) sw.Write($"<dc:description>{XmlEscape(props.Description)}</dc:description>");
+            sw.Write($"<dcterms:created xsi:type=\"dcterms:W3CDTF\">{DateTime.UtcNow:yyyy-MM-ddTHH:mm:ssZ}</dcterms:created>");
+            sw.Write("</cp:coreProperties>");
         }
 
         // workbook.xml
@@ -1196,6 +1219,17 @@ partial class ExcelWriter
         hash ^= password.Length;
         hash ^= 0xCE4B;
         return hash.ToString("X4");
+    }
+    /// <summary>XML 字符转义</summary>
+    private static String XmlEscape(String? text)
+    {
+        if (text.IsNullOrEmpty()) return String.Empty;
+        return text!
+            .Replace("&", "&amp;")
+            .Replace("<", "&lt;")
+            .Replace(">", "&gt;")
+            .Replace("\"", "&quot;")
+            .Replace("'", "&apos;");
     }
     #endregion
 }

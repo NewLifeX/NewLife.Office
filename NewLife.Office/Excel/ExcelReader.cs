@@ -25,6 +25,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
     /// <summary>工作表集合（键为工作表名称）</summary>
     public ICollection<String>? Sheets => _orderedSheets;
 
+    /// <summary>文档属性（从 docProps/core.xml 读取）</summary>
+    public ExcelWriter.ExcelDocumentProperties? DocumentProperties { get; private set; }
+
     private ZipArchive _zip;
     private String[]? _sharedStrings;
     private ExcelNumberFormat?[]? _styles;
@@ -139,6 +142,16 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
     #region 方法
     private void Parse()
     {
+        // 读取文档属性（可缺失）
+        {
+            var entry = _zip.GetEntry("docProps/core.xml");
+            if (entry != null)
+            {
+                using var es = entry.Open();
+                DocumentProperties = ReadCoreProperties(es);
+            }
+        }
+
         // 读取共享字符串（可缺失）
         {
             var entry = _zip.GetEntry("xl/sharedStrings.xml");
@@ -2488,6 +2501,26 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
     {
         if (String.IsNullOrEmpty(value)) return "";
         return value.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
+    }
+
+    /// <summary>从 docProps/core.xml 读取文档属性</summary>
+    private static ExcelWriter.ExcelDocumentProperties? ReadCoreProperties(Stream stream)
+    {
+        var reader = System.Xml.Linq.XDocument.Load(stream);
+        var root = reader.Root;
+        if (root == null) return null;
+
+        var cpNs = root.GetDefaultNamespace();
+        var dcNs = root.GetNamespaceOfPrefix("dc");
+        var dctermsNs = root.GetNamespaceOfPrefix("dcterms");
+
+        var props = new ExcelWriter.ExcelDocumentProperties();
+        props.Title = root.Element(dcNs + "title")?.Value;
+        props.Creator = root.Element(dcNs + "creator")?.Value;
+        props.Subject = root.Element(dcNs + "subject")?.Value;
+        props.Description = root.Element(dcNs + "description")?.Value;
+
+        return props;
     }
     #endregion
 }

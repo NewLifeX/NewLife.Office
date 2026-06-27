@@ -106,6 +106,22 @@ public partial class ExcelWriter : DisposeBase
         public String Text { get; set; } = null!;
         public String Author { get; set; } = String.Empty;
     }
+
+    /// <summary>Excel 文档属性（写入 docProps/core.xml）</summary>
+    public class ExcelDocumentProperties
+    {
+        /// <summary>标题</summary>
+        public String? Title { get; set; }
+
+        /// <summary>作者/创建者</summary>
+        public String? Creator { get; set; }
+
+        /// <summary>主题</summary>
+        public String? Subject { get; set; }
+
+        /// <summary>描述</summary>
+        public String? Description { get; set; }
+    }
     #endregion
 
     #region 属性
@@ -117,6 +133,9 @@ public partial class ExcelWriter : DisposeBase
 
     /// <summary>默认工作表名称（当调用 API 未指定 sheet 时使用）</summary>
     public String SheetName { get; set; } = "Sheet1";
+
+    /// <summary>文档属性</summary>
+    public ExcelDocumentProperties? DocumentProperties { get; set; }
 
     /// <summary>文本编码</summary>
     public Encoding Encoding { get; set; } = Encoding.UTF8;
