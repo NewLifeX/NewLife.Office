@@ -1119,7 +1119,9 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     /// <summary>解析图片或视频（p:pic）</summary>
     private void ParsePicture(XmlElement pic, PptSlide slide, Dictionary<String, (String Target, String Type)> rels)
     {
-        var (left, top, width, height) = ParseXfrm(pic.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement);
+        var xfrmEl = pic.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement;
+        var (left, top, width, height) = ParseXfrm(xfrmEl);
+        var rotation = ParseRotation(xfrmEl);
         var videoFile = pic.SelectSingleNode(".//*[local-name()='videoFile']") as XmlElement;
 
         // 读取缩略图/海报帧（图片用 blip embed，视频用 blip embed 作海报帧）
@@ -1197,7 +1199,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
             }
         }
 
-        slide.Images.Add(new PptImage { Data = idata, Extension = iext, Left = left, Top = top, Width = width, Height = height, IsSvg = isSvg });
+        slide.Images.Add(new PptImage { Data = idata, Extension = iext, Left = left, Top = top, Width = width, Height = height, IsSvg = isSvg, Rotation = rotation });
     }
 
     private void ParseGraphicFrame(XmlElement gf, PptSlide slide, Dictionary<String, (String Target, String Type)> rels)

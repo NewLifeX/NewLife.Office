@@ -27,5 +27,8 @@ public class PptImage
 
     /// <summary>是否为 SVG 图片（S15-03）</summary>
     public Boolean IsSvg { get; set; }
+
+    /// <summary>旋转角度（S15-02），以 60000 分之一度为单位（如 5400000=90°）</summary>
+    public Int32 Rotation { get; set; }
     #endregion
 }

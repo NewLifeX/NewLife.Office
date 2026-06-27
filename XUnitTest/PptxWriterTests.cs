@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Linq;
 using System.Text;
 using NewLife.Office;
 using Xunit;
@@ -863,5 +864,24 @@ public class PptxWriterTests
         writer.AddSlide(0);
         Assert.Throws<ArgumentOutOfRangeException>(() => writer.DuplicateShape(0, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => writer.DuplicateShape(0, -1));
+    }
+
+    [Fact, System.ComponentModel.DisplayName("图片旋转读写往返")]
+    public void ImageRotation_Roundtrip()
+    {
+        var writer = new PptxWriter();
+        writer.AddSlide(0);
+        var img = writer.AddImage(0, new Byte[] { 0x89, 0x50, 0x4E, 0x47 }, "png", 2, 2, 8, 6);
+        img.Rotation = 5400000; // 90度
+
+        using var ms = new MemoryStream();
+        writer.Save(ms);
+
+        ms.Position = 0;
+        using var reader = new PptxReader(ms);
+        var slides = reader.ReadAllSlides().ToList();
+        Assert.Single(slides);
+        Assert.Single(slides[0].Images);
+        Assert.Equal(5400000, slides[0].Images[0].Rotation);
     }
 }
