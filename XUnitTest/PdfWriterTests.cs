@@ -343,4 +343,41 @@ public class PdfWriterTests
         Assert.True(ms.Length > 0);
     }
     #endregion
+
+    #region 多边形绘制
+    [Fact(DisplayName = "DrawPolygon绘制三角形")]
+    public void DrawPolygon_Triangle()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.DrawPolygon([
+            (100f, 100f),
+            (200f, 300f),
+            (300f, 100f)
+        ], strokeColorHex: "0000FF", lineWidth: 2);
+        writer.Save(ms);
+
+        ms.Position = 0;
+        Assert.True(ms.Length > 0);
+    }
+
+    [Fact(DisplayName = "DrawPolygon绘制填充四边形")]
+    public void DrawPolygon_FilledQuad()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.DrawPolygon([
+            (50f, 50f),
+            (200f, 50f),
+            (200f, 150f),
+            (50f, 150f)
+        ], filled: true, fillColorHex: "FFFF00", strokeColorHex: "FF0000");
+        writer.Save(ms);
+
+        ms.Position = 0;
+        Assert.True(ms.Length > 0);
+    }
+    #endregion
 }

@@ -406,6 +406,36 @@ public class PdfWriter : IDisposable
         _content.AppendLine("Q");
     }
 
+    /// <summary>绘制多边形</summary>
+    /// <param name="points">顶点序列（至少3个），每项为 (X, Y) 元组</param>
+    /// <param name="filled">是否填充</param>
+    /// <param name="fillColorHex">填充色（16进制 RGB）</param>
+    /// <param name="strokeColorHex">边框色</param>
+    /// <param name="lineWidth">边框线宽</param>
+    public void DrawPolygon(IEnumerable<(Single X, Single Y)> points,
+        Boolean filled = false, String? fillColorHex = null, String? strokeColorHex = null, Single lineWidth = 0.5f)
+    {
+        var pts = points.ToList();
+        if (pts.Count < 3) return;
+
+        EnsurePage();
+        var sb = new StringBuilder();
+        sb.AppendLine("q");
+        sb.AppendLine($"{lineWidth:F2} w");
+        if (strokeColorHex != null) sb.AppendLine(HexToRgbOp(strokeColorHex, false));
+        if (filled && fillColorHex != null) sb.AppendLine(HexToRgbOp(fillColorHex, true));
+
+        sb.Append($"{pts[0].X:F2} {pts[0].Y:F2} m");
+        for (var i = 1; i < pts.Count; i++)
+            sb.Append($" {pts[i].X:F2} {pts[i].Y:F2} l");
+        // 闭合路径（回到起点）
+        sb.Append(" h");
+        sb.Append(filled ? (strokeColorHex != null ? " B" : " f") : " S");
+        sb.AppendLine();
+        _content.Append(sb.ToString());
+        _content.AppendLine("Q");
+    }
+
     /// <summary>绘制表格（从当前 Y 向下追加）</summary>
     /// <param name="rows">行列数据，rows[0] 可作为表头</param>
     /// <param name="firstRowHeader">首行是否表头（加粗、灰色背景）</param>
