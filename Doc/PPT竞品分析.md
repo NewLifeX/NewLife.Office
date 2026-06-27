@@ -382,28 +382,28 @@
 
 基于竞品深度对比，当前 PPT 模块的主要缺失项（模型层已完整，以下均为 Writer XML 生成侧或新能力）：
 
-### 高优先级（影响高保真读写，补齐后接近 ShapeCrawler 同等水准）
+### 高优先级（影响高保真读写，已全部完成 ✅）
 
 | 缺失项 | 对标竞品 | 当前状态 |
 |--------|---------|---------|
-| **docProps/core.xml 写入** | 所有竞品 | Title/Author 等未写入，`PptDocumentProperties` 模型已建 |
-| **表格单元格合并（读→写往返）** | ShapeCrawler/Aspose/OpenXML | Reader 已解析，Writer 未生成 `gridSpan`/`rowSpan` |
-| **表格单元格边框样式** | ShapeCrawler(v0.54+)/Aspose | `<a:tc><a:tcPr><a:lnL/lnR/lnT/lnB>` 未实现 |
-| **连接器 XML 写入** | 所有竞品 | `PptConnector` 模型完整，Writer 未生成 `<p:cxnSp>` |
-| **批注 XML 写入** | 所有竞品 | `PptSlide.Comments` 已建模，未生成 `ppt/comments/comments{N}.xml` |
+| **docProps/core.xml 写入** | 所有竞品 | ✅ 已完成 |
+| **表格单元格合并（读→写往返）** | ShapeCrawler/Aspose/OpenXML | ✅ 已完成 |
+| **表格单元格边框样式** | ShapeCrawler(v0.54+)/Aspose | ✅ 已完成 |
+| **连接器 XML 写入** | 所有竞品 | ✅ 已完成 |
+| **批注 XML 写入** | 所有竞品 | ✅ 已完成 |
 
-### 中优先级（功能完整性，补齐后超越 ShapeCrawler 综合能力）
+### 中优先级（大部分已完成，剩余 4 项）
 
 | 缺失项 | 对标竞品 | 当前状态 |
 |--------|---------|---------|
-| **元素动画 XML 写入** | Aspose/OpenXML | `PptSlide.Animations` 已建模，未生成 `<p:timing>` 序列 |
-| **全局页眉页脚** | 所有竞品 | `PptHeaderFooter` 模型完整，未生成 `presentation.xml` 中 `<p:hf>` |
-| **幻灯片隐藏/显示** | ShapeCrawler/Aspose | `<p:sld show="0">` 属性未实现 |
-| **图表散点图/气泡图** | ShapeCrawler(v0.78)/Aspose | 需补充 scatter/bubble 的 Chart XML 生成 |
-| **图表坐标轴 Min/Max** | ShapeCrawler(v0.45)/Aspose | `<c:scaling><c:min>/<c:max>` 未实现 |
-| **形状旋转角度** | 所有竞品 | `<a:xfrm rot="...">` 属性未写入 |
-| **图片原地替换 API** | ShapeCrawler/Aspose | `ReplaceImage()` 方法缺失 |
-| **Section 管理** | ShapeCrawler(v0.30)/Aspose | 读写 `<p:sldIdLst>` 节点分组 |
+| **元素动画 XML 写入** | Aspose/OpenXML | ✅ 已完成 |
+| **全局页眉页脚** | 所有竞品 | ✅ 已完成 |
+| **幻灯片隐藏/显示** | ShapeCrawler/Aspose | ✅ 已完成 |
+| **图表散点图/气泡图** | ShapeCrawler(v0.78)/Aspose | ✅ 已完成 |
+| **图表坐标轴 Min/Max** | ShapeCrawler(v0.45)/Aspose | ✅ 已完成 |
+| **形状旋转角度** | 所有竞品 | ✅ 已完成 |
+| **图片原地替换 API** | ShapeCrawler/Aspose | ✅ 已完成 |
+| **Section 管理** | ShapeCrawler(v0.30)/Aspose | 🔄 规划中 |
 
 ### 低优先级（差异化与渲染增强）
 
@@ -426,8 +426,9 @@
   - ✅ 内置 PDF 转换（文本映射级）
   - ✅ 内置自动排版引擎（`LayoutEngine`，5 种布局策略）
   - ✅ 模板填充（`{{Key}}` 占位符/表格行扩展/图片替换）
-  - ✅ 幻灯片切换动画（ShapeCrawler 完全缺失）
-  - 🔄 表格合并/边框规划中（ShapeCrawler v0.54+ 已支持）
+  - ✅ 幻灯片切换 + 元素动画读写（ShapeCrawler 两者均缺失）
+  - ✅ 批注读写 / 连接器 / 全局页眉页脚 / 文档属性（ShapeCrawler 缺失）
+  - ✅ 表格合并/边框完成
   - ❌ 无图片渲染/PDF 高保真（与 ShapeCrawler 同等缺失）
 
 - **vs NPOI（PPT 模块）**：
@@ -452,29 +453,29 @@
 
 ## 7. 优先级路线图
 
-### 近期（补齐 Writer 侧高保真差距）
+### 近期（补齐 Writer 侧高保真差距）✅ 全部完成
 
-1. **docProps 写入**：实现 `core.xml`（Title/Author/Subject）和 `app.xml`（幻灯片数/公司）写入
-2. **连接器 XML 写入**：为 `PptConnector` 生成 `<p:cxnSp>`（模型已完整）
-3. **批注 XML 写入**：为 `PptSlide.Comments` 生成 `ppt/comments/comments{N}.xml`（模型已完整）
-4. **表格单元格合并**：补充 Writer 侧 `gridSpan`/`rowSpan` XML 生成
-5. **表格边框样式**：补充 `<a:lnL>/<a:lnR>/<a:lnT>/<a:lnB>` 写入
+1. ✅ **docProps 写入**：实现 `core.xml` 和 `app.xml` 写入
+2. ✅ **连接器 XML 写入**：`PptConnector` → `<p:cxnSp>`
+3. ✅ **批注 XML 写入**：`PptSlide.Comments` → `comments.xml`
+4. ✅ **表格单元格合并**：`gridSpan`/`rowSpan` XML
+5. ✅ **表格边框样式**：`<a:lnL>/<a:lnR>/<a:lnT>/<a:lnB>`
 
-### 中期（功能完整性提升至业界一流免费库水准）
+### 中期（大部分已完成 ✅）
 
-6. **元素动画 XML**：生成 `<p:timing>` 序列（进入/退出/强调基础动画）
-7. **全局页眉页脚**：`<p:hf>` 元素写入
-8. **幻灯片隐藏**：`PptSlide.Hidden` 属性写入 `show="0"`
-9. **图表增强**：散点图/气泡图、坐标轴 Min/Max
-10. **形状旋转**：`PptShape.Rotation` → `<a:xfrm rot>`
-11. **图片替换 API**：`PptxWriter.ReplaceImage()`
+6. ✅ **元素动画 XML**：`<p:timing>` 序列（进入/退出/强调）
+7. ✅ **全局页眉页脚**：`<p:hf>` 元素写入
+8. ✅ **幻灯片隐藏**：`PptSlide.Hidden` → `show="0"`
+9. ✅ **图表增强**：散点图/气泡图、坐标轴 Min/Max
+10. ✅ **形状旋转**：`PptShape.Rotation`/<code>PptTextBox.Rotation</code> → `<a:xfrm rot>`
+11. ✅ **图片替换 API**：`PptxWriter.ReplaceImage()`
 
 ### 长期（渲染与高级导出）
 
-12. **SVG 图片**：读写 `image/svg+xml` ImagePart
-13. **背景渐变填充**：`<p:bgPr><a:gradFill>` 写入
-14. **pptx → PNG/JPEG**：集成可选依赖 SkiaSharp 或通过 PDF 中转实现
-15. **Section 管理**：`PptDocument.Sections` 集合读写
+12. 🔄 **SVG 图片**：读写 `image/svg+xml`
+13. 🔄 **背景渐变填充**：`<p:bgPr><a:gradFill>`
+14. 🔄 **pptx → PNG/JPEG**：SkiaSharp/Docnet 集成
+15. 🔄 **Section 管理**：`PptDocument.Sections` 读写
 
 ---
 

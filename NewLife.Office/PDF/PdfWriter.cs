@@ -71,8 +71,17 @@ public class PdfWriter : IDisposable
     /// <summary>权限标志位（PDF 标准，-1 表示全部允许，-3904 表示允许打印/复制，-3844 表示禁止修改）</summary>
     public Int32 Permissions { get; set; } = -1;
 
+    /// <summary>加密修订版本（默认 RC4-128bit，可选 AES-128/AES-256）</summary>
+    public PdfCipherRevision CipherRevision { get; set; } = PdfCipherRevision.Rc4_128;
+
+    /// <summary>PDF/A 合规级别，null 表示不启用 PDF/A</summary>
+    public PdfACompliance? PdfACompliance { get; set; }
+
     /// <summary>书签列表</summary>
     public List<PdfBookmark> Bookmarks { get; } = [];
+
+    /// <summary>注释列表（所有类型的页面注释）</summary>
+    public List<PdfAnnotation> Annotations { get; } = [];
     #endregion
 
     #region 私有字段
@@ -485,6 +494,14 @@ public class PdfWriter : IDisposable
         AddHyperlink(MarginLeft, y, ContentWidth, lineHeight, url);
     }
 
+    /// <summary>添加页面注释（便签/高亮/下划线/删除线/图章等全部类型）</summary>
+    /// <param name="annotation">注释对象（Type 决定注释类型）</param>
+    public void AddAnnotation(PdfAnnotation annotation)
+    {
+        if (annotation.PageIndex < 0) annotation.PageIndex = Pages.Count;
+        Annotations.Add(annotation);
+    }
+
     /// <summary>添加书签，指向当前（最后一）页</summary>
     /// <param name="title">书签标题</param>
     /// <returns>书签对象</returns>
@@ -796,8 +813,24 @@ public class PdfWriter : IDisposable
             fieldObjIds = AllocateFormFieldIds(Form.Fields, NextId);
         }
 
+        // ── 通用注释对象 ID ──
+        var annotObjIds = new List<Int32>();
+        foreach (var _ in Annotations)
+            annotObjIds.Add(NextId());
+
+        // ── PDF/A 对象 ID ──
+        var xmpMetadataObjId = 0;
+        var outputIntentObjId = 0;
+        if (PdfACompliance != null)
+        {
+            xmpMetadataObjId = NextId();
+            outputIntentObjId = NextId();
+        }
+
         var totalObjs = nextId;
         while (offsets.Count < totalObjs) offsets.Add(0);
+
+        var annotPageMap = new Dictionary<Int32, List<Int32>>(); // pageObjId → [generic annot objIds]
 
         // 创建加密器
         Byte[]? fileIdBytes = null;
@@ -806,7 +839,7 @@ public class PdfWriter : IDisposable
         {
             using var encMd5 = MD5.Create();
             fileIdBytes = encMd5.ComputeHash(latin1.GetBytes(DateTime.Now.Ticks.ToString()));
-            enc = new PdfEncryptor(UserPassword, OwnerPassword ?? UserPassword ?? String.Empty, Permissions, fileIdBytes);
+            enc = new PdfEncryptor(UserPassword, OwnerPassword ?? UserPassword ?? String.Empty, Permissions, fileIdBytes, CipherRevision);
         }
 
         String PdfStr(String text, Int32 objId)
@@ -886,6 +919,7 @@ public class PdfWriter : IDisposable
         if (outlineObjId > 0) catalogSb.Append($"\n/Outlines {outlineObjId} 0 R\n/PageMode /UseOutlines");
         if (encryptObjId > 0) catalogSb.Append($"\n/Encrypt {encryptObjId} 0 R");
         if (acroFormObjId > 0) catalogSb.Append($"\n/AcroForm {acroFormObjId} 0 R");
+        if (xmpMetadataObjId > 0) catalogSb.Append($"\n/Metadata {xmpMetadataObjId} 0 R");
         catalogSb.Append("\n>>");
         WriteObj(1, catalogSb.ToString());
 
@@ -898,11 +932,55 @@ public class PdfWriter : IDisposable
         {
             var oHex = BitConverter.ToString(enc.OEntry).Replace("-", "");
             var uHex = BitConverter.ToString(enc.UEntry).Replace("-", "");
-            WriteObj(encryptObjId,
-                $"<< /Filter /Standard /V 2 /R 3 /Length 128\n" +
-                $"/P {enc.EncPermissions}\n" +
-                $"/O <{oHex}>\n" +
-                $"/U <{uHex}>\n>>");
+            var encSb = new StringBuilder();
+            encSb.Append("<< /Filter /Standard\n");
+
+            var r = (Int32)enc.Revision;
+            var v = r switch
+            {
+                2 => 1,
+                3 => 2,
+                4 => 4,
+                6 => 5,
+                _ => 2,
+            };
+
+            encSb.Append($"/V {v}\n/R {r}\n");
+
+            if (r >= 6)
+            {
+                // AES-256 (/R 6): 256-bit 密钥
+                encSb.Append("/Length 256\n");
+                encSb.Append($"/O <{oHex}>\n");
+                encSb.Append($"/U <{uHex}>\n");
+                if (enc.OEEntry != null)
+                    encSb.Append($"/OE <{BitConverter.ToString(enc.OEEntry).Replace("-", "")}>\n");
+                if (enc.UEEntry != null)
+                    encSb.Append($"/UE <{BitConverter.ToString(enc.UEEntry).Replace("-", "")}>\n");
+                if (enc.PermsEntry != null)
+                    encSb.Append($"/Perms <{BitConverter.ToString(enc.PermsEntry).Replace("-", "")}>\n");
+                encSb.Append("/EncryptMetadata false\n");
+            }
+            else if (r >= 4)
+            {
+                // AES-128 (/R 4): 128-bit 密钥 + EncryptMetadata
+                encSb.Append("/Length 128\n");
+                encSb.Append("/StrF /StdCF\n");
+                encSb.Append("/StmF /StdCF\n");
+                encSb.Append($"/O <{oHex}>\n");
+                encSb.Append($"/U <{uHex}>\n");
+                encSb.Append("/EncryptMetadata true\n");
+            }
+            else
+            {
+                // RC4 (/R 2/3): 40/128-bit 密钥
+                encSb.Append("/Length 128\n");
+                encSb.Append($"/O <{oHex}>\n");
+                encSb.Append($"/U <{uHex}>\n");
+            }
+
+            encSb.Append($"/P {enc.EncPermissions}\n>>");
+            WriteObj(encryptObjId, encSb.ToString());
         }
 
         // ── 写入字体对象 ──
@@ -1025,6 +1103,33 @@ public class PdfWriter : IDisposable
             }
         }
 
+        // ── 写入 PDF/A 输出意图和 XMP 元数据 ──
+        if (outputIntentObjId > 0)
+        {
+            WriteObj(outputIntentObjId,
+                $"<< /Type /OutputIntent\n/S /GTS_PDFA1\n" +
+                $"/OutputConditionIdentifier ({PdfAConstants.SrgbIecProfileIdentifier})\n" +
+                $"/RegistryName (http://www.color.org)\n" +
+                "/Info (sRGB IEC61966-2.1)\n>>");
+        }
+        if (xmpMetadataObjId > 0)
+        {
+            // PDF/A part: 1=1B, 2=2B, 3=3B
+            var compliance = (Int32)(PdfACompliance ?? NewLife.Office.PdfACompliance.PDF_A_1B);
+            var part = compliance switch
+            {
+                (Int32)NewLife.Office.PdfACompliance.PDF_A_2B => 2,
+                (Int32)NewLife.Office.PdfACompliance.PDF_A_3B => 3,
+                _ => 1,
+            };
+            var xmpData = PdfAConstants.GenerateXmpMetadata(part);
+            offsets[xmpMetadataObjId - 1] = written;
+            var xmpHdr = latin1.GetBytes($"{xmpMetadataObjId} 0 obj\n<< /Type /Metadata /Subtype /XML\n/Length {xmpData.Length} >>\nstream\n");
+            WriteBytes(xmpHdr, 0, xmpHdr.Length);
+            WriteBytes(xmpData, 0, xmpData.Length);
+            WriteBytes(streamEndBytes, 0, streamEndBytes.Length);
+        }
+
         // ── 写入图片 XObject ──
         foreach (var (name, data, imgW, imgH, isJpeg) in allImages)
         {
@@ -1056,6 +1161,60 @@ public class PdfWriter : IDisposable
             }
         }
 
+        // ── 写入通用注释对象 ──
+        for (var ai = 0; ai < Annotations.Count; ai++)
+        {
+            var ann = Annotations[ai];
+            var objId = annotObjIds[ai];
+
+            var subtype = ann.Type switch
+            {
+                PdfAnnotationType.Link => "Link",
+                PdfAnnotationType.Text => "Text",
+                PdfAnnotationType.Highlight => "Highlight",
+                PdfAnnotationType.Underline => "Underline",
+                PdfAnnotationType.StrikeOut => "StrikeOut",
+                PdfAnnotationType.FreeText => "FreeText",
+                PdfAnnotationType.Square => "Square",
+                PdfAnnotationType.Circle => "Circle",
+                PdfAnnotationType.Line => "Line",
+                PdfAnnotationType.Stamp => "Stamp",
+                _ => "Text",
+            };
+
+            var rect = $"[{ann.X:F2} {ann.Y:F2} {(ann.X + ann.Width):F2} {(ann.Y + ann.Height):F2}]";
+            var sb = new StringBuilder();
+            sb.Append($"<< /Type /Annot /Subtype /{subtype}\n/Rect {rect}\n");
+
+            if (ann.Type == PdfAnnotationType.Link && ann.Url != null)
+                sb.Append($"/A << /Type /Action /S /URI /URI ({EscapePdfText(ann.Url)}) >>\n");
+            else if (ann.Type == PdfAnnotationType.Link && ann.DestinationPage >= 0)
+                sb.Append($"/Dest [{allPages[Math.Min(ann.DestinationPage, allPages.Count - 1)].PageObjId} 0 R /XYZ 0 {allPages[Math.Min(ann.DestinationPage, allPages.Count - 1)].Height} 0]\n");
+
+            if (ann.Contents != null)
+                sb.Append($"/Contents ({EscapePdfText(ann.Contents)})\n");
+            if (ann.Author != null)
+                sb.Append($"/T ({EscapePdfText(ann.Author)})\n");
+            if (ann.Subject != null)
+                sb.Append($"/Subj ({EscapePdfText(ann.Subject)})\n");
+
+            // 颜色（高亮/下划线/删除线/图章等需要 /C 数组）
+            if (ann.Type is PdfAnnotationType.Highlight or PdfAnnotationType.Underline or PdfAnnotationType.StrikeOut or PdfAnnotationType.Stamp or PdfAnnotationType.Square or PdfAnnotationType.Circle)
+                sb.Append("/C [1 0.84 0]\n"); // 默认黄色
+
+            sb.Append(">>");
+            WriteObj(objId, sb.ToString());
+
+            // 收集页面注释关联
+            var pageIdx = ann.PageIndex;
+            if (pageIdx >= 0 && pageIdx < allPages.Count)
+            {
+                var pId = allPages[pageIdx].PageObjId;
+                if (!annotPageMap.ContainsKey(pId)) annotPageMap[pId] = [];
+                annotPageMap[pId].Add(objId);
+            }
+        }
+
         // ── 写入书签（Outlines）对象 ──
         if (outlineObjId > 0)
         {
@@ -1075,6 +1234,28 @@ public class PdfWriter : IDisposable
                 bmSb.Append($"/Dest [{pageRef} 0 R /XYZ 0 {pageSz.Height} 0]\n");
                 if (bi > 0) bmSb.Append($"/Prev {bookmarkObjIds[bi - 1]} 0 R\n");
                 if (bi < Bookmarks.Count - 1) bmSb.Append($"/Next {bookmarkObjIds[bi + 1]} 0 R\n");
+
+                // 书签样式
+                var style = 0;
+                if (bm.Italic) style |= 1;
+                if (bm.Bold) style |= 2;
+                if (style != 0) bmSb.Append($"/F {style}\n");
+
+                if (bm.Color != null)
+                {
+                    var hex = bm.Color.TrimStart('#');
+                    if (hex.Length >= 6)
+                    {
+                        var r = Convert.ToInt32(hex[..2], 16) / 255f;
+                        var g = Convert.ToInt32(hex.Substring(2, 2), 16) / 255f;
+                        var b = Convert.ToInt32(hex.Substring(4, 2), 16) / 255f;
+                        bmSb.Append($"/C [{r:F3} {g:F3} {b:F3}]\n");
+                    }
+                }
+
+                // 展开/折叠状态
+                if (!bm.Expanded && bm.Children.Count > 0) bmSb.Append("/Count 0\n");
+
                 bmSb.Append(">>");
                 WriteObj(bookmarkObjIds[bi], bmSb.ToString());
             }
@@ -1128,12 +1309,14 @@ public class PdfWriter : IDisposable
             if (imgRefs.Length > 0) { resSb.Append("\n/XObject << "); resSb.Append(imgRefs); resSb.Append(" >>"); }
             resSb.Append(" >>");
 
-            // 合并超链接和表单注释引用
+            // 合并超链接、表单注释和通用注释引用
             var allAnnotIds = new List<Int32>();
             if (pageAnnotObjIds.TryGetValue(page.PageObjId, out var linkAnnotIds))
                 allAnnotIds.AddRange(linkAnnotIds);
             if (formPageAnnotMap.TryGetValue(page.PageObjId, out var formAnnotIds))
                 allAnnotIds.AddRange(formAnnotIds);
+            if (annotPageMap.TryGetValue(page.PageObjId, out var genAnnotIds))
+                allAnnotIds.AddRange(genAnnotIds);
 
             var annotStr = allAnnotIds.Count > 0
                 ? $"\n/Annots [{String.Join(" ", allAnnotIds.Select(id => $"{id} 0 R"))}]"
