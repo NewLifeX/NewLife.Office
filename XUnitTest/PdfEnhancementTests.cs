@@ -1,4 +1,5 @@
 using NewLife.Office;
+using System.Text;
 using Xunit;
 
 namespace XUnitTest;
@@ -201,4 +202,87 @@ public class PdfEnhancementTests
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }
+
+    #region LZWDecode 解码
+    [Fact(DisplayName = "PDF—LZW解码简单文本(ABC)")]
+    public void LzwDecode_SimpleText()
+    {
+        var encoded = BuildSimpleLzw("ABC");
+        var decoded = PdfReader.DecodeLzw(encoded);
+        Assert.Equal("ABC", Encoding.ASCII.GetString(decoded));
+    }
+
+    [Fact(DisplayName = "PDF—LZW解码长文本")]
+    public void LzwDecode_LongText()
+    {
+        var text = "The quick brown fox jumps over the lazy dog. 1234567890!@#$%^";
+        var encoded = BuildSimpleLzw(text);
+        var decoded = PdfReader.DecodeLzw(encoded);
+        Assert.Equal(text, Encoding.ASCII.GetString(decoded));
+    }
+
+    [Fact(DisplayName = "PDF—LZW解码中文UTF-8文本")]
+    public void LzwDecode_ChineseText()
+    {
+        var text = "你好世界HelloWorld混合文本测试";
+        var textBytes = Encoding.UTF8.GetBytes(text);
+        var encoded = BuildSimpleLzwBytes(textBytes);
+        var decoded = PdfReader.DecodeLzw(encoded);
+        Assert.Equal(textBytes, decoded);
+    }
+
+    [Fact(DisplayName = "PDF—LZW解码空数据")]
+    public void LzwDecode_EmptyData()
+    {
+        var decoded = PdfReader.DecodeLzw([]);
+        Assert.Empty(decoded);
+
+        decoded = PdfReader.DecodeLzw(null!);
+        Assert.Empty(decoded);
+    }
+
+    [Fact(DisplayName = "PDF—LZW解码包含EarlyChange参数")]
+    public void LzwDecode_EarlyChange()
+    {
+        // earlyChange=0 和 earlyChange=1 都应能正确解码简单数据
+        var encoded = BuildSimpleLzw("Test");
+        var decoded0 = PdfReader.DecodeLzw(encoded, earlyChange: 0);
+        var decoded1 = PdfReader.DecodeLzw(encoded, earlyChange: 1);
+        Assert.Equal("Test", Encoding.ASCII.GetString(decoded0));
+        Assert.Equal("Test", Encoding.ASCII.GetString(decoded1));
+    }
+
+    /// <summary>构建简单 LZW 编码数据（仅单字节码，无字典压缩，适合短文本）</summary>
+    private static Byte[] BuildSimpleLzw(String text) => BuildSimpleLzwBytes(Encoding.ASCII.GetBytes(text));
+
+    private static Byte[] BuildSimpleLzwBytes(Byte[] data)
+    {
+        using var ms = new MemoryStream();
+        var bitBuf = 0L;
+        var bitCount = 0;
+
+        void WriteCode(Int32 code)
+        {
+            bitBuf |= (Int64)code << bitCount;
+            bitCount += 9;
+            while (bitCount >= 8)
+            {
+                ms.WriteByte((Byte)(bitBuf & 0xFF));
+                bitBuf >>= 8;
+                bitCount -= 8;
+            }
+        }
+
+        WriteCode(256); // Clear
+        foreach (var b in data)
+            WriteCode(b);
+        WriteCode(257); // EOD
+
+        // Flush remaining bits
+        if (bitCount > 0)
+            ms.WriteByte((Byte)(bitBuf & 0xFF));
+
+        return ms.ToArray();
+    }
+    #endregion
 }

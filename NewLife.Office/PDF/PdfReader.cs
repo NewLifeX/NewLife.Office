@@ -99,7 +99,13 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
                 case "ASCII85Decode":
                     result = DecodeAscii85(result);
                     break;
-                // LZWDecode、RunLengthDecode 等较少使用，暂不支持
+                case "LZWDecode":
+                    // 从 dict 中读取 EarlyChange 参数（默认 1）
+                    var earlyChange = 1;
+                    if (dict.TryGetValue("EarlyChange", out var ecVal) && ecVal is PdfNumber ecn)
+                        earlyChange = (Int32)ecn.Value;
+                    result = DecodeLzw(result, earlyChange);
+                    break;
             }
         }
         return result;
@@ -1218,6 +1224,127 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
             else pos++;
         }
         return output.ToArray();
+    }
+
+    /// <summary>LZW 解码（PDF LZWDecode 过滤器）</summary>
+    /// <param name="data">LZW 编码数据</param>
+    /// <param name="earlyChange">EarlyChange 参数（PDF 默认 1）</param>
+    /// <returns>解码后的原始数据</returns>
+    /// <remarks>
+    /// PDF LZW 解码参数：
+    /// - 初始码宽 9 位
+    /// - 清除码 256，EOD 码 257
+    /// - EarlyChange=1 时在码值 511（而非 512）后增加码宽
+    /// </remarks>
+    public static Byte[] DecodeLzw(Byte[] data, Int32 earlyChange = 1)
+    {
+        if (data == null || data.Length == 0) return [];
+
+        using var output = new MemoryStream();
+        var bitPos = 0;     // 当前位位置
+        var codeSize = 9;   // 当前码宽
+        var clearCode = 256;
+        var eodCode = 257;
+        var nextCode = 258;
+        var maxCode = (1 << codeSize) - 1;
+
+        // 字典：code → byte[]（可变长度）
+        var dict = new Dictionary<Int32, Byte[]>();
+        for (var i = 0; i < 256; i++)
+            dict[i] = [(Byte)i];
+
+        Int32 prevCode = -1;
+        var firstCode = true;
+
+        while (true)
+        {
+            var code = ReadLzwBits(data, ref bitPos, codeSize);
+            if (code < 0) break; // 数据不足
+
+            if (code == eodCode) break;
+            if (code == clearCode)
+            {
+                // 重置字典
+                dict.Clear();
+                for (var i = 0; i < 256; i++)
+                    dict[i] = [(Byte)i];
+                nextCode = 258;
+                codeSize = 9;
+                maxCode = (1 << codeSize) - 1;
+                prevCode = -1;
+                firstCode = true;
+                continue;
+            }
+
+            Byte[] entry;
+            if (dict.TryGetValue(code, out var existing))
+            {
+                entry = existing;
+            }
+            else if (code == nextCode && prevCode >= 0)
+            {
+                // KwKwK 特殊情况：prev 序列 + prev 首字节
+                var prevEntry = dict[prevCode];
+                entry = new Byte[prevEntry.Length + 1];
+                Array.Copy(prevEntry, entry, prevEntry.Length);
+                entry[prevEntry.Length] = prevEntry[0];
+                dict[nextCode] = entry;
+                nextCode++;
+            }
+            else
+            {
+                // 无效码值，尝试恢复
+                break;
+            }
+
+            output.Write(entry, 0, entry.Length);
+
+            // 构建新字典条目
+            if (!firstCode && code != nextCode - 1)
+            {
+                var prevEntry = dict[prevCode];
+                var newEntry = new Byte[prevEntry.Length + 1];
+                Array.Copy(prevEntry, newEntry, prevEntry.Length);
+                newEntry[prevEntry.Length] = entry[0];
+
+                if (nextCode <= maxCode - (1 - earlyChange))
+                {
+                    dict[nextCode] = newEntry;
+                    nextCode++;
+                }
+            }
+
+            // 检查是否需要增加码宽
+            var threshold = (1 << codeSize) - earlyChange;
+            if (nextCode > threshold && codeSize < 12)
+            {
+                codeSize++;
+                maxCode = (1 << codeSize) - 1;
+            }
+
+            prevCode = code;
+            firstCode = false;
+        }
+
+        return output.ToArray();
+    }
+
+    /// <summary>从字节数组中读取指定位数的 LZW 码值</summary>
+    private static Int32 ReadLzwBits(Byte[] data, ref Int32 bitPos, Int32 numBits)
+    {
+        if (numBits <= 0 || numBits > 16) return -1;
+
+        var value = 0;
+        for (var i = 0; i < numBits; i++)
+        {
+            var byteIdx = (bitPos + i) / 8;
+            if (byteIdx >= data.Length) return -1;
+            var bitIdx = (bitPos + i) % 8;
+            if ((data[byteIdx] & (1 << bitIdx)) != 0)
+                value |= (1 << i);
+        }
+        bitPos += numBits;
+        return value;
     }
 
     /// <summary>从十六进制字符串解码为文本</summary>
