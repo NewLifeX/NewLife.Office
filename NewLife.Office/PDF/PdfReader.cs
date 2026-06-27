@@ -389,6 +389,60 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return results;
     }
 
+    /// <summary>启发式提取 PDF 中的表格数据（按位置聚类），返回每页的表格行数据</summary>
+    /// <param name="yTolerance">Y 坐标容差（点），默认 5</param>
+    /// <param name="xTolerance">X 坐标容差（点），默认 10</param>
+    /// <returns>每页的表格数据：List&lt;String[]&gt;，每行若干列</returns>
+    public List<String[]> ExtractTables(Single yTolerance = 5f, Single xTolerance = 10f)
+    {
+        var textItems = ExtractTextWithPositions().ToList();
+        if (textItems.Count == 0) return [];
+
+        // 按 Y 坐标分组（行）
+        var rows = new List<List<PdfText>>();
+        var sorted = textItems.OrderByDescending(t => t.Y).ToList();
+        foreach (var item in sorted)
+        {
+            var added = false;
+            foreach (var row in rows)
+            {
+                if (Math.Abs(row[0].Y - item.Y) <= yTolerance)
+                {
+                    row.Add(item);
+                    added = true;
+                    break;
+                }
+            }
+            if (!added) rows.Add([item]);
+        }
+
+        // 每行内按 X 排序并去重（相近 X 合并）
+        var result = new List<String[]>();
+        foreach (var row in rows)
+        {
+            var sortedRow = row.OrderBy(t => t.X).ToList();
+            var cells = new List<String>();
+            PdfText? last = null;
+            foreach (var t in sortedRow)
+            {
+                if (last != null && Math.Abs(last.X - t.X) <= xTolerance)
+                {
+                    // 合并相近的文本（同一单元格多段文本）
+                    cells[^1] += t.Text;
+                }
+                else
+                {
+                    cells.Add(t.Text);
+                }
+                last = t;
+            }
+            if (cells.Count > 0)
+                result.Add(cells.ToArray());
+        }
+
+        return result;
+    }
+
     /// <summary>读取 AcroForm 表单字段及当前值</summary>
     /// <returns>表单对象（含字段列表和值），null 表示无表单</returns>
     public PdfForm? ReadFormFields()
