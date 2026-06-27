@@ -439,6 +439,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
             doc.Slides.Add(ReadSlide(i));
         ParseDocProps(doc);
         ParseHeaderFooter(doc);
+        doc.Sections = ParseSections();
         return doc;
     }
     #endregion
@@ -481,6 +482,40 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         _slideWidth = width;
         _slideHeight = height;
         return (width, height);
+    }
+
+    /// <summary>从 presentation.xml 解析节（Section）信息</summary>
+    private List<PptSection>? ParseSections()
+    {
+        var entry = _zip.GetEntry("ppt/presentation.xml");
+        if (entry == null) return null;
+
+        var doc = LoadXml(entry);
+        var ns = new XmlNamespaceManager(doc.NameTable);
+        ns.AddNamespace("p14", "http://schemas.microsoft.com/office/powerpoint/2010/main");
+
+        var sectionNodes = doc.SelectNodes("//p14:section", ns);
+        if (sectionNodes == null || sectionNodes.Count == 0) return null;
+
+        var sections = new List<PptSection>();
+        foreach (XmlElement secEl in sectionNodes)
+        {
+            var name = secEl.GetAttribute("name");
+            if (String.IsNullOrEmpty(name)) name = "默认节";
+            var indices = new List<Int32>();
+
+            var sldNodes = secEl.SelectNodes("p14:sldIdLst/p14:sldId", ns);
+            if (sldNodes != null)
+            {
+                foreach (XmlElement sldEl in sldNodes)
+                {
+                    if (Int32.TryParse(sldEl.GetAttribute("id"), out var id) && id >= 256)
+                        indices.Add(id - 256);
+                }
+            }
+            sections.Add(new PptSection { Name = name, SlideIndices = indices });
+        }
+        return sections.Count > 0 ? sections : null;
     }
 
     /// <summary>从 theme1.xml 的 clrScheme 解析六个强调色</summary>

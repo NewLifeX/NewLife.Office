@@ -368,5 +368,50 @@ public class PptxEnhancementTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact(DisplayName = "PPT—Section写入读取往返")]
+    public void Section_WriteAndRead()
+    {
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            writer.AddSlide();
+            writer.AddSlide();
+            writer.Sections = new List<PptSection>
+            {
+                new() { Name = "第一章", SlideIndices = [0, 1] },
+                new() { Name = "第二章", SlideIndices = [2] }
+            };
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotNull(doc.Sections);
+            Assert.Equal(2, doc.Sections!.Count);
+            Assert.Equal("第一章", doc.Sections[0].Name);
+            Assert.Equal([0, 1], doc.Sections[0].SlideIndices);
+            Assert.Equal("第二章", doc.Sections[1].Name);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "PPT—无Section时Sections为null")]
+    public void Section_NoneIsNull()
+    {
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.Null(doc.Sections);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
     #endregion
 }

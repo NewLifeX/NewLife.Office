@@ -29,6 +29,9 @@ public partial class PptxWriter : IDisposable
 
     /// <summary>全局页眉页脚设置（S13-03），null 表示不加页脚</summary>
     public PptHeaderFooter? HeaderFooter { get; set; }
+
+    /// <summary>节（Section）列表（S13-04），按节组织幻灯片，null 表示不使用节</summary>
+    public List<PptSection>? Sections { get; set; }
     #endregion
 
     #region 私有字段

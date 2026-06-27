@@ -46,6 +46,7 @@ partial class PptxWriter
             SetProtection(document.Properties.Password);
         _documentProperties = document.Properties;
         HeaderFooter = document.HeaderFooter;
+        Sections = document.Sections;
         Save(stream);
     }
 
@@ -224,7 +225,9 @@ partial class PptxWriter
         const String R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
         var sb = new StringBuilder();
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-        sb.Append($"<p:presentation xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\" saveSubsetFonts=\"1\">");
+        var hasSections = Sections != null && Sections.Count > 0;
+        var nsExt = hasSections ? " xmlns:p14=\"http://schemas.microsoft.com/office/powerpoint/2010/main\"" : "";
+        sb.Append($"<p:presentation xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\"{nsExt} saveSubsetFonts=\"1\">");
         sb.Append($"<p:sldSz cx=\"{SlideWidth}\" cy=\"{SlideHeight}\"/>");
         var masterCount = Math.Max(1, _masterContents.Count);
         if (_masterContents.Count == 0 && _progMasters.Count > 0)
@@ -244,6 +247,22 @@ partial class PptxWriter
             sb.Append($"<p:sldId id=\"{256 + Slides.Count + i}\" r:id=\"rSlide{Slides.Count + i + 1}\"/>");
         }
         sb.Append("</p:sldIdLst>");
+
+        // Section 列表（S13-04）
+        if (hasSections)
+        {
+            sb.Append("<p:extLst><p:ext uri=\"{521415D9-36F7-43E2-AB2F-B90AF26B5E84}\">");
+            sb.Append("<p14:sectionLst>");
+            for (var si = 0; si < Sections!.Count; si++)
+            {
+                var sec = Sections[si];
+                sb.Append($"<p14:section name=\"{EscXml(sec.Name)}\"><p14:sldIdLst>");
+                foreach (var idx in sec.SlideIndices)
+                    sb.Append($"<p14:sldId id=\"{256 + idx}\"/>");
+                sb.Append("</p14:sldIdLst></p14:section>");
+            }
+            sb.Append("</p14:sectionLst></p:ext></p:extLst>");
+        }
         // 全局页眉页脚（S13-03）
         var hf = HeaderFooter;
         if (hf != null && (hf.ShowFooter || hf.ShowPageNumber || hf.ShowDate))
