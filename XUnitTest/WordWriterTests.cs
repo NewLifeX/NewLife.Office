@@ -711,4 +711,46 @@ public class WordWriterTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
     #endregion
+
+    #region 首字下沉测试
+    [Fact(DisplayName = "首字下沉写入往返")]
+    public void DropCap_Roundtrip()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            var para = new WordParagraph { DropCapLines = 3 };
+            para.Runs.Add(new WordRun { Text = "首字下沉的段落内容测试首字下沉效果。" });
+            writer.AppendParagraph(para);
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotEmpty(doc.Elements);
+            var p = doc.Elements[0].Paragraph;
+            Assert.NotNull(p);
+            Assert.Equal(3, p!.DropCapLines);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "首字下沉默认不设置")]
+    public void DropCap_Default_Null()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendParagraph("普通段落");
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotEmpty(doc.Elements);
+            Assert.Null(doc.Elements[0].Paragraph!.DropCapLines);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
 }

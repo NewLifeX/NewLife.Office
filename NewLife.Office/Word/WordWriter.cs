@@ -833,7 +833,8 @@ public class WordWriter : IDisposable
             || para.IndentLeft.HasValue || para.IndentRight.HasValue || para.FirstLineIndent.HasValue
             || para.SpaceBefore.HasValue || para.SpaceAfter.HasValue || para.LineSpacingPct.HasValue
             || para.IsBullet || para.IsOrderedList || para.BackgroundColor != null
-            || para.Borders != null || (para.TabStops != null && para.TabStops.Count > 0);
+            || para.Borders != null || (para.TabStops != null && para.TabStops.Count > 0)
+            || para.DropCapLines.HasValue;
         if (hasPPr)
         {
             sb.Append("<w:pPr>");
@@ -897,6 +898,12 @@ public class WordWriter : IDisposable
                     sb.Append("/>");
                 }
                 sb.Append("</w:tabs>");
+            }
+            // 首字下沉
+            if (para.DropCapLines.HasValue)
+            {
+                var chars = para.DropCapChars ?? 1;
+                sb.Append($"<w:framePr w:dropCap=\"drop\" w:lines=\"{para.DropCapLines}\" w:hSpace=\"144\" w:vSpace=\"0\" w:wrap=\"around\" w:hAnchor=\"text\" w:vAnchor=\"text\"/>");
             }
             sb.Append("</w:pPr>");
         }

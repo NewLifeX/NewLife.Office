@@ -576,6 +576,19 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
                 }
                 if (list.Count > 0) para.TabStops = list;
             }
+
+            // 首字下沉：<w:framePr w:dropCap="drop" w:lines="3"/>
+            var framePr = pPrEl.SelectSingleNode("w:framePr", ns) as XmlElement;
+            if (framePr != null)
+            {
+                var dc = framePr.GetAttribute("w:dropCap") ?? framePr.GetAttribute("dropCap");
+                if (dc == "drop")
+                {
+                    var lines = framePr.GetAttribute("w:lines") ?? framePr.GetAttribute("lines");
+                    if (Int32.TryParse(lines, out var ln) && ln > 0) para.DropCapLines = ln;
+                    else para.DropCapLines = 3;
+                }
+            }
         }
 
         var br = pEl.SelectSingleNode("w:r/w:br", ns) as XmlElement;

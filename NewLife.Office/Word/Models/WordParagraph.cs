@@ -56,5 +56,11 @@ public class WordParagraph
 
     /// <summary>段落边框，null 表示无边框（对应 OOXML w:pBdr）</summary>
     public WordParagraphBorders? Borders { get; set; }
+
+    /// <summary>首字下沉行数（0 或 null 表示不启用首字下沉），对应 w:framePr w:dropCap="drop"</summary>
+    public Int32? DropCapLines { get; set; }
+
+    /// <summary>首字下沉字符数（默认 1），对应 w:framePr w:lines="N"</summary>
+    public Int32? DropCapChars { get; set; }
     #endregion
 }
