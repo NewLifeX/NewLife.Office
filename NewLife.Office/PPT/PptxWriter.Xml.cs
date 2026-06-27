@@ -305,6 +305,17 @@ partial class PptxWriter
         var shapeId = 2;
         // 收集超链接 relId → url（用于 rels 文件）
         var hlinkMap = new Dictionary<String, String>();
+
+        // 自动分配 RelId：对未设置 RelId 的图片/视频/背景图统一补全
+        foreach (var img in slide.Images)
+        {
+            if (img.RelId.IsNullOrEmpty()) img.RelId = $"rImg{_imgGlobal++}";
+        }
+        foreach (var vid in slide.Videos)
+        {
+            if (vid.RelId.IsNullOrEmpty()) vid.RelId = $"rVid{_videoGlobal++}";
+        }
+
         var sb = new StringBuilder();
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
         sb.Append($"<p:sld xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\"");
