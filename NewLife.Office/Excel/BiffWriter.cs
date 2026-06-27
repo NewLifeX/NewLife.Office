@@ -42,6 +42,7 @@ public sealed class BiffWriter : IDisposable
     private const UInt16 RecFormula = 0x0006;
     private const UInt16 RecString = 0x0207;
     private const UInt16 RecWindow2 = 0x023E;
+    private const UInt16 RecMergedCells = 0x00E5;
     private const Int32 MaxRecordDataSize = 8224;
 
     // BIFF8 日期纪元：1900-01-01（含 1900 闰年兼容性偏移 +1）
@@ -86,6 +87,9 @@ public sealed class BiffWriter : IDisposable
 
     // 冻结窗格：Key = sheetName, Value = (freezeRow, freezeCol)
     private readonly Dictionary<String, (Int32 Row, Int32 Col)> _sheetFreezePanes = new(StringComparer.Ordinal);
+
+    // 合并单元格：Key = sheetName, Value = List of (r1,c1,r2,c2)
+    private readonly Dictionary<String, List<(Int32 R1, Int32 C1, Int32 R2, Int32 C2)>> _sheetMergedCells = new(StringComparer.Ordinal);
 
     private String _currentSheet = "Sheet1";
     private Boolean _disposed;
@@ -207,6 +211,21 @@ public sealed class BiffWriter : IDisposable
     public void SetFreezePane(Int32 freezeRow, Int32 freezeCol)
     {
         _sheetFreezePanes[_currentSheet] = (freezeRow, freezeCol);
+    }
+
+    /// <summary>合并当前工作表中指定区域的单元格</summary>
+    /// <param name="firstRow">起始行（0基）</param>
+    /// <param name="firstCol">起始列（0基）</param>
+    /// <param name="lastRow">结束行（含）</param>
+    /// <param name="lastCol">结束列（含）</param>
+    public void MergeCells(Int32 firstRow, Int32 firstCol, Int32 lastRow, Int32 lastCol)
+    {
+        if (!_sheetMergedCells.TryGetValue(_currentSheet, out var list))
+        {
+            list = [];
+            _sheetMergedCells[_currentSheet] = list;
+        }
+        list.Add((firstRow, firstCol, lastRow, lastCol));
     }
 
     #endregion
@@ -459,6 +478,12 @@ public sealed class BiffWriter : IDisposable
             }
         }
 
+        // MERGEDCELLS — 合并单元格
+        if (_sheetMergedCells.TryGetValue(sheetName, out var merges) && merges.Count > 0)
+        {
+            WriteRecord(bw, RecMergedCells, BuildMergedCellsData(merges));
+        }
+
         // Sheet EOF
         WriteRecord(bw, RecEof, []);
     }
@@ -644,6 +669,22 @@ public sealed class BiffWriter : IDisposable
         writer.Write((UInt16)0x0000);     // frozen scroll row (0 = not split)
         writer.Write((UInt16)0x0000);     // frozen scroll column
         writer.Write((UInt16)0x0040);     // Use gridline color
+        return buf;
+    }
+
+    /// <summary>构建 MERGEDCELLS 记录</summary>
+    private static Byte[] BuildMergedCellsData(List<(Int32 R1, Int32 C1, Int32 R2, Int32 C2)> merges)
+    {
+        var buf = new Byte[2 + merges.Count * 8];
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)merges.Count);
+        foreach (var (r1, c1, r2, c2) in merges)
+        {
+            writer.Write((UInt16)r1);
+            writer.Write((UInt16)r2);
+            writer.Write((UInt16)c1);
+            writer.Write((UInt16)c2);
+        }
         return buf;
     }
 

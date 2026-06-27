@@ -545,6 +545,52 @@ public class BiffWriterTests
     }
     #endregion
 
+    #region 合并单元格
+    [Fact, DisplayName("合并单元格—标题行合并")]
+    public void MergeCells_SingleRange()
+    {
+        var tempFile = Path.GetTempFileName() + ".xls";
+        try
+        {
+            using var writer = new BiffWriter();
+            writer.WriteHeader(["标题"]);
+            writer.WriteRow(["数据1"]);
+            writer.WriteRow(["数据2"]);
+            writer.MergeCells(0, 0, 0, 2); // 合并第一行 A1:C1
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            Assert.True(new FileInfo(tempFile).Length > 0);
+            using var reader = new BiffReader(tempFile);
+            var rows = reader.ReadSheet().ToList();
+            Assert.Equal(3, rows.Count);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact, DisplayName("合并单元格—多处合并")]
+    public void MergeCells_MultipleRanges()
+    {
+        var tempFile = Path.GetTempFileName() + ".xls";
+        try
+        {
+            using var writer = new BiffWriter();
+            writer.WriteHeader(["姓名", "部门", "备注"]);
+            writer.WriteRow(["Alice", "技术", "工程师"]);
+            writer.WriteRow(["Bob", "技术", "主管"]);
+            writer.MergeCells(0, 0, 0, 1); // 合并标题行 A1:B1
+            writer.MergeCells(2, 2, 3, 2); // 合并备注列 C2:C3
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var reader = new BiffReader(tempFile);
+            var rows = reader.ReadSheet().ToList();
+            Assert.Equal(3, rows.Count);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
+
     #region 辅助类型
 
     private class SampleModel
