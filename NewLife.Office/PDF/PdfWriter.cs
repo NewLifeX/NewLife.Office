@@ -475,6 +475,33 @@ public class PdfWriter : IDisposable
         CurrentY += heightPt + 6f;
     }
 
+    /// <summary>在当前页绘制 QR 码（自动生成 PNG 图片）</summary>
+    /// <param name="text">QR 码内容（URL 或短文本）</param>
+    /// <param name="x">X 坐标（点）</param>
+    /// <param name="y">Y 坐标（点，PDF 坐标系原点在左下角）</param>
+    /// <param name="sizePt">QR 码尺寸（点，正方形）</param>
+    public void DrawQRCode(String text, Single x, Single y, Single sizePt)
+    {
+        var pngBytes = PdfQRCode.Generate(text);
+        DrawImage(pngBytes, x, y, sizePt, sizePt);
+    }
+
+    /// <summary>追加 QR 码到当前页（自动跟踪 Y 位置）</summary>
+    /// <param name="text">QR 码内容</param>
+    /// <param name="sizePt">QR 码尺寸（点，正方形）</param>
+    public void AppendQRCode(String text, Single sizePt = 72f)
+    {
+        EnsurePage();
+        if (CurrentY + sizePt > PageHeight - MarginBottom)
+        {
+            EndPage();
+            BeginPage();
+        }
+        var y = PageHeight - CurrentY - sizePt;
+        DrawQRCode(text, MarginLeft, y, sizePt);
+        CurrentY += sizePt + 6f;
+    }
+
     /// <summary>在当前页面添加超链接注释区域</summary>
     /// <param name="x">左边距（点，原点在左下角）</param>
     /// <param name="y">下边距（点，原点在左下角）</param>

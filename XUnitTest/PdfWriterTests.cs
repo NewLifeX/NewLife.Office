@@ -266,4 +266,30 @@ public class PdfWriterTests
         Assert.Empty(attachments);
     }
     #endregion
+
+    #region QR码测试
+    [Fact(DisplayName = "DrawQRCode生成合法PNG并写入PDF")]
+    public void DrawQRCode_WritesPngToPdf()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.DrawQRCode("https://newlifex.com", 56, 700, 72);
+        writer.Save(ms);
+
+        var rawText = Encoding.Latin1.GetString(ms.ToArray());
+        Assert.Contains("/Type /XObject", rawText);
+        Assert.Contains("/Subtype /Image", rawText);
+        // 验证 PDF 文件头尾
+        Assert.StartsWith("%PDF-1.4", rawText);
+        Assert.Contains("%%EOF", rawText);
+    }
+
+    [Fact(DisplayName = "DrawQRCode空文本抛异常")]
+    public void DrawQRCode_EmptyText_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(() => PdfQRCode.Generate(""));
+        Assert.Throws<ArgumentNullException>(() => PdfQRCode.Generate(null!));
+    }
+    #endregion
 }
