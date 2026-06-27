@@ -352,6 +352,7 @@ public class WordWriter : IDisposable
             WriteFooterXml(za);
         if (DocumentProperties.Title != null || DocumentProperties.Author != null)
             WriteCoreProperties(za);
+            WriteCustomProperties(za);
         WriteOtherParts(za);
         foreach (var (_, ext, data) in _imageRels)
         {
@@ -465,6 +466,8 @@ public class WordWriter : IDisposable
             sb.Append("<Override PartName=\"/word/footer1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml\"/>");
         if (DocumentProperties.Title != null || DocumentProperties.Author != null)
             sb.Append("<Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/>");
+        if (DocumentProperties.CustomProperties.Count > 0)
+            sb.Append("<Override PartName=\"/docProps/custom.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.custom-properties+xml\"/>");
         // image content types
         var addedPng = false; var addedJpeg = false;
         foreach (var (_, ext, _) in _imageRels)
@@ -492,6 +495,8 @@ public class WordWriter : IDisposable
         sb.Append("<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/>");
         if (DocumentProperties.Title != null || DocumentProperties.Author != null)
             sb.Append("<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties\" Target=\"docProps/core.xml\"/>");
+        if (DocumentProperties.CustomProperties.Count > 0)
+            sb.Append("<Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties\" Target=\"docProps/custom.xml\"/>");
         sb.Append("</Relationships>");
         WriteEntry(za, "_rels/.rels", sb.ToString());
     }
@@ -1152,6 +1157,47 @@ public class WordWriter : IDisposable
         sb.Append($"<dcterms:created xsi:type=\"dcterms:W3CDTF\">{DateTime.UtcNow:yyyy-MM-ddTHH:mm:ssZ}</dcterms:created>");
         sb.Append("</cp:coreProperties>");
         WriteEntry(za, "docProps/core.xml", sb.ToString());
+    }
+
+    private void WriteCustomProperties(ZipArchive za)
+    {
+        if (DocumentProperties.CustomProperties.Count == 0) return;
+
+        var sb = new StringBuilder();
+        sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        sb.Append("<Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/custom-properties\" ");
+        sb.Append("xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\">");
+
+        var pid = 2; // PID 从 2 开始（1 保留给系统属性）
+        foreach (var kv in DocumentProperties.CustomProperties)
+        {
+            var name = Esc(kv.Key);
+            var value = Esc(kv.Value.Value);
+            sb.Append($"<property fmtid=\"{{D5CDD505-2E9C-101B-9397-08002B2CF9AE}}\" pid=\"{pid}\" name=\"{name}\">");
+            switch (kv.Value.Type)
+            {
+                case "i4":
+                    sb.Append($"<vt:i4>{value}</vt:i4>");
+                    break;
+                case "r8":
+                    sb.Append($"<vt:r8>{value}</vt:r8>");
+                    break;
+                case "bool":
+                    sb.Append($"<vt:bool>{(value == "true" || value == "1" ? "true" : "false")}</vt:bool>");
+                    break;
+                case "date":
+                    sb.Append($"<vt:filetime>{value}</vt:filetime>");
+                    break;
+                default:
+                    sb.Append($"<vt:lpwstr>{value}</vt:lpwstr>");
+                    break;
+            }
+            sb.Append("</property>");
+            pid++;
+        }
+
+        sb.Append("</Properties>");
+        WriteEntry(za, "docProps/custom.xml", sb.ToString());
     }
     #endregion
 }

@@ -478,6 +478,74 @@ public class WordWriterTests
     }
     #endregion
 
+    #region 自定义文档属性
+    [Fact(DisplayName = "自定义属性—写入字符串/整数/日期三个属性")]
+    public void CustomProperties_ThreeTypes()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendParagraph("正文内容");
+            writer.DocumentProperties.CustomProperties["Company"] = ("NewLife", "lpwstr");
+            writer.DocumentProperties.CustomProperties["Version"] = ("2025", "i4");
+            writer.DocumentProperties.CustomProperties["ReleaseDate"] = (DateTime.Today.ToString("yyyy-MM-dd"), "date");
+            writer.Save(tempFile);
+
+            // 验证 custom.xml 存在于 ZIP 中
+            using var archive = System.IO.Compression.ZipFile.OpenRead(tempFile);
+            Assert.NotNull(archive.GetEntry("docProps/custom.xml"));
+
+            // 读取回验证
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.Equal(3, doc.DocumentProperties.CustomProperties.Count);
+            Assert.Equal("NewLife", doc.DocumentProperties.CustomProperties["Company"].Value);
+            Assert.Equal("lpwstr", doc.DocumentProperties.CustomProperties["Company"].Type);
+            Assert.Equal("2025", doc.DocumentProperties.CustomProperties["Version"].Value);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "自定义属性—布尔和浮点类型")]
+    public void CustomProperties_BoolAndFloat()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendParagraph("测试");
+            writer.DocumentProperties.CustomProperties["IsApproved"] = ("true", "bool");
+            writer.DocumentProperties.CustomProperties["Score"] = ("98.5", "r8");
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.Equal(2, doc.DocumentProperties.CustomProperties.Count);
+            Assert.Equal("true", doc.DocumentProperties.CustomProperties["IsApproved"].Value);
+            Assert.Equal("bool", doc.DocumentProperties.CustomProperties["IsApproved"].Type);
+            Assert.Equal("98.5", doc.DocumentProperties.CustomProperties["Score"].Value);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "自定义属性—无属性时不生成custom.xml")]
+    public void CustomProperties_EmptySkips()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendParagraph("空属性");
+            writer.Save(tempFile);
+
+            using var archive = System.IO.Compression.ZipFile.OpenRead(tempFile);
+            Assert.Null(archive.GetEntry("docProps/custom.xml"));
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
+
     #region 辅助方法
     /// <summary>构建包含指定 SDT 元素的最小合法 docx 文件</summary>
     private static Byte[] BuildDocxWithSdt(String sdtXml)

@@ -151,6 +151,49 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return props;
     }
 
+    /// <summary>读取自定义文档属性（docProps/custom.xml）</summary>
+    private void ReadCustomProperties(WordDocumentProperties props)
+    {
+        var entry = _zip.GetEntry("docProps/custom.xml");
+        if (entry == null) return;
+
+        try
+        {
+            var doc = new XmlDocument();
+            using var s = entry.Open();
+            doc.Load(s);
+
+            var ns = new XmlNamespaceManager(doc.NameTable);
+            ns.AddNamespace("vt", "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes");
+
+            var propNodes = doc.SelectNodes("//*[local-name()='property']");
+            if (propNodes == null) return;
+
+            foreach (XmlElement propEl in propNodes)
+            {
+                var name = propEl.GetAttribute("name");
+                if (String.IsNullOrEmpty(name)) continue;
+
+                String? type = "lpwstr";
+                String? value = null;
+
+                // 检查所有可能的 vt 子元素类型
+                var vtNodes = propEl.SelectNodes("*[namespace-uri()='http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes']");
+                if (vtNodes == null || vtNodes.Count == 0) continue;
+
+                var vtEl = vtNodes[0] as XmlElement;
+                if (vtEl == null) continue;
+
+                type = vtEl.LocalName;
+                value = vtEl.InnerText;
+
+                if (value != null)
+                    props.CustomProperties[name] = (value, type);
+            }
+        }
+        catch { /* custom.xml 损坏时静默跳过 */ }
+    }
+
     /// <summary>读取对象集合（将第一行表格映射到属性）</summary>
     /// <typeparam name="T">目标类型</typeparam>
     /// <returns>对象序列</returns>
@@ -293,6 +336,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         doc.DocumentProperties.Author = props.Author;
         doc.DocumentProperties.Subject = props.Subject;
         doc.DocumentProperties.Description = props.Description;
+
+        // 读取自定义属性
+        ReadCustomProperties(doc.DocumentProperties);
 
         // 保存原始 XML 部件，用于 Writer 完美还原视觉效果
         doc.StylesXml = ReadZipEntryText("word/styles.xml");
