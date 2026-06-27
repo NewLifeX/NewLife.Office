@@ -54,6 +54,11 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
     {
         public String? BgColor;
         public String? PatternType = "none";
+        public String? GradientType;
+        public String? GradientColor1;
+        public String? GradientColor2;
+        public String? PatternFgColor;
+        public String? PatternName;
     }
 
     private class BorderInfo
@@ -606,6 +611,16 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                         var bg = pf.Element(ns + "bgColor");
                         if (bg != null) fli.BgColor = NormalizeColorAttr(bg);
                     }
+                }
+                var gf = f.Element(ns + "gradientFill");
+                if (gf != null)
+                {
+                    fli.PatternType = "gradient";
+                    var gradType = gf.Attribute("type")?.Value ?? "linear";
+                    fli.GradientType = gradType == "path" ? "radial" : "linear";
+                    var stops = gf.Elements(ns + "stop").ToList();
+                    if (stops.Count >= 1) fli.GradientColor1 = NormalizeColorAttr(stops[0].Element(ns + "color"));
+                    if (stops.Count >= 2) fli.GradientColor2 = NormalizeColorAttr(stops[1].Element(ns + "color"));
                 }
                 _fillInfos.Add(fli);
             }
@@ -1172,6 +1187,12 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         // 条件格式
         sd.ConditionalFormats = ReadConditionalFormats(sheet).ToList();
 
+        // 表格
+        sd.Tables = ReadTables(sheet);
+
+        // 图表
+        sd.Charts = ReadCharts(sheet);
+
         // 批注
         sd.Comments = ReadComments(sheet);
 
@@ -1236,6 +1257,17 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                     var fli = _fillInfos[xf.FillId];
                     if (fli.PatternType == "solid" && !fli.BgColor.IsNullOrEmpty())
                         cs.BackgroundColor = fli.BgColor;
+                    else if (fli.PatternType == "gradient")
+                    {
+                        cs.GradientType = fli.GradientType;
+                        cs.GradientColor1 = fli.GradientColor1;
+                        cs.GradientColor2 = fli.GradientColor2;
+                    }
+                    else if (!fli.PatternName.IsNullOrEmpty())
+                    {
+                        cs.PatternType = fli.PatternName;
+                        cs.PatternFgColor = fli.PatternFgColor;
+                    }
                 }
 
                 // 边框
@@ -1875,6 +1907,128 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
             }
 
             result.Add(tblInfo);
+        }
+
+        return result;
+    }
+
+    /// <summary>读取指定工作表中的图表</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>图表列表</returns>
+    public List<ExcelChart> ReadCharts(String sheet)
+    {
+        var result = new List<ExcelChart>();
+        if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry)) return result;
+
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return result;
+
+        var drawing = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("drawing"));
+        if (drawing == null) return result;
+
+        var sheetIdx = sheetEntry.Name.TrimEnd(".xml").TrimStart("sheet").ToInt(-1);
+        if (sheetIdx < 1) return result;
+
+        // 读取 drawing XML 获取图表引用
+        var drawingPath = $"xl/drawings/drawing{sheetIdx}.xml";
+        var drawingEntry = _zip.GetEntry(drawingPath);
+        if (drawingEntry == null) return result;
+
+        using var ds = drawingEntry.Open();
+        var drawDoc = XDocument.Load(ds);
+        if (drawDoc.Root == null) return result;
+
+        var ns = drawDoc.Root.Name.Namespace;
+        foreach (var anchor in drawDoc.Root.Elements())
+        {
+            var gf = anchor.Elements().FirstOrDefault(e => e.Name.LocalName == "graphicFrame");
+            if (gf == null) continue;
+            var graphicData = gf.Descendants().FirstOrDefault(e => e.Name.LocalName == "graphicData");
+            if (graphicData == null) continue;
+            var chartEl = graphicData.Elements().FirstOrDefault(e => e.Name.LocalName == "chart");
+            if (chartEl == null) continue;
+            var rId = chartEl.Attribute("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id")?.Value;
+            if (rId.IsNullOrEmpty()) continue;
+
+            // 从 drawing rels 获取 chart XML 路径
+            var drawRelsPath = $"xl/drawings/_rels/drawing{sheetIdx}.xml.rels";
+            var relsEntry = _zip.GetEntry(drawRelsPath);
+            if (relsEntry == null) continue;
+            var chartTarget = (String?)null;
+            using (var rs2 = relsEntry.Open())
+            {
+                var relDoc = XDocument.Load(rs2);
+                if (relDoc.Root != null)
+                {
+                    foreach (var rel in relDoc.Root.Elements())
+                    {
+                        if (rel.Attribute("Id")?.Value == rId)
+                        {
+                            chartTarget = rel.Attribute("Target")?.Value;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (chartTarget.IsNullOrEmpty()) continue;
+
+            // 读取 chart XML
+            var chartPath = chartTarget.TrimStart('.', '/').Replace("../", "xl/");
+            var chartEntry = _zip.GetEntry(chartPath);
+            if (chartEntry == null) continue;
+
+            var chart = new ExcelChart();
+            using var cs = chartEntry.Open();
+            var cDoc = XDocument.Load(cs);
+            if (cDoc.Root == null) continue;
+
+            var cNs = cDoc.Root.Name.Namespace;
+            // 图表标题
+            var titleEl = cDoc.Root.Descendants(cNs + "title").FirstOrDefault();
+            if (titleEl != null)
+            {
+                var tEl = titleEl.Descendants(cNs + "t").FirstOrDefault();
+                if (tEl != null) chart.Title = tEl.Value;
+            }
+            // 图表类型
+            var plotArea = cDoc.Root.Descendants(cNs + "plotArea").FirstOrDefault();
+            if (plotArea != null)
+            {
+                var chartTypeEl = plotArea.Elements().FirstOrDefault(e =>
+                    e.Name.LocalName is "barChart" or "lineChart" or "pieChart" or "areaChart" or "scatterChart");
+                if (chartTypeEl != null)
+                {
+                    chart.Type = chartTypeEl.Name.LocalName switch
+                    {
+                        "lineChart" => "line",
+                        "pieChart" => "pie",
+                        "areaChart" => "area",
+                        "scatterChart" => "scatter",
+                        _ => "bar",
+                    };
+                    // 分类和系列数据
+                    var serEls = chartTypeEl.Elements(cNs + "ser").ToList();
+                    foreach (var serEl in serEls)
+                    {
+                        var ser = new ExcelChartSeries();
+                        var nameV = serEl.Descendants(cNs + "strCache").FirstOrDefault()
+                            ?.Descendants(cNs + "v").FirstOrDefault()?.Value;
+                        ser.Name = nameV ?? "";
+                        var catVals = serEl.Descendants(cNs + "strRef").FirstOrDefault()
+                            ?.Descendants(cNs + "strCache")?.Elements(cNs + "pt")
+                            ?.Select(p => p.Element(cNs + "v")?.Value ?? "").ToArray();
+                        if (catVals != null && catVals.Length > 0)
+                            chart.Categories = catVals;
+                        var numVals = serEl.Descendants(cNs + "numRef").FirstOrDefault()
+                            ?.Descendants(cNs + "numCache")?.Elements(cNs + "pt")
+                            ?.Select(p => p.Element(cNs + "v")?.Value.ToDouble() ?? 0).ToArray() ?? [];
+                        ser.Data = numVals;
+                        chart.Series.Add(ser);
+                    }
+                }
+            }
+
+            result.Add(chart);
         }
 
         return result;

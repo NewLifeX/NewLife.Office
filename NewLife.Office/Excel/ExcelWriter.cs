@@ -28,7 +28,7 @@ public partial class ExcelWriter : DisposeBase
     private static readonly ExcelCellStyle[] _cellStyles = (ExcelCellStyle[])Enum.GetValues(typeof(ExcelCellStyle));
 
     private record FontEntry(String? Name, Double Size, Boolean Bold, Boolean Italic, Boolean Underline, String? Color, Boolean Strike, String? VerticalAlign);
-    private record FillEntry(String? BgColor, String PatternType);
+    private record FillEntry(String? BgColor, String PatternType, String? GradientType = null, String? GradientColor1 = null, String? GradientColor2 = null, String? PatternFgColor = null, String? PatternTypeName = null);
     private record BorderEntry(
         ExcelCellBorderStyle Left, String? LeftColor,
         ExcelCellBorderStyle Right, String? RightColor,
@@ -164,6 +164,9 @@ public partial class ExcelWriter : DisposeBase
     private String? _workbookProtectionHash;
     private Boolean _workbookLockStructure;
     private Boolean _workbookLockWindows;
+
+    // 图表：sheet → 图表列表
+    private readonly Dictionary<String, List<ExcelChart>> _sheetCharts = new(StringComparer.OrdinalIgnoreCase);
     // 超链接
     private readonly Dictionary<String, List<SheetHyperlink>> _sheetHyperlinks = new(StringComparer.OrdinalIgnoreCase);
     // 数据验证
@@ -671,6 +674,19 @@ public partial class ExcelWriter : DisposeBase
         _definedNames.Add((name, formula));
     }
 
+    /// <summary>按名称获取已添加的命名范围公式</summary>
+    /// <param name="name">命名范围名称（大小写不敏感）</param>
+    /// <returns>范围公式字符串，未找到返回 null</returns>
+    public String? GetRangeByName(String name)
+    {
+        if (name.IsNullOrEmpty()) return null;
+        foreach (var (n, f) in _definedNames)
+        {
+            if (n.EqualIgnoreCase(name)) return f;
+        }
+        return null;
+    }
+
     /// <summary>在当前工作表中添加结构化表格（OOXML table 元素）</summary>
     /// <param name="range">表格范围（Excel 记法，如 "A1:E10"，含表头行）</param>
     /// <param name="name">表格名称（同时作为表格引用标识）</param>
@@ -719,6 +735,22 @@ public partial class ExcelWriter : DisposeBase
             StyleName = style ?? "TableStyleMedium9",
             ColumnNames = columnNames,
         });
+    }
+
+    /// <summary>添加图表到工作表</summary>
+    /// <param name="sheet">工作表名称（可空，空时用当前工作表）</param>
+    /// <param name="chart">图表定义对象</param>
+    public void AddChart(String? sheet, ExcelChart chart)
+    {
+        if (chart == null) throw new ArgumentNullException(nameof(chart));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        if (!_sheetCharts.TryGetValue(sheet, out var charts))
+        {
+            charts = [];
+            _sheetCharts[sheet] = charts;
+        }
+        charts.Add(chart);
     }
 
     private SheetPageSetup GetOrCreatePageSetup(String sheet)
@@ -1062,6 +1094,12 @@ public partial class ExcelWriter : DisposeBase
                 foreach (var tbl in sd.Tables)
                 {
                     AddTable(sheet, tbl.Range, tbl.Name, tbl.StyleName, tbl.ColumnNames);
+                }
+
+                // 图表
+                foreach (var ch in sd.Charts)
+                {
+                    AddChart(sheet, ch);
                 }
             }
 

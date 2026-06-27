@@ -88,6 +88,21 @@ public class ExcelCellStyle
 
     /// <summary>富文本段落列表；不为 null 时优先使用富文本，忽略普通文本内容</summary>
     public List<RichTextRun>? RichTextRuns { get; set; }
+
+    /// <summary>渐变类型（"linear"/"radial"），仅 GradientColor1 和 GradientColor2 均非空时生效</summary>
+    public String? GradientType { get; set; }
+
+    /// <summary>渐变起始颜色（RGB六位十六进制）</summary>
+    public String? GradientColor1 { get; set; }
+
+    /// <summary>渐变结束颜色（RGB六位十六进制）</summary>
+    public String? GradientColor2 { get; set; }
+
+    /// <summary>图案填充类型名（如 "darkGray"、"darkGrid"、"lightGrid"、"dotted" 等）</summary>
+    public String? PatternType { get; set; }
+
+    /// <summary>图案填充前景色（RGB六位十六进制）</summary>
+    public String? PatternFgColor { get; set; }
     #endregion
 
     #region 静态

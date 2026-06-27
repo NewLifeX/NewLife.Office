@@ -21,6 +21,17 @@ partial class ExcelWriter
             var fill = new FillEntry(cs.BackgroundColor, "solid");
             fillId = FindOrAdd(_fills, fill);
         }
+        else if (!cs.GradientColor1.IsNullOrEmpty() && !cs.GradientColor2.IsNullOrEmpty())
+        {
+            var gradType = cs.GradientType.EqualIgnoreCase("radial") ? "radial" : "linear";
+            var fill = new FillEntry(null, "gradient", gradType, cs.GradientColor1, cs.GradientColor2);
+            fillId = FindOrAdd(_fills, fill);
+        }
+        else if (!cs.PatternType.IsNullOrEmpty())
+        {
+            var fill = new FillEntry(null, "pattern", PatternFgColor: cs.PatternFgColor, PatternTypeName: cs.PatternType);
+            fillId = FindOrAdd(_fills, fill);
+        }
 
         // 找或创建边框：单边属性优先，回退到全局 Border
         var borderId = 0;
@@ -144,6 +155,77 @@ partial class ExcelWriter
         return Math.Max(1, endCol - startCol + 1);
     }
 
+    /// <summary>生成图表 XML（xl/charts/chartN.xml）</summary>
+    private static void WriteChartXml(StreamWriter sw, ExcelChart chart, Int32 chartId)
+    {
+        const String C = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+        const String A = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        sw.Write($"<c:chartSpace xmlns:c=\"{C}\" xmlns:a=\"{A}\">");
+        sw.Write("<c:date1904 val=\"0\"/>");
+        sw.Write("<c:chart>");
+        if (!chart.Title.IsNullOrEmpty())
+        {
+            var et = SecurityElement.Escape(chart.Title!) ?? chart.Title;
+            sw.Write($"<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang=\"zh-CN\"/><a:t>{et}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val=\"0\"/></c:title>");
+        }
+        sw.Write("<c:autoTitleDeleted val=\"0\"/>");
+        sw.Write("<c:plotArea>");
+
+        var chartElem = chart.Type switch
+        {
+            "line" => "lineChart",
+            "pie"  => "pieChart",
+            "area" => "areaChart",
+            "scatter" => "scatterChart",
+            _ => "barChart",
+        };
+        sw.Write($"<c:{chartElem}>");
+        if (chart.Type == "bar") sw.Write("<c:barDir val=\"col\"/><c:grouping val=\"clustered\"/>");
+        else if (chart.Type == "line") sw.Write("<c:grouping val=\"standard\"/>");
+
+        var serColors = new[] { "4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F79646" };
+        var categories = chart.Categories ?? [];
+        for (var si = 0; si < chart.Series.Count; si++)
+        {
+            var ser = chart.Series[si];
+            var color = serColors[si % serColors.Length];
+            sw.Write("<c:ser>");
+            sw.Write($"<c:idx val=\"{si}\"/><c:order val=\"{si}\"/>");
+            var eName = SecurityElement.Escape(ser.Name) ?? ser.Name ?? "";
+            sw.Write($"<c:tx><c:strRef><c:f/><c:strCache><c:ptCount val=\"1\"/><c:pt idx=\"0\"><c:v>{eName}</c:v></c:pt></c:strCache></c:strRef></c:tx>");
+            sw.Write($"<c:spPr><a:solidFill><a:srgbClr val=\"{color}\"/></a:solidFill></c:spPr>");
+            if (categories.Length > 0)
+            {
+                sw.Write("<c:cat><c:strRef><c:f/><c:strCache>");
+                sw.Write($"<c:ptCount val=\"{categories.Length}\"/>");
+                for (var ci = 0; ci < categories.Length; ci++)
+                    sw.Write($"<c:pt idx=\"{ci}\"><c:v>{SecurityElement.Escape(categories[ci]) ?? categories[ci]}</c:v></c:pt>");
+                sw.Write("</c:strCache></c:strRef></c:cat>");
+            }
+            sw.Write("<c:val><c:numRef><c:f/><c:numCache>");
+            sw.Write($"<c:ptCount val=\"{ser.Data.Length}\"/>");
+            for (var vi = 0; vi < ser.Data.Length; vi++)
+                sw.Write($"<c:pt idx=\"{vi}\"><c:v>{ser.Data[vi]}</c:v></c:pt>");
+            sw.Write("</c:numCache></c:numRef></c:val>");
+            sw.Write("</c:ser>");
+        }
+        if (chart.Type != "pie")
+        {
+            sw.Write("<c:axId val=\"1\"/><c:axId val=\"2\"/>");
+            sw.Write($"</c:{chartElem}>");
+            sw.Write("<c:catAx><c:axId val=\"1\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"b\"/><c:crossAx val=\"2\"/></c:catAx>");
+            sw.Write("<c:valAx><c:axId val=\"2\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"l\"/><c:crossAx val=\"1\"/></c:valAx>");
+        }
+        else
+        {
+            sw.Write($"</c:{chartElem}>");
+        }
+        sw.Write("</c:plotArea>");
+        sw.Write("<c:legend><c:legendPos val=\"b\"/></c:legend>");
+        sw.Write("</c:chart></c:chartSpace>");
+    }
+
     /// <summary>写出单边边框 XML（style 为 None 时输出自关闭空元素）</summary>
     private static void WriteBorderSide(StreamWriter sw, String tag, ExcelCellBorderStyle style, String? color)
     {
@@ -247,6 +329,15 @@ partial class ExcelWriter
                 sheetsWithTables[i] = tbls;
         }
 
+        // 判断哪些 sheet 有图表
+        var sheetsWithCharts = new Dictionary<Int32, List<ExcelChart>>();
+        for (var i = 0; i < _sheetNames.Count; i++)
+        {
+            if (_sheetCharts.TryGetValue(_sheetNames[i], out var chs) && chs.Count > 0)
+                sheetsWithCharts[i] = chs;
+        }
+        var globalChartId = 0; // 全局图表编号（1基）
+
         using var za = new ZipArchive(target, ZipArchiveMode.Create, leaveOpen: Stream != null, entryNameEncoding: Encoding);
 
         // _rels/.rels
@@ -305,7 +396,14 @@ partial class ExcelWriter
                 foreach (var tbl in kv.Value)
                     sw.Write($"<Override PartName=\"/xl/tables/table{++globalTableIndex}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml\"/>");
             }
-            globalTableIndex = 0; // 重置，后面生成 XML 时重新从 1 开始
+            globalTableIndex = 0; // 重置
+            // 图表
+            foreach (var kv in sheetsWithCharts)
+            {
+                foreach (var c in kv.Value)
+                    sw.Write($"<Override PartName=\"/xl/charts/chart{++globalChartId}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawingml.chart+xml\"/>");
+            }
+            globalChartId = 0; // 重置
             sw.Write("</Types>");
         }
 
@@ -614,8 +712,9 @@ partial class ExcelWriter
                 }
             }
 
-            // drawing（图片引用）
-            if (sheetsWithImages.Contains(i))
+            // drawing（图片 + 图表引用）
+            var hasDrawing = sheetsWithImages.Contains(i) || sheetsWithCharts.ContainsKey(i);
+            if (hasDrawing)
             {
                 sw.Write($"<drawing r:id=\"rDr1\"/>");
             }
@@ -638,9 +737,9 @@ partial class ExcelWriter
             sw.Write("</worksheet>");
             sw.Dispose();
 
-            // sheet rels（超链接 + 图片 drawing + 批注 + 表格关系）
+            // sheet rels（超链接 + 图片 drawing + 批注 + 表格 + 图表关系）
             var needSheetRels = sheetsWithHyperlinks.Contains(i) || sheetsWithImages.Contains(i) ||
-                                sheetsWithComments.Contains(i) || sheetsWithTables.ContainsKey(i);
+                                sheetsWithComments.Contains(i) || sheetsWithTables.ContainsKey(i) || sheetsWithCharts.ContainsKey(i);
             if (needSheetRels)
             {
                 var relEntry = za.CreateEntry($"xl/worksheets/_rels/sheet{i + 1}.xml.rels");
@@ -670,67 +769,108 @@ partial class ExcelWriter
                     }
                     globalTableIndex += tblRels.Count;
                 }
+                // 图表关系
+                if (sheetsWithCharts.TryGetValue(i, out var chartRels))
+                {
+                    for (var c = 0; c < chartRels.Count; c++)
+                    {
+                        rsw.Write($"<Relationship Id=\"rCh{c + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart\" Target=\"../charts/chart{globalChartId + c + 1}.xml\"/>");
+                    }
+                    globalChartId += chartRels.Count;
+                }
                 rsw.Write("</Relationships>");
             }
         }
 
-        // Drawings 和媒体文件
+        // Drawings、媒体文件和图表
         for (var i = 0; i < _sheetNames.Count; i++)
         {
-            if (!sheetsWithImages.Contains(i)) continue;
+            var hasImages = sheetsWithImages.Contains(i);
+            var hasCharts = sheetsWithCharts.ContainsKey(i);
+            if (!hasImages && !hasCharts) continue;
             var sheet = _sheetNames[i];
-            var images = _sheetImages[sheet];
 
-            // drawing{i+1}.xml
+            // drawing{i+1}.xml（包含图片和图表锚点）
             var drawEntry = za.CreateEntry($"xl/drawings/drawing{i + 1}.xml");
             using (var dsw = new StreamWriter(drawEntry.Open(), Encoding))
             {
                 dsw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><xdr:wsDr xmlns:xdr=\"http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">");
-                for (var j = 0; j < images.Count; j++)
+                // 图片锚点
+                if (hasImages && _sheetImages.TryGetValue(sheet, out var images))
                 {
-                    var img = images[j];
-                    var emuW = (Int64)(img.Width * 9525); // px → EMU
-                    var emuH = (Int64)(img.Height * 9525);
-                    var editAs = img.EditAs.IsNullOrEmpty() ? "oneCell" : img.EditAs;
-                    dsw.Write($"<xdr:twoCellAnchor editAs=\"{editAs}\">");
-                    // from 锚点
-                    dsw.Write($"<xdr:from><xdr:col>{img.Col}</xdr:col><xdr:colOff>{img.FromColOff}</xdr:colOff><xdr:row>{img.Row}</xdr:row><xdr:rowOff>{img.FromRowOff}</xdr:rowOff></xdr:from>");
-                    // to 锚点：优先使用读取到的精确锚点；否则推算 from+1
-                    if (img.ToRow >= 0 && img.ToCol >= 0)
+                    for (var j = 0; j < images.Count; j++)
                     {
-                        dsw.Write($"<xdr:to><xdr:col>{img.ToCol}</xdr:col><xdr:colOff>{img.ToColOff}</xdr:colOff><xdr:row>{img.ToRow}</xdr:row><xdr:rowOff>{img.ToRowOff}</xdr:rowOff></xdr:to>");
+                        var img = images[j];
+                        var emuW = (Int64)(img.Width * 9525);
+                        var emuH = (Int64)(img.Height * 9525);
+                        var editAs = img.EditAs.IsNullOrEmpty() ? "oneCell" : img.EditAs;
+                        dsw.Write($"<xdr:twoCellAnchor editAs=\"{editAs}\">");
+                        dsw.Write($"<xdr:from><xdr:col>{img.Col}</xdr:col><xdr:colOff>{img.FromColOff}</xdr:colOff><xdr:row>{img.Row}</xdr:row><xdr:rowOff>{img.FromRowOff}</xdr:rowOff></xdr:from>");
+                        if (img.ToRow >= 0 && img.ToCol >= 0)
+                            dsw.Write($"<xdr:to><xdr:col>{img.ToCol}</xdr:col><xdr:colOff>{img.ToColOff}</xdr:colOff><xdr:row>{img.ToRow}</xdr:row><xdr:rowOff>{img.ToRowOff}</xdr:rowOff></xdr:to>");
+                        else
+                            dsw.Write($"<xdr:to><xdr:col>{img.Col + 1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>{img.Row + 1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>");
+                        dsw.Write($"<xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"{j + 2}\" name=\"Image{globalImageIndex + 1}\"/><xdr:cNvPicPr><a:picLocks noChangeAspect=\"1\"/></xdr:cNvPicPr></xdr:nvPicPr>");
+                        dsw.Write($"<xdr:blipFill><a:blip r:embed=\"rImg{j + 1}\"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>");
+                        dsw.Write($"<xdr:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{emuW}\" cy=\"{emuH}\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>");
+                        globalImageIndex++;
                     }
-                    else
+                }
+                // 图表锚点
+                if (hasCharts && sheetsWithCharts.TryGetValue(i, out var charts))
+                {
+                    for (var c = 0; c < charts.Count; c++)
                     {
-                        dsw.Write($"<xdr:to><xdr:col>{img.Col + 1}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>{img.Row + 1}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>");
+                        var chart = charts[c];
+                        var emuW = (Int64)(chart.WidthPx * 9525);
+                        var emuH = (Int64)(chart.HeightPx * 9525);
+                        dsw.Write("<xdr:twoCellAnchor>");
+                        dsw.Write($"<xdr:from><xdr:col>{chart.AnchorCol}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>{chart.AnchorRow}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>");
+                        dsw.Write($"<xdr:to><xdr:col>{chart.AnchorCol + 8}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>{chart.AnchorRow + 16}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>");
+                        var cNvPrId = 2 + (hasImages && _sheetImages.TryGetValue(sheet, out var ims) ? ims.Count : 0) + c;
+                        dsw.Write($"<xdr:graphicFrame macro=\"\"><xdr:nvGraphicFramePr><xdr:cNvPr id=\"{cNvPrId}\" name=\"Chart {c + 1}\"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>");
+                        dsw.Write($"<xdr:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{emuW}\" cy=\"{emuH}\"/></xdr:xfrm>");
+                        dsw.Write($"<a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/chart\"><c:chart xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" r:id=\"rCh{c + 1}\"/></a:graphicData></a:graphic>");
+                        dsw.Write("</xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor>");
                     }
-                    dsw.Write($"<xdr:pic><xdr:nvPicPr><xdr:cNvPr id=\"{j + 2}\" name=\"Image{globalImageIndex + 1}\"/><xdr:cNvPicPr><a:picLocks noChangeAspect=\"1\"/></xdr:cNvPicPr></xdr:nvPicPr>");
-                    dsw.Write($"<xdr:blipFill><a:blip r:embed=\"rImg{j + 1}\"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>");
-                    dsw.Write($"<xdr:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{emuW}\" cy=\"{emuH}\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:twoCellAnchor>");
-                    globalImageIndex++;
                 }
                 dsw.Write("</xdr:wsDr>");
             }
 
             // drawing rels
-            var drawRelEntry = za.CreateEntry($"xl/drawings/_rels/drawing{i + 1}.xml.rels");
-            using (var drsw = new StreamWriter(drawRelEntry.Open(), Encoding))
             {
-                drsw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
-                for (var j = 0; j < images.Count; j++)
+                _sheetImages.TryGetValue(sheet, out var drawImgs);
+                var hasDrawImgs = drawImgs != null && drawImgs.Count > 0;
+                var hasDrawCharts = sheetsWithCharts.TryGetValue(i, out var dCharts) && dCharts.Count > 0;
+                if (hasDrawImgs || hasDrawCharts)
                 {
-                    drsw.Write($"<Relationship Id=\"rImg{j + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/image{globalImageIndex - images.Count + j + 1}.{images[j].Extension}\"/>");
+                    var drawRelEntry = za.CreateEntry($"xl/drawings/_rels/drawing{i + 1}.xml.rels");
+                    using var drsw = new StreamWriter(drawRelEntry.Open(), Encoding);
+                    drsw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
+                    if (hasDrawImgs)
+                    {
+                        for (var j = 0; j < drawImgs!.Count; j++)
+                            drsw.Write($"<Relationship Id=\"rImg{j + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/image{globalImageIndex - drawImgs.Count + j + 1}.{drawImgs[j].Extension}\"/>");
+                    }
+                    if (hasDrawCharts)
+                    {
+                        for (var c = 0; c < dCharts!.Count; c++)
+                            drsw.Write($"<Relationship Id=\"rCh{c + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart\" Target=\"../charts/chart{globalChartId - dCharts.Count + c + 1}.xml\"/>");
+                    }
+                    drsw.Write("</Relationships>");
                 }
-                drsw.Write("</Relationships>");
             }
 
-            // 媒体文件
-            for (var j = 0; j < images.Count; j++)
+            // 媒体文件（仅图片）
+            if (hasImages && _sheetImages.TryGetValue(sheet, out var mediaImgs))
             {
-                var img = images[j];
-                var mediaEntry = za.CreateEntry($"xl/media/image{globalImageIndex - images.Count + j + 1}.{img.Extension}");
-                using var ms2 = mediaEntry.Open();
-                ms2.Write(img.Data, 0, img.Data.Length);
+                for (var j = 0; j < mediaImgs.Count; j++)
+                {
+                    var img = mediaImgs[j];
+                    var mediaEntry = za.CreateEntry($"xl/media/image{globalImageIndex - mediaImgs.Count + j + 1}.{img.Extension}");
+                    using var ms2 = mediaEntry.Open();
+                    ms2.Write(img.Data, 0, img.Data.Length);
+                }
             }
         }
 
@@ -802,6 +942,23 @@ partial class ExcelWriter
                 tblIndex++;
                 using var tsw = new StreamWriter(za.CreateEntry($"xl/tables/table{tblIndex}.xml").Open(), Encoding);
                 WriteTableXml(tsw, tbl, tblIndex);
+            }
+        }
+
+        // 图表 XML 文件
+        var cIndex = 0;
+        foreach (var kv in sheetsWithCharts)
+        {
+            foreach (var chart in kv.Value)
+            {
+                cIndex++;
+                using var csw = new StreamWriter(za.CreateEntry($"xl/charts/chart{cIndex}.xml").Open(), Encoding);
+                WriteChartXml(csw, chart, cIndex);
+                // chart rels
+                var cRelEntry = za.CreateEntry($"xl/charts/_rels/chart{cIndex}.xml.rels");
+                using var crsw = new StreamWriter(cRelEntry.Open(), Encoding);
+                crsw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
+                crsw.Write("</Relationships>");
             }
         }
 
@@ -901,6 +1058,22 @@ partial class ExcelWriter
                 sw.Write("<patternFill patternType=\"none\"/>");
             else if (f.PatternType == "gray125")
                 sw.Write("<patternFill patternType=\"gray125\"/>");
+            else if (f.PatternType == "solid")
+                sw.Write($"<patternFill patternType=\"solid\"><fgColor {FormatColorAttr(f.BgColor)}/></patternFill>");
+            else if (f.PatternType == "gradient" && f.GradientType != null)
+            {
+                sw.Write($"<gradientFill {(f.GradientType == "radial" ? "type=\"path\"" : "type=\"linear\"")} degree=\"{(f.GradientType == "radial" ? 0 : 90)}\">");
+                sw.Write($"<stop position=\"0\"><color {FormatColorAttr(f.GradientColor1)}/></stop>");
+                sw.Write($"<stop position=\"1\"><color {FormatColorAttr(f.GradientColor2)}/></stop>");
+                sw.Write("</gradientFill>");
+            }
+            else if (f.PatternType == "pattern" && f.PatternTypeName != null)
+            {
+                sw.Write($"<patternFill patternType=\"{f.PatternTypeName}\">");
+                if (!f.PatternFgColor.IsNullOrEmpty()) sw.Write($"<fgColor {FormatColorAttr(f.PatternFgColor)}/>");
+                if (!f.BgColor.IsNullOrEmpty()) sw.Write($"<bgColor {FormatColorAttr(f.BgColor)}/>");
+                sw.Write("</patternFill>");
+            }
             else
                 sw.Write($"<patternFill patternType=\"solid\"><fgColor {FormatColorAttr(f.BgColor)}/></patternFill>");
             sw.Write("</fill>");
