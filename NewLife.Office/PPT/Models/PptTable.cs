@@ -33,5 +33,42 @@ public class PptTable
 
     /// <summary>单元格边框样式（S11-02），键为 (行索引, 列索引)</summary>
     public Dictionary<(Int32 Row, Int32 Col), PptCellBorder> CellBorders { get; } = [];
+
+    /// <summary>表格样式主题引用 GUID（S11-04），如 "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"（默认中等样式2）</summary>
+    public String? TableStyleGuid { get; set; }
+    #endregion
+
+    #region 方法
+    /// <summary>添加行</summary>
+    /// <param name="cells">行中各单元格文本</param>
+    public void AddRow(String[] cells)
+    {
+        Rows.Add(cells);
+    }
+
+    /// <summary>删除行</summary>
+    /// <param name="index">0基行索引</param>
+    public void RemoveRow(Int32 index)
+    {
+        if (index < 0 || index >= Rows.Count) return;
+        Rows.RemoveAt(index);
+    }
+
+    /// <summary>在指定位置插入列</summary>
+    /// <param name="index">0基列索引（插入位置，原列及之后右移）</param>
+    /// <param name="header">列头文本（仅当 FirstRowHeader 时用于首行）</param>
+    public void AddColumn(Int32 index, String? header = null)
+    {
+        for (var r = 0; r < Rows.Count; r++)
+        {
+            var newRow = new List<String>(Rows[r]);
+            var cellText = r == 0 && FirstRowHeader && header != null ? header : String.Empty;
+            if (index >= newRow.Count)
+                newRow.Add(cellText);
+            else
+                newRow.Insert(index, cellText);
+            Rows[r] = newRow.ToArray();
+        }
+    }
     #endregion
 }

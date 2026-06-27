@@ -25,6 +25,15 @@ public class PptSlide
     /// <summary>背景图片，null 表示纯色背景</summary>
     public PptImage? BackgroundImage { get; set; }
 
+    /// <summary>背景渐变类型（S15-04），"linear" 或 "radial"，null 表示不使用渐变</summary>
+    public String? BackgroundGradientType { get; set; }
+
+    /// <summary>背景渐变起始色（16进制 RGB）</summary>
+    public String? BackgroundGradientColor1 { get; set; }
+
+    /// <summary>背景渐变结束色（16进制 RGB）</summary>
+    public String? BackgroundGradientColor2 { get; set; }
+
     /// <summary>演讲者备注</summary>
     public String? Notes { get; set; }
 

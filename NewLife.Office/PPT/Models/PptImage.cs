@@ -24,5 +24,8 @@ public class PptImage
 
     /// <summary>关系ID（内部用）</summary>
     public String RelId { get; set; } = String.Empty;
+
+    /// <summary>是否为 SVG 图片（S15-03）</summary>
+    public Boolean IsSvg { get; set; }
     #endregion
 }

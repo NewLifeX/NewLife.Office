@@ -328,6 +328,15 @@ partial class PptxWriter
             sb.Append($"<a:solidFill><a:srgbClr val=\"{slide.BackgroundColor.TrimStart('#')}\"/></a:solidFill>");
             sb.Append("<a:effectLst/></p:bgPr></p:bg>");
         }
+        else if (slide.BackgroundGradientType != null && slide.BackgroundGradientColor1 != null && slide.BackgroundGradientColor2 != null)
+        {
+            sb.Append("<p:bg><p:bgPr>");
+            sb.Append($"<a:gradFill><a:gsLst>");
+            sb.Append($"<a:gs pos=\"0\"><a:srgbClr val=\"{slide.BackgroundGradientColor1.TrimStart('#')}\"/></a:gs>");
+            sb.Append($"<a:gs pos=\"100000\"><a:srgbClr val=\"{slide.BackgroundGradientColor2.TrimStart('#')}\"/></a:gs>");
+            sb.Append($"</a:gsLst><a:lin ang=\"5400000\" scaled=\"0\"/></a:gradFill>");
+            sb.Append("<a:effectLst/></p:bgPr></p:bg>");
+        }
 
         sb.Append("<p:cSld><p:spTree>");
         sb.Append("<p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>");
@@ -976,7 +985,8 @@ partial class PptxWriter
             runEaFn = fn;
         }
         sb.Append("<a:r>");
-        sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{runSz * 100}\"{(run.Bold ? " b=\"1\"" : "")}{(run.Italic ? " i=\"1\"" : "")}{(run.Underline ? " u=\"sng\"" : "")} dirty=\"0\">");
+        var baseline = run.Superscript ? " baseline=\"30000\"" : run.Subscript ? " baseline=\"-25000\"" : "";
+        sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{runSz * 100}\"{(run.Bold ? " b=\"1\"" : "")}{(run.Italic ? " i=\"1\"" : "")}{(run.Underline ? " u=\"sng\"" : "")}{baseline} dirty=\"0\">");
         if (run.GradFillColors?.Length >= 2)
             WriteGradFill(sb, run.GradFillColors, run.GradAngle);
         else
@@ -1033,7 +1043,8 @@ partial class PptxWriter
         sb.Append($"<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id=\"{shapeId++}\" name=\"Table\"/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp=\"1\"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>");
         sb.Append($"<p:xfrm><a:off x=\"{tbl.Left}\" y=\"{tbl.Top}\"/><a:ext cx=\"{tbl.Width}\" cy=\"{tbl.Height}\"/></p:xfrm>");
         sb.Append($"<a:graphic xmlns:a=\"{A}\"><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/table\">");
-        sb.Append("<a:tbl><a:tblPr firstRow=\"1\" bandRow=\"1\"><a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId></a:tblPr>");
+        var tableStyleId = tbl.TableStyleGuid ?? "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}";
+        sb.Append($"<a:tbl><a:tblPr firstRow=\"1\" bandRow=\"1\"><a:tableStyleId>{tableStyleId}</a:tableStyleId></a:tblPr>");
         // columns
         var colCount = tbl.Rows.Count > 0 ? tbl.Rows[0].Length : 1;
         var autoColW = colCount > 0 ? tbl.Width / colCount : tbl.Width;

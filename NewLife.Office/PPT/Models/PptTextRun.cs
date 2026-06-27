@@ -53,5 +53,11 @@ public class PptTextRun
 
     /// <summary>超链接 URL，不为 null 时点击该片段跳转</summary>
     public String? HyperlinkUrl { get; set; }
+
+    /// <summary>上标（S15-06）</summary>
+    public Boolean Superscript { get; set; }
+
+    /// <summary>下标（S15-06）</summary>
+    public Boolean Subscript { get; set; }
     #endregion
 }

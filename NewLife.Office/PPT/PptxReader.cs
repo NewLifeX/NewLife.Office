@@ -564,10 +564,30 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         var bg = doc.SelectSingleNode("//*[local-name()='bg']") as XmlElement;
         if (bg == null) return;
 
-        // 纯色背景
-        var bgClr = bg.SelectSingleNode(".//*[local-name()='srgbClr']") as XmlElement;
+        // 纯色背景（仅 bgPr 的直接子 solidFill，排除嵌套在 gradFill 中的 srgbClr）
+        var solidFill = bg.SelectSingleNode("*[local-name()='bgPr']/*[local-name()='solidFill']") as XmlElement;
+        var bgClr = solidFill?.SelectSingleNode("*[local-name()='srgbClr']") as XmlElement;
         var val = bgClr?.GetAttribute("val");
         if (!String.IsNullOrEmpty(val)) { slide.BackgroundColor = val; return; }
+
+        // 渐变背景（S15-04）
+        var gradFill = bg.SelectSingleNode(".//*[local-name()='gradFill']") as XmlElement;
+        if (gradFill != null)
+        {
+            var stops = gradFill.SelectNodes(".//*[local-name()='gs']");
+            if (stops != null && stops.Count >= 2)
+            {
+                var c1 = (stops[0] as XmlElement)?.SelectSingleNode(".//*[local-name()='srgbClr']") as XmlElement;
+                var c2 = (stops[1] as XmlElement)?.SelectSingleNode(".//*[local-name()='srgbClr']") as XmlElement;
+                if (c1 != null && c2 != null)
+                {
+                    slide.BackgroundGradientColor1 = c1.GetAttribute("val");
+                    slide.BackgroundGradientColor2 = c2.GetAttribute("val");
+                    slide.BackgroundGradientType = "linear";
+                }
+            }
+            return;
+        }
 
         // 图片背景
         var blip = bg.SelectSingleNode(".//*[local-name()='blipFill']/*[local-name()='blip']") as XmlElement;
@@ -596,7 +616,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         Byte[] data;
         using (var ms = new MemoryStream())
         using (var es = mediaEntry.Open()) { es.CopyTo(ms); data = ms.ToArray(); }
-        slide.BackgroundImage = new PptImage { Data = data, Extension = ext };
+        slide.BackgroundImage = new PptImage { Data = data, Extension = ext, IsSvg = ext == "svg" };
     }
 
     private static Boolean TryResolveBgImage(String embedId,
@@ -884,6 +904,13 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     }
                 }
             }
+            // 上标/下标（S15-06）：<a:rPr baseline="30000"> 为上标，baseline="-25000" 为下标
+            var baselineAttr = rPr.GetAttribute("baseline");
+            if (!String.IsNullOrEmpty(baselineAttr) && Int32.TryParse(baselineAttr, out var bv))
+            {
+                if (bv >= 20000) run.Superscript = true;
+                else if (bv <= -15000) run.Subscript = true;
+            }
             var latin = rPr.SelectSingleNode(".//*[local-name()='latin']") as XmlElement;
             var ea = rPr.SelectSingleNode(".//*[local-name()='ea']") as XmlElement;
             var cs = rPr.SelectSingleNode(".//*[local-name()='cs']") as XmlElement;
@@ -1090,7 +1117,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         Byte[] idata;
         using (var ms = new MemoryStream())
         using (var es = ientry.Open()) { es.CopyTo(ms); idata = ms.ToArray(); }
-        slide.Images.Add(new PptImage { Data = idata, Extension = iext, Left = left, Top = top, Width = width, Height = height });
+        slide.Images.Add(new PptImage { Data = idata, Extension = iext, Left = left, Top = top, Width = width, Height = height, IsSvg = iext == "svg" });
     }
 
     private void ParseGraphicFrame(XmlElement gf, PptSlide slide, Dictionary<String, (String Target, String Type)> rels)
