@@ -546,6 +546,49 @@ public class WordWriterTests
     }
     #endregion
 
+    #region 页面边框
+    [Fact(DisplayName = "页面边框—四面单线边框")]
+    public void PageBorder_AllSides()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendParagraph("带页面边框的文档");
+            writer.PageSettings.PageBorder = new WordPageBorder
+            {
+                Top = "single", Bottom = "single", Left = "single", Right = "single",
+                Color = "FF0000", Size = 8, Space = 24
+            };
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotNull(doc.PageSettings.PageBorder);
+            Assert.Equal("single", doc.PageSettings.PageBorder!.Top);
+            Assert.Equal("FF0000", doc.PageSettings.PageBorder!.Color);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "页面边框—无边框时PageBorder为null")]
+    public void PageBorder_None()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendParagraph("无边框文档");
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.Null(doc.PageSettings.PageBorder);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
+
     #region 辅助方法
     /// <summary>构建包含指定 SDT 元素的最小合法 docx 文件</summary>
     private static Byte[] BuildDocxWithSdt(String sdtXml)

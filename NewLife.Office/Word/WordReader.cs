@@ -919,11 +919,42 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
             if (Int32.TryParse(cols.GetAttribute("w:space") ?? cols.GetAttribute("space"), out var cs)) ps.ColumnSpacing = cs;
         }
 
+        // 页面边框
+        var pgBorders = sectPr.SelectSingleNode("w:pgBorders", ns) as XmlElement;
+        if (pgBorders != null)
+        {
+            var pb = new WordPageBorder();
+            var offset = pgBorders.GetAttribute("w:offsetFrom") ?? pgBorders.GetAttribute("offsetFrom");
+            if (offset == "text") pb.OffsetFrom = 0;
+
+            var top = pgBorders.SelectSingleNode("w:top", ns) as XmlElement;
+            if (top != null) { pb.Top = top.GetAttribute("w:val") ?? top.GetAttribute("val"); ParsePgBorderAttrs(top, pb); }
+
+            var bottom = pgBorders.SelectSingleNode("w:bottom", ns) as XmlElement;
+            if (bottom != null) { pb.Bottom = bottom.GetAttribute("w:val") ?? bottom.GetAttribute("val"); ParsePgBorderAttrs(bottom, pb); }
+
+            var left = pgBorders.SelectSingleNode("w:left", ns) as XmlElement;
+            if (left != null) { pb.Left = left.GetAttribute("w:val") ?? left.GetAttribute("val"); ParsePgBorderAttrs(left, pb); }
+
+            var right = pgBorders.SelectSingleNode("w:right", ns) as XmlElement;
+            if (right != null) { pb.Right = right.GetAttribute("w:val") ?? right.GetAttribute("val"); ParsePgBorderAttrs(right, pb); }
+
+            ps.PageBorder = pb;
+        }
+
         var hdrRef = sectPr.SelectSingleNode("w:headerReference", ns) as XmlElement;
         if (hdrRef != null) { var rId = hdrRef.GetAttribute("r:id"); if (rId != null) ps.HeaderText = rId; }
 
         var ftrRef = sectPr.SelectSingleNode("w:footerReference", ns) as XmlElement;
         if (ftrRef != null) { var rId = ftrRef.GetAttribute("r:id"); if (rId != null) ps.FooterText = rId; }
+    }
+
+    private static void ParsePgBorderAttrs(XmlElement el, WordPageBorder pb)
+    {
+        if (Int32.TryParse(el.GetAttribute("w:sz") ?? el.GetAttribute("sz"), out var sz)) pb.Size = sz;
+        if (Int32.TryParse(el.GetAttribute("w:space") ?? el.GetAttribute("space"), out var sp)) pb.Space = sp;
+        var color = el.GetAttribute("w:color") ?? el.GetAttribute("color");
+        if (!String.IsNullOrEmpty(color)) pb.Color = color;
     }
 
     private static WordSdtElement? ParseSdt(XmlElement sdtEl, XmlNamespaceManager ns)

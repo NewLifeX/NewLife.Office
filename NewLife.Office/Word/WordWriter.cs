@@ -734,6 +734,18 @@ public class WordWriter : IDisposable
             // 分栏设置
             if (ps.ColumnCount > 1)
                 sb.Append($"<w:cols w:num=\"{ps.ColumnCount}\" w:space=\"{ps.ColumnSpacing}\"/>");
+            // 页面边框
+            var pb = ps.PageBorder;
+            if (pb != null)
+            {
+                var offset = pb.OffsetFrom == 0 ? "text" : "page";
+                sb.Append($"<w:pgBorders w:offsetFrom=\"{offset}\">");
+                AppendPgBorderXml(sb, "top", pb.Top, pb);
+                AppendPgBorderXml(sb, "bottom", pb.Bottom, pb);
+                AppendPgBorderXml(sb, "left", pb.Left, pb);
+                AppendPgBorderXml(sb, "right", pb.Right, pb);
+                sb.Append("</w:pgBorders>");
+            }
             var orientAttr = ps.Landscape ? " w:orient=\"landscape\"" : String.Empty;
             sb.Append($"<w:pgSz w:w=\"{pgW}\" w:h=\"{pgH}\"{orientAttr}/>");
             sb.Append($"<w:pgMar w:top=\"{ps.MarginTop}\" w:right=\"{ps.MarginRight}\" w:bottom=\"{ps.MarginBottom}\" w:left=\"{ps.MarginLeft}\" w:header=\"720\" w:footer=\"720\"/>");
@@ -1036,6 +1048,14 @@ public class WordWriter : IDisposable
         if (!String.IsNullOrEmpty(border.Color)) sb.Append($" w:color=\"{border.Color!.TrimStart('#')}\"");
         if (!String.IsNullOrEmpty(border.ThemeColor)) sb.Append($" w:themeColor=\"{border.ThemeColor}\"");
         if (border.Shadow) sb.Append(" w:shadow=\"1\"");
+        sb.Append("/>");
+    }
+
+    private static void AppendPgBorderXml(StringBuilder sb, String edge, String? style, WordPageBorder pb)
+    {
+        if (style == null || style == "none") return;
+        sb.Append($"<w:{edge} w:val=\"{style}\" w:sz=\"{pb.Size}\" w:space=\"{pb.Space}\"");
+        if (!String.IsNullOrEmpty(pb.Color)) sb.Append($" w:color=\"{pb.Color!.TrimStart('#')}\"");
         sb.Append("/>");
     }
 

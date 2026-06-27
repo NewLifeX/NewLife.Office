@@ -39,5 +39,36 @@ public class WordPageSettings
 
     /// <summary>分栏间距（twips，默认 720 = 0.5 英寸）</summary>
     public Int32 ColumnSpacing { get; set; } = 720;
+
+    /// <summary>页面边框设置（null 表示无边框）</summary>
+    public WordPageBorder? PageBorder { get; set; }
     #endregion
+}
+
+/// <summary>页面边框设置</summary>
+public class WordPageBorder
+{
+    /// <summary>上边框样式（single/double/dotted/dash/thick/wave 等）</summary>
+    public String? Top { get; set; }
+
+    /// <summary>下边框样式</summary>
+    public String? Bottom { get; set; }
+
+    /// <summary>左边框样式</summary>
+    public String? Left { get; set; }
+
+    /// <summary>右边框样式</summary>
+    public String? Right { get; set; }
+
+    /// <summary>边框颜色（16进制RGB，如 "FF0000"），null 表示自动</summary>
+    public String? Color { get; set; }
+
+    /// <summary>边框宽度（缇，1/8点），默认 4 = 0.5pt</summary>
+    public Int32 Size { get; set; } = 4;
+
+    /// <summary>边框距页面边缘的距离（缇），默认 24</summary>
+    public Int32 Space { get; set; } = 24;
+
+    /// <summary>边框距页面文字的距离（缇），默认 24</summary>
+    public Int32 OffsetFrom { get; set; } = 24; // 0=text, 1=page edge
 }
