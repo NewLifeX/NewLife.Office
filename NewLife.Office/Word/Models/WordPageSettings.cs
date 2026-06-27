@@ -42,7 +42,26 @@ public class WordPageSettings
 
     /// <summary>页面边框设置（null 表示无边框）</summary>
     public WordPageBorder? PageBorder { get; set; }
+
+    /// <summary>行号设置（null 表示无行号）</summary>
+    public WordLineNumberSettings? LineNumber { get; set; }
     #endregion
+}
+
+/// <summary>行号设置</summary>
+public class WordLineNumberSettings
+{
+    /// <summary>起始编号（默认 1）</summary>
+    public Int32 Start { get; set; } = 1;
+
+    /// <summary>每隔几行显示行号（默认 1=每行）</summary>
+    public Int32 CountBy { get; set; } = 1;
+
+    /// <summary>行号距正文距离（twips，默认 180=0.125英寸）</summary>
+    public Int32 Distance { get; set; } = 180;
+
+    /// <summary>重新开始方式：newPage=每页, newSection=每节, continuous=连续</summary>
+    public String Restart { get; set; } = "newPage";
 }
 
 /// <summary>页面边框设置</summary>

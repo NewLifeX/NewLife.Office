@@ -942,6 +942,19 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
             ps.PageBorder = pb;
         }
 
+        // 行号
+        var lnNumType = sectPr.SelectSingleNode("w:lnNumType", ns) as XmlElement;
+        if (lnNumType != null)
+        {
+            var ln = new WordLineNumberSettings();
+            if (Int32.TryParse(lnNumType.GetAttribute("w:start") ?? lnNumType.GetAttribute("start"), out var st)) ln.Start = st;
+            if (Int32.TryParse(lnNumType.GetAttribute("w:countBy") ?? lnNumType.GetAttribute("countBy"), out var cb)) ln.CountBy = cb;
+            if (Int32.TryParse(lnNumType.GetAttribute("w:distance") ?? lnNumType.GetAttribute("distance"), out var dist)) ln.Distance = dist;
+            var restart = lnNumType.GetAttribute("w:restart") ?? lnNumType.GetAttribute("restart");
+            if (!restart.IsNullOrEmpty()) ln.Restart = restart!;
+            ps.LineNumber = ln;
+        }
+
         var hdrRef = sectPr.SelectSingleNode("w:headerReference", ns) as XmlElement;
         if (hdrRef != null) { var rId = hdrRef.GetAttribute("r:id"); if (rId != null) ps.HeaderText = rId; }
 

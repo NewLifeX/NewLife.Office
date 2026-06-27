@@ -637,4 +637,78 @@ public class WordWriterTests
         sw.Write(content);
     }
     #endregion
+
+    #region 行号测试
+    [Fact(DisplayName = "行号往返读写一致")]
+    public void LineNumber_Roundtrip()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.PageSettings.LineNumber = new WordLineNumberSettings
+            {
+                Start = 10,
+                CountBy = 2,
+                Distance = 360,
+                Restart = "continuous"
+            };
+            writer.AppendParagraph("行号测试");
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotNull(doc.PageSettings.LineNumber);
+            Assert.Equal(10, doc.PageSettings.LineNumber!.Start);
+            Assert.Equal(2, doc.PageSettings.LineNumber.CountBy);
+            Assert.Equal(360, doc.PageSettings.LineNumber.Distance);
+            Assert.Equal("continuous", doc.PageSettings.LineNumber.Restart);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "行号默认不设置")]
+    public void LineNumber_Default_Null()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendParagraph("无行号");
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.Null(doc.PageSettings.LineNumber);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "行号每页重新开始")]
+    public void LineNumber_NewPage_Restart()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.PageSettings.LineNumber = new WordLineNumberSettings
+            {
+                Start = 1,
+                CountBy = 1,
+                Restart = "newPage"
+            };
+            writer.AppendParagraph("每页重编行号");
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.NotNull(doc.PageSettings.LineNumber);
+            Assert.Equal(1, doc.PageSettings.LineNumber.Start);
+            Assert.Equal(1, doc.PageSettings.LineNumber.CountBy);
+            Assert.Equal("newPage", doc.PageSettings.LineNumber.Restart);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
 }

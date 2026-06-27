@@ -749,6 +749,10 @@ public class WordWriter : IDisposable
             var orientAttr = ps.Landscape ? " w:orient=\"landscape\"" : String.Empty;
             sb.Append($"<w:pgSz w:w=\"{pgW}\" w:h=\"{pgH}\"{orientAttr}/>");
             sb.Append($"<w:pgMar w:top=\"{ps.MarginTop}\" w:right=\"{ps.MarginRight}\" w:bottom=\"{ps.MarginBottom}\" w:left=\"{ps.MarginLeft}\" w:header=\"720\" w:footer=\"720\"/>");
+            // 行号
+            var ln = ps.LineNumber;
+            if (ln != null)
+                sb.Append($"<w:lnNumType w:countBy=\"{ln.CountBy}\" w:start=\"{ln.Start}\" w:distance=\"{ln.Distance}\" w:restart=\"{ln.Restart}\"/>");
             sb.Append("</w:sectPr>");
         }
 
