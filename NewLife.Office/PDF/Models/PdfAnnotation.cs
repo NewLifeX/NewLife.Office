@@ -116,5 +116,8 @@ public class PdfAnnotation
 
     /// <summary>便签是否默认展开显示（Type=Text 时有效）</summary>
     public Boolean Open { get; set; }
+
+    /// <summary>多边形/折线顶点坐标（Type=Polygon/PolyLine 时有效），数组为交替 [x1,y1,x2,y2,...] 的磅值坐标</summary>
+    public Single[]? Vertices { get; set; }
     #endregion
 }

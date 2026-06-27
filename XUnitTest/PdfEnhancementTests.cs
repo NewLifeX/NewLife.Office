@@ -125,4 +125,80 @@ public class PdfEnhancementTests
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }
+
+    [Fact(DisplayName = "PDF—Polygon顶点写入")]
+    public void Polygon_Vertices()
+    {
+        var path = Path.GetTempFileName() + ".pdf";
+        try
+        {
+            using var writer = new PdfWriter();
+            var ann = new PdfAnnotation
+            {
+                Type = PdfAnnotationType.Polygon,
+                PageIndex = 0,
+                X = 100, Y = 700, Width = 200, Height = 100,
+                Contents = "三角形区域",
+                Vertices = [100, 700, 200, 800, 300, 700]
+            };
+            writer.AddAnnotation(ann);
+            writer.Save(path);
+
+            var pdfContent = File.ReadAllText(path);
+            Assert.Contains("/Subtype /Polygon", pdfContent);
+            Assert.Contains("/Vertices", pdfContent);
+            Assert.Contains("100.00", pdfContent);
+            Assert.Contains("800.00", pdfContent);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact(DisplayName = "PDF—PolyLine顶点写入")]
+    public void PolyLine_Vertices()
+    {
+        var path = Path.GetTempFileName() + ".pdf";
+        try
+        {
+            using var writer = new PdfWriter();
+            var ann = new PdfAnnotation
+            {
+                Type = PdfAnnotationType.PolyLine,
+                PageIndex = 0,
+                X = 50, Y = 600, Width = 300, Height = 50,
+                Contents = "折线路径",
+                Vertices = [50, 600, 150, 650, 250, 620, 350, 640]
+            };
+            writer.AddAnnotation(ann);
+            writer.Save(path);
+
+            var pdfContent = File.ReadAllText(path);
+            Assert.Contains("/Subtype /PolyLine", pdfContent);
+            Assert.Contains("/Vertices", pdfContent);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact(DisplayName = "PDF—Polygon无顶点时不含Vertices")]
+    public void Polygon_NoVertices_OmitsEntry()
+    {
+        var path = Path.GetTempFileName() + ".pdf";
+        try
+        {
+            using var writer = new PdfWriter();
+            var ann = new PdfAnnotation
+            {
+                Type = PdfAnnotationType.Polygon,
+                PageIndex = 0,
+                X = 100, Y = 700, Width = 50, Height = 50,
+                Contents = "无顶点"
+            };
+            writer.AddAnnotation(ann);
+            writer.Save(path);
+
+            var pdfContent = File.ReadAllText(path);
+            Assert.Contains("/Subtype /Polygon", pdfContent);
+            Assert.DoesNotContain("/Vertices", pdfContent);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
 }

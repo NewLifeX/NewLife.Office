@@ -1219,6 +1219,15 @@ public class PdfWriter : IDisposable
             if (ann.Type is PdfAnnotationType.Highlight or PdfAnnotationType.Underline or PdfAnnotationType.StrikeOut or PdfAnnotationType.Stamp or PdfAnnotationType.Square or PdfAnnotationType.Circle)
                 sb.Append("/C [1 0.84 0]\n"); // 默认黄色
 
+            // 多边形/折线顶点坐标
+            if (ann.Vertices != null && ann.Vertices.Length >= 4 && (ann.Type is PdfAnnotationType.Polygon or PdfAnnotationType.PolyLine))
+            {
+                sb.Append("/Vertices [");
+                for (var vi = 0; vi < ann.Vertices.Length; vi++)
+                    sb.Append($" {ann.Vertices[vi]:F2}");
+                sb.Append("]\n");
+            }
+
             sb.Append(">>");
             WriteObj(objId, sb.ToString());
 
