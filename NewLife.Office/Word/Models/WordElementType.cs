@@ -9,4 +9,6 @@ public enum WordElementType
     Table,
     /// <summary>图片</summary>
     Image,
+    /// <summary>内容控件（SDT）</summary>
+    Sdt,
 }

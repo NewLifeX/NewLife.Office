@@ -53,6 +53,9 @@ public class WordDocument
     /// <summary>文档批注列表（审阅评论）</summary>
     public List<WordComment> Comments { get; set; } = [];
 
+    /// <summary>内容控件列表（SDT）</summary>
+    public List<WordSdtElement> SdtElements { get; set; } = [];
+
     /// <summary>编号/列表定义（程序化创建列表时使用，与 NumberingXml 二选一）</summary>
     public WordNumbering? Numbering { get; set; }
 

@@ -25,6 +25,9 @@ public class WordElement
     /// <summary>图片（Type=Image 时有效）</summary>
     public WordImage? Image { get; set; }
 
+    /// <summary>内容控件（Type=Sdt 时有效）</summary>
+    public WordSdtElement? Sdt { get; set; }
+
     /// <summary>
     /// 元素原始 XML，由 Reader 将对应 <c>w:p</c>/<c>w:tbl</c> 的 OuterXml 存入。
     /// Writer 在此不为空时<strong>优先直接写入</strong>，完整保留所有内联格式

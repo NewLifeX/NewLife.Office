@@ -249,6 +249,16 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     te.RawXml = el.OuterXml; // 保存表格原始 XML
                     doc.Elements.Add(te);
                 }
+                else if (el.LocalName == "sdt")
+                {
+                    var se = ParseSdt(el, ns);
+                    if (se != null)
+                    {
+                        se.RawXml = el.OuterXml;
+                        doc.SdtElements.Add(se);
+                        doc.Elements.Add(new WordElement { Type = WordElementType.Sdt, Sdt = se, RawXml = el.OuterXml });
+                    }
+                }
                 else if (el.LocalName == "sectPr")
                 {
                     ParseSectPr(el, ns, doc);
@@ -839,11 +849,63 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
             if (Int32.TryParse(pgMar.GetAttribute("w:left") ?? pgMar.GetAttribute("left"), out var lv)) ps.MarginLeft = lv;
         }
 
+        // 分栏设置
+        var cols = sectPr.SelectSingleNode("w:cols", ns) as XmlElement;
+        if (cols != null)
+        {
+            if (Int32.TryParse(cols.GetAttribute("w:num") ?? cols.GetAttribute("num"), out var cn)) ps.ColumnCount = cn;
+            if (Int32.TryParse(cols.GetAttribute("w:space") ?? cols.GetAttribute("space"), out var cs)) ps.ColumnSpacing = cs;
+        }
+
         var hdrRef = sectPr.SelectSingleNode("w:headerReference", ns) as XmlElement;
         if (hdrRef != null) { var rId = hdrRef.GetAttribute("r:id"); if (rId != null) ps.HeaderText = rId; }
 
         var ftrRef = sectPr.SelectSingleNode("w:footerReference", ns) as XmlElement;
         if (ftrRef != null) { var rId = ftrRef.GetAttribute("r:id"); if (rId != null) ps.FooterText = rId; }
+    }
+
+    private static WordSdtElement? ParseSdt(XmlElement sdtEl, XmlNamespaceManager ns)
+    {
+        var sdt = new WordSdtElement();
+
+        // 解析 sdtPr 获取控件类型和标签
+        var sdtPr = sdtEl.SelectSingleNode("w:sdtPr", ns) as XmlElement;
+        if (sdtPr != null)
+        {
+            sdt.Tag = (sdtPr.SelectSingleNode("w:tag", ns) as XmlElement)?.GetAttribute("w:val")
+                ?? (sdtPr.SelectSingleNode("w:tag", ns) as XmlElement)?.GetAttribute("val");
+            sdt.Alias = (sdtPr.SelectSingleNode("w:alias", ns) as XmlElement)?.GetAttribute("w:val")
+                ?? (sdtPr.SelectSingleNode("w:alias", ns) as XmlElement)?.GetAttribute("val");
+
+            if (sdtPr.SelectSingleNode("w:date", ns) != null)
+                sdt.SdtType = WordSdtType.Date;
+            else if (sdtPr.SelectSingleNode("w:dropDownList", ns) != null)
+                sdt.SdtType = WordSdtType.DropDownList;
+            else if (sdtPr.SelectSingleNode("w:comboBox", ns) != null)
+                sdt.SdtType = WordSdtType.ComboBox;
+            else if (sdtPr.SelectSingleNode("w:checkBox", ns) != null)
+                sdt.SdtType = WordSdtType.CheckBox;
+            else if (sdtPr.SelectSingleNode("w:picture", ns) != null)
+                sdt.SdtType = WordSdtType.Picture;
+            else if (sdtPr.SelectSingleNode("w:repeatingSection", ns) != null)
+                sdt.SdtType = WordSdtType.RepeatingSection;
+            else if (sdtPr.SelectSingleNode("w:richText", ns) != null)
+                sdt.SdtType = WordSdtType.RichText;
+            else
+                sdt.SdtType = WordSdtType.PlainText; // 默认纯文本
+        }
+
+        // 提取内容文本（sdtContent 内的 w:t 文本）
+        var sdtContent = sdtEl.SelectSingleNode("w:sdtContent", ns) as XmlElement;
+        if (sdtContent != null)
+        {
+            var sb = new StringBuilder();
+            foreach (XmlElement t in sdtContent.SelectNodes(".//w:t", ns)!)
+                sb.Append(t.InnerText);
+            sdt.Content = sb.ToString();
+        }
+
+        return sdt;
     }
 
     private void LoadHdrFtr(Dictionary<String, String> rels, WordDocument doc)

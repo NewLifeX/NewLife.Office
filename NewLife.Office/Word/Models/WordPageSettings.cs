@@ -33,5 +33,11 @@ public class WordPageSettings
 
     /// <summary>水印文字（null 表示无水印）</summary>
     public String? WatermarkText { get; set; }
+
+    /// <summary>分栏数量（1 表示不分栏，默认 1）</summary>
+    public Int32 ColumnCount { get; set; } = 1;
+
+    /// <summary>分栏间距（twips，默认 720 = 0.5 英寸）</summary>
+    public Int32 ColumnSpacing { get; set; } = 720;
     #endregion
 }

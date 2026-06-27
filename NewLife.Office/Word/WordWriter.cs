@@ -574,6 +574,11 @@ public class WordWriter : IDisposable
                     case WordElementType.Image when el.Image != null:
                         BuildImageXml(sb, el.Image);
                         break;
+                    case WordElementType.Sdt:
+                        // SDT 通过 RawXml 透传，不单独生成 XML
+                        if (el.RawXml != null)
+                            sb.Append(el.RawXml);
+                        break;
                 }
             }
         }
@@ -593,6 +598,9 @@ public class WordWriter : IDisposable
                 sb.Append("<w:headerReference w:type=\"default\" r:id=\"rHdr1\"/>");
             if (ps.FooterText != null)
                 sb.Append("<w:footerReference w:type=\"default\" r:id=\"rFtr1\"/>");
+            // 分栏设置
+            if (ps.ColumnCount > 1)
+                sb.Append($"<w:cols w:num=\"{ps.ColumnCount}\" w:space=\"{ps.ColumnSpacing}\"/>");
             var orientAttr = ps.Landscape ? " w:orient=\"landscape\"" : String.Empty;
             sb.Append($"<w:pgSz w:w=\"{pgW}\" w:h=\"{pgH}\"{orientAttr}/>");
             sb.Append($"<w:pgMar w:top=\"{ps.MarginTop}\" w:right=\"{ps.MarginRight}\" w:bottom=\"{ps.MarginBottom}\" w:left=\"{ps.MarginLeft}\" w:header=\"720\" w:footer=\"720\"/>");
