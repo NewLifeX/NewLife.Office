@@ -44,6 +44,8 @@ partial class PptxWriter
             Slides.Add(slide);
         if (!document.Properties.Password.IsNullOrEmpty())
             SetProtection(document.Properties.Password);
+        _documentProperties = document.Properties;
+        HeaderFooter = document.HeaderFooter;
         Save(stream);
     }
 
@@ -86,6 +88,8 @@ partial class PptxWriter
             es.Write(kv.Value, 0, kv.Value.Length);
         }
         WriteTheme(za);
+        WriteDocProps(za);
+        WriteComments(za);
     }
     #endregion
 
@@ -183,6 +187,25 @@ partial class PptxWriter
         // 嵌入字体类型
         if (_embeddedFonts.Count > 0)
             sb.Append("<Default Extension=\"fntdata\" ContentType=\"application/vnd.ms-office.activeX+xml\"/>");
+
+        // docProps（S14）
+        if (_documentProperties != null)
+        {
+            sb.Append("<Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/>");
+            sb.Append("<Override PartName=\"/docProps/app.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.extended-properties+xml\"/>");
+        }
+
+        // comments（S13-01）
+        if (Slides.Any(s => s.Comments.Count > 0))
+        {
+            sb.Append("<Override PartName=\"/ppt/comments/commentAuthors.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.commentAuthors+xml\"/>");
+            for (var i = 0; i < Slides.Count; i++)
+            {
+                if (Slides[i].Comments.Count > 0)
+                    sb.Append($"<Override PartName=\"/ppt/comments/comment{i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.comments+xml\"/>");
+            }
+        }
+
         sb.Append("</Types>");
         WriteEntry(za, "[Content_Types].xml", sb.ToString());
     }
@@ -221,6 +244,24 @@ partial class PptxWriter
             sb.Append($"<p:sldId id=\"{256 + Slides.Count + i}\" r:id=\"rSlide{Slides.Count + i + 1}\"/>");
         }
         sb.Append("</p:sldIdLst>");
+        // 全局页眉页脚（S13-03）
+        var hf = HeaderFooter;
+        if (hf != null && (hf.ShowFooter || hf.ShowPageNumber || hf.ShowDate))
+        {
+            sb.Append("<p:hf");
+            if (hf.ShowFooter) sb.Append($" footer=\"{EscXml(hf.FooterText ?? String.Empty)}\"");
+            if (hf.ShowPageNumber) sb.Append(" showSlideNum=\"1\"");
+            if (hf.ShowDate)
+            {
+                sb.Append(" dt=\"1\"");
+                if (!hf.DateAutomatic && hf.FixedDate != null)
+                    sb.Append($" fdt=\"{EscXml(hf.FixedDate)}\"");
+                if (hf.DateFormat != null)
+                    sb.Append($" dfmt=\"{EscXml(hf.DateFormat)}\"");
+            }
+            sb.Append("/>");
+        }
+
         // 演示文稿保护（S07-04）
         if (_protectionHash != null)
             sb.Append($"<p:modifyVerifier algorithmName=\"SHA-512\" hashData=\"{_protectionHash}\" saltData=\"{_protectionSalt}\" spinCount=\"100000\"/>");
@@ -517,6 +558,21 @@ partial class PptxWriter
             sb.Append("</p:grpSp>");
         }
 
+        // connectors（连接器，S13-02）
+        foreach (var cn in slide.Connectors)
+        {
+            sb.Append($"<p:cxnSp><p:nvCxnSpPr><p:cNvPr id=\"{shapeId++}\" name=\"Connector\"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>");
+            sb.Append("<p:spPr>");
+            sb.Append($"<a:xfrm><a:off x=\"{cn.Left}\" y=\"{cn.Top}\"/><a:ext cx=\"{cn.Width}\" cy=\"{cn.Height}\"/></a:xfrm>");
+            var lineColor = cn.LineColor ?? "000000";
+            var prstDash = cn.DashStyle != null ? $"<a:prstDash val=\"{cn.DashStyle}\"/>" : "";
+            var tailEnd = cn.StartArrow != null ? $"<a:tailEnd type=\"{cn.StartArrow}\"/>" : "";
+            var headEnd = cn.EndArrow != null ? $"<a:headEnd type=\"{cn.EndArrow}\"/>" : "";
+            sb.Append($"<a:prstGeom prst=\"{cn.ConnectorType}Connector1\"><a:avLst/></a:prstGeom>");
+            sb.Append($"<a:ln w=\"{cn.LineWidth}\">{prstDash}<a:solidFill><a:srgbClr val=\"{lineColor}\"/></a:solidFill>{tailEnd}{headEnd}</a:ln>");
+            sb.Append("</p:spPr></p:cxnSp>");
+        }
+
         sb.Append("</p:spTree></p:cSld>");
 
         // notes
@@ -619,6 +675,125 @@ partial class PptxWriter
         foreach (var chart in slide.Charts)
         {
             WriteChartXml(za, chart);
+        }
+    }
+
+    /// <summary>写入文档属性（docProps/core.xml 和 docProps/app.xml），S14-01/S14-02</summary>
+    private void WriteDocProps(ZipArchive za)
+    {
+        var props = _documentProperties;
+        if (props == null) return;
+        var hasTitle = !props.Title.IsNullOrEmpty();
+        var hasAuthor = !props.Author.IsNullOrEmpty();
+        var hasSubject = !props.Subject.IsNullOrEmpty();
+        var hasDesc = !props.Description.IsNullOrEmpty();
+        if (!hasTitle && !hasAuthor && !hasSubject && !hasDesc) return;
+
+        // core.xml
+        var coreSb = new StringBuilder();
+        coreSb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        coreSb.Append("<cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\"");
+        coreSb.Append(" xmlns:dc=\"http://purl.org/dc/elements/1.1/\"");
+        coreSb.Append(" xmlns:dcterms=\"http://purl.org/dc/terms/\"");
+        coreSb.Append(" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">");
+        if (hasTitle)
+            coreSb.Append($"<dc:title>{EscXml(props.Title!)}</dc:title>");
+        if (hasAuthor)
+            coreSb.Append($"<dc:creator>{EscXml(props.Author!)}</dc:creator>");
+        if (hasSubject)
+            coreSb.Append($"<dc:subject>{EscXml(props.Subject!)}</dc:subject>");
+        if (hasDesc)
+            coreSb.Append($"<dc:description>{EscXml(props.Description!)}</dc:description>");
+        var now = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ");
+        coreSb.Append($"<dcterms:created xsi:type=\"dcterms:W3CDTF\">{now}</dcterms:created>");
+        coreSb.Append($"<dcterms:modified xsi:type=\"dcterms:W3CDTF\">{now}</dcterms:modified>");
+        coreSb.Append("</cp:coreProperties>");
+        WriteZipEntryText(za, "docProps/core.xml", coreSb.ToString());
+
+        // app.xml
+        var appSb = new StringBuilder();
+        appSb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        appSb.Append("<Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\">");
+        var totalSlides = Slides.Count + _rawSlides.Count;
+        appSb.Append($"<Slides>{totalSlides}</Slides>");
+        if (!props.Author.IsNullOrEmpty())
+            appSb.Append($"<Company>{EscXml(props.Author!)}</Company>");
+        appSb.Append("</Properties>");
+        WriteZipEntryText(za, "docProps/app.xml", appSb.ToString());
+    }
+
+    /// <summary>写入批注（ppt/comments/commentAuthors.xml 和各幻灯片 comments XML），S13-01</summary>
+    private void WriteComments(ZipArchive za)
+    {
+        // 收集所有幻灯片的批注，确保每个幻灯片内 Index 从 1 开始
+        var allCommentSlides = new List<Int32>();
+        var allCommentItems = new List<PptComment>();
+        var uniqueAuthors = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < Slides.Count; i++)
+        {
+            var comments = Slides[i].Comments;
+            for (var ci = 0; ci < comments.Count; ci++)
+            {
+                var c = comments[ci];
+                c.Index = ci + 1;
+                allCommentSlides.Add(i);
+                allCommentItems.Add(c);
+                var name = c.Author ?? "unknown";
+                var id = c.AuthorId ?? name;
+                if (!uniqueAuthors.ContainsKey(name))
+                    uniqueAuthors[name] = id;
+            }
+        }
+        if (allCommentItems.Count == 0) return;
+
+        // commentAuthors.xml — 全局唯一，记录所有批注作者
+        var authSb = new StringBuilder();
+        authSb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        authSb.Append("<p:cmAuthorLst xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">");
+        var authorIdMap = new Dictionary<String, Int32>(StringComparer.OrdinalIgnoreCase);
+        var authId = 0;
+        foreach (var kv in uniqueAuthors)
+        {
+            var name = kv.Key;
+            var uid = kv.Value;
+            authorIdMap[name] = authId;
+            var initial = name.Length > 2 ? name.Substring(0, 2) : name;
+            authSb.Append($"<p:cmAuthor id=\"{authId}\" name=\"{EscXml(name)}\" initials=\"{EscXml(initial)}\"");
+            authSb.Append($" uid=\"{EscXml(uid)}\" lastIdx=\"{allCommentItems.Count}\"/>");
+            authId++;
+        }
+        authSb.Append("</p:cmAuthorLst>");
+        WriteZipEntryText(za, "ppt/comments/commentAuthors.xml", authSb.ToString());
+
+        // 为每个有批注的幻灯片生成 comments{N}.xml — 按 slideIdx 分组
+        var slideMap = new Dictionary<Int32, List<PptComment>>();
+        for (var i = 0; i < allCommentSlides.Count; i++)
+        {
+            var idx = allCommentSlides[i];
+            if (!slideMap.TryGetValue(idx, out var list))
+                slideMap[idx] = list = [];
+            list.Add(allCommentItems[i]);
+        }
+        foreach (var kv in slideMap)
+        {
+            var slideIdx = kv.Key;
+            var slideCommentList = kv.Value;
+            var csb = new StringBuilder();
+            csb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            csb.Append("<p:cmLst xmlns:p=\"http://schemas.openxmlformats.org/presentationml/2006/main\">");
+            foreach (var comment in slideCommentList)
+            {
+                authorIdMap.TryGetValue(comment.Author ?? "unknown", out var ai);
+                var dateStr = (comment.Date ?? DateTime.UtcNow).ToString("yyyy-MM-ddTHH:mm:ssZ");
+                csb.Append($"<p:cm authorId=\"{ai}\" dt=\"{dateStr}\" idx=\"{comment.Index}\">");
+                csb.Append("<p:pos ");
+                csb.Append($"x=\"{(Int32)(comment.X * SlideWidth)}\" ");
+                csb.Append($"y=\"{(Int32)(comment.Y * SlideHeight)}\"/>");
+                csb.Append($"<p:text>{EscXml(comment.Text ?? String.Empty)}</p:text>");
+                csb.Append("</p:cm>");
+            }
+            csb.Append("</p:cmLst>");
+            WriteZipEntryText(za, $"ppt/comments/comment{slideIdx + 1}.xml", csb.ToString());
         }
     }
 
@@ -798,11 +973,28 @@ partial class PptxWriter
             for (var ci = 0; ci < row.Length; ci++)
             {
                 tbl.CellStyles.TryGetValue((ri, ci), out var cs);
+                tbl.MergedCells.TryGetValue((ri, ci), out var merge);
+                tbl.CellBorders.TryGetValue((ri, ci), out var border);
                 var isBold = isHeaderRow || (cs?.Bold ?? false);
                 var cellSz = (cs?.FontSize ?? 0) > 0 ? cs!.FontSize : 0;
                 var cellFc = cs?.FontColor;
                 var cellBg = cs?.BackgroundColor;
-                sb.Append("<a:tc><a:txBody><a:bodyPr/><a:lstStyle/>");
+                sb.Append("<a:tc");
+                if (merge.ColSpan > 1) sb.Append($" gridSpan=\"{merge.ColSpan}\"");
+                if (merge.RowSpan > 1) sb.Append($" rowSpan=\"{merge.RowSpan}\"");
+                // 被合并的后续单元格：RowSpan 向上合并的隐藏单元格（vmMerge=1）
+                var vmMerge = false;
+                for (var pr = 0; pr < ri; pr++)
+                {
+                    tbl.MergedCells.TryGetValue((pr, ci), out var prevMerge);
+                    if (prevMerge.RowSpan > 1 && ri < pr + prevMerge.RowSpan)
+                    {
+                        vmMerge = true;
+                        break;
+                    }
+                }
+                if (vmMerge) sb.Append(" vMerge=\"1\"");
+                sb.Append("><a:txBody><a:bodyPr/><a:lstStyle/>");
                 sb.Append("<a:p><a:r>");
                 sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\"{(isBold ? " b=\"1\"" : "")}{(cellSz > 0 ? $" sz=\"{cellSz * 100}\"" : "")} dirty=\"0\">");
                 if (cellFc != null)
@@ -810,8 +1002,26 @@ partial class PptxWriter
                 sb.Append("</a:rPr>");
                 sb.Append($"<a:t>{EscXml(row[ci])}</a:t>");
                 sb.Append("</a:r></a:p></a:txBody>");
-                if (cellBg != null)
-                    sb.Append($"<a:tcPr><a:solidFill><a:srgbClr val=\"{cellBg.TrimStart('#')}\"/></a:solidFill></a:tcPr>");
+                if (cellBg != null || border != null || vmMerge)
+                {
+                    sb.Append("<a:tcPr");
+                    if (vmMerge) sb.Append(" vMerge=\"1\"");
+                    sb.Append('>');
+                    if (cellBg != null)
+                        sb.Append($"<a:solidFill><a:srgbClr val=\"{cellBg.TrimStart('#')}\"/></a:solidFill>");
+                    if (border != null)
+                    {
+                        if (border.LeftColor != null)
+                            sb.Append($"<a:lnL w=\"{border.LeftWidth}\"><a:solidFill><a:srgbClr val=\"{border.LeftColor.TrimStart('#')}\"/></a:solidFill></a:lnL>");
+                        if (border.RightColor != null)
+                            sb.Append($"<a:lnR w=\"{border.RightWidth}\"><a:solidFill><a:srgbClr val=\"{border.RightColor.TrimStart('#')}\"/></a:solidFill></a:lnR>");
+                        if (border.TopColor != null)
+                            sb.Append($"<a:lnT w=\"{border.TopWidth}\"><a:solidFill><a:srgbClr val=\"{border.TopColor.TrimStart('#')}\"/></a:solidFill></a:lnT>");
+                        if (border.BottomColor != null)
+                            sb.Append($"<a:lnB w=\"{border.BottomWidth}\"><a:solidFill><a:srgbClr val=\"{border.BottomColor.TrimStart('#')}\"/></a:solidFill></a:lnB>");
+                    }
+                    sb.Append("</a:tcPr>");
+                }
                 else
                     sb.Append("<a:tcPr/>");
                 sb.Append("</a:tc>");

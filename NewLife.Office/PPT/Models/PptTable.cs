@@ -27,5 +27,11 @@ public class PptTable
 
     /// <summary>单元格样式字典，键为 (行索引, 列索引)，优先级高于行级默认样式</summary>
     public Dictionary<(Int32 Row, Int32 Col), PptCellStyle> CellStyles { get; } = [];
+
+    /// <summary>单元格合并字典（S11-01），键为 (起始行, 起始列)，值为 (跨列数, 跨行数)</summary>
+    public Dictionary<(Int32 Row, Int32 Col), (Int32 ColSpan, Int32 RowSpan)> MergedCells { get; } = [];
+
+    /// <summary>单元格边框样式（S11-02），键为 (行索引, 列索引)</summary>
+    public Dictionary<(Int32 Row, Int32 Col), PptCellBorder> CellBorders { get; } = [];
     #endregion
 }

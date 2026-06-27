@@ -398,12 +398,15 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     case "pic": ParsePicture(el, slide, rels); break;
                     case "graphicFrame": ParseGraphicFrame(el, slide, rels); break;
                     case "grpSp": ParseGroup(el, slide, rels, layoutDefaults); break;
+                    case "cxnSp": ParseConnector(el, slide); break;
                 }
             }
         }
 
         ParseNotes(doc, slide);
         ParseTransition(doc, slide);
+        ParseSlideComments(slideIndex, slide);
+        ParseSlideAnimations(doc, slide);
 
         return slide;
     }
@@ -430,6 +433,8 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         var count = GetSlideCount();
         for (var i = 0; i < count; i++)
             doc.Slides.Add(ReadSlide(i));
+        ParseDocProps(doc);
+        ParseHeaderFooter(doc);
         return doc;
     }
     #endregion
@@ -1332,6 +1337,172 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
             break;
         }
         slide.Transition = tr;
+    }
+
+    /// <summary>解析连接器（S13-02 Reader 侧）</summary>
+    private static void ParseConnector(XmlElement cxnSp, PptSlide slide)
+    {
+        var xfrm = cxnSp.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement;
+        var (l, t, w, h) = ParseXfrm(xfrm);
+        var prstGeom = cxnSp.SelectSingleNode(".//*[local-name()='prstGeom']") as XmlElement;
+        var prst = prstGeom?.GetAttribute("prst") ?? "straightConnector1";
+        // 去掉 Connector1 后缀还原为类型名
+        var ct = prst.Replace("Connector1", "").Replace("1", "");
+        var (lc, lw) = ParseLine(cxnSp.SelectSingleNode(".//*[local-name()='spPr']") as XmlElement);
+        var ln = cxnSp.SelectSingleNode(".//*[local-name()='ln']") as XmlElement;
+        var tailEnd = ln?.SelectSingleNode("*[local-name()='tailEnd']") as XmlElement;
+        var headEnd = ln?.SelectSingleNode("*[local-name()='headEnd']") as XmlElement;
+        var prstDash = ln?.SelectSingleNode("*[local-name()='prstDash']") as XmlElement;
+        slide.Connectors.Add(new PptConnector
+        {
+            Left = l, Top = t, Width = w, Height = h,
+            ConnectorType = ct.Length > 0 ? ct : "straight",
+            LineColor = lc,
+            LineWidth = lw > 0 ? (Int32)lw : 9525,
+            StartArrow = tailEnd?.GetAttribute("type"),
+            EndArrow = headEnd?.GetAttribute("type"),
+            DashStyle = prstDash?.GetAttribute("val"),
+        });
+    }
+
+    /// <summary>解析幻灯片批注（S13-01 Reader 侧）</summary>
+    private void ParseSlideComments(Int32 slideIndex, PptSlide slide)
+    {
+        var commentsEntry = _zip.GetEntry($"ppt/comments/comment{slideIndex + 1}.xml");
+        if (commentsEntry == null) return;
+        var doc = LoadXml(commentsEntry);
+        var authorsDoc = TryLoadCommentsAuthors();
+        var authorMap = new Dictionary<String, String>();
+        if (authorsDoc != null)
+        {
+            foreach (XmlElement author in authorsDoc.SelectNodes("//*[local-name()='cmAuthor']")!)
+            {
+                var aId = author.GetAttribute("id");
+                var aName = author.GetAttribute("name");
+                var aUid = author.GetAttribute("uid");
+                if (aId.Length > 0) authorMap[aId] = aName;
+            }
+        }
+        var idx = 0;
+        foreach (XmlElement cm in doc.SelectNodes("//*[local-name()='cm']")!)
+        {
+            var c = new PptComment { Index = ++idx };
+            c.Author = authorMap.TryGetValue(cm.GetAttribute("authorId"), out var name) ? name : cm.GetAttribute("authorId");
+            var dtStr = cm.GetAttribute("dt");
+            if (DateTime.TryParse(dtStr, out var dt)) c.Date = dt;
+            var pos = cm.SelectSingleNode("*[local-name()='pos']") as XmlElement;
+            if (pos != null)
+            {
+                if (Int32.TryParse(pos.GetAttribute("x"), out var px) && SlideWidth > 0) c.X = (Single)px / SlideWidth;
+                if (Int32.TryParse(pos.GetAttribute("y"), out var py) && SlideHeight > 0) c.Y = (Single)py / SlideHeight;
+            }
+            c.Text = cm.SelectSingleNode("*[local-name()='text']")?.InnerText;
+            slide.Comments.Add(c);
+        }
+    }
+
+    /// <summary>加载批注作者列表</summary>
+    private XmlDocument? TryLoadCommentsAuthors()
+    {
+        var entry = _zip.GetEntry("ppt/comments/commentAuthors.xml");
+        return entry != null ? LoadXml(entry) : null;
+    }
+
+    /// <summary>解析幻灯片元素动画（S12 Reader 侧）</summary>
+    private static void ParseSlideAnimations(XmlDocument sldDoc, PptSlide slide)
+    {
+        var timing = sldDoc.SelectSingleNode("//*[local-name()='timing']") as XmlElement;
+        if (timing == null) return;
+        // 遍历 <p:par>（顺序容器）下的动画节点
+        var order = 0;
+        foreach (XmlElement par in timing.SelectNodes(".//*[local-name()='par']")!)
+        {
+            foreach (XmlNode child in par.ChildNodes)
+            {
+                if (child is not XmlElement el) continue;
+                var localName = el.LocalName;
+                // 识别动画类型：animEffect(进入)/animEmph(强调)/animMotion(路径)
+                var category = localName switch
+                {
+                    "animEffect" => PptAnimationCategory.Entrance,
+                    "animEmph" => PptAnimationCategory.Emphasis,
+                    "animMotion" => PptAnimationCategory.MotionPath,
+                    _ => PptAnimationCategory.Entrance,
+                };
+                var cBhvr = el.SelectSingleNode("*[local-name()='cBhvr']") as XmlElement;
+                if (cBhvr == null) continue;
+                var anim = new PptAnimation
+                {
+                    Order = order++,
+                    Category = category,
+                    Effect = el.GetAttribute("filter") ?? el.LocalName,
+                };
+                // 目标形状
+                var tgt = cBhvr.SelectSingleNode("*[local-name()='tgtEl']/*[local-name()='spTgt']") as XmlElement;
+                if (tgt != null && Int32.TryParse(tgt.GetAttribute("spid"), out var spid))
+                    anim.TargetIndex = spid;
+                // 时长
+                var durEl = cBhvr.SelectSingleNode("*[local-name()='cTn']") as XmlElement;
+                if (durEl != null)
+                {
+                    var durVal = durEl.GetAttribute("dur");
+                    if (durVal.Length > 0) anim.DurationMs = (Int32)(ParseDuration(durVal) / 1000);
+                }
+                slide.Animations.Add(anim);
+            }
+        }
+    }
+
+    /// <summary>解析动画时长（如 "indefinite" 或毫秒数）</summary>
+    private static Int64 ParseDuration(String val) => Int64.TryParse(val, out var ms) ? ms : 0;
+
+    /// <summary>解析文档属性（S14-03 Reader 侧）</summary>
+    private void ParseDocProps(PptDocument doc)
+    {
+        // core.xml
+        var coreEntry = _zip.GetEntry("docProps/core.xml");
+        if (coreEntry != null)
+        {
+            var coreDoc = LoadXml(coreEntry);
+            doc.Properties.Title = coreDoc.SelectSingleNode("//*[local-name()='title']")?.InnerText;
+            doc.Properties.Author = coreDoc.SelectSingleNode("//*[local-name()='creator']")?.InnerText;
+            doc.Properties.Subject = coreDoc.SelectSingleNode("//*[local-name()='subject']")?.InnerText;
+            doc.Properties.Description = coreDoc.SelectSingleNode("//*[local-name()='description']")?.InnerText;
+        }
+        // app.xml
+        var appEntry = _zip.GetEntry("docProps/app.xml");
+        if (appEntry != null)
+        {
+            var appDoc = LoadXml(appEntry);
+            var company = appDoc.SelectSingleNode("//*[local-name()='Company']")?.InnerText;
+            if (!company.IsNullOrEmpty() && doc.Properties.Author.IsNullOrEmpty())
+                doc.Properties.Author = company;
+        }
+    }
+
+    /// <summary>解析全局页眉页脚（S13-03 Reader 侧）</summary>
+    private void ParseHeaderFooter(PptDocument doc)
+    {
+        var presEntry = _zip.GetEntry("ppt/presentation.xml");
+        if (presEntry == null) return;
+        var presDoc = LoadXml(presEntry);
+        var hf = presDoc.SelectSingleNode("//*[local-name()='hf']") as XmlElement;
+        if (hf == null) return;
+        var footer = hf.GetAttribute("footer");
+        var showSlideNum = hf.GetAttribute("showSlideNum");
+        var dt = hf.GetAttribute("dt");
+        var fdt = hf.GetAttribute("fdt");
+        var dfmt = hf.GetAttribute("dfmt");
+        doc.HeaderFooter = new PptHeaderFooter
+        {
+            ShowFooter = footer.Length > 0,
+            FooterText = footer.Length > 0 ? footer : null,
+            ShowPageNumber = showSlideNum == "1",
+            ShowDate = dt == "1",
+            DateAutomatic = fdt.Length == 0,
+            FixedDate = fdt.Length > 0 ? fdt : null,
+            DateFormat = dfmt.Length > 0 ? dfmt : null,
+        };
     }
 
     private static String? ParseFillColor(XmlElement? parent)

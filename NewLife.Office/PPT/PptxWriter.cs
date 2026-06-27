@@ -26,6 +26,9 @@ public partial class PptxWriter : IDisposable
 
     /// <summary>主题强调色（6个，默认 Office 配色，可通过 SetAccentColors 修改）</summary>
     public String[] AccentColors { get; set; } = ["4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F79646"];
+
+    /// <summary>全局页眉页脚设置（S13-03），null 表示不加页脚</summary>
+    public PptHeaderFooter? HeaderFooter { get; set; }
     #endregion
 
     #region 私有字段
@@ -50,6 +53,9 @@ public partial class PptxWriter : IDisposable
     private readonly List<PptMaster> _progMasters = [];
     // 嵌入字体：文件名→字节数据（ppt/fonts/*.fntdata）
     private readonly Dictionary<String, Byte[]> _embeddedFonts = [];
+
+    // 文档属性（docProps，S14-01/S14-02），从 PptDocument.Properties 委托  
+    private PptDocumentProperties? _documentProperties;
 
     /// <summary>最小有效 PNG（1×1 黑色像素，67 字节），用作视频无缩略图时的占位</summary>
     private static readonly Byte[] MinimalPng =
