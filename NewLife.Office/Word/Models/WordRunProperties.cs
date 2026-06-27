@@ -40,5 +40,20 @@ public class WordRunProperties
 
     /// <summary>字符缩放百分比（100=正常, 150=宽150%, 80=窄80%）</summary>
     public Int32? CharacterScaling { get; set; }
+
+    /// <summary>发光颜色（16进制 RGB，如 "FFD700"）。设置后自动启用发光效果</summary>
+    public String? GlowColor { get; set; }
+
+    /// <summary>发光半径（EMU，默认 254000 = 10pt）</summary>
+    public Int64? GlowSize { get; set; }
+
+    /// <summary>阴影颜色（16进制 RGB，如 "808080"）。设置后自动启用阴影效果</summary>
+    public String? ShadowColor { get; set; }
+
+    /// <summary>阴影 X 偏移（EMU，正值=右偏移，默认 25400 = 1pt）</summary>
+    public Int64? ShadowOffsetX { get; set; }
+
+    /// <summary>阴影 Y 偏移（EMU，正值=下偏移，默认 25400 = 1pt）</summary>
+    public Int64? ShadowOffsetY { get; set; }
     #endregion
 }

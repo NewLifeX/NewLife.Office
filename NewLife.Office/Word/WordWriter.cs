@@ -427,6 +427,17 @@ public class WordWriter : IDisposable
 
     private static String Esc(String? s) => s == null ? String.Empty : (SecurityElement.Escape(s) ?? s);
 
+    /// <summary>将阴影偏移量转换为 OOXML w14:dir 角度（1/60000 度单位，顺时针从顶部量起）</summary>
+    private static Int32 ShadowDirToAngle(Int64 dx, Int64 dy)
+    {
+        // w14:dir 角度：0=向上/顶部，顺时针递增，单位为 1/60000 度
+        if (dx == 0 && dy == 0) return 0;
+        var angleRad = Math.Atan2(dx, -dy); // dx=正→右, dy=正→下; -dy 让上方为 0
+        var angleDeg = angleRad * 180.0 / Math.PI;
+        if (angleDeg < 0) angleDeg += 360.0;
+        return (Int32)(angleDeg * 60000);
+    }
+
     /// <summary>写入所有透传部件（主题/字体表/脚注/尾注/页眉页脚 raw XML 等）</summary>
     private void WriteOtherParts(ZipArchive za)
     {
@@ -1044,6 +1055,22 @@ public class WordWriter : IDisposable
             if (p.CharacterScaling.HasValue) sb.Append($"<w:w w:val=\"{p.CharacterScaling.Value}\"/>");
             if (p.FontName != null) sb.Append($"<w:rFonts w:ascii=\"{Esc(p.FontName)}\" w:hAnsi=\"{Esc(p.FontName)}\" w:eastAsia=\"{Esc(p.FontName)}\"/>");
             if (run.HyperlinkRelId != null) sb.Append("<w:rStyle w:val=\"Hyperlink\"/><w:color w:val=\"0563C1\"/><w:u w:val=\"single\"/>");
+            // 文字发光效果 (w14:glow)
+            if (p.GlowColor != null)
+            {
+                var rad = p.GlowSize ?? 254000; // EMU，默认 10pt
+                sb.Append($"<w14:glow w14:rad=\"{rad}\"><w14:srgbClr val=\"{p.GlowColor.TrimStart('#')}\"/></w14:glow>");
+            }
+            // 文字阴影效果 (w14:shadow)
+            if (p.ShadowColor != null)
+            {
+                var blurRad = 63500; // EMU，默认 2.5pt
+                var dist = p.ShadowOffsetX != null || p.ShadowOffsetY != null
+                    ? (Int64)Math.Sqrt((Double)((p.ShadowOffsetX ?? 0) * (p.ShadowOffsetX ?? 0) + (p.ShadowOffsetY ?? 0) * (p.ShadowOffsetY ?? 0)))
+                    : 25400L;
+                var dir = ShadowDirToAngle(p.ShadowOffsetX ?? 25400, p.ShadowOffsetY ?? 25400);
+                sb.Append($"<w14:shadow w14:blurRad=\"{blurRad}\" w14:dist=\"{dist}\" w14:dir=\"{dir}\"><w14:srgbClr val=\"{p.ShadowColor.TrimStart('#')}\"/></w14:shadow>");
+            }
             sb.Append("</w:rPr>");
         }
         var spaceAttr = (run.Text.Length > 0 && (run.Text[0] == ' ' || run.Text[^1] == ' '))

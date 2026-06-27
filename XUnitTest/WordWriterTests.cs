@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using System.Text;
 using NewLife.Office;
 using Xunit;
 
@@ -772,6 +774,75 @@ public class WordWriterTests
             var doc = reader.ReadDocument();
             Assert.NotEmpty(doc.Elements);
             Assert.True(doc.Elements.Count >= 2);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
+
+    #region 文字效果
+    [Fact(DisplayName = "发光文字—写入w14:glow并验证")]
+    public void GlowText_WritesGlowXml()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            var para = new WordParagraph();
+            para.Runs.Add(new WordRun
+            {
+                Text = "发光文字",
+                Properties = new WordRunProperties
+                {
+                    FontSize = 14,
+                    GlowColor = "FFD700",
+                    GlowSize = 254000 // 10pt
+                }
+            });
+            writer.AppendParagraph(para);
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var za = new ZipArchive(File.OpenRead(tempFile), ZipArchiveMode.Read);
+            var entry = za.GetEntry("word/document.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("w14:glow", xml);
+            Assert.Contains("FFD700", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "阴影文字—写入w14:shadow并验证")]
+    public void ShadowText_WritesShadowXml()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            var para = new WordParagraph();
+            para.Runs.Add(new WordRun
+            {
+                Text = "阴影文字",
+                Properties = new WordRunProperties
+                {
+                    FontSize = 16,
+                    ShadowColor = "808080",
+                    ShadowOffsetX = 25400,
+                    ShadowOffsetY = 25400
+                }
+            });
+            writer.AppendParagraph(para);
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var za = new ZipArchive(File.OpenRead(tempFile), ZipArchiveMode.Read);
+            var entry = za.GetEntry("word/document.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("w14:shadow", xml);
+            Assert.Contains("808080", xml);
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
