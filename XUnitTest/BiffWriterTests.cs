@@ -380,6 +380,68 @@ public class BiffWriterTests
 
     #endregion
 
+    #region 数字格式
+
+    [Fact]
+    [DisplayName("设置列数字格式—日期格式")]
+    public void SetColumnNumberFormat_Date()
+    {
+        using var writer = new BiffWriter();
+        writer.WriteHeader(["日期", "数值"]);
+        writer.SetColumnNumberFormat(0, "yyyy-mm-dd");
+        writer.WriteRow([new DateTime(2025, 6, 15), 12345.67]);
+
+        var bytes = writer.ToBytes();
+        Assert.True(bytes.Length > 512);
+
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        var rows = reader.ReadSheet().ToList();
+        Assert.Equal(2, rows.Count);
+        var dateVal = rows[1][0];
+        Assert.NotNull(dateVal);
+    }
+
+    [Fact]
+    [DisplayName("设置列数字格式—货币格式")]
+    public void SetColumnNumberFormat_Currency()
+    {
+        using var writer = new BiffWriter();
+        writer.WriteHeader(["商品", "价格"]);
+        writer.SetColumnNumberFormat(1, "#,##0.00");
+        writer.WriteRow(["产品A", 1234.5]);
+
+        var bytes = writer.ToBytes();
+        Assert.True(bytes.Length > 512);
+
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        var rows = reader.ReadSheet().ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(1234.5, rows[1][1]);
+    }
+
+    [Fact]
+    [DisplayName("设置列数字格式—多列不同格式")]
+    public void SetColumnNumberFormat_MultiColumn()
+    {
+        using var writer = new BiffWriter();
+        writer.WriteHeader(["日期", "金额", "百分比"]);
+        writer.SetColumnNumberFormat(0, "yyyy/mm/dd");
+        writer.SetColumnNumberFormat(1, "¥#,##0.00");
+        writer.SetColumnNumberFormat(2, "0.00%");
+        writer.WriteRow([new DateTime(2025, 1, 1), 9999.99, 0.85]);
+
+        var bytes = writer.ToBytes();
+        Assert.True(bytes.Length > 512);
+
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        var rows = reader.ReadSheet().ToList();
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(9999.99, rows[1][1]);
+        Assert.Equal(0.85, rows[1][2]);
+    }
+
+    #endregion
+
     #region 辅助类型
 
     private class SampleModel

@@ -78,6 +78,9 @@ public sealed class BiffWriter : IDisposable
     // 列宽：Key = sheetName, Value = (colIndex → width)
     private readonly Dictionary<String, Dictionary<Int32, Int32>> _sheetColWidths = new(StringComparer.Ordinal);
 
+    // 列数字格式：Key = sheetName, Value = (colIndex → formatString)
+    private readonly Dictionary<String, Dictionary<Int32, String>> _columnFormats = new(StringComparer.Ordinal);
+
     private String _currentSheet = "Sheet1";
     private Boolean _disposed;
 
@@ -178,6 +181,19 @@ public sealed class BiffWriter : IDisposable
         colMap[columnIndex] = (Int32)(width * 256);
     }
 
+    /// <summary>设置当前工作表中指定列的数字格式</summary>
+    /// <param name="columnIndex">列索引（0基）</param>
+    /// <param name="format">Excel 数字格式字符串（如 yyyy-mm-dd、#,##0.00、0%）</param>
+    public void SetColumnNumberFormat(Int32 columnIndex, String format)
+    {
+        if (!_columnFormats.TryGetValue(_currentSheet, out var colMap))
+        {
+            colMap = [];
+            _columnFormats[_currentSheet] = colMap;
+        }
+        colMap[columnIndex] = format;
+    }
+
     #endregion
 
     #region 保存
@@ -261,20 +277,50 @@ public sealed class BiffWriter : IDisposable
         using var ms = new MemoryStream();
         using var bw = new BinaryWriter(ms, Encoding.Unicode, leaveOpen: true);
 
+        // 提前收集格式映射（需要先于字体/XF 记录使用）
+        var formatMap = new Dictionary<String, Int32>(); // formatString → formatIndex
+        var nextFormatIdx = 165;
+        foreach (var sheetName in _sheetNames)
+        {
+            if (!_columnFormats.TryGetValue(sheetName, out var colFmts)) continue;
+            foreach (var kv in colFmts)
+            {
+                var fmt = kv.Value;
+                if (!formatMap.ContainsKey(fmt))
+                    formatMap[fmt] = nextFormatIdx++;
+            }
+        }
+
+        // 为每个自定义格式创建 XF 索引
+        var formatXfIndex = new Dictionary<Int32, Int32>(); // formatIndex → xfIndex
+        foreach (var kv in formatMap)
+        {
+            formatXfIndex[kv.Value] = nextXfIndex;
+            nextFontIndex++; // 每个格式需要自己的字体槽位
+            nextXfIndex++;
+        }
+
         // 1. Globals BOF
         WriteRecord(bw, RecBof, BuildBofData(0x0005));
 
-        // 2. 字体记录（6默认 + 样式字体）
+        // 2. 字体记录（6默认 + 样式字体 + 每自定义格式一个字体槽位）
         for (var fi = 0; fi < 6; fi++)
             WriteRecord(bw, RecFont, BuildFontRecord(null));
         foreach (var s in styleFonts)
             WriteRecord(bw, RecFont, BuildFontRecord(s));
+        // 为每个自定义格式写一个默认字体
+        foreach (var _ in formatMap)
+            WriteRecord(bw, RecFont, BuildFontRecord(null));
 
         // 3. 格式记录（默认日期格式 + 自定义数字格式）
+        // 写入内置日期格式
         WriteRecord(bw, RecFormat, BuildFormatRecord(164, "yyyy/mm/dd"));
+        // 写入自定义列格式
+        foreach (var kv in formatMap)
+            WriteRecord(bw, RecFormat, BuildFormatRecord(kv.Value, kv.Key));
 
         // 4. XF 记录：21 条内置 + N 条自定义样式
-        WriteXfRecords(bw, styleMap, nextFontIndex);
+        WriteXfRecords(bw, styleMap, nextFontIndex, formatXfIndex);
 
         // 5. BoundSheet
         var boundSheetPositions = new List<Int64>();
@@ -299,14 +345,15 @@ public sealed class BiffWriter : IDisposable
             ms.Position = boundSheetPositions[si];
             bw.Write(sheetBofOffset);
             ms.Position = savedPos;
-            WriteSheetStream(bw, sheetName, styleMap);
+            WriteSheetStream(bw, sheetName, styleMap, formatMap, formatXfIndex);
         }
 
         bw.Flush();
         return ms.ToArray();
     }
 
-    private void WriteSheetStream(BinaryWriter bw, String sheetName, Dictionary<ExcelCellStyle, Int32> styleMap)
+    private void WriteSheetStream(BinaryWriter bw, String sheetName, Dictionary<ExcelCellStyle, Int32> styleMap,
+        Dictionary<String, Int32> formatMap, Dictionary<Int32, Int32> formatXfIndex)
     {
         var rows = _sheetData.TryGetValue(sheetName, out var r) ? r : [];
 
@@ -327,6 +374,9 @@ public sealed class BiffWriter : IDisposable
             }
         }
 
+        // 获取当前工作表的列格式映射
+        _columnFormats.TryGetValue(sheetName, out var sheetColFmts);
+
         // ROW + 单元格记录
         for (var ri = 0; ri < rows.Count; ri++)
         {
@@ -342,29 +392,38 @@ public sealed class BiffWriter : IDisposable
 
             for (var ci = 0; ci < values.Count; ci++)
             {
+                // 获取此列的 XF 索引（格式优先于行样式）
+                var cellXf = baseXf;
+                if (sheetColFmts != null && sheetColFmts.TryGetValue(ci, out var colFmt) &&
+                    formatMap.TryGetValue(colFmt, out var fmtIdx) &&
+                    formatXfIndex.TryGetValue(fmtIdx, out var fmtXf))
+                    cellXf = fmtXf;
+
                 var cell = values[ci];
                 if (cell == null)
                 {
-                    WriteRecord(bw, RecBlank, BuildBlankData(ri, ci, baseXf));
+                    WriteRecord(bw, RecBlank, BuildBlankData(ri, ci, cellXf));
                 }
                 else if (cell is String strVal)
                 {
                     var sstIdx = _sstIndex.TryGetValue(strVal, out var idx) ? idx : 0;
-                    WriteRecord(bw, RecLabelSst, BuildLabelSstData(ri, ci, sstIdx, baseXf));
+                    WriteRecord(bw, RecLabelSst, BuildLabelSstData(ri, ci, sstIdx, cellXf));
                 }
                 else if (cell is Boolean boolVal)
                 {
-                    WriteRecord(bw, RecBoolErr, BuildBoolErrData(ri, ci, boolVal ? (Byte)1 : (Byte)0, false, baseXf));
+                    WriteRecord(bw, RecBoolErr, BuildBoolErrData(ri, ci, boolVal ? (Byte)1 : (Byte)0, false, cellXf));
                 }
                 else if (cell is DateTime dtVal)
                 {
                     var serial = DateToSerial(dtVal);
-                    WriteRecord(bw, RecNumber, BuildNumberData(ri, ci, serial, xfIndex: 1));
+                    // 日期使用列格式 XF 或内置日期 XF(1)
+                    var dateXf = cellXf != 15 ? cellXf : 1;
+                    WriteRecord(bw, RecNumber, BuildNumberData(ri, ci, serial, xfIndex: dateXf));
                 }
                 else
                 {
                     var dbl = ConvertToDouble(cell);
-                    WriteRecord(bw, RecNumber, BuildNumberData(ri, ci, dbl, baseXf));
+                    WriteRecord(bw, RecNumber, BuildNumberData(ri, ci, dbl, cellXf));
                 }
             }
         }
@@ -576,7 +635,7 @@ public sealed class BiffWriter : IDisposable
         return buf;
     }
 
-    private static void WriteXfRecords(BinaryWriter bw, Dictionary<ExcelCellStyle, Int32> styleMap, Int32 startFontIndex)
+    private static void WriteXfRecords(BinaryWriter bw, Dictionary<ExcelCellStyle, Int32> styleMap, Int32 startFontIndex, Dictionary<Int32, Int32> formatXfIndex)
     {
         // 21 内置 XF：索引 0-14 = 普通, 15 = 默认, 16-20 = 标题
         for (var i = 0; i < 21; i++)
@@ -592,6 +651,14 @@ public sealed class BiffWriter : IDisposable
             var bgColor = style.BackgroundColor.IsNullOrEmpty() ? 0x40u : 0u;
             var xfData = BuildStyledXfRecord((UInt16)fontIdx, bgColor, style.Border != ExcelCellBorderStyle.None);
             WriteRecord(bw, RecXf, xfData);
+        }
+        // 自定义格式 XF（每个格式一个简约 XF 记录，仅设置格式索引）
+        var fmtFontIdx = (UInt16)(startFontIndex + styleMap.Count);
+        foreach (var kv in formatXfIndex)
+        {
+            var xfData = BuildFormatXfRecord(fmtFontIdx, (UInt16)kv.Key);
+            WriteRecord(bw, RecXf, xfData);
+            fmtFontIdx++;
         }
     }
 
@@ -624,6 +691,22 @@ public sealed class BiffWriter : IDisposable
         writer.Write((UInt16)0);
         writer.Write(hasBorder ? 0x0000000Fu : 0u); // thin borders (4 nibbles)
         writer.Write(bgColor); // fill pattern + bg color
+        return buf;
+    }
+
+    private static Byte[] BuildFormatXfRecord(UInt16 fontIndex, UInt16 formatIndex)
+    {
+        var buf = new Byte[22];
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write(fontIndex);
+        writer.Write(formatIndex);     // 指向 FORMAT 记录的索引
+        writer.Write((UInt16)0xFFF5);  // cell style
+        writer.Write((UInt16)0x20C0);  // default alignment
+        writer.Write((UInt16)0);
+        writer.Write((UInt16)0);
+        writer.Write((UInt16)0);
+        writer.Write(0u);              // no borders
+        writer.Write(0x40u);           // no fill
         return buf;
     }
 
