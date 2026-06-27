@@ -315,4 +315,32 @@ public class PdfWriterTests
         Assert.NotNull(tables);
     }
     #endregion
+
+    #region 椭圆绘制
+    [Fact(DisplayName = "DrawEllipse绘制椭圆圆边框")]
+    public void DrawEllipse_CircleOutline()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.DrawEllipse(300, 400, 100, 100, strokeColorHex: "FF0000", lineWidth: 1);
+        writer.Save(ms);
+
+        ms.Position = 0;
+        Assert.True(ms.Length > 0);
+    }
+
+    [Fact(DisplayName = "DrawEllipse绘制填充椭圆")]
+    public void DrawEllipse_FilledEllipse()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.DrawEllipse(300, 400, 80, 120, filled: true, fillColorHex: "00FF00");
+        writer.Save(ms);
+
+        ms.Position = 0;
+        Assert.True(ms.Length > 0);
+    }
+    #endregion
 }

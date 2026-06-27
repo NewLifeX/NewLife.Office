@@ -367,6 +367,45 @@ public class PdfWriter : IDisposable
         _content.AppendLine("Q");
     }
 
+    /// <summary>绘制椭圆（含圆）</summary>
+    /// <param name="cx">中心 X</param>
+    /// <param name="cy">中心 Y（从底部量起）</param>
+    /// <param name="rx">水平半径</param>
+    /// <param name="ry">垂直半径</param>
+    /// <param name="filled">是否填充</param>
+    /// <param name="fillColorHex">填充色（16进制 RGB）</param>
+    /// <param name="strokeColorHex">边框色</param>
+    /// <param name="lineWidth">边框线宽</param>
+    /// <remarks>使用 4 段三次贝塞尔曲线逼近椭圆</remarks>
+    public void DrawEllipse(Single cx, Single cy, Single rx, Single ry,
+        Boolean filled = false, String? fillColorHex = null, String? strokeColorHex = null, Single lineWidth = 0.5f)
+    {
+        EnsurePage();
+        // 贝塞尔控制点偏移系数 k = 4*(√2-1)/3 ≈ 0.552
+        const Single k = 0.5522847498f;
+        var kx = k * rx;
+        var ky = k * ry;
+
+        var sb = new StringBuilder();
+        sb.AppendLine("q");
+        sb.AppendLine($"{lineWidth:F2} w");
+        if (strokeColorHex != null) sb.AppendLine(HexToRgbOp(strokeColorHex, false));
+        if (filled && fillColorHex != null) sb.AppendLine(HexToRgbOp(fillColorHex, true));
+
+        // 从 3 点钟方向开始，逆时针画 4 段贝塞尔曲线
+        sb.Append($"{cx + rx:F2} {cy:F2} m");
+        sb.AppendLine($" {cx + rx:F2} {cy + ky:F2} {cx + kx:F2} {cy + ry:F2} {cx:F2} {cy + ry:F2} c");
+        sb.Append($"{cx - kx:F2} {cy + ry:F2} {cx - rx:F2} {cy + ky:F2} {cx - rx:F2} {cy:F2} c");
+        sb.AppendLine($" {cx - rx:F2} {cy - ky:F2} {cx - kx:F2} {cy - ry:F2} {cx:F2} {cy - ry:F2} c");
+        sb.Append($"{(filled ? "f" : "S")}");
+        // 对于椭圆不需要末尾换行，上面的c和操作符已就位
+        _content.Append(sb.ToString());
+        if (filled && strokeColorHex != null)
+            _content.Append(" B");
+        _content.AppendLine();
+        _content.AppendLine("Q");
+    }
+
     /// <summary>绘制表格（从当前 Y 向下追加）</summary>
     /// <param name="rows">行列数据，rows[0] 可作为表头</param>
     /// <param name="firstRowHeader">首行是否表头（加粗、灰色背景）</param>
