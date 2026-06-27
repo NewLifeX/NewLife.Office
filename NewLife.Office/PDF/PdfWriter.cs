@@ -93,6 +93,9 @@ public class PdfWriter : IDisposable
     private readonly PdfFont _fontCourier = new("F3", "Courier");
     private PdfFont? _fontCjk;
 
+    // 嵌入文件列表
+    private readonly List<(String FileName, Byte[] Data)> _embeddedFiles = [];
+
     // WinAnsiEncoding 在 Latin-1 之外的 CP1252 扩展字符映射（U+0080-U+009F 区段）
     private static readonly Dictionary<Char, Char> _cp1252Map = new Dictionary<Char, Char>
     {
@@ -521,6 +524,17 @@ public class PdfWriter : IDisposable
             Pages[pageIndex].Rotation = rotation / 90 * 90;
     }
 
+    /// <summary>嵌入文件作为附件（PDF 1.4+）</summary>
+    /// <param name="fileName">文件名（显示名）</param>
+    /// <param name="data">文件二进制数据</param>
+    public void EmbedFile(String fileName, Byte[] data)
+    {
+        if (fileName.IsNullOrEmpty()) throw new ArgumentNullException(nameof(fileName));
+        if (data == null || data.Length == 0) throw new ArgumentNullException(nameof(data));
+
+        _embeddedFiles.Add((fileName, data));
+    }
+
     /// <summary>将对象集合以表格形式写入 PDF</summary>
     /// <param name="data">对象集合</param>
     /// <param name="firstRowHeader">首行表头</param>
@@ -840,6 +854,18 @@ public class PdfWriter : IDisposable
             outputIntentObjId = NextId();
         }
 
+        // ── 嵌入文件对象 ID ──
+        var efStreamObjIds = new Int32[_embeddedFiles.Count]; // /EmbeddedFile 流对象
+        var efSpecObjIds  = new Int32[_embeddedFiles.Count]; // /Filespec 字典对象
+        var efNamesObjId  = 0; // Name tree node 对象 ID
+        for (var i = 0; i < _embeddedFiles.Count; i++)
+        {
+            efStreamObjIds[i] = NextId();
+            efSpecObjIds[i] = NextId();
+        }
+        if (_embeddedFiles.Count > 0)
+            efNamesObjId = NextId();
+
         var totalObjs = nextId;
         while (offsets.Count < totalObjs) offsets.Add(0);
 
@@ -933,6 +959,10 @@ public class PdfWriter : IDisposable
         if (encryptObjId > 0) catalogSb.Append($"\n/Encrypt {encryptObjId} 0 R");
         if (acroFormObjId > 0) catalogSb.Append($"\n/AcroForm {acroFormObjId} 0 R");
         if (xmpMetadataObjId > 0) catalogSb.Append($"\n/Metadata {xmpMetadataObjId} 0 R");
+        if (_embeddedFiles.Count > 0)
+        {
+            catalogSb.Append($"\n/Names << /EmbeddedFiles {efNamesObjId} 0 R >>");
+        }
         catalogSb.Append("\n>>");
         WriteObj(1, catalogSb.ToString());
 
@@ -1296,6 +1326,32 @@ public class PdfWriter : IDisposable
             if (DocumentSubject != null) infoSb.Append($"/Subject {PdfStr(DocumentSubject, infoObjId)} ");
             infoSb.Append(">>");
             WriteObj(infoObjId, infoSb.ToString());
+        }
+
+        // ── 写入嵌入文件 ──
+        for (var i = 0; i < _embeddedFiles.Count; i++)
+        {
+            var (fileName, data) = _embeddedFiles[i];
+            var specId = efSpecObjIds[i];
+            var streamId = efStreamObjIds[i];
+
+            // 嵌入文件流对象（原始字节写入）
+            offsets[streamId - 1] = written;
+            var efHeader = latin1.GetBytes($"{streamId} 0 obj\n<< /Type /EmbeddedFile /Length {data.Length} >>\nstream\n");
+            WriteBytes(efHeader, 0, efHeader.Length);
+            WriteBytes(data, 0, data.Length);
+            WriteBytes(streamEndBytes, 0, streamEndBytes.Length);
+
+            // 文件规格字典
+            WriteObj(specId, $"<< /Type /Filespec\n/F ({EscapePdfText(fileName)})\n/EF << /F {streamId} 0 R >>\n>>");
+        }
+
+        // 嵌入文件名树节点
+        if (_embeddedFiles.Count > 0)
+        {
+            var efNames = String.Join(" ", _embeddedFiles.Select((ef, i) =>
+                $"({EscapePdfText(ef.FileName)}) {efSpecObjIds[i]} 0 R"));
+            WriteObj(efNamesObjId, $"<< /Names [{efNames}] >>");
         }
 
         // ── 写入 AcroForm 表单字典和字段 ──

@@ -222,4 +222,48 @@ public class PdfWriterTests
         Assert.Contains("0 R]", text);
     }
     #endregion
+
+    #region 附件
+    [Fact, DisplayName("EmbedFile写入附件结构正确")]
+    public void EmbedFile_StructureCorrect()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.DrawText("Test", 56, 780, 12);
+        writer.EmbedFile("test.txt", Encoding.UTF8.GetBytes("Hello World!"));
+        writer.EmbedFile("data.bin", new Byte[] { 0x01, 0x02, 0x03, 0xFF });
+        writer.Save(ms);
+
+        // 验证 PDF 原始内容包含嵌入文件结构
+        var rawText = Encoding.Latin1.GetString(ms.ToArray());
+        Assert.Contains("/EmbeddedFiles", rawText);
+        Assert.Contains("/Type /Filespec", rawText);
+        Assert.Contains("/Type /EmbeddedFile", rawText);
+        Assert.Contains("test.txt", rawText);
+        Assert.Contains("data.bin", rawText);
+        // 验证二进制数据存在于流中
+        Assert.Contains("Hello World!", rawText);
+        // 验证 name tree 节点存在
+        Assert.Contains("/Names [", rawText);
+        // 验证 xref 包含所有对象
+        Assert.Contains("xref", rawText);
+        Assert.Contains("startxref", rawText);
+    }
+
+    [Fact, DisplayName("EmbedFile未嵌入时返回空")]
+    public void EmbedFile_None_ReturnsEmpty()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.DrawText("Test", 56, 780, 12);
+        writer.Save(ms);
+
+        ms.Position = 0;
+        using var reader = new PdfReader(ms);
+        var attachments = reader.GetAttachments();
+        Assert.Empty(attachments);
+    }
+    #endregion
 }

@@ -1512,6 +1512,113 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
     #endregion
 
+    #region 附件
+    /// <summary>获取文档附件（嵌入式文件）</summary>
+    /// <returns>附件列表，每项 (文件名, 文件数据)</returns>
+    public List<(String FileName, Byte[] Data)> GetAttachments()
+    {
+        var result = new List<(String, Byte[])>();
+        if (XRefTable == null) return result;
+
+        // 查找 Catalog
+        if (!XRefTable.Trailer.TryGetValue("Root", out var rootVal) || rootVal is not PdfRef rootRef)
+            return result;
+
+        var catalogObj = PdfObjectParser.ReadObject(_data, XRefTable, rootRef.ObjNum);
+        if (catalogObj is not PdfDictObj catalogDict) return result;
+
+        // 读取 /Names → /EmbeddedFiles
+        if (!catalogDict.Value.TryGetValue("Names", out var namesVal) || namesVal is not PdfDictObj namesDict)
+            return result;
+
+        if (!namesDict.Value.TryGetValue("EmbeddedFiles", out var efVal))
+            return result;
+
+        // EmbeddedFiles 可能是内联字典（leaf node）或引用（Ref to name tree node）
+        PdfDictObj? efLeaf = null;
+        if (efVal is PdfDictObj efDictObj)
+        {
+            efLeaf = efDictObj;
+        }
+        else if (efVal is PdfRef efRef)
+        {
+            var efObj = PdfObjectParser.ReadObject(_data, XRefTable, efRef.ObjNum);
+            efLeaf = efObj as PdfDictObj;
+        }
+        if (efLeaf == null) return result;
+
+        // 读取 /Names 数组：[name1, filespec1, name2, filespec2, ...]
+        if (!efLeaf.Value.TryGetValue("Names", out var namesArrVal) || namesArrVal is not PdfArray namesArr)
+            return result;
+
+        var items = namesArr.Items;
+        for (var i = 0; i + 1 < items.Count; i += 2)
+        {
+            var fileName = items[i] is PdfString ps ? ps.Value : items[i].ToString()?.Trim('(', ')') ?? $"file{i / 2}";
+            if (items[i + 1] is not PdfRef fsRef) continue;
+
+            var fsObj = PdfObjectParser.ReadObject(_data, XRefTable, fsRef.ObjNum);
+            if (fsObj is not PdfDictObj fsDict) continue;
+
+            // 读取 /EF → /F → 流对象引用
+            if (!fsDict.Value.TryGetValue("EF", out var efVal2) || efVal2 is not PdfDictObj efDict2)
+                continue;
+
+            if (!efDict2.Value.TryGetValue("F", out var fVal) || fVal is not PdfRef fRef)
+                continue;
+
+            var streamObj = PdfObjectParser.ReadObject(_data, XRefTable, fRef.ObjNum);
+            if (streamObj is not PdfDictObj streamDict) continue;
+
+            // 手动提取流数据（ReadObject 不处理 stream/endstream）
+            var streamOffset = XRefTable!.GetOffset(fRef.ObjNum);
+            if (streamOffset < 0) continue;
+            var rawData = ReadStreamData(_data, streamOffset, streamDict.Value);
+            if (rawData != null && rawData.Length > 0)
+                result.Add((fileName, rawData));
+        }
+
+        return result;
+    }
+
+    /// <summary>从原始字节中提取 stream/endstream 之间的数据</summary>
+    private static Byte[]? ReadStreamData(Byte[] data, Int64 objOffset, PdfDict dict)
+    {
+        var text = Encoding.GetEncoding(28591).GetString(data);
+        var pos = (Int32)objOffset;
+
+        // 跳过对象头 "N G obj\n"
+        var objIdx = text.IndexOf("obj", pos, StringComparison.Ordinal);
+        if (objIdx < 0 || objIdx - pos > 30) return null;
+        pos = objIdx + 3;
+
+        // 查找 "stream" 关键字（在字典 >> 之后）
+        var streamIdx = text.IndexOf("stream", pos, StringComparison.Ordinal);
+        if (streamIdx < 0) return null;
+
+        // stream 之后是 \n 或 \r\n
+        var dataStart = streamIdx + 6;
+        if (dataStart < text.Length && text[dataStart] == '\r') dataStart++;
+        if (dataStart < text.Length && text[dataStart] == '\n') dataStart++;
+
+        // 查找 endstream
+        var endIdx = text.IndexOf("endstream", dataStart, StringComparison.Ordinal);
+        if (endIdx < 0) return null;
+
+        // endstream 之前的 \n 或 \r\n 是数据的一部分（可能没有）
+        var dataEnd = endIdx;
+        if (dataEnd > dataStart && text[dataEnd - 1] == '\n') dataEnd--;
+        if (dataEnd > dataStart && text[dataEnd - 1] == '\r') dataEnd--;
+
+        var length = dataEnd - dataStart;
+        if (length <= 0) return [];
+
+        var rawData = new Byte[length];
+        Array.Copy(data, dataStart, rawData, 0, length);
+        return DecompressStreamData(rawData, dict);
+    }
+    #endregion
+
     #region 文本提取
     /// <summary>提取纯文本</summary>
     /// <returns>纯文本字符串</returns>

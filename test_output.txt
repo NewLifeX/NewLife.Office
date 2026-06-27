@@ -1,0 +1,148 @@
+﻿鐢熸垚鍚姩鏃堕棿涓?2026/6/28 1:26:10銆?
+     1>椤圭洰鈥淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥濆湪鑺傜偣 1 涓?Restore 涓洰鏍?銆?
+     1>_GetAllRestoreProjectPathItems:
+         姝ｅ湪纭畾瑕佽繕鍘熺殑椤圭洰鈥?
+     1>椤圭洰鈥淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?1)姝ｅ湪鑺傜偣 1 涓婄敓鎴愨€淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?2:10) (_GenerateProjectRestoreGraph 涓洰鏍?銆?
+  2:10>椤圭洰鈥淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?2:10)姝ｅ湪鑺傜偣 1 涓婄敓鎴愨€淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?2:14) (_GenerateProjectRestoreGraphPerFramework 涓洰鏍?銆?
+     2>AddPrunePackageReferences:
+         Loaded prune package data from framework packages
+     2>宸插畬鎴愮敓鎴愰」鐩€淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?_GenerateProjectRestoreGraphPerFramework 涓洰鏍?鐨勬搷浣溿€?
+  2:10>椤圭洰鈥淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?2:10)姝ｅ湪鑺傜偣 1 涓婄敓鎴愨€淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?2:15) (_GenerateProjectRestoreGraphPerFramework 涓洰鏍?銆?
+     2>AddPrunePackageReferences:
+         Loaded prune package data from framework packages
+     2>宸插畬鎴愮敓鎴愰」鐩€淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?_GenerateProjectRestoreGraphPerFramework 涓洰鏍?鐨勬搷浣溿€?
+  2:10>椤圭洰鈥淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?2:10)姝ｅ湪鑺傜偣 1 涓婄敓鎴愨€淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?2:16) (_GenerateProjectRestoreGraphPerFramework 涓洰鏍?銆?
+     2>AddPrunePackageReferences:
+         Loaded prune package data from framework packages
+     2>宸插畬鎴愮敓鎴愰」鐩€淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?_GenerateProjectRestoreGraphPerFramework 涓洰鏍?鐨勬搷浣溿€?
+     2>宸插畬鎴愮敓鎴愰」鐩€淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?_GenerateProjectRestoreGraph 涓洰鏍?鐨勬搷浣溿€?
+     1>椤圭洰鈥淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?1)姝ｅ湪鑺傜偣 1 涓婄敓鎴愨€淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?1:6) (_GenerateProjectRestoreGraph 涓洰鏍?銆?
+     1>AddPrunePackageReferences:
+         Loading prune package data from PrunePackageData folder
+         Failed to load prune package data from PrunePackageData folder, loading from targeting packs instead
+         Looking for targeting packs in C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Ref
+         Pack directories found: C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Ref\10.0.9
+         Found package overrides file C:\Program Files\dotnet\packs\Microsoft.NETCore.App.Ref\10.0.9\data\PackageOverrides.txt
+     1>宸插畬鎴愮敓鎴愰」鐩€淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?_GenerateProjectRestoreGraph 涓洰鏍?鐨勬搷浣溿€?
+     1>Restore:
+         X.509 璇佷功閾鹃獙璇佸皢浣跨敤 .NET 閫夋嫨鐨勯粯璁や俊浠诲瓨鍌ㄨ繘琛屼唬鐮佺鍚嶃€?
+         X.509 璇佷功閾鹃獙璇佸皢浣跨敤 .NET 閫夋嫨鐨勯粯璁や俊浠诲瓨鍌ㄨ繘琛屾椂闂存埑銆?
+         璧勪骇鏂囦欢鏈敼鍙樸€傝烦杩囪祫浜ф枃浠跺啓鍏ャ€傝矾寰? C:\X\NewLife.Office\NewLife.Office\obj\project.assets.json
+         宸茶繕鍘?C:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj (鐢ㄦ椂 36 姣)銆?
+     1>C:\X\NewLife.Office\XUnitTest\XUnitTest.csproj : warning NU1510: PackageReference System.Text.Encoding.CodePages 灏嗕笉浼氬垹闄ゃ€傝鑰冭檻浠庝緷璧栭」涓Щ闄ゆ鍖咃紝鍥犱负鍙兘涓嶉渶瑕佸畠銆?
+         璧勪骇鏂囦欢鏈敼鍙樸€傝烦杩囪祫浜ф枃浠跺啓鍏ャ€傝矾寰? C:\X\NewLife.Office\XUnitTest\obj\project.assets.json
+         宸茶繕鍘?C:\X\NewLife.Office\XUnitTest\XUnitTest.csproj (鐢ㄦ椂 62 姣)銆?
+         
+         浣跨敤鐨?NuGet 閰嶇疆鏂囦欢:
+             C:\Users\Stone\AppData\Roaming\NuGet\NuGet.Config
+             C:\Program Files (x86)\NuGet\Config\Microsoft.VisualStudio.FallbackLocation.config
+             C:\Program Files (x86)\NuGet\Config\Microsoft.VisualStudio.Offline.config
+         
+         浣跨敤鐨勬簮:
+             https://api.nuget.org/v3/index.json
+             C:\Program Files (x86)\Microsoft SDKs\NuGetPackages\
+             D:\X\Bin
+             C:\Program Files\dotnet\library-packs
+         鎵€鏈夐」鐩潎鏄渶鏂扮殑锛屾棤娉曡繕鍘熴€?
+     1>宸插畬鎴愮敓鎴愰」鐩€淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?Restore 涓洰鏍?鐨勬搷浣溿€?
+   1:7>椤圭洰鈥淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥濆湪鑺傜偣 1 涓?VSTest 涓洰鏍?銆?
+     1>BuildProject:
+         宸插紑濮嬬敓鎴愶紝璇风瓑寰?..
+   1:7>椤圭洰鈥淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?1:7)姝ｅ湪鑺傜偣 1 涓婄敓鎴愨€淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?1:8) (榛樿鐩爣)銆?
+     1>C:\X\NewLife.Office\XUnitTest\XUnitTest.csproj : warning NU1510: PackageReference System.Text.Encoding.CodePages 灏嗕笉浼氬垹闄ゃ€傝鑰冭檻浠庝緷璧栭」涓Щ闄ゆ鍖咃紝鍥犱负鍙兘涓嶉渶瑕佸畠銆?
+   1:8>椤圭洰鈥淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?1:8)姝ｅ湪鑺傜偣 3 涓婄敓鎴愨€淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?2:21) (榛樿鐩爣)銆?
+     2>GenerateTargetFrameworkMonikerAttribute:
+       姝ｅ湪璺宠繃鐩爣鈥淕enerateTargetFrameworkMonikerAttribute鈥濓紝鍥犱负鎵€鏈夎緭鍑烘枃浠剁浉瀵逛簬杈撳叆鏂囦欢鑰岃█閮芥槸鏈€鏂扮殑銆?
+       CoreGenerateAssemblyInfo:
+       姝ｅ湪璺宠繃鐩爣鈥淐oreGenerateAssemblyInfo鈥濓紝鍥犱负鎵€鏈夎緭鍑烘枃浠剁浉瀵逛簬杈撳叆鏂囦欢鑰岃█閮芥槸鏈€鏂扮殑銆?
+     2>C:\Users\Stone\.nuget\packages\microsoft.sourcelink.common\10.0.201\build\Microsoft.SourceLink.Common.targets(56,5): warning : 婧愪唬鐮佺鐞嗕俊鎭笉鍙敤 - 鐢熸垚鐨勬簮閾炬帴涓虹┖銆?[C:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj::TargetFramework=netstandard2.1]
+         Source Link 涓虹┖锛屽垯鏂囦欢 "obj\Debug\netstandard2.1\NewLife.Office.sourcelink.json" 涓嶅瓨鍦ㄣ€?
+       CoreCompile:
+       姝ｅ湪璺宠繃鐩爣鈥淐oreCompile鈥濓紝鍥犱负鎵€鏈夎緭鍑烘枃浠剁浉瀵逛簬杈撳叆鏂囦欢鑰岃█閮芥槸鏈€鏂扮殑銆?
+       GenerateBuildDependencyFile:
+       姝ｅ湪璺宠繃鐩爣鈥淕enerateBuildDependencyFile鈥濓紝鍥犱负鎵€鏈夎緭鍑烘枃浠剁浉瀵逛簬杈撳叆鏂囦欢鑰岃█閮芥槸鏈€鏂扮殑銆?
+       CopyFilesToOutputDirectory:
+         NewLife.Office -> C:\X\NewLife.Office\Bin\netstandard2.1\NewLife.Office.dll
+     2>宸插畬鎴愮敓鎴愰」鐩€淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?榛樿鐩爣)鐨勬搷浣溿€?
+     1>GenerateTargetFrameworkMonikerAttribute:
+       姝ｅ湪璺宠繃鐩爣鈥淕enerateTargetFrameworkMonikerAttribute鈥濓紝鍥犱负鎵€鏈夎緭鍑烘枃浠剁浉瀵逛簬杈撳叆鏂囦欢鑰岃█閮芥槸鏈€鏂扮殑銆?
+       CoreGenerateAssemblyInfo:
+       姝ｅ湪璺宠繃鐩爣鈥淐oreGenerateAssemblyInfo鈥濓紝鍥犱负鎵€鏈夎緭鍑烘枃浠剁浉瀵逛簬杈撳叆鏂囦欢鑰岃█閮芥槸鏈€鏂扮殑銆?
+       _GenerateSourceLinkFile:
+         Source Link 涓虹┖锛屽垯鏂囦欢 "obj\Debug\XUnitTest.sourcelink.json" 涓嶅瓨鍦ㄣ€?
+       CoreCompile:
+       姝ｅ湪璺宠繃鐩爣鈥淐oreCompile鈥濓紝鍥犱负鎵€鏈夎緭鍑烘枃浠剁浉瀵逛簬杈撳叆鏂囦欢鑰岃█閮芥槸鏈€鏂扮殑銆?
+       _CopyOutOfDateSourceItemsToOutputDirectory:
+       姝ｅ湪璺宠繃鐩爣鈥淿CopyOutOfDateSourceItemsToOutputDirectory鈥濓紝鍥犱负鎵€鏈夎緭鍑烘枃浠剁浉瀵逛簬杈撳叆鏂囦欢鑰岃█閮芥槸鏈€鏂扮殑銆?
+       GenerateBuildDependencyFile:
+       姝ｅ湪璺宠繃鐩爣鈥淕enerateBuildDependencyFile鈥濓紝鍥犱负鎵€鏈夎緭鍑烘枃浠剁浉瀵逛簬杈撳叆鏂囦欢鑰岃█閮芥槸鏈€鏂扮殑銆?
+       GenerateBuildRuntimeConfigurationFiles:
+       姝ｅ湪璺宠繃鐩爣鈥淕enerateBuildRuntimeConfigurationFiles鈥濓紝鍥犱负鎵€鏈夎緭鍑烘枃浠剁浉瀵逛簬杈撳叆鏂囦欢鑰岃█閮芥槸鏈€鏂扮殑銆?
+       CopyFilesToOutputDirectory:
+         XUnitTest -> C:\X\NewLife.Office\Bin\UnitTest\XUnitTest.dll
+     1>宸插畬鎴愮敓鎴愰」鐩€淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?榛樿鐩爣)鐨勬搷浣溿€?
+     1>BuildProject:
+         瀹屾垚鐨勭敓鎴愩€?
+         
+C:\X\NewLife.Office\Bin\UnitTest\XUnitTest.dll (.NETCoreApp,Version=v10.0)鐨勬祴璇曡繍琛?
+鎬诲叡 1 涓祴璇曟枃浠朵笌鎸囧畾妯″紡鐩稿尮閰嶃€?
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.5+1b188a7b0a (64-bit .NET 10.0.9)
+[xUnit.net 00:00:00.09]   Discovering: XUnitTest
+[xUnit.net 00:00:00.16]   Discovered:  XUnitTest
+[xUnit.net 00:00:00.18]   Starting:    XUnitTest
+dotnet : [xUnit.net 00:00:00.24]     XUnitTest.PdfWriterTests.EmbedFile_Roundtr
+ip [FAIL]
+所在位置 行:1 字符: 1
++ dotnet test XUnitTest/XUnitTest.csproj --filter "EmbedFile_Roundtrip" ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([xUnit.net 00:0...oundtrip [FAIL] 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[xUnit.net 00:00:00.24]       System.ArgumentOutOfRangeException : Index was out of range. Must be non-negative and less than the size of the collection. (Parameter 'index')
+[xUnit.net 00:00:00.24]       Stack Trace:
+[xUnit.net 00:00:00.24]            at System.Collections.Generic.List`1.get_Item(Int32 index)
+[xUnit.net 00:00:00.24]         C:\X\NewLife.Office\XUnitTest\PdfWriterTests.cs(253,0): at XUnitTest.PdfWriterTests.EmbedFile_Roundtrip()
+[xUnit.net 00:00:00.24]            at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+[xUnit.net 00:00:00.24]            at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:00.26]   Finished:    XUnitTest
+  澶辫触 XUnitTest.PdfWriterTests.EmbedFile_Roundtrip [31 ms]
+  閿欒娑堟伅:
+   System.ArgumentOutOfRangeException : Index was out of range. Must be non-negative and less than the size of the collection. (Parameter 'index')
+  鍫嗘爤璺熻釜:
+     at System.Collections.Generic.List`1.get_Item(Int32 index)
+   at XUnitTest.PdfWriterTests.EmbedFile_Roundtrip() in C:\X\NewLife.Office\XUnitTest\PdfWriterTests.cs:line 253
+   at System.Reflection.MethodBaseInvoker.InterpretedInvoke_Method(Object obj, IntPtr* args)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+
+娴嬭瘯杩愯澶辫触銆?
+娴嬭瘯鎬绘暟: 1
+     澶辫触鏁? 1
+鎬绘椂闂? 0.7222 绉?
+       _VSTestConsole:
+         MSB4181: 鈥淰STestTask鈥濅换鍔¤繑鍥炰簡 false锛屼絾鏈褰曢敊璇€?
+     1>宸插畬鎴愮敓鎴愰」鐩€淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?VSTest 涓洰鏍?鐨勬搷浣?- 澶辫触銆?
+
+鐢熸垚澶辫触銆?
+
+       鈥淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?Restore 鐩爣) (1) ->
+       (Restore 鐩爣) -> 
+         C:\X\NewLife.Office\XUnitTest\XUnitTest.csproj : warning NU1510: PackageReference System.Text.Encoding.CodePages 灏嗕笉浼氬垹闄ゃ€傝鑰冭檻浠庝緷璧栭」涓Щ闄ゆ鍖咃紝鍥犱负鍙兘涓嶉渶瑕佸畠銆?
+
+
+       鈥淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?VSTest 鐩爣) (1:7) ->
+       鈥淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?榛樿鐩爣) (1:8) ->
+       (ResolvePackageAssets 鐩爣) -> 
+         C:\X\NewLife.Office\XUnitTest\XUnitTest.csproj : warning NU1510: PackageReference System.Text.Encoding.CodePages 灏嗕笉浼氬垹闄ゃ€傝鑰冭檻浠庝緷璧栭」涓Щ闄ゆ鍖咃紝鍥犱负鍙兘涓嶉渶瑕佸畠銆?
+
+
+       鈥淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?VSTest 鐩爣) (1:7) ->
+       鈥淐:\X\NewLife.Office\XUnitTest\XUnitTest.csproj鈥?榛樿鐩爣) (1:8) ->
+       鈥淐:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj鈥?榛樿鐩爣) (2:21) ->
+       (_GenerateSourceLinkFile 鐩爣) -> 
+         C:\Users\Stone\.nuget\packages\microsoft.sourcelink.common\10.0.201\build\Microsoft.SourceLink.Common.targets(56,5): warning : 婧愪唬鐮佺鐞嗕俊鎭笉鍙敤 - 鐢熸垚鐨勬簮閾炬帴涓虹┖銆?[C:\X\NewLife.Office\NewLife.Office\NewLife.Office.csproj::TargetFramework=netstandard2.1]
+
+    3 涓鍛?
+    0 涓敊璇?
+
+宸茬敤鏃堕棿 00:00:02.77
