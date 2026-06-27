@@ -33,7 +33,8 @@ public partial class ExcelWriter : DisposeBase
         ExcelCellBorderStyle Left, String? LeftColor,
         ExcelCellBorderStyle Right, String? RightColor,
         ExcelCellBorderStyle Top, String? TopColor,
-        ExcelCellBorderStyle Bottom, String? BottomColor);
+        ExcelCellBorderStyle Bottom, String? BottomColor,
+        ExcelCellBorderStyle Diagonal = ExcelCellBorderStyle.None, String? DiagonalColor = null);
     private record XfEntry(Int32 NumFmtId, Int32 FontId, Int32 FillId, Int32 BorderId, ExcelHorizontalAlignment HAlign, ExcelVerticalAlignment VAlign, Boolean WrapText, Int32 TextRotation, Int32 Indent, Boolean ShrinkToFit);
 
     private class SheetHyperlink

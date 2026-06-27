@@ -43,10 +43,13 @@ partial class ExcelWriter
         var rightColor  = cs.RightBorderColor  ?? cs.BorderColor;
         var topColor    = cs.TopBorderColor    ?? cs.BorderColor;
         var bottomColor = cs.BottomBorderColor ?? cs.BorderColor;
+        var diagonalStyle = cs.DiagonalBorder;
+        var diagonalColor = cs.DiagonalBorderColor;
         if (leftStyle != ExcelCellBorderStyle.None || rightStyle != ExcelCellBorderStyle.None ||
-            topStyle  != ExcelCellBorderStyle.None || bottomStyle != ExcelCellBorderStyle.None)
+            topStyle  != ExcelCellBorderStyle.None || bottomStyle != ExcelCellBorderStyle.None ||
+            diagonalStyle != ExcelCellBorderStyle.None)
         {
-            var border = new BorderEntry(leftStyle, leftColor, rightStyle, rightColor, topStyle, topColor, bottomStyle, bottomColor);
+            var border = new BorderEntry(leftStyle, leftColor, rightStyle, rightColor, topStyle, topColor, bottomStyle, bottomColor, diagonalStyle, diagonalColor);
             borderId = FindOrAdd(_borders, border);
         }
 
@@ -1085,7 +1088,8 @@ partial class ExcelWriter
         foreach (var b in _borders)
         {
             var hasAny = b.Left != ExcelCellBorderStyle.None || b.Right != ExcelCellBorderStyle.None ||
-                         b.Top  != ExcelCellBorderStyle.None || b.Bottom != ExcelCellBorderStyle.None;
+                         b.Top  != ExcelCellBorderStyle.None || b.Bottom != ExcelCellBorderStyle.None ||
+                         b.Diagonal != ExcelCellBorderStyle.None;
             if (!hasAny)
             {
                 sw.Write("<border><left/><right/><top/><bottom/><diagonal/></border>");
@@ -1097,7 +1101,25 @@ partial class ExcelWriter
                 WriteBorderSide(sw, "right",  b.Right,  b.RightColor);
                 WriteBorderSide(sw, "top",    b.Top,    b.TopColor);
                 WriteBorderSide(sw, "bottom", b.Bottom, b.BottomColor);
-                sw.Write("<diagonal/></border>");
+                if (b.Diagonal != ExcelCellBorderStyle.None)
+                {
+                    var diagStyle = b.Diagonal switch
+                    {
+                        ExcelCellBorderStyle.Thin => "thin",
+                        ExcelCellBorderStyle.Medium => "medium",
+                        ExcelCellBorderStyle.Thick => "thick",
+                        ExcelCellBorderStyle.Dashed => "dashed",
+                        ExcelCellBorderStyle.Dotted => "dotted",
+                        ExcelCellBorderStyle.DoubleLine => "double",
+                        _ => "thin"
+                    };
+                    sw.Write($"<diagonal style=\"{diagStyle}\">");
+                    if (!b.DiagonalColor.IsNullOrEmpty()) sw.Write($"<color rgb=\"FF{b.DiagonalColor}\"/>");
+                    sw.Write("</diagonal>");
+                }
+                else
+                    sw.Write("<diagonal/>");
+                sw.Write("</border>");
             }
         }
         sw.Write("</borders>");

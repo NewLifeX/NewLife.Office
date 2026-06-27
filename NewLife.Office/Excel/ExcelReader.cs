@@ -71,6 +71,8 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         public String? TopColor;
         public ExcelCellBorderStyle BottomStyle;
         public String? BottomColor;
+        public ExcelCellBorderStyle DiagonalStyle;
+        public String? DiagonalColor;
 
         // 向后兼容快捷访问
         public ExcelCellBorderStyle Style => LeftStyle != ExcelCellBorderStyle.None ? LeftStyle : BottomStyle;
@@ -664,6 +666,13 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                     bi.BottomStyle = ParseBorderStyle(bottom.Attribute("style")?.Value);
                     var bc = bottom.Element(ns + "color");
                     if (bc != null) bi.BottomColor = NormalizeRgb(bc.Attribute("rgb")?.Value);
+                }
+                var diagonal = b.Element(ns + "diagonal");
+                if (diagonal != null)
+                {
+                    bi.DiagonalStyle = ParseBorderStyle(diagonal.Attribute("style")?.Value);
+                    var dc = diagonal.Element(ns + "color");
+                    if (dc != null) bi.DiagonalColor = NormalizeRgb(dc.Attribute("rgb")?.Value);
                 }
                 _borderInfos.Add(bi);
             }
@@ -1290,6 +1299,8 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                     cs.TopBorderColor    = bi.TopColor;
                     cs.BottomBorder = bi.BottomStyle;
                     cs.BottomBorderColor = bi.BottomColor;
+                    cs.DiagonalBorder = bi.DiagonalStyle;
+                    cs.DiagonalBorderColor = bi.DiagonalColor;
                     // 向后兼容快捷属性：取任意非空的单边样式
                     cs.Border = bi.Style;
                     cs.BorderColor = bi.Color;

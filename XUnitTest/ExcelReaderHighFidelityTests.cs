@@ -193,4 +193,44 @@ public class ExcelReaderHighFidelityTests
         Assert.Contains("B1>30", expr.Formula);
     }
     #endregion
+
+    #region 对角线边框
+    [Fact(DisplayName = "Excel—对角线边框写入+读取")]
+    public void DiagonalBorder_WriteAndRead()
+    {
+        var path = SaveAndOpen(writer =>
+        {
+            var cs = new ExcelCellStyle { DiagonalBorder = ExcelCellBorderStyle.Thin, DiagonalBorderColor = "FF0000" };
+            writer.WriteRow(null, new Object?[] { "对角线" }, cs);
+        });
+
+        using var reader = new ExcelReader(path);
+        var styles = reader.ReadCellStyles("Sheet1");
+        var (_, style) = styles.First();
+        Assert.Equal(ExcelCellBorderStyle.Thin, style.DiagonalBorder);
+        Assert.Equal("FF0000", style.DiagonalBorderColor);
+    }
+
+    [Fact(DisplayName = "Excel—对角线+普通四边边框共存")]
+    public void DiagonalBorder_WithNormalBorders()
+    {
+        var path = SaveAndOpen(writer =>
+        {
+            var cs = new ExcelCellStyle
+            {
+                Border = ExcelCellBorderStyle.Thin,
+                BorderColor = "000000",
+                DiagonalBorder = ExcelCellBorderStyle.Dashed,
+                DiagonalBorderColor = "0000FF"
+            };
+            writer.WriteRow(null, new Object?[] { "混合边框" }, cs);
+        });
+
+        using var reader = new ExcelReader(path);
+        var styles = reader.ReadCellStyles("Sheet1");
+        var (_, style) = styles.First();
+        Assert.Equal(ExcelCellBorderStyle.Thin, style.Border);
+        Assert.Equal(ExcelCellBorderStyle.Dashed, style.DiagonalBorder);
+    }
+    #endregion
 }

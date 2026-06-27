@@ -68,6 +68,12 @@ public class ExcelCellStyle
     /// <summary>下边框颜色（RGB十六进制，优先级高于 BorderColor）</summary>
     public String? BottomBorderColor { get; set; }
 
+    /// <summary>对角线边框样式（自左上到右下或自左下到右上）</summary>
+    public ExcelCellBorderStyle DiagonalBorder { get; set; }
+
+    /// <summary>对角线边框颜色（RGB十六进制）</summary>
+    public String? DiagonalBorderColor { get; set; }
+
     /// <summary>自定义数字格式（如 "#,##0.00"、"yyyy-MM-dd"）</summary>
     public String? NumberFormat { get; set; }
 
