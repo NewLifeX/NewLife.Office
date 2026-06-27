@@ -483,7 +483,15 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
             }
 
             if (pPrEl.SelectSingleNode("w:numPr", ns) != null)
+            {
                 isBullet = true;
+                var ilvl = pPrEl.SelectSingleNode("w:numPr/w:ilvl", ns) as XmlElement;
+                if (ilvl != null)
+                {
+                    var lv = ilvl.GetAttribute("w:val") ?? ilvl.GetAttribute("val");
+                    if (Int32.TryParse(lv, out var lvi)) para.ListLevel = lvi;
+                }
+            }
 
             // 段落边框：<w:pBdr>
             var pBdr = pPrEl.SelectSingleNode("w:pBdr", ns) as XmlElement;

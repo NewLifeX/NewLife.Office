@@ -149,6 +149,18 @@ public class WordWriter : IDisposable
         }
     }
 
+    /// <summary>追加多级嵌套无序列表</summary>
+    /// <param name="items">列表项，每项为 (文本, 级别) 元组，级别 0=一级, 1=二级...</param>
+    public void AppendMultiLevelBulletList(IEnumerable<(String Text, Int32 Level)> items)
+    {
+        foreach (var (text, level) in items)
+        {
+            var para = new WordParagraph { IsBullet = true, ListLevel = level };
+            para.Runs.Add(new WordRun { Text = text });
+            _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
+        }
+    }
+
     /// <summary>追加有序列表</summary>
     /// <param name="items">列表项</param>
     public void AppendOrderedList(IEnumerable<String> items)
@@ -384,7 +396,7 @@ public class WordWriter : IDisposable
         sb.Append("<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>");
         sb.Append("<Override PartName=\"/word/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml\"/>");
         sb.Append("<Override PartName=\"/word/settings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml\"/>");
-        if (_numberingXml != null)
+        if (_numberingXml != null || _elements.Any(e => e.Type == WordElementType.Paragraph && e.Paragraph?.IsBullet == true))
             sb.Append("<Override PartName=\"/word/numbering.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml\"/>");
         var ps = PageSettings;
         if (ps.HeaderText != null || ps.WatermarkText != null)
@@ -501,7 +513,37 @@ public class WordWriter : IDisposable
     private void WriteNumbering(ZipArchive za)
     {
         if (_numberingXml != null)
+        {
             WriteEntry(za, "word/numbering.xml", _numberingXml);
+            return;
+        }
+
+        // 检查是否有任何列表项需要编号定义
+        if (!_elements.Any(e => e.Type == WordElementType.Paragraph && e.Paragraph?.IsBullet == true)) return;
+
+        const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+        var hasMultiLevel = _elements.Any(e => e.Type == WordElementType.Paragraph && e.Paragraph?.ListLevel > 0);
+        var maxLevel = hasMultiLevel ? 3 : 1;
+
+        var sb = new StringBuilder();
+        sb.Append($"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><w:numbering xmlns:w=\"{W}\">");
+        // 抽象编号定义：bullet 字符按层级不同
+        sb.Append("<w:abstractNum w:abstractNumId=\"0\">");
+        sb.Append("<w:multiLevelType w:val=\"hybridMultilevel\"/>");
+        var bullets = new[] { "\uF0B7", "\uF0D8", "\uF0A7" }; // • → ◆ → §
+        for (var l = 0; l < maxLevel; l++)
+        {
+            sb.Append($"<w:lvl w:ilvl=\"{l}\"><w:start w:val=\"1\"/><w:numFmt w:val=\"bullet\"/>");
+            sb.Append($"<w:lvlText w:val=\"{bullets[l]}\"/><w:lvlJc w:val=\"left\"/>");
+            var indent = 720 + l * 720;
+            sb.Append($"<w:pPr><w:ind w:left=\"{indent}\" w:hanging=\"360\"/></w:pPr>");
+            sb.Append("<w:rPr><w:rFonts w:ascii=\"Symbol\" w:hAnsi=\"Symbol\" w:hint=\"default\"/></w:rPr>");
+            sb.Append("</w:lvl>");
+        }
+        sb.Append("</w:abstractNum>");
+        sb.Append("<w:num w:numId=\"1\"><w:abstractNumId w:val=\"0\"/></w:num>");
+        sb.Append("</w:numbering>");
+        WriteEntry(za, "word/numbering.xml", sb.ToString());
     }
 
     private void WriteDocument(ZipArchive za)
@@ -724,7 +766,7 @@ public class WordWriter : IDisposable
                 sb.Append("/>");
             }
             if (para.IsBullet)
-                sb.Append("<w:numPr><w:ilvl w:val=\"0\"/><w:numId w:val=\"1\"/></w:numPr>");
+                sb.Append($"<w:numPr><w:ilvl w:val=\"{para.ListLevel}\"/><w:numId w:val=\"1\"/></w:numPr>");
             // 段落边框
             if (para.Borders != null)
             {

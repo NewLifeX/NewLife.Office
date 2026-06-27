@@ -41,6 +41,9 @@ public class WordParagraph
     /// <summary>是否项目符号列表</summary>
     public Boolean IsBullet { get; set; }
 
+    /// <summary>列表级别（0=一级, 1=二级...），配合 IsBullet 使用，默认 0</summary>
+    public Int32 ListLevel { get; set; }
+
     /// <summary>书签名称</summary>
     public String? BookmarkName { get; set; }
 

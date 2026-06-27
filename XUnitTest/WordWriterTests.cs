@@ -213,6 +213,85 @@ public class WordWriterTests
     }
     #endregion
 
+    #region 多级嵌套列表
+    [Fact(DisplayName = "多级列表—2级嵌套写入+读取")]
+    public void MultiLevelBulletList_WriteAndRead()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendMultiLevelBulletList([
+                ("一级项目A", 0),
+                ("二级项目1", 1),
+                ("二级项目2", 1),
+                ("一级项目B", 0),
+                ("三级项目x", 2),
+            ]);
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.Equal(5, doc.Elements.Count);
+            var level0 = doc.Elements[0].Paragraph!;
+            Assert.True(level0.IsBullet);
+            Assert.Equal(0, level0.ListLevel);
+            var level1 = doc.Elements[1].Paragraph!;
+            Assert.True(level1.IsBullet);
+            Assert.Equal(1, level1.ListLevel);
+            var level2 = doc.Elements[4].Paragraph!;
+            Assert.True(level2.IsBullet);
+            Assert.Equal(2, level2.ListLevel);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "多级列表—默认级别为0")]
+    public void MultiLevelBulletList_DefaultLevel()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendBulletList(["普通项目1", "普通项目2"]);
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.All(doc.Elements, e => Assert.Equal(0, e.Paragraph!.ListLevel));
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "多级列表—与普通段落混合")]
+    public void MultiLevelBulletList_MixedWithParagraphs()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendHeading("章节标题", 1);
+            writer.AppendParagraph("正文段落");
+            writer.AppendMultiLevelBulletList([
+                ("要点一", 0),
+                ("要点一-1", 1),
+                ("要点二", 0),
+            ]);
+            writer.AppendParagraph("结束段落");
+            writer.Save(tempFile);
+
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            Assert.Equal(6, doc.Elements.Count);
+            Assert.Equal(WordParagraphStyle.Heading1, doc.Elements[0].Paragraph!.Style);
+            Assert.False(doc.Elements[1].Paragraph!.IsBullet);
+            Assert.True(doc.Elements[2].Paragraph!.IsBullet);
+            Assert.False(doc.Elements[5].Paragraph!.IsBullet);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
+
     #region 辅助方法
     /// <summary>构建包含指定 SDT 元素的最小合法 docx 文件</summary>
     private static Byte[] BuildDocxWithSdt(String sdtXml)
