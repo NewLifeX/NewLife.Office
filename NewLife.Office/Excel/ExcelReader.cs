@@ -86,6 +86,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         public ExcelHorizontalAlignment HAlign;
         public ExcelVerticalAlignment VAlign;
         public Boolean WrapText;
+        public Int32 TextRotation;
+        public Int32 Indent;
+        public Boolean ShrinkToFit;
     }
     #endregion
 
@@ -687,6 +690,10 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                     xi.VAlign = ParseVAlign(al.Attribute("vertical")?.Value);
                     var wt = al.Attribute("wrapText")?.Value;
                     xi.WrapText = wt == "1" || wt == "true";
+                    xi.TextRotation = al.Attribute("textRotation")?.Value.ToInt() ?? 0;
+                    xi.Indent = al.Attribute("indent")?.Value.ToInt() ?? 0;
+                    var stf = al.Attribute("shrinkToFit")?.Value;
+                    xi.ShrinkToFit = stf == "1" || stf == "true";
                 }
                 _xfInfos.Add(xi);
             }
@@ -1292,6 +1299,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                 cs.HAlign = xf.HAlign;
                 cs.VAlign = xf.VAlign;
                 cs.WrapText = xf.WrapText;
+                cs.TextRotation = xf.TextRotation;
+                cs.Indent = xf.Indent;
+                cs.ShrinkToFit = xf.ShrinkToFit;
 
                 // 数字格式
                 if (_numFmtCodes != null && _numFmtCodes.TryGetValue(xf.NumFmtId, out var fmt) && fmt != "General")
@@ -1646,6 +1656,120 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         return sp?.Attribute("password")?.Value;
     }
 
+    /// <summary>读取工作表列大纲级别</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>0基列号 → 大纲级别（0表示无分组）</returns>
+    public Dictionary<Int32, Int32> ReadColumnOutlines(String sheet)
+    {
+        var result = new Dictionary<Int32, Int32>();
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return result;
+
+        var cols = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("cols"));
+        if (cols == null) return result;
+
+        foreach (var col in cols.Elements())
+        {
+            var min = col.Attribute("min")?.Value.ToInt(1) ?? 1;
+            var max = col.Attribute("max")?.Value.ToInt(1) ?? 1;
+            var level = col.Attribute("outlineLevel")?.Value.ToInt() ?? 0;
+            for (var c = min - 1; c < max; c++)
+                result[c] = level;
+        }
+        return result;
+    }
+
+    /// <summary>读取工作表行大纲级别</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>0基行号 → 大纲级别（0表示无分组）</returns>
+    public Dictionary<Int32, Int32> ReadRowOutlines(String sheet)
+    {
+        var result = new Dictionary<Int32, Int32>();
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return result;
+
+        var data = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sheetData"));
+        if (data == null) return result;
+
+        foreach (var row in data.Elements())
+        {
+            var level = row.Attribute("outlineLevel")?.Value.ToInt() ?? 0;
+            if (level <= 0) continue;
+            var rAttr = row.Attribute("r");
+            var r = rAttr != null ? rAttr.Value.ToInt(-1) : -1;
+            if (r >= 1) result[r - 1] = level;
+        }
+        return result;
+    }
+
+    /// <summary>读取所有工作表标签颜色</summary>
+    /// <returns>工作表名称 → 颜色（RGB十六进制，不含FF前缀），未设颜色的表不返回</returns>
+    public Dictionary<String, String> ReadTabColors()
+    {
+        var result = new Dictionary<String, String>();
+        var sheetNames = Sheets;
+        if (sheetNames == null) return result;
+
+        foreach (var sheetName in sheetNames)
+        {
+            var doc = OpenSheetXml(sheetName);
+            if (doc.Root == null) continue;
+
+            var sheetPr = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sheetPr"));
+            if (sheetPr == null) continue;
+
+            var tabColorEl = sheetPr.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("tabColor"));
+            if (tabColorEl == null) continue;
+
+            var rgb = tabColorEl.Attribute("rgb")?.Value;
+            if (rgb.IsNullOrEmpty()) continue;
+
+            // Writer 写入时加了 FF 前缀（如 "FF{color}" → "FFFF0000"），去除前缀
+            var color = rgb!.StartsWith("FF") ? rgb[2..] : rgb;
+            result[sheetName] = color;
+        }
+        return result;
+    }
+
+    /// <summary>读取工作簿保护信息</summary>
+    /// <returns>(lockStructure, lockWindows, passwordHash)，null 表示未保护</returns>
+    public (Boolean LockStructure, Boolean LockWindows, String? PasswordHash)? ReadWorkbookProtection()
+    {
+        var entry = _zip.GetEntry("xl/workbook.xml");
+        if (entry == null) return null;
+
+        using var es = entry.Open();
+        var doc = XDocument.Load(es);
+        if (doc.Root == null) return null;
+
+        var wp = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("workbookProtection"));
+        if (wp == null) return null;
+
+        var ls = wp.Attribute("lockStructure")?.Value == "1";
+        var lw = wp.Attribute("lockWindows")?.Value == "1";
+        var hash = wp.Attribute("workbookPassword")?.Value;
+        return (ls, lw, hash);
+    }
+
+    /// <summary>读取计算选项</summary>
+    /// <returns>(calcId, fullCalcOnLoad)，null 表示无 calcPr 设置</returns>
+    public (Int32 CalcId, Boolean FullCalcOnLoad)? ReadCalcPr()
+    {
+        var entry = _zip.GetEntry("xl/workbook.xml");
+        if (entry == null) return null;
+
+        using var es = entry.Open();
+        var doc = XDocument.Load(es);
+        if (doc.Root == null) return null;
+
+        var cp = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("calcPr"));
+        if (cp == null) return null;
+
+        var calcId = cp.Attribute("calcId")?.Value.ToInt() ?? 0;
+        var full = cp.Attribute("fullCalcOnLoad")?.Value == "1";
+        return (calcId, full);
+    }
+
     /// <summary>读取条件格式</summary>
     /// <param name="sheet">工作表名称</param>
     /// <returns>条件格式列表</returns>
@@ -1698,6 +1822,18 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                 else if (type == "colorScale")
                 {
                     info.Type = ExcelConditionalFormatType.ColorScale;
+                }
+                else if (type == "iconSet")
+                {
+                    info.Type = ExcelConditionalFormatType.IconSet;
+                    var iconSet = rule.Element(rule.Name.Namespace + "iconSet");
+                    info.IconSetType = iconSet?.Attribute("iconSet")?.Value;
+                }
+                else if (type == "expression")
+                {
+                    info.Type = ExcelConditionalFormatType.Expression;
+                    var formulas = rule.Elements().Where(e => e.Name.LocalName == "formula").ToList();
+                    if (formulas.Count > 0) info.Formula = formulas[0].Value;
                 }
 
                 yield return info;

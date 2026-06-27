@@ -18,5 +18,11 @@ public class ExcelConditionalFormat
 
     /// <summary>颜色（RGB十六进制）</summary>
     public String? Color { get; set; }
+
+    /// <summary>图标集类型（仅 IconSet 类型，如 "3Arrows"/"3TrafficLights1"）</summary>
+    public String? IconSetType { get; set; }
+
+    /// <summary>自定义公式（仅 Expression 类型）</summary>
+    public String? Formula { get; set; }
     #endregion
 }
