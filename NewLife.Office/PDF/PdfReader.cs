@@ -106,6 +106,9 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
                         earlyChange = (Int32)ecn.Value;
                     result = DecodeLzw(result, earlyChange);
                     break;
+                case "RunLengthDecode":
+                    result = DecodeRunLength(result);
+                    break;
             }
         }
         return result;
@@ -1345,6 +1348,47 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         }
         bitPos += numBits;
         return value;
+    }
+
+    /// <summary>RunLengthDecode（PDF RLE）解压缩</summary>
+    /// <param name="data">RLE 编码数据</param>
+    /// <returns>解码后的原始数据</returns>
+    /// <remarks>
+    /// PDF RunLength 编码：
+    /// - 字节 n (0-127): 复制接下来的 n+1 个字节原样输出
+    /// - 字节 n (128-255): 将下一个字节重复 257-n 次
+    /// - 字节 128: EOD（流结束）
+    /// </remarks>
+    public static Byte[] DecodeRunLength(Byte[] data)
+    {
+        if (data == null || data.Length == 0) return [];
+
+        using var output = new MemoryStream();
+        var pos = 0;
+        while (pos < data.Length)
+        {
+            var n = data[pos++];
+            if (n == 128) break; // EOD
+
+            if (n < 128)
+            {
+                // 复制接下来的 n+1 个字节
+                var count = n + 1;
+                if (pos + count > data.Length) count = data.Length - pos;
+                output.Write(data, pos, count);
+                pos += count;
+            }
+            else
+            {
+                // 重复下一个字节 257-n 次
+                if (pos >= data.Length) break;
+                var count = 257 - n;
+                var b = data[pos++];
+                for (var i = 0; i < count; i++)
+                    output.WriteByte(b);
+            }
+        }
+        return output.ToArray();
     }
 
     /// <summary>从十六进制字符串解码为文本</summary>

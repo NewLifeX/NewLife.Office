@@ -285,4 +285,42 @@ public class PdfEnhancementTests
         return ms.ToArray();
     }
     #endregion
+
+    #region RunLengthDecode 解码
+    [Fact(DisplayName = "PDF—RLE解码重复字节序列")]
+    public void RleDecode_RepeatedBytes()
+    {
+        // "AAAA": n=253(0xFD) → 257-253=4次, 'A'(0x41), EOD(128)
+        var encoded = new Byte[] { 0xFD, 0x41, 0x80 };
+        var decoded = PdfReader.DecodeRunLength(encoded);
+        Assert.Equal("AAAA", Encoding.ASCII.GetString(decoded));
+    }
+
+    [Fact(DisplayName = "PDF—RLE解码字面量序列")]
+    public void RleDecode_LiteralBytes()
+    {
+        // "ABC": n=2 → copy 3 bytes, 'A','B','C', EOD(128)
+        var encoded = new Byte[] { 0x02, 0x41, 0x42, 0x43, 0x80 };
+        var decoded = PdfReader.DecodeRunLength(encoded);
+        Assert.Equal("ABC", Encoding.ASCII.GetString(decoded));
+    }
+
+    [Fact(DisplayName = "PDF—RLE解码混合序列")]
+    public void RleDecode_Mixed()
+    {
+        // "AABBB": n=1(copy 2:'A','A'), n=254(257-254=3 repeat B), 'B', EOD(128)
+        var encoded = new Byte[] { 0x01, 0x41, 0x41, 0xFE, 0x42, 0x80 };
+        var decoded = PdfReader.DecodeRunLength(encoded);
+        Assert.Equal("AABBB", Encoding.ASCII.GetString(decoded));
+    }
+
+    [Fact(DisplayName = "PDF—RLE解码空数据")]
+    public void RleDecode_Empty()
+    {
+        var decoded = PdfReader.DecodeRunLength([]);
+        Assert.Empty(decoded);
+        decoded = PdfReader.DecodeRunLength(null!);
+        Assert.Empty(decoded);
+    }
+    #endregion
 }
