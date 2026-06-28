@@ -594,6 +594,26 @@ public class PdfWriter : IDisposable
         _content.AppendLine("[] 0 d");
     }
 
+    /// <summary>设置绘图透明度（影响后续所有 Draw* 方法的填充和描边）</summary>
+    /// <param name="fillAlpha">填充不透明度（0=完全透明，1=完全不透明），-1 表示不改变</param>
+    /// <param name="strokeAlpha">描边不透明度（0=完全透明，1=完全不透明），-1 表示不改变</param>
+    /// <remarks>调用 SetOpacity(1, 1) 或 SetOpacity() 恢复完全不透明</remarks>
+    public void SetOpacity(Single fillAlpha = 1f, Single strokeAlpha = 1f)
+    {
+        EnsurePage();
+        var gsName = _ensureExtGState(CurrentPage!, fillAlpha, strokeAlpha);
+        _content.AppendLine($"/{gsName} gs");
+    }
+
+    private String _ensureExtGState(PdfPage page, Single fillAlpha, Single strokeAlpha)
+    {
+        var key = $"{fillAlpha:F2},{strokeAlpha:F2}";
+        if (page.ExtGStates.TryGetValue(key, out var name)) return name;
+        name = $"GS{page.ExtGStates.Count + 1}";
+        page.ExtGStates[key] = name;
+        return name;
+    }
+
     /// <summary>绘制多边形</summary>
     /// <param name="points">顶点序列（至少3个），每项为 (X, Y) 元组</param>
     /// <param name="filled">是否填充</param>
@@ -1673,6 +1693,22 @@ public class PdfWriter : IDisposable
             resSb.Append(fontRefs);
             resSb.Append(" >>");
             if (imgRefs.Length > 0) { resSb.Append("\n/XObject << "); resSb.Append(imgRefs); resSb.Append(" >>"); }
+            // ExtGState 字典（透明度等）
+            if (page.ExtGStates.Count > 0)
+            {
+                resSb.Append("\n/ExtGState << ");
+                foreach (var kv in page.ExtGStates)
+                {
+                    var parts = kv.Key.Split(',');
+                    var fa = Single.Parse(parts[0]);
+                    var sa = Single.Parse(parts[1]);
+                    resSb.Append($"/{kv.Value} << /Type /ExtGState");
+                    if (fa < 0.999f) resSb.Append($" /ca {fa:F2}");
+                    if (sa < 0.999f) resSb.Append($" /CA {sa:F2}");
+                    resSb.Append(" >> ");
+                }
+                resSb.Append(">>");
+            }
             resSb.Append(" >>");
 
             // 合并超链接、表单注释和通用注释引用

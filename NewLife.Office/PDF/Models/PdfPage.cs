@@ -24,6 +24,9 @@ public class PdfPage
     /// <summary>页面超链接注释列表（PDF 坐标：原点在左下角）</summary>
     public List<(Single X, Single Y, Single W, Single H, String Url)> LinkAnnotations { get; } = [];
 
+    /// <summary>页面 ExtGState 字典（Key=fillAlpha,strokeAlpha, Value=GS名称）</summary>
+    public Dictionary<String, String> ExtGStates { get; } = [];
+
     /// <summary>PDF 对象号（catalog=1, pages=2, page=3...）</summary>
     internal Int32 PageObjId { get; set; }
 

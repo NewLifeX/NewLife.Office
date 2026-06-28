@@ -423,6 +423,25 @@ public class PdfWriterTests
         Assert.True(ms.Length > 0);
     }
 
+    [Fact(DisplayName = "透明度—SetOpacity设置填充/描边不透明度")]
+    public void SetOpacity_Works()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.SetOpacity(0.5f, 0.8f);
+        writer.DrawRect(50, 50, 100, 100, true, "4472C4");
+        writer.SetOpacity(1f, 1f);
+        writer.Save(ms);
+
+        ms.Position = 0;
+        Assert.True(ms.Length > 0);
+        var content = Encoding.UTF8.GetString(ms.ToArray());
+        Assert.Contains("/GS1 gs", content);
+        Assert.Contains("/ca 0.50", content);
+        Assert.Contains("/CA 0.80", content);
+    }
+
     [Fact(DisplayName = "虚线样式—SetLineDash/SetLineDot/SetLineSolid")]
     public void LineDash_SetsPattern()
     {
