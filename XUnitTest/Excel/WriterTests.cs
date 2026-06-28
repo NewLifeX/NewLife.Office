@@ -901,6 +901,76 @@ public class ExcelWriterTests
         Assert.Contains("x14:sparkline", xml);
         Assert.Contains("G2", xml);
     }
+
+    [Fact(DisplayName = "迷你图—写入后ReadSparklines可回读")]
+    public void ReadSparklines_RoundTrip()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteHeader(null!, new[] { "A", "B", "C", "D", "E", "F" });
+        w.WriteRow(null, new Object?[] { 1, 2, 3, 4, 5, 6 });
+        w.AddSparklineGroup(null, "Sheet1!B2:F2", "Sheet1!G2", "line", "FF0000", "FF0000");
+        w.Save();
+
+        ms.Position = 0;
+        using var reader = new ExcelReader(ms, Encoding.UTF8);
+        var sheetName = reader.Sheets!.First();
+        var groups = reader.ReadSparklines(sheetName);
+        Assert.NotEmpty(groups);
+        Assert.Single(groups);
+        var sg = groups[0];
+        Assert.Equal("line", sg.Type);
+        Assert.Equal("Sheet1!B2:F2", sg.DataRange);
+        Assert.NotEmpty(sg.Sparklines);
+        Assert.Contains("G2", sg.Sparklines[0]);
+        Assert.True(sg.ShowMarkers);
+    }
+
+    [Fact(DisplayName = "迷你图—无迷你图的Sheet返回空列表")]
+    public void ReadSparklines_NoSparklines_ReturnsEmpty()
+    {
+        using var ms = new MemoryStream();
+        var w = new ExcelWriter(ms);
+        w.WriteRow(null, new Object?[] { "A", "B" });
+        w.Save();
+
+        ms.Position = 0;
+        using var reader = new ExcelReader(ms, Encoding.UTF8);
+        var sheetName = reader.Sheets!.First();
+        var groups = reader.ReadSparklines(sheetName);
+        Assert.NotNull(groups);
+        Assert.Empty(groups);
+    }
+    #endregion
+
+    #region 透视表筛选字段
+    [Fact(DisplayName = "透视表—AddFilterField写入pageFields")]
+    public void PivotTable_AddFilterField_WritesPageFields()
+    {
+        using var ms = new MemoryStream();
+        var builder = new ExcelPivotBuilder();
+        builder.SetSourceData(
+            new[] { "Region", "Product", "Sales" },
+            new List<Object?[]>
+            {
+                new Object?[] { "East", "A", 100 },
+                new Object?[] { "West", "B", 200 },
+            });
+        builder.AddFilterField("Region");
+        builder.AddRowField("Product");
+        builder.AddDataField("Sales", ExcelPivotSummaryFunction.Sum);
+        builder.Save(ms);
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true, Encoding.UTF8);
+        var entry = za.GetEntry("xl/pivotTables/pivotTable1.xml");
+        Assert.NotNull(entry);
+        using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("pageFields", xml);
+        Assert.Contains("pageField", xml);
+        Assert.Contains("axis=\"axisPage\"", xml);
+    }
     #endregion
 
     #region 辅助类

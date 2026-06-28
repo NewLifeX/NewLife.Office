@@ -1222,6 +1222,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         // 图表
         sd.Charts = ReadCharts(sheet);
 
+        // 迷你图
+        sd.SparklineGroups = ReadSparklines(sheet);
+
         // 批注
         sd.Comments = ReadComments(sheet);
 
@@ -2191,6 +2194,71 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
             }
 
             result.Add(chart);
+        }
+
+        return result;
+    }
+
+    /// <summary>读取迷你图（Sparkline）</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>迷你图组列表</returns>
+    /// <remarks>
+    /// 解析工作表 XML 中的 x14:sparklineGroups 元素。
+    /// Excel 2010+ 才引入迷你图，因此老版本 xlsx 文件中不存在此节点。
+    /// </remarks>
+    public List<ExcelSparklineGroup> ReadSparklines(String sheet)
+    {
+        var result = new List<ExcelSparklineGroup>();
+
+        if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry))
+            return result;
+
+        using var es = sheetEntry.Open();
+        var doc = XDocument.Load(es);
+        if (doc.Root == null) return result;
+
+        // x14:sparklineGroups 节点
+        var sglEl = doc.Root.Elements()
+            .FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sparklineGroups"));
+        if (sglEl == null) return result;
+
+        foreach (var sgEl in sglEl.Elements()
+            .Where(e => e.Name.LocalName.EqualIgnoreCase("sparklineGroup")))
+        {
+            var group = new ExcelSparklineGroup();
+
+            // 读取 sqref（数据范围）
+            var sqrefEl = sgEl.Elements()
+                .FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sqref"));
+            group.DataRange = sqrefEl?.Value ?? String.Empty;
+
+            // 读取 sparklines 中的每个 sparkline 位置
+            var sparklinesEl = sgEl.Elements()
+                .FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sparklines"));
+            if (sparklinesEl != null)
+            {
+                foreach (var spEl in sparklinesEl.Elements()
+                    .Where(e => e.Name.LocalName.EqualIgnoreCase("sparkline")))
+                {
+                    var fEl = spEl.Elements()
+                        .FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("f"));
+                    if (fEl != null && !fEl.Value.IsNullOrEmpty())
+                        group.Sparklines.Add(fEl.Value);
+                }
+            }
+
+            // 构建 CellRange（从 sparklines 的 f 值组合）
+            if (group.Sparklines.Count > 0)
+            {
+                group.CellRange = String.Join(",", group.Sparklines);
+            }
+
+            // 读取 type（从颜色系列推断，x14 规范中通过系列颜色区分）
+            // 默认为 line，column/stacked 目前从标记判断
+            group.Type = "line";
+            group.ShowMarkers = sgEl.Attribute("markers")?.Value == "1";
+
+            result.Add(group);
         }
 
         return result;

@@ -79,6 +79,14 @@ public class ExcelPivotBuilder
         return this;
     }
 
+    /// <summary>添加筛选字段（报表筛选区）</summary>
+    /// <param name="fieldName">字段名称</param>
+    public ExcelPivotBuilder AddFilterField(String fieldName)
+    {
+        Fields.Add(new ExcelPivotField { Name = fieldName, IsFilterField = true });
+        return this;
+    }
+
     /// <summary>生成包含数据源和透视表的 xlsx 文件</summary>
     /// <param name="outputPath">输出文件路径</param>
     public void Save(String outputPath)
@@ -294,6 +302,7 @@ public class ExcelPivotBuilder
         var rowFields = Fields.Where(f => f.IsRowField).ToList();
         var colFields = Fields.Where(f => f.IsColumnField).ToList();
         var dataFields = Fields.Where(f => f.IsDataField).ToList();
+        var filterFields = Fields.Where(f => f.IsFilterField).ToList();
 
         // 字段索引映射
         var fieldIndex = new Dictionary<String, Int32>(StringComparer.OrdinalIgnoreCase);
@@ -314,6 +323,14 @@ public class ExcelPivotBuilder
             {
                 sb.Append("<pivotField axis=\"axisRow\" showAll=\"0\"><items count=\"1\"><item t=\"default\"/></items></pivotField>");
             }
+            else if (field?.IsColumnField == true)
+            {
+                sb.Append("<pivotField axis=\"axisCol\" showAll=\"0\"><items count=\"1\"><item t=\"default\"/></items></pivotField>");
+            }
+            else if (field?.IsFilterField == true)
+            {
+                sb.Append("<pivotField axis=\"axisPage\" showAll=\"0\"><items count=\"1\"><item t=\"default\"/></items></pivotField>");
+            }
             else if (field?.IsDataField == true)
             {
                 sb.Append("<pivotField dataField=\"1\" showAll=\"0\"><items count=\"0\"/></pivotField>");
@@ -324,6 +341,18 @@ public class ExcelPivotBuilder
             }
         }
         sb.Append("</pivotFields>");
+
+        // 筛选字段（报表筛选区）
+        if (filterFields.Count > 0)
+        {
+            sb.Append($"<pageFields count=\"{filterFields.Count}\">");
+            foreach (var ff in filterFields)
+            {
+                if (fieldIndex.TryGetValue(ff.Name, out var idx))
+                    sb.Append($"<pageField fld=\"{idx}\"/>");
+            }
+            sb.Append("</pageFields>");
+        }
 
         if (rowFields.Count > 0)
         {

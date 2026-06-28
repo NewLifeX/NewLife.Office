@@ -96,5 +96,8 @@ public class ExcelSheet
 
     /// <summary>结构化表格集合（由 ExcelWriter.AddTable 写入）</summary>
     public List<ExcelTableInfo> Tables { get; set; } = [];
+
+    /// <summary>迷你图组集合（由 ExcelWriter.AddSparklineGroup 写入）</summary>
+    public List<ExcelSparklineGroup> SparklineGroups { get; set; } = [];
     #endregion
 }
