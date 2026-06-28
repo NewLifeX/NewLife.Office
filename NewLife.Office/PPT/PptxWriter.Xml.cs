@@ -518,13 +518,23 @@ partial class PptxWriter
             else
                 sb.Append("<a:noFill/>");
             if (sp.LineColor != null)
-                sb.Append($"<a:ln w=\"{sp.LineWidth}\"><a:solidFill><a:srgbClr val=\"{sp.LineColor.TrimStart('#')}\"/></a:solidFill></a:ln>");
+                sb.Append($"<a:ln w=\"{sp.LineWidth}\"><a:solidFill><a:srgbClr val=\"{sp.LineColor.TrimStart('#')}\"/></a:solidFill>");
             else
-                sb.Append("<a:ln><a:noFill/></a:ln>");
+                sb.Append("<a:ln><a:noFill/>");
+            if (sp.DashStyle != null)
+                sb.Append($"<a:prstDash val=\"{sp.DashStyle}\"/>");
+            sb.Append("</a:ln>");
             sb.Append("</p:spPr>");
             if (sp.Text != null)
             {
-                sb.Append("<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r>");
+                // bodyPr with text direction, autofit, and insets
+                var vertAttr = sp.TextDirection != null ? $" vert=\"{sp.TextDirection}\"" : "";
+                var insetL = sp.LeftInset ?? 25400;
+                var insetR = sp.RightInset ?? 25400;
+                var insetT = sp.TopInset ?? 12700;
+                var insetB = sp.BottomInset ?? 12700;
+                var autoFitXml = sp.TextAutoFit == "norm" ? "<a:normAutofit/>" : sp.TextAutoFit == "noAuto" ? "<a:noAutofit/>" : "";
+                sb.Append($"<p:txBody><a:bodyPr lIns=\"{insetL}\" rIns=\"{insetR}\" tIns=\"{insetT}\" bIns=\"{insetB}\"{vertAttr}>{autoFitXml}</a:bodyPr><a:lstStyle/><a:p><a:r>");
                 sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{sp.FontSize * 100}\"{(sp.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
                 WriteFontColor(sb, sp.FontColor);
                 WriteFontElements(sb, sp.LatinFontName, sp.EastAsianFontName, sp.ComplexScriptFontName, sp.SymbolFontName);

@@ -1107,4 +1107,32 @@ public class PptxWriterTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact(DisplayName = "形状增强—TextDirection/DashStyle/Inset输出bodyPr和prstDash")]
+    public void Shape_TextDirection_DashStyle_Inset_OutputXml()
+    {
+        using var writer = new PptxWriter();
+        var shape = writer.AddShape(0, "rect", 2, 2, 6, 4);
+        shape.Text = "竖排虚线边框形状";
+        shape.TextDirection = "vert";
+        shape.DashStyle = "dash";
+        shape.LeftInset = 50000;
+        shape.TopInset = 30000;
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            writer.Save(tempFile);
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("ppt/slides/slide1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("vert=\"vert\"", xml);
+            Assert.Contains("prstDash val=\"dash\"", xml);
+            Assert.Contains("lIns=\"50000\"", xml);
+            Assert.Contains("tIns=\"30000\"", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
 }

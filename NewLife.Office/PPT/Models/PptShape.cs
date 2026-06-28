@@ -90,6 +90,27 @@ public class PptShape
 
     /// <summary>垂直翻转（对应 OOXML a:xfrm flipV）</summary>
     public Boolean FlipVertical { get; set; }
+
+    /// <summary>文本方向（"horz"=横排/"vert"=竖排/"vert270"=竖排270），null=默认横排</summary>
+    public String? TextDirection { get; set; }
+
+    /// <summary>文本自动适应（"norm"=自动缩小/"noAuto"=不自动适应），null=默认</summary>
+    public String? TextAutoFit { get; set; }
+
+    /// <summary>文本左边距（EMU），null=默认（25400=0.1英寸）</summary>
+    public Int64? LeftInset { get; set; }
+
+    /// <summary>文本右边距（EMU），null=默认</summary>
+    public Int64? RightInset { get; set; }
+
+    /// <summary>文本上边距（EMU），null=默认（12700=0.05英寸）</summary>
+    public Int64? TopInset { get; set; }
+
+    /// <summary>文本下边距（EMU），null=默认</summary>
+    public Int64? BottomInset { get; set; }
+
+    /// <summary>线条虚线样式（"dash"/"dot"/"dashDot"/"lgDash" 等），null=实线</summary>
+    public String? DashStyle { get; set; }
     #endregion
 
     #region 方法
