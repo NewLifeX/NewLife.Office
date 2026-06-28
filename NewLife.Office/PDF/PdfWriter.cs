@@ -406,6 +406,65 @@ public class PdfWriter : IDisposable
         _content.AppendLine("Q");
     }
 
+    /// <summary>绘制圆弧</summary>
+    /// <param name="cx">中心 X</param>
+    /// <param name="cy">中心 Y（从底部量起）</param>
+    /// <param name="r">半径</param>
+    /// <param name="startAngle">起始角度（度，0=3点钟方向，逆时针）</param>
+    /// <param name="endAngle">结束角度（度）</param>
+    /// <param name="strokeColorHex">线条颜色（16进制 RGB）</param>
+    /// <param name="lineWidth">线宽</param>
+    /// <remarks>使用三次贝塞尔曲线分段逼近圆弧，每段 ≤ 90°</remarks>
+    public void DrawArc(Single cx, Single cy, Single r, Single startAngle, Single endAngle,
+        String? strokeColorHex = null, Single lineWidth = 0.5f)
+    {
+        // 规范化角度差（确保逆时针且不超过 360°）
+        var sweep = endAngle - startAngle;
+        while (sweep <= 0) sweep += 360;
+        if (sweep > 360) sweep = 360;
+
+        EnsurePage();
+        var sb = new StringBuilder();
+        sb.AppendLine("q");
+        sb.AppendLine($"{lineWidth:F2} w");
+        if (strokeColorHex != null) sb.AppendLine(HexToRgbOp(strokeColorHex, false));
+
+        // 将弧度范围按每段 ≤ 90° 分段
+        var segCount = (Int32)Math.Ceiling(sweep / 90.0);
+        var segSweep = sweep / segCount;
+
+        // 贝塞尔魔术常数
+        const Double k = 0.5522847498;
+
+        // 第一段：moveto 起点
+        var angleRad = startAngle * Math.PI / 180.0;
+        var sx = cx + r * (Single)Math.Cos(angleRad);
+        var sy = cy + r * (Single)Math.Sin(angleRad);
+        sb.Append($"{sx:F2} {sy:F2} m");
+
+        for (var i = 0; i < segCount; i++)
+        {
+            var a1 = (startAngle + i * segSweep) * Math.PI / 180.0;
+            var a2 = (startAngle + (i + 1) * segSweep) * Math.PI / 180.0;
+            var da = a2 - a1;
+
+            // 控制点：从起点沿切线方向延伸 k*r*tan(da/2)，终点沿反向切线
+            var tanLen = (Single)(k * r * Math.Tan(da / 2.0));
+            var c1x = cx + r * (Single)Math.Cos(a1) - tanLen * (Single)Math.Sin(a1);
+            var c1y = cy + r * (Single)Math.Sin(a1) + tanLen * (Single)Math.Cos(a1);
+            var c2x = cx + r * (Single)Math.Cos(a2) + tanLen * (Single)Math.Sin(a2);
+            var c2y = cy + r * (Single)Math.Sin(a2) - tanLen * (Single)Math.Cos(a2);
+            var ex = cx + r * (Single)Math.Cos(a2);
+            var ey = cy + r * (Single)Math.Sin(a2);
+
+            sb.Append($" {c1x:F2} {c1y:F2} {c2x:F2} {c2y:F2} {ex:F2} {ey:F2} c");
+        }
+
+        sb.AppendLine(" S");
+        _content.Append(sb.ToString());
+        _content.AppendLine("Q");
+    }
+
     /// <summary>绘制多边形</summary>
     /// <param name="points">顶点序列（至少3个），每项为 (X, Y) 元组</param>
     /// <param name="filled">是否填充</param>

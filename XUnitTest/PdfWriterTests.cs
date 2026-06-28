@@ -380,4 +380,32 @@ public class PdfWriterTests
         Assert.True(ms.Length > 0);
     }
     #endregion
+
+    #region 圆弧绘制
+    [Fact(DisplayName = "DrawArc绘制90度圆弧")]
+    public void DrawArc_QuarterCircle()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.DrawArc(200, 300, 100, 0, 90, strokeColorHex: "0000FF", lineWidth: 1);
+        writer.Save(ms);
+
+        ms.Position = 0;
+        Assert.True(ms.Length > 0);
+    }
+
+    [Fact(DisplayName = "DrawArc绘制270度大弧")]
+    public void DrawArc_Large270DegreeArc()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.DrawArc(300, 400, 120, 45, 315, strokeColorHex: "FF0000", lineWidth: 2);
+        writer.Save(ms);
+
+        ms.Position = 0;
+        Assert.True(ms.Length > 0);
+    }
+    #endregion
 }
