@@ -421,6 +421,16 @@ public partial class PptxWriter : IDisposable
         Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
         => AddChart(slideIndex, "radar", categories, leftCm, topCm, widthCm, heightCm);
 
+    /// <summary>向幻灯片添加股价图（K线/OHLC）</summary>
+    public PptChart AddStockChart(Int32 slideIndex, String[] categories,
+        Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
+        => AddChart(slideIndex, "stock", categories, leftCm, topCm, widthCm, heightCm);
+
+    /// <summary>向幻灯片添加曲面图</summary>
+    public PptChart AddSurfaceChart(Int32 slideIndex, String[] categories,
+        Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
+        => AddChart(slideIndex, "surface", categories, leftCm, topCm, widthCm, heightCm);
+
     private PptChart AddChart(Int32 slideIndex, String chartType, String[] categories,
         Double leftCm, Double topCm, Double widthCm, Double heightCm)
     {

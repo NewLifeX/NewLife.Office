@@ -983,6 +983,25 @@ public class PptxWriterTests
         Assert.Contains("50000", xml);
     }
 
+    [Fact, System.ComponentModel.DisplayName("股价图—AddStockChart创建并验证")]
+    public void StockChart_CreatesSuccessfully()
+    {
+        var writer = new PptxWriter();
+        writer.AddSlide(0);
+        var chart = writer.AddStockChart(0, ["周一", "周二", "周三"], 2, 2, 16, 12);
+        chart.Series.Add(new PptChartSeries { Name = "AAPL", Values = [150, 152, 148] });
+
+        using var ms = new MemoryStream();
+        writer.Save(ms);
+        Assert.True(ms.Length > 0);
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true);
+        var chartEntry = za.GetEntry("ppt/charts/chart1.xml");
+        Assert.NotNull(chartEntry);
+        using var sr = new StreamReader(chartEntry!.Open(), Encoding.UTF8);
+        Assert.Contains("stockChart", sr.ReadToEnd());
+    }
+
     [Fact, System.ComponentModel.DisplayName("雷达图—AddRadarChart创建并验证")]
     public void RadarChart_CreatesSuccessfully()
     {

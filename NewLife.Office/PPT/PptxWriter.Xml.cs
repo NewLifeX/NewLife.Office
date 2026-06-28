@@ -961,6 +961,8 @@ partial class PptxWriter
             "scatter" => "scatterChart",
             "bubble" => "bubbleChart",
             "radar" => "radarChart",
+            "stock" => "stockChart",
+            "surface" => "surfaceChart",
             _ => "barChart",
         };
         sb.Append($"<c:{chartElem}>");
