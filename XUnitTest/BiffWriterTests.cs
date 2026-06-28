@@ -766,5 +766,20 @@ public class BiffWriterTests
         Assert.True(found, "DEFCOLWIDTH record (0x0055) with width=3072 not found in file");
     }
 
+    [Fact(DisplayName = "BiffReader—GetColumnWidths API可用")]
+    public void BiffReader_GetColumnWidths_ReturnsDictionary()
+    {
+        using var writer = new BiffWriter();
+        writer.WriteHeader(["A", "B"]);
+        writer.WriteRow(["1", "2"]);
+
+        var bytes = writer.ToBytes();
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        var rows = reader.ReadSheet().ToList();
+        Assert.NotEmpty(rows);
+        var widths = reader.GetColumnWidths();
+        Assert.NotNull(widths); // API exists, may be empty for files without COLINFO
+    }
+
     #endregion
 }

@@ -29,6 +29,7 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     private List<String> _sheetNames = [];
     private List<Int32> _sheetBofOffsets = [];
     private readonly List<(Int32 Row, Int32 Col, String Url)> _hyperlinks = [];
+    private readonly Dictionary<Int32, Double> _columnWidths = [];
     private Boolean _disposed;
     #endregion
 
@@ -292,6 +293,8 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
                 ParseFormula(data, cells, ref maxCol);
             else if (type == RecHyperlink)
                 ParseHyperlink(data);
+            else if (type == RecColInfo)
+                ParseColInfo(data);
             // RecBlank / RecMulBlank：空单元格，跳过
         }
 
@@ -500,6 +503,23 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     /// <returns>超链接列表（行、列、URL）</returns>
     public IReadOnlyList<(Int32 Row, Int32 Col, String Url)> GetHyperlinks() => _hyperlinks.AsReadOnly();
 
+    /// <summary>获取已解析的列宽（列索引 → 宽度，以字符宽度为单位）</summary>
+    /// <returns>列宽字典的只读包装</returns>
+    public IReadOnlyDictionary<Int32, Double> GetColumnWidths() => new Dictionary<Int32, Double>(_columnWidths);
+
+    private void ParseColInfo(Byte[] data)
+    {
+        if (data.Length < 10) return;
+        var reader = new SpanReader(data, 0, data.Length);
+        var firstCol = (Int32)reader.ReadUInt16();
+        var lastCol = (Int32)reader.ReadUInt16();
+        var widthRaw = reader.ReadUInt16(); // 1/256 of character width
+        reader.Advance(4); // skip xfIndex(2) + flags(2)
+        var width = widthRaw / 256.0;
+        for (var c = firstCol; c <= lastCol; c++)
+            _columnWidths[c] = width;
+    }
+
     /// <summary>解码 RK 压缩数值</summary>
     /// <param name="rk">4字节 RK 值</param>
     /// <returns>解码后的浮点数</returns>
@@ -621,6 +641,7 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     private const UInt16 RecBlank = 0x0201;
     private const UInt16 RecFormula = 0x0006;
     private const UInt16 RecMulBlank = 0x00BF;
+    private const UInt16 RecColInfo = 0x007D;
     #endregion
 
     #region 文本提取
