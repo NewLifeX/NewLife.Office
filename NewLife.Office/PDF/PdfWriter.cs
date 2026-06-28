@@ -568,6 +568,32 @@ public class PdfWriter : IDisposable
         _content.AppendLine("Q");
     }
 
+    /// <summary>设置线型为虚线（影响后续所有 Draw* 方法的线条）</summary>
+    /// <param name="dashOn">实线段长度（点）</param>
+    /// <param name="dashOff">空白段长度（点）</param>
+    /// <remarks>调用 SetLineSolid() 恢复实线</remarks>
+    public void SetLineDash(Single dashOn = 4f, Single dashOff = 3f)
+    {
+        EnsurePage();
+        _content.AppendLine($"[{dashOn:F1} {dashOff:F1}] 0 d");
+    }
+
+    /// <summary>设置线型为点线（影响后续所有 Draw* 方法的线条）</summary>
+    /// <param name="dotSize">点的大小（点），默认 1.5</param>
+    /// <param name="gapSize">点间距（点），默认 2.5</param>
+    public void SetLineDot(Single dotSize = 1.5f, Single gapSize = 2.5f)
+    {
+        EnsurePage();
+        _content.AppendLine($"[{dotSize:F1} {gapSize:F1}] 0 d");
+    }
+
+    /// <summary>恢复实线样式</summary>
+    public void SetLineSolid()
+    {
+        EnsurePage();
+        _content.AppendLine("[] 0 d");
+    }
+
     /// <summary>绘制多边形</summary>
     /// <param name="points">顶点序列（至少3个），每项为 (X, Y) 元组</param>
     /// <param name="filled">是否填充</param>

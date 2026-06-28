@@ -423,6 +423,25 @@ public class PdfWriterTests
         Assert.True(ms.Length > 0);
     }
 
+    [Fact(DisplayName = "虚线样式—SetLineDash/SetLineDot/SetLineSolid")]
+    public void LineDash_SetsPattern()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.SetLineDash(4, 3);
+        writer.DrawLine(10, 10, 100, 10, 1);
+        writer.SetLineSolid();
+        writer.DrawLine(10, 20, 100, 20, 1);
+        writer.Save(ms);
+
+        ms.Position = 0;
+        Assert.True(ms.Length > 0);
+        var content = Encoding.UTF8.GetString(ms.ToArray());
+        Assert.Contains("[4.0 3.0] 0 d", content);
+        Assert.Contains("[] 0 d", content);
+    }
+
     [Fact(DisplayName = "DrawBezier贝塞尔曲线")]
     public void DrawBezier_Curve()
     {
