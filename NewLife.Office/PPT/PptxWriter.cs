@@ -597,6 +597,30 @@ public partial class PptxWriter : IDisposable
         slide.Shapes.Insert(shapeIndex - 1, shape);
     }
 
+    /// <summary>取消组合，将组内形状释放到幻灯片顶层（保留位置）</summary>
+    /// <param name="slideIndex">幻灯片索引（0起始）</param>
+    /// <param name="groupIndex">组在 Groups 列表中的索引</param>
+    public void UngroupShapes(Int32 slideIndex, Int32 groupIndex)
+    {
+        var slide = EnsureSlide(slideIndex);
+        if (groupIndex < 0 || groupIndex >= slide.Groups.Count) return;
+        var group = slide.Groups[groupIndex];
+        // 将组内形状坐标从相对于组转换为相对于幻灯片
+        foreach (var s in group.Shapes)
+        {
+            s.Left += group.Left;
+            s.Top += group.Top;
+            slide.Shapes.Add(s);
+        }
+        foreach (var tb in group.TextBoxes)
+        {
+            tb.Left += group.Left;
+            tb.Top += group.Top;
+            slide.TextBoxes.Add(tb);
+        }
+        slide.Groups.RemoveAt(groupIndex);
+    }
+
     /// <summary>为幻灯片添加页脚文本和/或页码（S04-05）</summary>
     /// /// <param name="slideIndex">幻灯片索引（0起始）</param>
     /// <param name="footerText">页脚文本，null 表示不显示</param>

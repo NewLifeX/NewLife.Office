@@ -983,6 +983,27 @@ public class PptxWriterTests
         Assert.Contains("50000", xml);
     }
 
+    [Fact, System.ComponentModel.DisplayName("取消组合—UngroupShapes释放组内形状")]
+    public void UngroupShapes_Works()
+    {
+        var writer = new PptxWriter();
+        writer.AddSlide(0);
+        var group = writer.GroupShapes(0, 1, 1, 10, 10);
+        group.Shapes.Add(new PptShape { ShapeType = "rect", Left = 100, Top = 200, Width = 500, Height = 300 });
+        group.TextBoxes.Add(new PptTextBox { Text = "组内文字", Left = 300, Top = 400, Width = 200, Height = 100 });
+
+        var slide = writer.Slides[0];
+        Assert.Single(slide.Groups);
+        Assert.Empty(slide.Shapes);
+
+        writer.UngroupShapes(0, 0);
+        Assert.Empty(slide.Groups);
+        Assert.Single(slide.Shapes);
+        Assert.Single(slide.TextBoxes);
+        // 坐标应从相对于组转换为相对于幻灯片
+        Assert.True(slide.Shapes[0].Left > 0);
+    }
+
     [Fact, System.ComponentModel.DisplayName("Z-Order—BringToFront置顶")]
     public void ZOrder_BringToFront()
     {
