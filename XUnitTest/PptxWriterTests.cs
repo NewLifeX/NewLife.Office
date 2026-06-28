@@ -1084,4 +1084,27 @@ public class PptxWriterTests
         Assert.Contains("radarChart", xml);
         Assert.Contains("radarStyle", xml);
     }
+
+    [Fact(DisplayName = "翻转—FlipHorizontal/Vertical输出flipH/flipV")]
+    public void FlipHorizontal_Vertical_OutputFlipAttributes()
+    {
+        using var writer = new PptxWriter();
+        var shape = writer.AddShape(0, "rect", 2, 2, 6, 4);
+        shape.FlipHorizontal = true;
+        shape.FlipVertical = true;
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            writer.Save(tempFile);
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("ppt/slides/slide1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("flipH=\"1\"", xml);
+            Assert.Contains("flipV=\"1\"", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
 }

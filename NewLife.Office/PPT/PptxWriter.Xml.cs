@@ -481,6 +481,8 @@ partial class PptxWriter
             sb.Append("<p:spPr>");
             sb.Append($"<a:xfrm><a:off x=\"{sp.Left}\" y=\"{sp.Top}\"/><a:ext cx=\"{sp.Width}\" cy=\"{sp.Height}\"/>");
             if (sp.Rotation != 0) sb.Append($" rot=\"{sp.Rotation}\"");
+            if (sp.FlipHorizontal) sb.Append(" flipH=\"1\"");
+            if (sp.FlipVertical) sb.Append(" flipV=\"1\"");
             sb.Append("</a:xfrm>");
             // 圆角矩形：写入 adj 调整值（CornerRadius=EMU，转换为 OOXML adj 值占宽度百分比*50000）
             if (sp.ShapeType == "roundRect" && sp.CornerRadius > 0)

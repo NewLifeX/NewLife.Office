@@ -84,6 +84,12 @@ public class PptShape
 
     /// <summary>圆角半径（仅 roundRect 形状有效，EMU）</summary>
     public Int64 CornerRadius { get; set; }
+
+    /// <summary>水平翻转（对应 OOXML a:xfrm flipH）</summary>
+    public Boolean FlipHorizontal { get; set; }
+
+    /// <summary>垂直翻转（对应 OOXML a:xfrm flipV）</summary>
+    public Boolean FlipVertical { get; set; }
     #endregion
 
     #region 方法
