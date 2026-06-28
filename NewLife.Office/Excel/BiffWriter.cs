@@ -45,6 +45,7 @@ public sealed class BiffWriter : IDisposable
     private const UInt16 RecMergedCells = 0x00E5;
     private const UInt16 RecHyperlink = 0x01B8;
     private const UInt16 RecAutoFilter = 0x009E;
+    private const UInt16 RecSetup = 0x00A1;
     private const Int32 MaxRecordDataSize = 8224;
 
     // BIFF8 日期纪元：1900-01-01（含 1900 闰年兼容性偏移 +1）
@@ -101,6 +102,9 @@ public sealed class BiffWriter : IDisposable
 
     // 自动筛选：Key = sheetName, Value = (firstRow, lastRow, firstCol, lastCol)
     private readonly Dictionary<String, (Int32 FirstRow, Int32 LastRow, Int32 FirstCol, Int32 LastCol)> _sheetAutoFilters = new(StringComparer.Ordinal);
+
+    // 页面设置：Key = sheetName
+    private readonly Dictionary<String, (Boolean Landscape, Int32 PaperSize, Double HeaderMargin, Double FooterMargin)> _sheetPageSetups = new(StringComparer.Ordinal);
 
     private String _currentSheet = "Sheet1";
     private Boolean _disposed;
@@ -276,6 +280,16 @@ public sealed class BiffWriter : IDisposable
     public void SetAutoFilter(Int32 firstRow, Int32 firstCol, Int32 lastRow, Int32 lastCol)
     {
         _sheetAutoFilters[_currentSheet] = (firstRow, lastRow, firstCol, lastCol);
+    }
+
+    /// <summary>在当前工作表设置页面属性</summary>
+    /// <param name="landscape">横向（true）或纵向（false），默认纵向</param>
+    /// <param name="paperSize">纸张大小（9=Letter, 11=Legal, 1=A5, 5=A4, 8=A3，默认 A4=5）</param>
+    /// <param name="headerMargin">页眉边距（英寸，默认 0.3）</param>
+    /// <param name="footerMargin">页脚边距（英寸，默认 0.3）</param>
+    public void SetPageSetup(Boolean landscape = false, Int32 paperSize = 5, Double headerMargin = 0.3, Double footerMargin = 0.3)
+    {
+        _sheetPageSetups[_currentSheet] = (landscape, paperSize, headerMargin, footerMargin);
     }
 
     #endregion
@@ -554,6 +568,12 @@ public sealed class BiffWriter : IDisposable
             WriteRecord(bw, RecAutoFilter, BuildAutoFilterData(af.FirstRow, af.LastRow, af.FirstCol, af.LastCol));
         }
 
+        // SETUP — 页面设置
+        if (_sheetPageSetups.TryGetValue(sheetName, out var ps))
+        {
+            WriteRecord(bw, RecSetup, BuildSetupData(ps.Landscape, ps.PaperSize, ps.HeaderMargin, ps.FooterMargin));
+        }
+
         // Sheet EOF
         WriteRecord(bw, RecEof, []);
     }
@@ -791,6 +811,34 @@ public sealed class BiffWriter : IDisposable
         writer.Write((UInt16)(lastRow - firstRow + 1));
         writer.Write((UInt16)(lastCol - firstCol + 1));
         writer.Write((UInt16)(lastRow - firstRow + 1));
+        return buf;
+    }
+
+    private static Byte[] BuildSetupData(Boolean landscape, Int32 paperSize, Double headerMargin, Double footerMargin)
+    {
+        // BIFF8 SETUP (0x00A1): 固定 34 字节
+        // 字 段: 2(papSize)+2(scale)+2(pgStart)+2(fitWidth)+2(fitHeight)+2(grbit)+
+        //          2(sclNum)+2(sclDen)+2(marginH)+2(marginH2)+2(marginF)+2(marginF2)+
+        //          2(copies)+2(fface)+4(reserved)
+        var buf = new Byte[34];
+        var writer = new SpanWriter(buf, 0, 34);
+        writer.Write((UInt16)paperSize);              // 0-1: paper size (5=A4)
+        writer.Write((UInt16)100);                     // 2-3: scale = 100%
+        writer.Write((UInt16)1);                       // 4-5: page start = 1
+        writer.Write((UInt16)1);                       // 6-7: fit width = 1
+        writer.Write((UInt16)1);                       // 8-9: fit height = 1
+        var grbit = (UInt16)(landscape ? 0x0001 : 0x0000);
+        writer.Write(grbit);                           // 10-11: grbit (bit0=landscape)
+        writer.Write((UInt16)100);                     // 12-13: sclNum (numerator)
+        writer.Write((UInt16)100);                     // 14-15: sclDen (denominator)
+        writer.Write((UInt16)(headerMargin * 100));    // 16-17: header margin (0.01" units)
+        writer.Write((UInt16)0);                       // 18-19: header margin 2
+        writer.Write((UInt16)(footerMargin * 100));    // 20-21: footer margin
+        writer.Write((UInt16)0);                       // 22-23: footer margin 2
+        writer.Write((UInt16)1);                       // 24-25: copies
+        writer.Write((UInt16)0);                       // 26-27: fface (first page number? 0=auto)
+        writer.Write(0u);                              // 28-31: reserved
+        writer.Write((UInt16)0);                       // 32-33: reserved
         return buf;
     }
 
