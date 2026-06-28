@@ -29,6 +29,7 @@ public class WordWriter : IDisposable
     private Int32 _relCounter = 1;
     private Int32 _imgCounter = 1;
     private Int32 _bookmarkId = 1;
+    private readonly Dictionary<Int32, Int32> _orderedStartOverrides = []; // level → startValue
 
     // 原始 XML 透传（非空时覆盖生成默认）
     private String? _stylesXml;
@@ -403,9 +404,9 @@ public class WordWriter : IDisposable
         WriteRels(za);
         WriteStyles(za);
         WriteSettings(za);
+        WriteDocument(za);
         WriteNumbering(za);
         WriteDocumentRels(za);
-        WriteDocument(za);
         var psave = PageSettings;
         var hdrInOther = _otherParts.ContainsKey("word/header1.xml");
         var ftrInOther = _otherParts.ContainsKey("word/footer1.xml");
@@ -437,6 +438,7 @@ public class WordWriter : IDisposable
     {
         _elements.Clear(); _imageRels.Clear(); _hyperlinkRels.Clear();
         _relCounter = 1; _imgCounter = 1; _bookmarkId = 1;
+        _orderedStartOverrides.Clear();
         _stylesXml = document.StylesXml;
         _numberingXml = document.NumberingXml;
         _settingsXml = document.SettingsXml;
@@ -704,6 +706,17 @@ public class WordWriter : IDisposable
             }
             sb.Append("</w:abstractNum>");
             sb.Append("<w:num w:numId=\"2\"><w:abstractNumId w:val=\"1\"/></w:num>");
+
+            // numId=3: 有序列表（含 startOverride 的变体）
+            if (_orderedStartOverrides.Count > 0)
+            {
+                sb.Append("<w:num w:numId=\"3\"><w:abstractNumId w:val=\"1\"/>");
+                foreach (var kv in _orderedStartOverrides)
+                {
+                    sb.Append($"<w:lvlOverride w:ilvl=\"{kv.Key}\"><w:startOverride w:val=\"{kv.Value}\"/></w:lvlOverride>");
+                }
+                sb.Append("</w:num>");
+            }
         }
 
         sb.Append("</w:numbering>");
@@ -950,7 +963,12 @@ public class WordWriter : IDisposable
             if (para.IsBullet)
                 sb.Append($"<w:numPr><w:ilvl w:val=\"{para.ListLevel}\"/><w:numId w:val=\"1\"/></w:numPr>");
             else if (para.IsOrderedList)
-                sb.Append($"<w:numPr><w:ilvl w:val=\"{para.ListLevel}\"/><w:numId w:val=\"2\"/></w:numPr>");
+            {
+                var numId = para.ListStartOverride.HasValue ? 3 : 2; // numId=3 用于有 startOverride 的列表
+                sb.Append($"<w:numPr><w:ilvl w:val=\"{para.ListLevel}\"/><w:numId w:val=\"{numId}\"/></w:numPr>");
+                if (para.ListStartOverride.HasValue)
+                    _orderedStartOverrides[para.ListLevel] = para.ListStartOverride.Value;
+            }
             // 段落边框
             if (para.Borders != null)
             {

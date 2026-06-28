@@ -45,6 +45,9 @@ public class WordParagraph
     /// <summary>列表级别（0=一级, 1=二级...），配合 IsBullet 使用，默认 0</summary>
     public Int32 ListLevel { get; set; }
 
+    /// <summary>有序列表起始编号（仅 IsOrderedList=true 时有效），默认 1</summary>
+    public Int32? ListStartOverride { get; set; }
+
     /// <summary>书签名称</summary>
     public String? BookmarkName { get; set; }
 

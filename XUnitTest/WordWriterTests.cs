@@ -873,6 +873,29 @@ public class WordWriterTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
 
+    [Fact(DisplayName = "列表续号—startOverride从5开始")]
+    public void OrderedList_StartOverride()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            var p = new WordParagraph { IsOrderedList = true, ListStartOverride = 5 };
+            p.Runs.Add(new WordRun { Text = "从5开始的条目" });
+            writer.AppendParagraph(p);
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var za = new ZipArchive(File.OpenRead(tempFile), ZipArchiveMode.Read);
+            var entry = za.GetEntry("word/numbering.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("startOverride", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
     [Fact(DisplayName = "内容控件—RichText和ComboBox便捷方法")]
     public void Sdt_RichTextAndComboBox()
     {
