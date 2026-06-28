@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using NewLife.Office;
@@ -325,7 +325,7 @@ public class PptxWriterTests
     public void CopyMasterFrom_EquivalentToLoadMaster()
     {
         var template = BuildTemplatePptx("CopyTest");
-        var tmpFile = Path.GetTempFileName() + ".pptx";
+        var tmpFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             File.WriteAllBytes(tmpFile, template);
@@ -1092,7 +1092,7 @@ public class PptxWriterTests
         var shape = writer.AddShape(0, "rect", 2, 2, 6, 4);
         shape.FlipHorizontal = true;
         shape.FlipVertical = true;
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             writer.Save(tempFile);
@@ -1118,7 +1118,7 @@ public class PptxWriterTests
         shape.DashStyle = "dash";
         shape.LeftInset = 50000;
         shape.TopInset = 30000;
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             writer.Save(tempFile);
@@ -1143,7 +1143,7 @@ public class PptxWriterTests
         var shape = writer.AddShape(0, "rect", 2, 2, 6, 4);
         shape.Text = "垂直居中文字";
         shape.Anchor = "ctr";
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             writer.Save(tempFile);
@@ -1170,7 +1170,7 @@ public class PptxWriterTests
             XValues = [1.0, 2.0, 3.0],
             Values = [10.0, 20.0, 15.0]
         });
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             writer.Save(tempFile);
@@ -1192,7 +1192,7 @@ public class PptxWriterTests
         using var writer = new PptxWriter();
         writer.AddSlide();
         writer.SetNotes(0, "这是演讲者备注内容");
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             writer.Save(tempFile);
@@ -1213,7 +1213,7 @@ public class PptxWriterTests
         using var writer = new PptxWriter();
         writer.AddSlide();
         writer.SetSlideFooter(0, "公司机密", true);
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             writer.Save(tempFile);

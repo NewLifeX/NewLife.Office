@@ -918,7 +918,7 @@ public class ExcelWriterTests
     [Fact(DisplayName = "分页符—SetColumnPageBreak写入垂直分页符")]
     public void SetColumnPageBreak_WritesColBreaks()
     {
-        var tempFile = Path.GetTempFileName() + ".xlsx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
         try
         {
             using var writer = new ExcelWriter(tempFile);
@@ -941,7 +941,7 @@ public class ExcelWriterTests
     [Fact(DisplayName = "条件格式—NotEqual类型写入notEqual操作符")]
     public void ConditionalFormat_NotEqual_WritesOperator()
     {
-        var tempFile = Path.GetTempFileName() + ".xlsx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
         try
         {
             using var writer = new ExcelWriter(tempFile);
@@ -965,7 +965,7 @@ public class ExcelWriterTests
     [Fact(DisplayName = "工作表可见性—HideSheet写入state=hidden")]
     public void HideSheet_WritesStateAttribute()
     {
-        var tempFile = Path.GetTempFileName() + ".xlsx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
         try
         {
             using var writer = new ExcelWriter(tempFile);
@@ -987,7 +987,7 @@ public class ExcelWriterTests
     [Fact(DisplayName = "结构化表格—AddTable写入table元素")]
     public void AddTable_WritesTableElement()
     {
-        var tempFile = Path.GetTempFileName() + ".xlsx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
         try
         {
             using var writer = new ExcelWriter(tempFile);
@@ -1012,7 +1012,7 @@ public class ExcelWriterTests
     [Fact(DisplayName = "工作表可见性—UnhideSheet取消隐藏")]
     public void UnhideSheet_ThenHideSheet_RestoresVisibility()
     {
-        var tempFile = Path.GetTempFileName() + ".xlsx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
         try
         {
             using var writer = new ExcelWriter(tempFile);
@@ -1035,7 +1035,7 @@ public class ExcelWriterTests
     [Fact(DisplayName = "工作表标签—SetSheetTabColor写入tabColor")]
     public void SetSheetTabColor_WritesTabColor()
     {
-        var tempFile = Path.GetTempFileName() + ".xlsx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
         try
         {
             using var writer = new ExcelWriter(tempFile);
@@ -1057,7 +1057,7 @@ public class ExcelWriterTests
     [Fact(DisplayName = "条件格式—NotBetween输出cfRule notBetween")]
     public void AddConditionalFormat_NotBetween_WritesCfRule()
     {
-        var tempFile = Path.GetTempFileName() + ".xlsx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
         try
         {
             using var writer = new ExcelWriter(tempFile);
@@ -1081,7 +1081,7 @@ public class ExcelWriterTests
     [Fact(DisplayName = "定义名称—AddDefinedName写入definedNames")]
     public void AddDefinedName_WritesDefinedNameXml()
     {
-        var tempFile = Path.GetTempFileName() + ".xlsx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
         try
         {
             using var writer = new ExcelWriter(tempFile);
@@ -1104,7 +1104,7 @@ public class ExcelWriterTests
     [Fact(DisplayName = "数据验证—AddRangeValidation写入dataValidation")]
     public void AddRangeValidation_WritesDataValidation()
     {
-        var tempFile = Path.GetTempFileName() + ".xlsx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
         try
         {
             using var writer = new ExcelWriter(tempFile);
@@ -1127,7 +1127,7 @@ public class ExcelWriterTests
     [Fact(DisplayName = "分级显示—SetColumnOutlineLevel写入outlinePr summaryBelow")]
     public void SetColumnOutlineLevel_WritesOutlinePr()
     {
-        var tempFile = Path.GetTempFileName() + ".xlsx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
         try
         {
             using var writer = new ExcelWriter(tempFile);

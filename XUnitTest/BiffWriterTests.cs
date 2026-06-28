@@ -501,7 +501,7 @@ public class BiffWriterTests
     [Fact, DisplayName("冻结窗格—冻结首行")]
     public void FreezePane_TopRow()
     {
-        var tempFile = Path.GetTempFileName() + ".xls";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xls");
         try
         {
             using var writer = new BiffWriter();
@@ -525,7 +525,7 @@ public class BiffWriterTests
     [Fact, DisplayName("冻结窗格—冻结首行首列")]
     public void FreezePane_RowAndColumn()
     {
-        var tempFile = Path.GetTempFileName() + ".xls";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xls");
         try
         {
             using var writer = new BiffWriter();
@@ -549,7 +549,7 @@ public class BiffWriterTests
     [Fact, DisplayName("合并单元格—标题行合并")]
     public void MergeCells_SingleRange()
     {
-        var tempFile = Path.GetTempFileName() + ".xls";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xls");
         try
         {
             using var writer = new BiffWriter();
@@ -571,7 +571,7 @@ public class BiffWriterTests
     [Fact, DisplayName("合并单元格—多处合并")]
     public void MergeCells_MultipleRanges()
     {
-        var tempFile = Path.GetTempFileName() + ".xls";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xls");
         try
         {
             using var writer = new BiffWriter();
@@ -595,7 +595,7 @@ public class BiffWriterTests
     [Fact, DisplayName("行高—设置自定义行高")]
     public void SetRowHeight_CustomHeight()
     {
-        var tempFile = Path.GetTempFileName() + ".xls";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xls");
         try
         {
             using var writer = new BiffWriter();
@@ -619,7 +619,7 @@ public class BiffWriterTests
     [Fact, DisplayName("超链接读取—BiffReader解析HYPERLINK记录")]
     public void BiffReader_ParseHyperlink()
     {
-        var tempFile = Path.GetTempFileName() + ".xls";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xls");
         try
         {
             // 先写入含超链接的xls
@@ -644,7 +644,7 @@ public class BiffWriterTests
     [Fact, DisplayName("页眉页脚—xls SetHeaderFooter写入HEADER/FOOTER记录")]
     public void HeaderFooter_Writes()
     {
-        var tempFile = Path.GetTempFileName() + ".xls";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xls");
         try
         {
             using var w = new BiffWriter();
@@ -663,7 +663,7 @@ public class BiffWriterTests
     [Fact, DisplayName("页面设置—xls SetPageSetup写入SETUP记录")]
     public void PageSetup_Writes()
     {
-        var tempFile = Path.GetTempFileName() + ".xls";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xls");
         try
         {
             using var w = new BiffWriter();
@@ -682,7 +682,7 @@ public class BiffWriterTests
     [Fact, DisplayName("自动筛选—xls SetAutoFilter写入AUTOFILTER记录")]
     public void AutoFilter_Writes()
     {
-        var tempFile = Path.GetTempFileName() + ".xls";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xls");
         try
         {
             using var w = new BiffWriter();
@@ -702,7 +702,7 @@ public class BiffWriterTests
     [Fact, DisplayName("超链接—写入URL链接")]
     public void Hyperlink_WritesUrl()
     {
-        var tempFile = Path.GetTempFileName() + ".xls";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xls");
         try
         {
             using var writer = new BiffWriter();

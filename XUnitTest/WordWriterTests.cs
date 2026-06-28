@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Text;
 using NewLife.Office;
 using Xunit;
@@ -12,7 +12,7 @@ public class WordWriterTests
     [Fact(DisplayName = "分栏写入—2栏文档")]
     public void WriteWithColumns_TwoColumns()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -35,7 +35,7 @@ public class WordWriterTests
     [Fact(DisplayName = "分栏写入—3栏文档")]
     public void WriteWithColumns_ThreeColumns()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -55,7 +55,7 @@ public class WordWriterTests
     [Fact(DisplayName = "分栏写入—默认单栏")]
     public void WriteWithoutColumns_DefaultSingleColumn()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -74,7 +74,7 @@ public class WordWriterTests
     [Fact(DisplayName = "分栏—含分栏的完整页面设置往返")]
     public void Columns_WithFullPageSettings_RoundTrip()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -105,7 +105,7 @@ public class WordWriterTests
             "<w:sdtContent><w:p><w:r><w:t>张三</w:t></w:r></w:p></w:sdtContent>" +
             "</w:sdt>");
 
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             File.WriteAllBytes(tempFile, docxContent);
@@ -128,7 +128,7 @@ public class WordWriterTests
             "<w:sdtContent><w:p><w:r><w:t>2026-06-27</w:t></w:r></w:p></w:sdtContent>" +
             "</w:sdt>");
 
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             File.WriteAllBytes(tempFile, docxContent);
@@ -149,7 +149,7 @@ public class WordWriterTests
             "<w:sdtContent><w:p><w:r><w:t>技术部</w:t></w:r></w:p></w:sdtContent>" +
             "</w:sdt>");
 
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             File.WriteAllBytes(tempFile, docxContent);
@@ -168,7 +168,7 @@ public class WordWriterTests
             "<w:sdtContent><w:p><w:r><w:t>默认类型</w:t></w:r></w:p></w:sdtContent>" +
             "</w:sdt>");
 
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             File.WriteAllBytes(tempFile, docxContent);
@@ -186,7 +186,7 @@ public class WordWriterTests
     [Fact(DisplayName = "分页符—带有格式的段落加分页符后格式保留")]
     public void PageBreak_FormatPreservation()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -219,7 +219,7 @@ public class WordWriterTests
     [Fact(DisplayName = "多级列表—2级嵌套写入+读取")]
     public void MultiLevelBulletList_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -251,7 +251,7 @@ public class WordWriterTests
     [Fact(DisplayName = "多级列表—默认级别为0")]
     public void MultiLevelBulletList_DefaultLevel()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -268,7 +268,7 @@ public class WordWriterTests
     [Fact(DisplayName = "多级列表—与普通段落混合")]
     public void MultiLevelBulletList_MixedWithParagraphs()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -298,7 +298,7 @@ public class WordWriterTests
     [Fact(DisplayName = "有序列表写入—decimal编号，往返验证")]
     public void WriteOrderedList_DecimalNumbering()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -326,7 +326,7 @@ public class WordWriterTests
     [Fact(DisplayName = "有序列表写入—与无序列表混合")]
     public void WriteOrderedList_MixedWithBullets()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -361,7 +361,7 @@ public class WordWriterTests
     [Fact(DisplayName = "有序列表写入—多级编号列表（decimal/lowerLetter/lowerRoman）")]
     public void WriteOrderedList_MultiLevel()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -394,7 +394,7 @@ public class WordWriterTests
     [Fact(DisplayName = "SDT写入—纯文本内容控件")]
     public void Sdt_PlainText_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -415,7 +415,7 @@ public class WordWriterTests
     [Fact(DisplayName = "SDT写入—日期选择器")]
     public void Sdt_Date_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -434,7 +434,7 @@ public class WordWriterTests
     [Fact(DisplayName = "SDT写入—下拉列表控件")]
     public void Sdt_DropDownList_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -453,7 +453,7 @@ public class WordWriterTests
     [Fact(DisplayName = "SDT写入—多个控件混合")]
     public void Sdt_MultipleControls()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -484,7 +484,7 @@ public class WordWriterTests
     [Fact(DisplayName = "自定义属性—写入字符串/整数/日期三个属性")]
     public void CustomProperties_ThreeTypes()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -512,7 +512,7 @@ public class WordWriterTests
     [Fact(DisplayName = "自定义属性—布尔和浮点类型")]
     public void CustomProperties_BoolAndFloat()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -534,7 +534,7 @@ public class WordWriterTests
     [Fact(DisplayName = "自定义属性—无属性时不生成custom.xml")]
     public void CustomProperties_EmptySkips()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -552,7 +552,7 @@ public class WordWriterTests
     [Fact(DisplayName = "页面边框—四面单线边框")]
     public void PageBorder_AllSides()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -576,7 +576,7 @@ public class WordWriterTests
     [Fact(DisplayName = "页面边框—无边框时PageBorder为null")]
     public void PageBorder_None()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -644,7 +644,7 @@ public class WordWriterTests
     [Fact(DisplayName = "行号往返读写一致")]
     public void LineNumber_Roundtrip()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -673,7 +673,7 @@ public class WordWriterTests
     [Fact(DisplayName = "行号默认不设置")]
     public void LineNumber_Default_Null()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -690,7 +690,7 @@ public class WordWriterTests
     [Fact(DisplayName = "行号每页重新开始")]
     public void LineNumber_NewPage_Restart()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -718,7 +718,7 @@ public class WordWriterTests
     [Fact(DisplayName = "首字下沉写入往返")]
     public void DropCap_Roundtrip()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -740,7 +740,7 @@ public class WordWriterTests
     [Fact(DisplayName = "首字下沉默认不设置")]
     public void DropCap_Default_Null()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -760,7 +760,7 @@ public class WordWriterTests
     [Fact(DisplayName = "交叉引用写入—REF域含书签引用")]
     public void CrossRef_AppendAndVerify()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -783,7 +783,7 @@ public class WordWriterTests
     [Fact(DisplayName = "发光文字—写入w14:glow并验证")]
     public void GlowText_WritesGlowXml()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -816,7 +816,7 @@ public class WordWriterTests
     [Fact(DisplayName = "阴影文字—写入w14:shadow并验证")]
     public void ShadowText_WritesShadowXml()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -852,7 +852,7 @@ public class WordWriterTests
     [Fact(DisplayName = "邮件合并域—写入MERGEFIELD并验证")]
     public void MergeField_WritesCorrectXml()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -876,8 +876,8 @@ public class WordWriterTests
     [Fact(DisplayName = "文档变量—DocumentVariables读写往返")]
     public void DocumentVariables_RoundTrip()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
-        var tempFile2 = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
+        var tempFile2 = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using (var w = new WordWriter())
@@ -914,7 +914,7 @@ public class WordWriterTests
         writer.AppendParagraph(new WordParagraph { Runs = { new WordRun { Text = "上文" } } });
         writer.AppendHorizontalRule("FF0000", 12);
         writer.AppendParagraph(new WordParagraph { Runs = { new WordRun { Text = "下文" } } });
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             writer.Save(tempFile);
@@ -927,7 +927,7 @@ public class WordWriterTests
     [Fact(DisplayName = "自定义XML部件—读写customXml往返")]
     public void CustomXmlParts_RoundTrip()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             // 创建含自定义XML部件的docx
@@ -943,7 +943,7 @@ public class WordWriterTests
             doc.CustomXmlParts["item1.xml"] = Encoding.UTF8.GetBytes(xml);
 
             // 写回并验证
-            var tempFile2 = Path.GetTempFileName() + ".docx";
+            var tempFile2 = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
             try
             {
                 using var writer2 = new WordWriter();
@@ -963,7 +963,7 @@ public class WordWriterTests
     [Fact(DisplayName = "列表续号—startOverride从5开始")]
     public void OrderedList_StartOverride()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -986,7 +986,7 @@ public class WordWriterTests
     [Fact(DisplayName = "内容控件—RichText和ComboBox便捷方法")]
     public void Sdt_RichTextAndComboBox()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -1009,7 +1009,7 @@ public class WordWriterTests
     [Fact(DisplayName = "分页控制—KeepNext和KeepLines生成w:keepNext/w:keepLines")]
     public void KeepWithNext_And_KeepLines_GenerateXml()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -1037,7 +1037,7 @@ public class WordWriterTests
     [Fact(DisplayName = "分页控制—WidowControl=false输出w:widowControl val=0")]
     public void WidowControl_False_OutputsXml()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -1063,7 +1063,7 @@ public class WordWriterTests
     [Fact(DisplayName = "表格—单元格垂直对齐vAlign输出")]
     public void TableCell_VerticalAlignment_OutputsVAlign()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             var cell = new WordCell
@@ -1095,7 +1095,7 @@ public class WordWriterTests
     [Fact(DisplayName = "页面设置—TitlePage和EvenAndOddHeaders输出w:titlePg/w:evenAndOddHeaders")]
     public void TitlePage_And_EvenAndOddHeaders_OutputXml()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -1119,7 +1119,7 @@ public class WordWriterTests
     [Fact(DisplayName = "表格—ColSpan和RowSpan输出gridSpan和vMerge")]
     public void TableCell_ColSpan_RowSpan_OutputXml()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             var cell = new WordCell
@@ -1152,7 +1152,7 @@ public class WordWriterTests
     [Fact(DisplayName = "对象映射—WriteObjects<T>泛型集合写入Word表格")]
     public void WriteObjects_Generic_WritesTable()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();
@@ -1177,7 +1177,7 @@ public class WordWriterTests
     [Fact(DisplayName = "文档保护—ProtectionReadOnly写入w:documentProtection")]
     public void ProtectionReadOnly_WritesSettingsXml()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter { ProtectionReadOnly = true };
@@ -1198,7 +1198,7 @@ public class WordWriterTests
     [Fact(DisplayName = "水印—WatermarkText生成VML形状")]
     public void WatermarkText_GeneratesVmlShape()
     {
-        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
             using var writer = new WordWriter();

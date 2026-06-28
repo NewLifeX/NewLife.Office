@@ -1,4 +1,4 @@
-using NewLife.Office;
+﻿using NewLife.Office;
 using System.Text;
 using Xunit;
 
@@ -10,7 +10,7 @@ public class PdfEnhancementTests
     [Fact(DisplayName = "PDF—Caret注释写入")]
     public void Annotation_Caret()
     {
-        var path = Path.GetTempFileName() + ".pdf";
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pdf");
         try
         {
             using var writer = new PdfWriter();
@@ -30,7 +30,7 @@ public class PdfEnhancementTests
     [Fact(DisplayName = "PDF—Polygon注释写入")]
     public void Annotation_Polygon()
     {
-        var path = Path.GetTempFileName() + ".pdf";
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pdf");
         try
         {
             using var writer = new PdfWriter();
@@ -50,7 +50,7 @@ public class PdfEnhancementTests
     [Fact(DisplayName = "PDF—Squiggly注释写入")]
     public void Annotation_Squiggly()
     {
-        var path = Path.GetTempFileName() + ".pdf";
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pdf");
         try
         {
             using var writer = new PdfWriter();
@@ -70,7 +70,7 @@ public class PdfEnhancementTests
     [Fact(DisplayName = "PDF—表单创建+填充+读取往返")]
     public void FormField_FillAndRead()
     {
-        var path = Path.GetTempFileName() + ".pdf";
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pdf");
         try
         {
             using var writer = new PdfWriter();
@@ -103,7 +103,7 @@ public class PdfEnhancementTests
     [Fact(DisplayName = "PDF—SetFormFieldValue修改值")]
     public void FormField_SetValue()
     {
-        var path = Path.GetTempFileName() + ".pdf";
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pdf");
         try
         {
             using var writer = new PdfWriter();
@@ -130,7 +130,7 @@ public class PdfEnhancementTests
     [Fact(DisplayName = "PDF—Polygon顶点写入")]
     public void Polygon_Vertices()
     {
-        var path = Path.GetTempFileName() + ".pdf";
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pdf");
         try
         {
             using var writer = new PdfWriter();
@@ -157,7 +157,7 @@ public class PdfEnhancementTests
     [Fact(DisplayName = "PDF—PolyLine顶点写入")]
     public void PolyLine_Vertices()
     {
-        var path = Path.GetTempFileName() + ".pdf";
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pdf");
         try
         {
             using var writer = new PdfWriter();
@@ -182,7 +182,7 @@ public class PdfEnhancementTests
     [Fact(DisplayName = "PDF—Polygon无顶点时不含Vertices")]
     public void Polygon_NoVertices_OmitsEntry()
     {
-        var path = Path.GetTempFileName() + ".pdf";
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pdf");
         try
         {
             using var writer = new PdfWriter();
@@ -328,7 +328,7 @@ public class PdfEnhancementTests
     [Fact(DisplayName = "PDF—ReadFonts读取字体列表")]
     public void ReadFonts_Basic()
     {
-        var path = Path.GetTempFileName() + ".pdf";
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pdf");
         try
         {
             using var writer = new PdfWriter();
@@ -347,7 +347,7 @@ public class PdfEnhancementTests
     [Fact(DisplayName = "PDF—ReadFonts无异常")]
     public void ReadFonts_NoException()
     {
-        var path = Path.GetTempFileName() + ".pdf";
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pdf");
         try
         {
             using var writer = new PdfWriter();

@@ -1,4 +1,4 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Text;
 using NewLife.Office;
 using Xunit;
@@ -104,8 +104,8 @@ public class PptxPdfConverterTests
     {
         var titleShape = ShapeXml("1", "File API Test", 0L, 0L, 9_144_000L, 1_143_000L);
         using var input = BuildPptx(titleShape);
-        var pptxPath = Path.GetTempFileName() + ".pptx";
-        var pdfPath = Path.GetTempFileName() + ".pdf";
+        var pptxPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
+        var pdfPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pdf");
         try
         {
             // 先将 PPTX 写入临时文件

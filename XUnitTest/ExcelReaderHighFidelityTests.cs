@@ -1,4 +1,4 @@
-using NewLife.Office;
+﻿using NewLife.Office;
 using Xunit;
 
 namespace XUnitTest;
@@ -9,7 +9,7 @@ public class ExcelReaderHighFidelityTests
     #region 辅助
     private static String SaveAndOpen(Action<ExcelWriter> buildWriter)
     {
-        var path = Path.GetTempFileName() + ".xlsx";
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
         using (var w = new ExcelWriter(path))
         {
             buildWriter(w);

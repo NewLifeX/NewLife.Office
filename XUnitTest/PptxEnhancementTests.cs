@@ -1,4 +1,4 @@
-using NewLife.Office;
+﻿using NewLife.Office;
 using Xunit;
 
 namespace XUnitTest;
@@ -43,7 +43,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—表格动态操作往返")]
     public void PptTable_DynamicOperations_RoundTrip()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             using var writer = new PptxWriter();
@@ -78,7 +78,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—上标写入+读取")]
     public void Superscript_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             using var writer = new PptxWriter();
@@ -100,7 +100,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—下标写入+读取")]
     public void Subscript_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             using var writer = new PptxWriter();
@@ -141,7 +141,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—背景渐变写入+读取")]
     public void BackgroundGradient_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             using var writer = new PptxWriter();
@@ -177,7 +177,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—SVG图片写入+读取")]
     public void SvgImage_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             // 最小有效 SVG 数据
@@ -204,7 +204,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—SVG图片 asvg:svgBlip XML生成验证")]
     public void SvgImage_AsvgSvgBlipXml()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             using var writer = new PptxWriter();
@@ -240,7 +240,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—形状Alt Text写入+读取")]
     public void AltText_Shape_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             using var writer = new PptxWriter();
@@ -265,7 +265,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—文本框Alt Text写入+读取")]
     public void AltText_TextBox_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             using var writer = new PptxWriter();
@@ -290,7 +290,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—圆角矩形CornerRadius写入+读取")]
     public void RoundRect_CornerRadius_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             using var writer = new PptxWriter();
@@ -315,7 +315,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—文本框东亚竖排(eaVert) TextDirection")]
     public void TextDirection_EaVert_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             using var writer = new PptxWriter();
@@ -335,7 +335,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—文本框垂直旋转270°(vert270)")]
     public void TextDirection_Vert270_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             using var writer = new PptxWriter();
@@ -354,7 +354,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—文本框默认水平方向(null)")]
     public void TextDirection_DefaultHorz()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             using var writer = new PptxWriter();
@@ -372,7 +372,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—Section写入读取往返")]
     public void Section_WriteAndRead()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             using var writer = new PptxWriter();
@@ -400,7 +400,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—无Section时Sections为null")]
     public void Section_NoneIsNull()
     {
-        var tempFile = Path.GetTempFileName() + ".pptx";
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
         try
         {
             using var writer = new PptxWriter();

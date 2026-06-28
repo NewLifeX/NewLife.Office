@@ -114,7 +114,6 @@ public class WordDocxTests : IntegrationTestBase
         {
             var fileName = Path.GetFileNameWithoutExtension(sourcePath);
             var outputPath = Path.Combine(outDir, $"{fileName}.docx");
-            var guidPath = Path.Combine(outDir, $"{fileName}_{Guid.NewGuid():N}.docx");
 
             // 读取源文件（用 MemoryStream 避免 Word 独占锁导致 ZipFile.OpenRead 失败）
             WordDocument sourceDoc;
@@ -137,12 +136,11 @@ public class WordDocxTests : IntegrationTestBase
             Console.WriteLine($"[{fileName}] 源文件: {sourceDoc.Elements.Count} 元素 (P={sourceDoc.Elements.Count(e=>e.Type==WordElementType.Paragraph)} T={sourceDoc.Elements.Count(e=>e.Type==WordElementType.Table)} I={sourceDoc.Elements.Count(e=>e.Type==WordElementType.Image)})");
 
             // 写入并重新读取
-            // 写入到唯一路径（避免 Word 锁定冲突）
             try
             {
                 using (var writer = new WordWriter())
                 {
-                    writer.Save(guidPath, sourceDoc);
+                    writer.Save(outputPath, sourceDoc);
                 }
             }
             catch (IOException ex)
@@ -151,17 +149,13 @@ public class WordDocxTests : IntegrationTestBase
                 continue;
             }
 
-            Assert.True(File.Exists(guidPath), $"输出文件 {guidPath} 应存在");
-
-            // 复制到固定文件名便于查看（若被 Word 锁定则跳过）
-            try { if (File.Exists(outputPath)) File.Delete(outputPath); } catch { }
-            try { File.Copy(guidPath, outputPath, overwrite: true); } catch { }
+            Assert.True(File.Exists(outputPath), $"输出文件 {outputPath} 应存在");
 
             // 用 MemoryStream 读回避免 ZIP 文件锁问题
             WordDocument outputDoc;
             try
             {
-                var outputBytes = ReadAllBytesShared(guidPath);
+                var outputBytes = ReadAllBytesShared(outputPath);
                 using (var ms = new MemoryStream(outputBytes))
                 using (var reader = new WordReader(ms))
                 {
