@@ -239,6 +239,46 @@ public class PdfFluentDocument : IDisposable
         _writer.AppendEmptyLine(6f);
         return this;
     }
+
+    /// <summary>绘制椭圆/圆（P07-04）</summary>
+    public PdfFluentDocument DrawEllipse(Single x, Single y, Single w, Single h, Boolean fill = false, String? fillColor = null, String? borderColor = null, Single borderWidth = 0.5f)
+    {
+        EnsurePage();
+        _writer.DrawEllipse(x, y, w, h, fill, fillColor, borderColor, borderWidth);
+        return this;
+    }
+
+    /// <summary>绘制圆角矩形（P07-04）</summary>
+    public PdfFluentDocument DrawRoundedRect(Single x, Single y, Single w, Single h, Single radius, Boolean fill = false, String? fillColor = null, String? borderColor = null, Single borderWidth = 0.5f)
+    {
+        EnsurePage();
+        _writer.DrawRoundedRect(x, y, w, h, radius, fill, fillColor, borderColor, borderWidth);
+        return this;
+    }
+
+    /// <summary>绘制圆弧（P07-04）</summary>
+    public PdfFluentDocument DrawArc(Single cx, Single cy, Single r, Single startAngle, Single endAngle, String? colorHex = null, Single lineWidth = 0.5f)
+    {
+        EnsurePage();
+        _writer.DrawArc(cx, cy, r, startAngle, endAngle, colorHex, lineWidth);
+        return this;
+    }
+
+    /// <summary>绘制贝塞尔曲线（P07-04）</summary>
+    public PdfFluentDocument DrawBezier(Single x1, Single y1, Single x2, Single y2, Single x3, Single y3, Single x4, Single y4, String? colorHex = null, Single lineWidth = 0.5f)
+    {
+        EnsurePage();
+        _writer.DrawBezier(x1, y1, x2, y2, x3, y3, x4, y4, colorHex, lineWidth);
+        return this;
+    }
+
+    /// <summary>绘制多边形（P07-04）</summary>
+    public PdfFluentDocument DrawPolygon(IEnumerable<(Single X, Single Y)> points, Boolean fill = false, String? fillColor = null, String? borderColor = null, Single borderWidth = 0.5f)
+    {
+        EnsurePage();
+        _writer.DrawPolygon(points, fill, fillColor, borderColor, borderWidth);
+        return this;
+    }
     #endregion
 
     #region 导航方法

@@ -565,5 +565,25 @@ public class PdfWriterTests
         Assert.Contains("2.50 Tc", pdf);
         Assert.Contains("1.00 Tw", pdf);
     }
+
+    [Fact(DisplayName = "FluentAPI—DrawEllipse/DrawRoundedRect/DrawBezier透传至PdfWriter")]
+    public void FluentApi_DrawingPrimitives_Chainable()
+    {
+        using var ms = new MemoryStream();
+        using (var doc = new PdfFluentDocument())
+        {
+            doc.DrawEllipse(100, 200, 50, 30, true, "FF0000", "0000FF", 1)
+               .DrawRoundedRect(200, 200, 80, 40, 8, false, null, "00FF00", 0.5f)
+               .DrawArc(300, 200, 30, 0, 180, "FF00FF", 0.5f)
+               .DrawBezier(400, 200, 420, 180, 440, 220, 460, 200, "000000", 0.5f)
+               .DrawPolygon(new[] { (500f, 200f), (520f, 250f), (480f, 250f) }, true, "FFFF00");
+            doc.Save(ms);
+        }
+        ms.Position = 0;
+        using var reader = new StreamReader(ms);
+        var pdf = reader.ReadToEnd();
+        Assert.Contains("stream", pdf);
+        Assert.Contains("endstream", pdf);
+    }
     #endregion
 }
