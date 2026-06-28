@@ -739,5 +739,32 @@ public class BiffWriterTests
         public String FullName { get; set; } = "";
     }
 
+    [Fact(DisplayName = "默认列宽—SetDefaultColumnWidth写入DEFCOLWIDTH记录")]
+    public void SetDefaultColumnWidth_WritesDefColWidth()
+    {
+        using var writer = new BiffWriter();
+        writer.SetDefaultColumnWidth(3072); // 12 characters
+        writer.WriteHeader(["A", "B", "C"]);
+        writer.WriteRow(["1", "2", "3"]);
+
+        var bytes = writer.ToBytes();
+        // Search for DEFCOLWIDTH record: type=0x0055 (little-endian: 55 00)
+        var found = false;
+        for (var i = 0; i < bytes.Length - 4; i++)
+        {
+            if (bytes[i] == 0x55 && bytes[i + 1] == 0x00 &&
+                bytes[i + 2] == 0x02 && bytes[i + 3] == 0x00) // record length = 2
+            {
+                // value = 3072 = 0x0C00 → little-endian: 00 0C
+                if (bytes[i + 4] == 0x00 && bytes[i + 5] == 0x0C)
+                {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        Assert.True(found, "DEFCOLWIDTH record (0x0055) with width=3072 not found in file");
+    }
+
     #endregion
 }

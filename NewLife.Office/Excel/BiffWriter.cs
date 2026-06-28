@@ -48,6 +48,7 @@ public sealed class BiffWriter : IDisposable
     private const UInt16 RecSetup = 0x00A1;
     private const UInt16 RecHeader = 0x0014;
     private const UInt16 RecFooter = 0x0015;
+    private const UInt16 RecDefColWidth = 0x0055;
     private const Int32 MaxRecordDataSize = 8224;
 
     // BIFF8 日期纪元：1900-01-01（含 1900 闰年兼容性偏移 +1）
@@ -110,6 +111,9 @@ public sealed class BiffWriter : IDisposable
 
     // 页眉页脚：Key = sheetName, Value = (header, footer)
     private readonly Dictionary<String, (String Header, String Footer)> _sheetHeaderFooters = new(StringComparer.Ordinal);
+
+    // 默认列宽：Key = sheetName, Value = width（1/256 字符宽度单位）
+    private readonly Dictionary<String, UInt16> _sheetDefColWidths = new(StringComparer.Ordinal);
 
     private String _currentSheet = "Sheet1";
     private Boolean _disposed;
@@ -303,6 +307,13 @@ public sealed class BiffWriter : IDisposable
     public void SetHeaderFooter(String? header = null, String? footer = null)
     {
         _sheetHeaderFooters[_currentSheet] = (header ?? String.Empty, footer ?? String.Empty);
+    }
+
+    /// <summary>设置当前工作表的默认列宽</summary>
+    /// <param name="width">列宽（1/256 字符宽度单位），Excel 默认约 2048（8 字符宽）</param>
+    public void SetDefaultColumnWidth(Int32 width = 2048)
+    {
+        _sheetDefColWidths[_currentSheet] = (UInt16)width;
     }
 
     #endregion
@@ -594,6 +605,12 @@ public sealed class BiffWriter : IDisposable
             if (hf.Footer.Length > 0) WriteRecord(bw, RecFooter, BuildHeaderFooterData(hf.Footer));
         }
 
+        // DEFCOLWIDTH — 默认列宽
+        if (_sheetDefColWidths.TryGetValue(sheetName, out var defColWidth))
+        {
+            WriteRecord(bw, RecDefColWidth, BuildDefColWidthData(defColWidth));
+        }
+
         // Sheet EOF
         WriteRecord(bw, RecEof, []);
     }
@@ -871,6 +888,15 @@ public sealed class BiffWriter : IDisposable
         writer.Write((UInt16)text.Length);
         if (bytes.Length > 0)
             Array.Copy(bytes, 0, buf, 2, bytes.Length);
+        return buf;
+    }
+
+    private static Byte[] BuildDefColWidthData(UInt16 width)
+    {
+        // BIFF8 DEFCOLWIDTH: 2(gc12) = 2 bytes
+        var buf = new Byte[2];
+        var writer = new SpanWriter(buf, 0, 2);
+        writer.Write(width);
         return buf;
     }
 
