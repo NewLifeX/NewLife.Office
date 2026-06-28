@@ -1005,5 +1005,34 @@ public class WordWriterTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact(DisplayName = "分页控制—KeepNext和KeepLines生成w:keepNext/w:keepLines")]
+    public void KeepWithNext_And_KeepLines_GenerateXml()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            var para = new WordParagraph
+            {
+                Runs = { new WordRun { Text = "标题不孤行" } },
+                Style = WordParagraphStyle.Heading1,
+                KeepNext = true,
+                KeepLines = true
+            };
+            writer.AppendParagraph(para);
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("word/document.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("<w:keepNext/>", xml);
+            Assert.Contains("<w:keepLines/>", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
     #endregion
 }

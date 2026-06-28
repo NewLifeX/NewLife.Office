@@ -65,5 +65,11 @@ public class WordParagraph
 
     /// <summary>首字下沉字符数（默认 1），对应 w:framePr w:lines="N"</summary>
     public Int32? DropCapChars { get; set; }
+
+    /// <summary>与下一段落保持同页（w:keepNext），防止标题孤立在页尾</summary>
+    public Boolean KeepNext { get; set; }
+
+    /// <summary>段落内各行保持同页（w:keepLines），防止段落跨页断裂</summary>
+    public Boolean KeepLines { get; set; }
     #endregion
 }

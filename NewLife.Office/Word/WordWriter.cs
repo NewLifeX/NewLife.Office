@@ -1032,10 +1032,12 @@ public class WordWriter : IDisposable
             || para.SpaceBefore.HasValue || para.SpaceAfter.HasValue || para.LineSpacingPct.HasValue
             || para.IsBullet || para.IsOrderedList || para.BackgroundColor != null
             || para.Borders != null || (para.TabStops != null && para.TabStops.Count > 0)
-            || para.DropCapLines.HasValue;
+            || para.DropCapLines.HasValue || para.KeepNext || para.KeepLines;
         if (hasPPr)
         {
             sb.Append("<w:pPr>");
+            if (para.KeepNext) sb.Append("<w:keepNext/>");
+            if (para.KeepLines) sb.Append("<w:keepLines/>");
             if (para.StyleId != null)
                 sb.Append($"<w:pStyle w:val=\"{Esc(para.StyleId)}\"/>");
             else if (para.Style != WordParagraphStyle.Normal)
