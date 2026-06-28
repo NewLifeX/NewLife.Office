@@ -735,6 +735,34 @@ public class PdfWriter : IDisposable
         _content.AppendLine("Q");
     }
 
+    /// <summary>绘制图片（支持旋转）</summary>
+    /// <param name="imageData">图片字节</param>
+    /// <param name="x">中心 X 坐标（点）</param>
+    /// <param name="y">中心 Y 坐标（点，PDF 坐标系原点在左下角）</param>
+    /// <param name="w">宽度（点）</param>
+    /// <param name="h">高度（点）</param>
+    /// <param name="rotationDeg">旋转角度（度，顺时针）</param>
+    public void DrawImage(Byte[] imageData, Single x, Single y, Single w, Single h, Single rotationDeg)
+    {
+        EnsurePage();
+        var imgName = $"Im{_imgCounter++}";
+        var (imgW, imgH) = GetPngSize(imageData);
+        CurrentPage!.Images[imgName] = (imageData, imgW, imgH, false);
+        var rad = rotationDeg * Math.PI / 180.0;
+        var cos = (Single)Math.Cos(rad);
+        var sin = (Single)Math.Sin(rad);
+        // 旋转矩阵：先平移中心→旋转→缩放→还原
+        // cm: a b c d e f = cos*W, sin*W, -sin*H, cos*H, x, y
+        var a = cos * w;
+        var b = sin * w;
+        var c = -sin * h;
+        var d = cos * h;
+        _content.AppendLine("q");
+        _content.AppendLine($"{a:F2} {b:F2} {c:F2} {d:F2} {x:F2} {y:F2} cm");
+        _content.AppendLine($"/{imgName} Do");
+        _content.AppendLine("Q");
+    }
+
     /// <summary>追加图片（自动跟踪 Y 位置）</summary>
     /// <param name="imageData">图片字节</param>
     /// <param name="widthPt">显示宽度（点）</param>
