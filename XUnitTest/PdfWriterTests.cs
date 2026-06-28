@@ -408,4 +408,32 @@ public class PdfWriterTests
         Assert.True(ms.Length > 0);
     }
     #endregion
+
+    #region 圆角矩形绘制
+    [Fact(DisplayName = "DrawRoundedRect绘制圆角矩形")]
+    public void DrawRoundedRect_Basic()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.DrawRoundedRect(50, 50, 200, 100, 15, strokeColorHex: "000000", lineWidth: 1);
+        writer.Save(ms);
+
+        ms.Position = 0;
+        Assert.True(ms.Length > 0);
+    }
+
+    [Fact(DisplayName = "DrawRoundedRect填充圆角矩形")]
+    public void DrawRoundedRect_Filled()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.DrawRoundedRect(100, 200, 150, 80, 20, filled: true, fillColorHex: "CCCCFF", strokeColorHex: "0000FF");
+        writer.Save(ms);
+
+        ms.Position = 0;
+        Assert.True(ms.Length > 0);
+    }
+    #endregion
 }

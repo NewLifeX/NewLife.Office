@@ -367,6 +367,57 @@ public class PdfWriter : IDisposable
         _content.AppendLine("Q");
     }
 
+    /// <summary>绘制圆角矩形</summary>
+    /// <param name="x">左下角 X</param>
+    /// <param name="y">左下角 Y</param>
+    /// <param name="w">宽度</param>
+    /// <param name="h">高度</param>
+    /// <param name="radius">圆角半径</param>
+    /// <param name="filled">是否填充</param>
+    /// <param name="fillColorHex">填充色</param>
+    /// <param name="strokeColorHex">边框色</param>
+    /// <param name="lineWidth">边框线宽</param>
+    public void DrawRoundedRect(Single x, Single y, Single w, Single h, Single radius,
+        Boolean filled = false, String? fillColorHex = null, String? strokeColorHex = null, Single lineWidth = 0.5f)
+    {
+        if (radius <= 0 || radius * 2 > w || radius * 2 > h)
+        {
+            DrawRect(x, y, w, h, filled, fillColorHex, strokeColorHex, lineWidth);
+            return;
+        }
+
+        EnsurePage();
+        var r = radius;
+        const Single k = 0.5522847498f; // 90° 贝塞尔近似常数
+        var kc = k * r;
+
+        _content.AppendLine("q");
+        _content.AppendLine($"{lineWidth:F2} w");
+        if (strokeColorHex != null) _content.AppendLine(HexToRgbOp(strokeColorHex, false));
+        if (filled && fillColorHex != null) _content.AppendLine(HexToRgbOp(fillColorHex, true));
+
+        // 从底边左角开始，逆时针画
+        _content.Append($"{x + r:F2} {y:F2} m");                          // 底边起点
+        _content.Append($" {x + w - r:F2} {y:F2} l");                     // 底边直线
+        // 右下角圆弧
+        _content.Append($" {x + w - r + kc:F2} {y:F2} {x + w:F2} {y + r - kc:F2} {x + w:F2} {y + r:F2} c");
+        // 右边直线
+        _content.Append($" {x + w:F2} {y + h - r:F2} l");
+        // 右上角圆弧
+        _content.AppendLine($" {x + w:F2} {y + h - r + kc:F2} {x + w - r + kc:F2} {y + h:F2} {x + w - r:F2} {y + h:F2} c");
+        // 顶边直线
+        _content.Append($" {x + r:F2} {y + h:F2} l");
+        // 左上角圆弧
+        _content.Append($" {x + r - kc:F2} {y + h:F2} {x:F2} {y + h - r + kc:F2} {x:F2} {y + h - r:F2} c");
+        // 左边直线
+        _content.AppendLine($" {x:F2} {y + r:F2} l");
+        // 左下角圆弧（闭合回到起点）
+        _content.Append($" {x:F2} {y + r - kc:F2} {x + r - kc:F2} {y:F2} {x + r:F2} {y:F2} c");
+        _content.Append(filled ? (strokeColorHex != null ? " B" : " f") : " S");
+        _content.AppendLine();
+        _content.AppendLine("Q");
+    }
+
     /// <summary>绘制椭圆（含圆）</summary>
     /// <param name="cx">中心 X</param>
     /// <param name="cy">中心 Y（从底部量起）</param>
