@@ -641,6 +641,26 @@ public class BiffWriterTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
 
+    [Fact, DisplayName("自动筛选—xls SetAutoFilter写入AUTOFILTER记录")]
+    public void AutoFilter_Writes()
+    {
+        var tempFile = Path.GetTempFileName() + ".xls";
+        try
+        {
+            using var w = new BiffWriter();
+            w.WriteHeader(["名称", "数量"]);
+            w.WriteRow(["苹果", 10]);
+            w.WriteRow(["香蕉", 20]);
+            w.SetAutoFilter(0, 0, 2, 1);
+            w.Save(tempFile);
+
+            using var reader = new BiffReader(tempFile);
+            var rows = reader.ReadSheet().ToList();
+            Assert.Equal(3, rows.Count);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
     [Fact, DisplayName("超链接—写入URL链接")]
     public void Hyperlink_WritesUrl()
     {

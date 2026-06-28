@@ -44,6 +44,7 @@ public sealed class BiffWriter : IDisposable
     private const UInt16 RecWindow2 = 0x023E;
     private const UInt16 RecMergedCells = 0x00E5;
     private const UInt16 RecHyperlink = 0x01B8;
+    private const UInt16 RecAutoFilter = 0x009E;
     private const Int32 MaxRecordDataSize = 8224;
 
     // BIFF8 日期纪元：1900-01-01（含 1900 闰年兼容性偏移 +1）
@@ -97,6 +98,9 @@ public sealed class BiffWriter : IDisposable
 
     // 超链接：Key = sheetName, Value = List of (row, col, url, displayText)
     private readonly Dictionary<String, List<(Int32 Row, Int32 Col, String Url, String? DisplayText)>> _sheetHyperlinks = new(StringComparer.Ordinal);
+
+    // 自动筛选：Key = sheetName, Value = (firstRow, lastRow, firstCol, lastCol)
+    private readonly Dictionary<String, (Int32 FirstRow, Int32 LastRow, Int32 FirstCol, Int32 LastCol)> _sheetAutoFilters = new(StringComparer.Ordinal);
 
     private String _currentSheet = "Sheet1";
     private Boolean _disposed;
@@ -262,6 +266,16 @@ public sealed class BiffWriter : IDisposable
             _sheetHyperlinks[_currentSheet] = list;
         }
         list.Add((rowIndex, colIndex, url, displayText));
+    }
+
+    /// <summary>在当前工作表设置自动筛选区域</summary>
+    /// <param name="firstRow">起始行（0基）</param>
+    /// <param name="firstCol">起始列（0基）</param>
+    /// <param name="lastRow">结束行（含）</param>
+    /// <param name="lastCol">结束列（含）</param>
+    public void SetAutoFilter(Int32 firstRow, Int32 firstCol, Int32 lastRow, Int32 lastCol)
+    {
+        _sheetAutoFilters[_currentSheet] = (firstRow, lastRow, firstCol, lastCol);
     }
 
     #endregion
@@ -534,6 +548,12 @@ public sealed class BiffWriter : IDisposable
             }
         }
 
+        // AUTO FILTER — 自动筛选
+        if (_sheetAutoFilters.TryGetValue(sheetName, out var af))
+        {
+            WriteRecord(bw, RecAutoFilter, BuildAutoFilterData(af.FirstRow, af.LastRow, af.FirstCol, af.LastCol));
+        }
+
         // Sheet EOF
         WriteRecord(bw, RecEof, []);
     }
@@ -760,6 +780,17 @@ public sealed class BiffWriter : IDisposable
         {
             Array.Copy(urlBytes, 0, buf, 28, urlBytes.Length);
         }
+        return buf;
+    }
+
+    private static Byte[] BuildAutoFilterData(Int32 firstRow, Int32 lastRow, Int32 firstCol, Int32 lastCol)
+    {
+        // BIFF8 AUTO FILTER: 2(rowCount) + 2(colCount) + 2(dataRowCount) = 6 bytes
+        var buf = new Byte[6];
+        var writer = new SpanWriter(buf, 0, 6);
+        writer.Write((UInt16)(lastRow - firstRow + 1));
+        writer.Write((UInt16)(lastCol - firstCol + 1));
+        writer.Write((UInt16)(lastRow - firstRow + 1));
         return buf;
     }
 
