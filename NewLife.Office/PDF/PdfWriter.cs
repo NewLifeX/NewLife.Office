@@ -516,6 +516,35 @@ public class PdfWriter : IDisposable
         _content.AppendLine("Q");
     }
 
+    /// <summary>绘制渐变矩形（垂直方向）</summary>
+    /// <param name="x">左下角 X</param>
+    /// <param name="y">左下角 Y</param>
+    /// <param name="w">宽度</param>
+    /// <param name="h">高度</param>
+    /// <param name="colorTop">顶部颜色（16进制 RGB）</param>
+    /// <param name="colorBottom">底部颜色（16进制 RGB）</param>
+    /// <param name="steps">渐变分段数（默认20，越大越平滑）</param>
+    public void DrawGradientRect(Single x, Single y, Single w, Single h,
+        String colorTop, String colorBottom, Int32 steps = 20)
+    {
+        EnsurePage();
+        var (r1, g1, b1) = HexToRgb(colorTop);
+        var (r2, g2, b2) = HexToRgb(colorBottom);
+        var stepH = h / steps;
+
+        _content.AppendLine("q");
+        for (var i = 0; i < steps; i++)
+        {
+            var t = (Single)i / Math.Max(steps - 1, 1);
+            var r = r1 + (r2 - r1) * t;
+            var g = g1 + (g2 - g1) * t;
+            var b = b1 + (b2 - b1) * t;
+            _content.AppendLine($"{r:F3} {g:F3} {b:F3} rg");
+            _content.AppendLine($"{x:F2} {y + i * stepH:F2} {w:F2} {stepH:F2} re f");
+        }
+        _content.AppendLine("Q");
+    }
+
     /// <summary>绘制多边形</summary>
     /// <param name="points">顶点序列（至少3个），每项为 (X, Y) 元组</param>
     /// <param name="filled">是否填充</param>
@@ -1998,6 +2027,17 @@ public class PdfWriter : IDisposable
         return fill
             ? $"{r:F3} {g:F3} {b:F3} rg"
             : $"{r:F3} {g:F3} {b:F3} RG";
+    }
+
+    /// <summary>将16进制颜色转为RGB浮点三元组（0-1）</summary>
+    private static (Single R, Single G, Single B) HexToRgb(String hex)
+    {
+        hex = hex.TrimStart('#');
+        if (hex.Length < 6) hex = "000000";
+        var r = Convert.ToInt32(hex[..2], 16) / 255f;
+        var g = Convert.ToInt32(hex.Substring(2, 2), 16) / 255f;
+        var b = Convert.ToInt32(hex.Substring(4, 2), 16) / 255f;
+        return (r, g, b);
     }
 
     /// <summary>从 PNG 数据读取宽高（从 IHDR chunk）</summary>

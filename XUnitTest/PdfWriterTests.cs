@@ -423,6 +423,19 @@ public class PdfWriterTests
         Assert.True(ms.Length > 0);
     }
 
+    [Fact(DisplayName = "DrawGradientRect渐变矩形")]
+    public void DrawGradientRect_Vertical()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.DrawGradientRect(50, 50, 200, 100, "4472C4", "FFFFFF");
+        writer.Save(ms);
+
+        ms.Position = 0;
+        Assert.True(ms.Length > 0);
+    }
+
     [Fact(DisplayName = "DrawRoundedRect填充圆角矩形")]
     public void DrawRoundedRect_Filled()
     {
