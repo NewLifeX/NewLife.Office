@@ -756,8 +756,9 @@ public class PdfWriter : IDisposable
     {
         EnsurePage();
         var imgName = $"Im{_imgCounter++}";
-        var (imgW, imgH) = GetPngSize(imageData);
-        CurrentPage!.Images[imgName] = (imageData, imgW, imgH, false);
+        var isJpeg = IsJpegData(imageData);
+        var (imgW, imgH) = isJpeg ? GetJpegSize(imageData) : GetPngSize(imageData);
+        CurrentPage!.Images[imgName] = (imageData, imgW, imgH, isJpeg);
         _content.AppendLine("q");
         _content.AppendLine($"{w:F2} 0 0 {h:F2} {x:F2} {y:F2} cm");
         _content.AppendLine($"/{imgName} Do");
@@ -775,8 +776,9 @@ public class PdfWriter : IDisposable
     {
         EnsurePage();
         var imgName = $"Im{_imgCounter++}";
-        var (imgW, imgH) = GetPngSize(imageData);
-        CurrentPage!.Images[imgName] = (imageData, imgW, imgH, false);
+        var isJpeg = IsJpegData(imageData);
+        var (imgW, imgH) = isJpeg ? GetJpegSize(imageData) : GetPngSize(imageData);
+        CurrentPage!.Images[imgName] = (imageData, imgW, imgH, isJpeg);
         var rad = rotationDeg * Math.PI / 180.0;
         var cos = (Single)Math.Cos(rad);
         var sin = (Single)Math.Sin(rad);
@@ -1537,16 +1539,28 @@ public class PdfWriter : IDisposable
         // ── 写入图片 XObject ──
         foreach (var (name, data, imgW, imgH, isJpeg) in allImages)
         {
-            var rawRgb = ExtractPngRgb(data, imgW, imgH);
+            Byte[] imgData;
+            String extraFilters;
+            if (isJpeg)
+            {
+                // JPEG: 直通 JPEG 字节，使用 DCTDecode 过滤器（无需解码/重编码）
+                imgData = data;
+                extraFilters = "\n/Filter /DCTDecode";
+            }
+            else
+            {
+                imgData = ExtractPngRgb(data, imgW, imgH);
+                extraFilters = "";
+            }
             var imgObjId = imgObjMap[name];
-            var imgData = enc != null ? enc.EncryptBytes(rawRgb, imgObjId, 0) : rawRgb;
+            var encData = enc != null ? enc.EncryptBytes(imgData, imgObjId, 0) : imgData;
             offsets[imgObjId - 1] = written;
             var imgHdr = latin1.GetBytes(
                 $"{imgObjId} 0 obj\n" +
                 $"<< /Type /XObject /Subtype /Image\n/Width {imgW} /Height {imgH}\n" +
-                $"/ColorSpace /DeviceRGB\n/BitsPerComponent 8\n/Length {imgData.Length}\n>>\nstream\n");
+                $"/ColorSpace /DeviceRGB\n/BitsPerComponent 8{extraFilters}\n/Length {encData.Length}\n>>\nstream\n");
             WriteBytes(imgHdr, 0, imgHdr.Length);
-            WriteBytes(imgData, 0, imgData.Length);
+            WriteBytes(encData, 0, encData.Length);
             var imgEnd = latin1.GetBytes("\nendstream\nendobj\n");
             WriteBytes(imgEnd, 0, imgEnd.Length);
         }
@@ -2193,6 +2207,31 @@ public class PdfWriter : IDisposable
         var w = (png[16] << 24) | (png[17] << 16) | (png[18] << 8) | png[19];
         var h = (png[20] << 24) | (png[21] << 16) | (png[22] << 8) | png[23];
         return (w > 0 ? w : 1, h > 0 ? h : 1);
+    }
+
+    private static Boolean IsJpegData(Byte[] data)
+    {
+        return data.Length >= 2 && data[0] == 0xFF && data[1] == 0xD8;
+    }
+
+    private static (Int32 Width, Int32 Height) GetJpegSize(Byte[] jpeg)
+    {
+        // Scan JPEG markers for SOF0 (0xC0) or SOF2 (0xC2) frame header
+        var i = 2;
+        while (i < jpeg.Length - 8)
+        {
+            if (jpeg[i] != 0xFF) { i++; continue; }
+            var marker = jpeg[i + 1];
+            if (marker == 0xC0 || marker == 0xC2)
+            {
+                var h = (jpeg[i + 5] << 8) | jpeg[i + 6];
+                var w = (jpeg[i + 7] << 8) | jpeg[i + 8];
+                return (w, h);
+            }
+            var segLen = (jpeg[i + 2] << 8) | jpeg[i + 3];
+            i += 2 + segLen;
+        }
+        return (1, 1);
     }
 
     /// <summary>从 PNG 提取原始 RGB 字节（简化：跳过压缩，直接返回后 IDAT 内容占位）</summary>
