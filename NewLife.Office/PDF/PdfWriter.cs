@@ -746,6 +746,31 @@ public class PdfWriter : IDisposable
         AppendEmptyLine(4f);
     }
 
+    /// <summary>绘制表格（使用 PdfTable 结构化模型）</summary>
+    /// <param name="table">表格定义（含行/列/样式）</param>
+    /// <remarks>
+    /// 将 PdfTable 模型转换为内部行列数组后调用基础 DrawTable。
+    /// 高级特性（单元格背景色、对齐、跨列）计划在后续版本中支持。
+    /// </remarks>
+    public void DrawTable(PdfTable table)
+    {
+        if (table == null) throw new ArgumentNullException(nameof(table));
+        if (table.Rows.Count == 0) return;
+
+        // 提取行列数据
+        var rows = table.Rows.Select(r => r.Cells.Select(c => c.Text).ToArray()).ToList();
+
+        // 提取列宽（如果有）
+        Single[]? colWidths = null;
+        if (table.ColumnWidths.Length > 0)
+            colWidths = table.ColumnWidths;
+
+        // 如果有表头行标记，使用 firstRowHeader
+        var firstRowHeader = table.Rows.Count > 0 && table.Rows[0].IsHeader;
+
+        DrawTable(rows, firstRowHeader, colWidths);
+    }
+
     /// <summary>嵌入并绘制 PNG 图片</summary>
     /// <param name="imageData">图片字节（PNG 格式）</param>
     /// <param name="x">左下角 X（从底部量起）</param>

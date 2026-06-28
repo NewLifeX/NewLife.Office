@@ -539,6 +539,117 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return field;
     }
 
+    /// <summary>读取指定页面的注释（Annotations）</summary>
+    /// <param name="pageIndex">页面索引（0起始）</param>
+    /// <returns>注释列表，无注释时返回空列表</returns>
+    /// <remarks>
+    /// 支持全部 14 种 PDF 注释类型（Link/Text/Highlight/Underline/StrikeOut/
+    /// FreeText/Square/Circle/Line/Stamp/Caret/Polygon/PolyLine/Squiggly）。
+    /// 解析注释的 Rect、Contents、作者、颜色、顶点等属性。
+    /// </remarks>
+    public List<PdfAnnotation> ReadAnnotations(Int32 pageIndex)
+    {
+        var result = new List<PdfAnnotation>();
+        if (XRefTable == null) return result;
+
+        var pageObjNums = GetPageObjectNumbers();
+        if (pageIndex < 0 || pageIndex >= pageObjNums.Count) return result;
+
+        var pageObjNum = pageObjNums[pageIndex];
+        var pageObj = PdfObjectParser.ReadObject(_data, XRefTable, pageObjNum);
+        if (pageObj is not PdfDictObj pageDictObj) return result;
+
+        if (!pageDictObj.Value.TryGetValue("Annots", out var annotsVal)) return result;
+
+        // 收集注释引用
+        var annotRefs = new List<PdfRef>();
+        if (annotsVal is PdfRef ar) annotRefs.Add(ar);
+        else if (annotsVal is PdfArray aa) annotRefs.AddRange(aa.Items.OfType<PdfRef>());
+
+        foreach (var aref in annotRefs)
+        {
+            var aobj = PdfObjectParser.ReadObject(_data, XRefTable, aref.ObjNum);
+            if (aobj is not PdfDictObj adictObj) continue;
+            var dict = adictObj.Value;
+
+            var annot = new PdfAnnotation { PageIndex = pageIndex };
+
+            // Subtype → 类型映射
+            if (dict.TryGetValue("Subtype", out var subVal) && subVal is PdfName subName)
+            {
+                annot.Type = subName.Value switch
+                {
+                    "Link" => PdfAnnotationType.Link,
+                    "Text" => PdfAnnotationType.Text,
+                    "Highlight" => PdfAnnotationType.Highlight,
+                    "Underline" => PdfAnnotationType.Underline,
+                    "StrikeOut" => PdfAnnotationType.StrikeOut,
+                    "FreeText" => PdfAnnotationType.FreeText,
+                    "Square" => PdfAnnotationType.Square,
+                    "Circle" => PdfAnnotationType.Circle,
+                    "Line" => PdfAnnotationType.Line,
+                    "Stamp" => PdfAnnotationType.Stamp,
+                    "Caret" => PdfAnnotationType.Caret,
+                    "Polygon" => PdfAnnotationType.Polygon,
+                    "PolyLine" => PdfAnnotationType.PolyLine,
+                    "Squiggly" => PdfAnnotationType.Squiggly,
+                    _ => PdfAnnotationType.Text,
+                };
+            }
+
+            // Rect
+            if (dict.TryGetValue("Rect", out var rectVal) && rectVal is PdfArray rectArr && rectArr.Items.Count >= 4)
+            {
+                if (rectArr.Items[0] is PdfNumber rx) annot.X = (Single)rx.Value;
+                if (rectArr.Items[1] is PdfNumber ry) annot.Y = (Single)ry.Value;
+                if (rectArr.Items[2] is PdfNumber rw) annot.Width = (Single)rw.Value - annot.X;
+                if (rectArr.Items[3] is PdfNumber rh) annot.Height = (Single)rh.Value - annot.Y;
+            }
+
+            // Contents
+            if (dict.TryGetValue("Contents", out var contVal))
+            {
+                if (contVal is PdfString cs) annot.Contents = cs.Value;
+                else if (contVal is PdfHexString chs) annot.Contents = DecodeHexFromString(chs.Value);
+            }
+
+            // Author（便签注释）
+            if (dict.TryGetValue("T", out var tVal) && tVal is PdfString ts)
+                annot.Author = ts.Value;
+
+            // 颜色
+            if (dict.TryGetValue("C", out var cVal) && cVal is PdfArray ca && ca.Items.Count >= 3)
+            {
+                var r = ca.Items[0] is PdfNumber cr ? (Byte)(cr.Value * 255) : (Byte)0;
+                var g = ca.Items[1] is PdfNumber cg ? (Byte)(cg.Value * 255) : (Byte)0;
+                var b = ca.Items[2] is PdfNumber cb ? (Byte)(cb.Value * 255) : (Byte)0;
+                annot.Color = new OfficeColor(r, g, b);
+            }
+
+            // 顶点（多边形/折线）
+            if (dict.TryGetValue("Vertices", out var vertVal) && vertVal is PdfArray va)
+            {
+                var verts = new List<Single>();
+                foreach (var vi in va.Items)
+                {
+                    if (vi is PdfNumber vn) verts.Add((Single)vn.Value);
+                }
+                annot.Vertices = verts.ToArray();
+            }
+
+            // Link 类型：URL
+            if (annot.Type == PdfAnnotationType.Link && dict.TryGetValue("A", out var aVal) && aVal is PdfDictObj aDict)
+            {
+                if (aDict.Value.TryGetValue("URI", out var uriVal) && uriVal is PdfString us)
+                    annot.Url = us.Value;
+            }
+
+            result.Add(annot);
+        }
+
+        return result;
+    }
+
     /// <summary>从 PDF 中提取嵌入图片</summary>
     /// <returns>图片流对象序列</returns>
     public IEnumerable<PdfImage> ExtractImageStreams()
