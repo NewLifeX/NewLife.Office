@@ -873,6 +873,42 @@ public class WordWriterTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
 
+    [Fact(DisplayName = "自定义XML部件—读写customXml往返")]
+    public void CustomXmlParts_RoundTrip()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            // 创建含自定义XML部件的docx
+            using (var writer = new WordWriter())
+            {
+                writer.AppendParagraph(new WordParagraph { Runs = { new WordRun { Text = "测试" } } });
+                writer.Save(tempFile);
+            }
+            // 读取并添加自定义XML
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            var xml = "<root><key>value</key></root>";
+            doc.CustomXmlParts["item1.xml"] = Encoding.UTF8.GetBytes(xml);
+
+            // 写回并验证
+            var tempFile2 = Path.GetTempFileName() + ".docx";
+            try
+            {
+                using var writer2 = new WordWriter();
+                writer2.Save(tempFile2, doc);
+
+                using var za = new ZipArchive(File.OpenRead(tempFile2), ZipArchiveMode.Read);
+                var entry = za.GetEntry("customXml/item1.xml");
+                Assert.NotNull(entry);
+                using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+                Assert.Contains("<key>value</key>", sr.ReadToEnd());
+            }
+            finally { if (File.Exists(tempFile2)) File.Delete(tempFile2); }
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
     [Fact(DisplayName = "列表续号—startOverride从5开始")]
     public void OrderedList_StartOverride()
     {

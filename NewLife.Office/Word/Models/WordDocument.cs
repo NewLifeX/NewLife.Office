@@ -56,6 +56,9 @@ public class WordDocument
     /// <summary>内容控件列表（SDT）</summary>
     public List<WordSdtElement> SdtElements { get; set; } = [];
 
+    /// <summary>自定义 XML 部件（customXml/item*.xml），Key 为部件名（如 item1.xml），Value 为 XML 原始字节</summary>
+    public Dictionary<String, Byte[]> CustomXmlParts { get; set; } = [];
+
     /// <summary>编号/列表定义（程序化创建列表时使用，与 NumberingXml 二选一）</summary>
     public WordNumbering? Numbering { get; set; }
 

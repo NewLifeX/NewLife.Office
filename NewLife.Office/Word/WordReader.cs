@@ -387,7 +387,15 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
             using var ms = new MemoryStream();
             using var es = entry.Open();
             es.CopyTo(ms);
-            doc.OtherParts[name] = ms.ToArray();
+            var data = ms.ToArray();
+            doc.OtherParts[name] = data;
+
+            // 收集自定义 XML 部件到专用集合
+            if (name.StartsWith("customXml/", StringComparison.OrdinalIgnoreCase) && name.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
+            {
+                var partName = name.Substring("customXml/".Length);
+                doc.CustomXmlParts[partName] = data;
+            }
         }
     }
     #endregion

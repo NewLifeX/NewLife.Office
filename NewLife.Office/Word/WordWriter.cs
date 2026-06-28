@@ -446,6 +446,9 @@ public class WordWriter : IDisposable
         _documentXmlNsDecls = document.DocumentXmlNsDecls;
         _documentXml = document.DocumentXml;
         _otherParts = document.OtherParts.Count > 0 ? new Dictionary<String, Byte[]>(document.OtherParts) : [];
+        // 自定义 XML 部件写入 OtherParts 以便原样透传
+        foreach (var kv in document.CustomXmlParts)
+            _otherParts[$"customXml/{kv.Key}"] = kv.Value;
         _elements.AddRange(document.Elements);
         foreach (var kv in document.Images) _imageRels.Add((kv.Key, kv.Value.Extension, kv.Value.Data));
         foreach (var item in document.Hyperlinks) _hyperlinkRels.Add(item);
