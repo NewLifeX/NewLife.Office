@@ -91,6 +91,9 @@ public sealed class BiffWriter : IDisposable
     // 合并单元格：Key = sheetName, Value = List of (r1,c1,r2,c2)
     private readonly Dictionary<String, List<(Int32 R1, Int32 C1, Int32 R2, Int32 C2)>> _sheetMergedCells = new(StringComparer.Ordinal);
 
+    // 行高：Key = sheetName, Value = (rowIndex → heightTwips)，默认 255 twips = 约 12.75pt
+    private readonly Dictionary<String, Dictionary<Int32, Int32>> _sheetRowHeights = new(StringComparer.Ordinal);
+
     private String _currentSheet = "Sheet1";
     private Boolean _disposed;
 
@@ -226,6 +229,20 @@ public sealed class BiffWriter : IDisposable
             _sheetMergedCells[_currentSheet] = list;
         }
         list.Add((firstRow, firstCol, lastRow, lastCol));
+    }
+
+    /// <summary>设置当前工作表中指定行的高度</summary>
+    /// <param name="rowIndex">行索引（0基）</param>
+    /// <param name="heightPoints">行高（磅值），如 20=20pt</param>
+    public void SetRowHeight(Int32 rowIndex, Double heightPoints)
+    {
+        if (!_sheetRowHeights.TryGetValue(_currentSheet, out var map))
+        {
+            map = [];
+            _sheetRowHeights[_currentSheet] = map;
+        }
+        // BIFF8 行高单位：twips（1pt = 20 twips）
+        map[rowIndex] = (Int32)(heightPoints * 20);
     }
 
     #endregion
@@ -419,6 +436,9 @@ public sealed class BiffWriter : IDisposable
         // 获取当前工作表的列格式映射
         _columnFormats.TryGetValue(sheetName, out var sheetColFmts);
 
+        // 获取当前工作表的行高映射
+        _sheetRowHeights.TryGetValue(sheetName, out var rowHeights);
+
         // ROW + 单元格记录
         for (var ri = 0; ri < rows.Count; ri++)
         {
@@ -430,7 +450,9 @@ public sealed class BiffWriter : IDisposable
             if (style != null && styleMap.TryGetValue(style, out var sx))
                 baseXf = sx;
 
-            WriteRecord(bw, RecRow, BuildRowData(ri, 0, colMax));
+            // 使用自定义行高或默认值
+            var rowHeight = rowHeights?.TryGetValue(ri, out var h) == true ? h : 0x00FF;
+            WriteRecord(bw, RecRow, BuildRowData(ri, 0, colMax, rowHeight));
 
             for (var ci = 0; ci < values.Count; ci++)
             {
@@ -593,14 +615,14 @@ public sealed class BiffWriter : IDisposable
         return ms.ToArray();
     }
 
-    private static Byte[] BuildRowData(Int32 row, Int32 firstCol, Int32 lastCol)
+    private static Byte[] BuildRowData(Int32 row, Int32 firstCol, Int32 lastCol, Int32 rowHeight = 0x00FF)
     {
         var buf = new Byte[16];
         var writer = new SpanWriter(buf, 0, buf.Length);
         writer.Write((UInt16)row);
         writer.Write((UInt16)firstCol);
         writer.Write((UInt16)lastCol);
-        writer.Write((UInt16)0x00FF); // row height = 255 twips (default)
+        writer.Write((UInt16)rowHeight); // row height in twips (0x00FF = 255 twips = 12.75pt default)
         writer.Write((UInt16)0);      // unused
         writer.Write((UInt16)0);      // unused
         writer.Write((UInt16)0x0100); // default row attributes

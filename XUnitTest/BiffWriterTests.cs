@@ -591,6 +591,32 @@ public class BiffWriterTests
     }
     #endregion
 
+    #region 行高设置
+    [Fact, DisplayName("行高—设置自定义行高")]
+    public void SetRowHeight_CustomHeight()
+    {
+        var tempFile = Path.GetTempFileName() + ".xls";
+        try
+        {
+            using var writer = new BiffWriter();
+            writer.WriteHeader(["姓名", "年龄"]);
+            writer.WriteRow(["Alice", 28]);
+            writer.WriteRow(["Bob", 35]);
+            writer.SetRowHeight(0, 24); // 标题行 24pt
+            writer.SetRowHeight(1, 18); // 数据行 18pt
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            Assert.True(new FileInfo(tempFile).Length > 0);
+            using var reader = new BiffReader(tempFile);
+            var rows = reader.ReadSheet().ToList();
+            Assert.Equal(3, rows.Count);
+            Assert.Equal("Alice", rows[1][0]);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
+
     #region 辅助类型
 
     private class SampleModel
