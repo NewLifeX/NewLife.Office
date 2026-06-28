@@ -925,6 +925,8 @@ public class WordWriter : IDisposable
             var pgW = ps.Landscape ? ps.PageHeight : ps.PageWidth;
             var pgH = ps.Landscape ? ps.PageWidth : ps.PageHeight;
             sb.Append("<w:sectPr>");
+            if (ps.TitlePage) sb.Append("<w:titlePg/>");
+            if (ps.EvenAndOddHeaders) sb.Append("<w:evenAndOddHeaders/>");
             if (ps.HeaderText != null || ps.WatermarkText != null)
                 sb.Append("<w:headerReference w:type=\"default\" r:id=\"rHdr1\"/>");
             if (ps.FooterText != null)

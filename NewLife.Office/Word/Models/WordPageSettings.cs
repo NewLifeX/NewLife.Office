@@ -45,6 +45,12 @@ public class WordPageSettings
 
     /// <summary>行号设置（null 表示无行号）</summary>
     public WordLineNumberSettings? LineNumber { get; set; }
+
+    /// <summary>首页不同页眉页脚（对应 w:titlePg）</summary>
+    public Boolean TitlePage { get; set; }
+
+    /// <summary>奇偶页不同页眉页脚（对应 w:evenAndOddHeaders）</summary>
+    public Boolean EvenAndOddHeaders { get; set; }
     #endregion
 }
 

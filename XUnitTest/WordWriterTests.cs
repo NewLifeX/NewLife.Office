@@ -1091,5 +1091,29 @@ public class WordWriterTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact(DisplayName = "页面设置—TitlePage和EvenAndOddHeaders输出w:titlePg/w:evenAndOddHeaders")]
+    public void TitlePage_And_EvenAndOddHeaders_OutputXml()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.PageSettings.TitlePage = true;
+            writer.PageSettings.EvenAndOddHeaders = true;
+            writer.AppendParagraph("首页不同页眉页脚");
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("word/document.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("<w:titlePg/>", xml);
+            Assert.Contains("<w:evenAndOddHeaders/>", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
     #endregion
 }
