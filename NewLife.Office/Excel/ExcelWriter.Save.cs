@@ -440,7 +440,8 @@ partial class ExcelWriter
             for (var i = 0; i < _sheetNames.Count; i++)
             {
                 var name = SecurityElement.Escape(_sheetNames[i]) ?? _sheetNames[i];
-                sw.Write($"<sheet name=\"{name}\" sheetId=\"{i + 1}\" r:id=\"rId{i + 1}\"/>");
+                var stateAttr = _sheetStates.TryGetValue(_sheetNames[i], out var st) ? $" state=\"{st}\"" : "";
+                sw.Write($"<sheet name=\"{name}\" sheetId=\"{i + 1}\" r:id=\"rId{i + 1}\"{stateAttr}/>");
             }
             sw.Write("</sheets>");
             // definedNames（打印标题行 + 用户自定义命名范围）

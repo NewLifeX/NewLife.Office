@@ -197,6 +197,8 @@ public partial class ExcelWriter : DisposeBase
     private readonly Dictionary<String, SheetPageSetup> _sheetPageSetups = new(StringComparer.OrdinalIgnoreCase);
     // 工作表保护
     private readonly Dictionary<String, String?> _sheetProtection = new(StringComparer.OrdinalIgnoreCase);
+    // 工作表可见性：sheet → state ("visible"/"hidden"/"veryHidden")
+    private readonly Dictionary<String, String> _sheetStates = new(StringComparer.OrdinalIgnoreCase);
     // 条件格式
     private readonly Dictionary<String, List<ConditionalFormatEntry>> _sheetCondFormats = new(StringComparer.OrdinalIgnoreCase);
     // 批注
@@ -881,6 +883,25 @@ public partial class ExcelWriter : DisposeBase
         if (sheet.IsNullOrEmpty()) sheet = SheetName;
         EnsureSheet(sheet);
         _sheetProtection[sheet] = password;
+    }
+
+    /// <summary>设置工作表可见性</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="veryHidden">true=深度隐藏（仅 VBA 可取消隐藏），false=普通隐藏（用户可从 UI 取消隐藏）</param>
+    public void HideSheet(String? sheet, Boolean veryHidden = false)
+    {
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        _sheetStates[sheet] = veryHidden ? "veryHidden" : "hidden";
+    }
+
+    /// <summary>恢复工作表可见</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    public void UnhideSheet(String? sheet)
+    {
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        _sheetStates.Remove(sheet);
     }
     #endregion
 

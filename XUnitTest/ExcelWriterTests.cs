@@ -965,5 +965,27 @@ public class ExcelWriterTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact(DisplayName = "工作表可见性—HideSheet写入state=hidden")]
+    public void HideSheet_WritesStateAttribute()
+    {
+        var tempFile = Path.GetTempFileName() + ".xlsx";
+        try
+        {
+            using var writer = new ExcelWriter(tempFile);
+            writer.HideSheet(null); // hide current sheet "Sheet1"
+            writer.WriteRow(null, new Object?[] { "HiddenData" });
+            writer.Save();
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("xl/workbook.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("state=\"hidden\"", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
     #endregion
 }
