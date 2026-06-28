@@ -409,6 +409,18 @@ public partial class PptxWriter : IDisposable
         Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
         => AddChart(slideIndex, "bubble", categories, leftCm, topCm, widthCm, heightCm);
 
+    /// <summary>向幻灯片添加雷达图</summary>
+    /// <param name="slideIndex">幻灯片索引</param>
+    /// <param name="categories">轴分类标签</param>
+    /// <param name="leftCm">左边距（厘米）</param>
+    /// <param name="topCm">上边距（厘米）</param>
+    /// <param name="widthCm">宽度（厘米）</param>
+    /// <param name="heightCm">高度（厘米）</param>
+    /// <returns>图表对象</returns>
+    public PptChart AddRadarChart(Int32 slideIndex, String[] categories,
+        Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
+        => AddChart(slideIndex, "radar", categories, leftCm, topCm, widthCm, heightCm);
+
     private PptChart AddChart(Int32 slideIndex, String chartType, String[] categories,
         Double leftCm, Double topCm, Double widthCm, Double heightCm)
     {

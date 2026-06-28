@@ -960,6 +960,7 @@ partial class PptxWriter
             "area" => "areaChart",
             "scatter" => "scatterChart",
             "bubble" => "bubbleChart",
+            "radar" => "radarChart",
             _ => "barChart",
         };
         sb.Append($"<c:{chartElem}>");
@@ -969,6 +970,8 @@ partial class PptxWriter
             sb.Append("<c:scatterStyle val=\"lineMarker\"/>");
         if (chart.ChartType == "bubble")
             sb.Append("<c:bubbleScale val=\"100\"/>");
+        if (chart.ChartType == "radar")
+            sb.Append("<c:radarStyle val=\"marker\"/>");
 
         var serColors = new[] { "4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F79646" };
         for (var si = 0; si < chart.Series.Count; si++)

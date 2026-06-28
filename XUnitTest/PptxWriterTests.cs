@@ -982,4 +982,26 @@ public class PptxWriterTests
         Assert.Contains("roundRect", xml);
         Assert.Contains("50000", xml);
     }
+
+    [Fact, System.ComponentModel.DisplayName("雷达图—AddRadarChart创建并验证")]
+    public void RadarChart_CreatesSuccessfully()
+    {
+        var writer = new PptxWriter();
+        writer.AddSlide(0);
+        var chart = writer.AddRadarChart(0, ["速度", "力量", "智力"], 2, 2, 16, 12);
+        chart.Series.Add(new PptChartSeries { Name = "英雄A", Values = [80, 60, 90] });
+
+        using var ms = new MemoryStream();
+        writer.Save(ms);
+
+        Assert.True(ms.Length > 0);
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true);
+        var chartEntry = za.GetEntry("ppt/charts/chart1.xml");
+        Assert.NotNull(chartEntry);
+        using var sr = new StreamReader(chartEntry!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("radarChart", xml);
+        Assert.Contains("radarStyle", xml);
+    }
 }
