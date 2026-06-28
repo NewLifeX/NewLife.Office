@@ -847,4 +847,30 @@ public class WordWriterTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
     #endregion
+
+    #region 邮件合并域
+    [Fact(DisplayName = "邮件合并域—写入MERGEFIELD并验证")]
+    public void MergeField_WritesCorrectXml()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendMergeField("FirstName");
+            writer.AppendMergeField("Company");
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var za = new ZipArchive(File.OpenRead(tempFile), ZipArchiveMode.Read);
+            var entry = za.GetEntry("word/document.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("MERGEFIELD", xml);
+            Assert.Contains("FirstName", xml);
+            Assert.Contains("Company", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
 }

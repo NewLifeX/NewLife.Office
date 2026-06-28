@@ -154,6 +154,24 @@ public class WordWriter : IDisposable
         _elements.Add(new WordElement { Type = WordElementType.Paragraph, RawXml = xml });
     }
 
+    /// <summary>追加邮件合并域（MERGEFIELD）</summary>
+    /// <param name="fieldName">合并域名（如 "FirstName"、"Company"）</param>
+    /// <remarks>
+    /// 生成标准 MERGEFIELD 域代码，Word 打开后可执行邮件合并填充数据源。
+    /// 域显示文本使用 «FieldName» 占位符格式。
+    /// </remarks>
+    public void AppendMergeField(String fieldName)
+    {
+        var xml = "<w:p>"
+            + "<w:r><w:fldChar w:fldCharType=\"begin\"/></w:r>"
+            + $"<w:r><w:instrText xml:space=\"preserve\"> MERGEFIELD {Esc(fieldName)} </w:instrText></w:r>"
+            + "<w:r><w:fldChar w:fldCharType=\"separate\"/></w:r>"
+            + $"<w:r><w:t>«{Esc(fieldName)}»</w:t></w:r>"
+            + "<w:r><w:fldChar w:fldCharType=\"end\"/></w:r>"
+            + "</w:p>";
+        _elements.Add(new WordElement { Type = WordElementType.Paragraph, RawXml = xml });
+    }
+
     /// <summary>追加分页符</summary>
     public void AppendPageBreak()
     {
