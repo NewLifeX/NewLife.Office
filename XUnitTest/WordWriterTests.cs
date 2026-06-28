@@ -1034,5 +1034,62 @@ public class WordWriterTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+    [Fact(DisplayName = "分页控制—WidowControl=false输出w:widowControl val=0")]
+    public void WidowControl_False_OutputsXml()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            var para = new WordParagraph
+            {
+                Runs = { new WordRun { Text = "允许孤行" } },
+                WidowControl = false
+            };
+            writer.AppendParagraph(para);
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("word/document.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("<w:widowControl w:val=\"0\"/>", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "表格—单元格垂直对齐vAlign输出")]
+    public void TableCell_VerticalAlignment_OutputsVAlign()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            var cell = new WordCell
+            {
+                VerticalAlignment = "center",
+                Paragraphs = { new WordParagraph { Runs = { new WordRun { Text = "居中文字" } } } }
+            };
+            var doc = new WordDocument();
+            doc.Elements.Add(new WordElement
+            {
+                Type = WordElementType.Table,
+                TableRows = new List<List<WordCell>> { new() { cell } },
+                TableFirstRowHeader = false
+            });
+            using var writer = new WordWriter();
+            writer.Save(tempFile, doc);
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("word/document.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("<w:vAlign w:val=\"center\"/>", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
     #endregion
 }

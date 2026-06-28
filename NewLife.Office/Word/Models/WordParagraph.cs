@@ -71,5 +71,8 @@ public class WordParagraph
 
     /// <summary>段落内各行保持同页（w:keepLines），防止段落跨页断裂</summary>
     public Boolean KeepLines { get; set; }
+
+    /// <summary>孤行控制（w:widowControl），true=防止首行孤悬页尾/末行孤悬页首，默认 true</summary>
+    public Boolean WidowControl { get; set; } = true;
     #endregion
 }

@@ -15,5 +15,8 @@ public class WordCell
 
     /// <summary>合并行数（垂直合并）</summary>
     public Int32 RowSpan { get; set; } = 1;
+
+    /// <summary>单元格垂直对齐（"top"/"center"/"bottom"），null 表示继承默认</summary>
+    public String? VerticalAlignment { get; set; }
     #endregion
 }
