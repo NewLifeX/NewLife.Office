@@ -28,6 +28,7 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     private String[] _sst = [];
     private List<String> _sheetNames = [];
     private List<Int32> _sheetBofOffsets = [];
+    private readonly List<(Int32 Row, Int32 Col, String Url)> _hyperlinks = [];
     private Boolean _disposed;
     #endregion
 
@@ -289,6 +290,8 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
                 ParseLabel(data, cells, ref maxCol);
             else if (type == RecFormula)
                 ParseFormula(data, cells, ref maxCol);
+            else if (type == RecHyperlink)
+                ParseHyperlink(data);
             // RecBlank / RecMulBlank：空单元格，跳过
         }
 
@@ -475,6 +478,28 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
         if (col > maxCol) maxCol = col;
     }
 
+    /// <summary>解析 HYPERLINK 记录 (0x01B8)</summary>
+    private void ParseHyperlink(Byte[] data)
+    {
+        if (data.Length < 30) return;
+        var reader = new SpanReader(data, 0, data.Length);
+        var firstRow = (Int32)reader.ReadUInt16();
+        var lastRow = (Int32)reader.ReadUInt16();
+        var firstCol = (Int32)reader.ReadUInt16();
+        var lastCol = (Int32)reader.ReadUInt16();
+        reader.Advance(20); // skip 16-byte GUID + 4-byte options
+        var urlLen = (Int32)reader.ReadUInt16();
+        if (urlLen > 0 && 30 + urlLen <= data.Length)
+        {
+            var url = Encoding.UTF8.GetString(data, 30, urlLen);
+            _hyperlinks.Add((firstRow, firstCol, url));
+        }
+    }
+
+    /// <summary>获取已解析的超链接列表</summary>
+    /// <returns>超链接列表（行、列、URL）</returns>
+    public IReadOnlyList<(Int32 Row, Int32 Col, String Url)> GetHyperlinks() => _hyperlinks.AsReadOnly();
+
     /// <summary>解码 RK 压缩数值</summary>
     /// <param name="rk">4字节 RK 值</param>
     /// <returns>解码后的浮点数</returns>
@@ -588,6 +613,7 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     private const UInt16 RecBoundSheet = 0x0085;
     private const UInt16 RecLabelSst = 0x00FD;
     private const UInt16 RecNumber = 0x0203;
+    private const UInt16 RecHyperlink = 0x01B8;
     private const UInt16 RecRk = 0x027E;
     private const UInt16 RecMulRk = 0x00BE;
     private const UInt16 RecBoolErr = 0x0205;
