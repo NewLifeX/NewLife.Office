@@ -873,6 +873,23 @@ public class WordWriterTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
 
+    [Fact(DisplayName = "分隔线—AppendHorizontalRule生成底部分隔段落")]
+    public void AppendHorizontalRule_Works()
+    {
+        using var writer = new WordWriter();
+        writer.AppendParagraph(new WordParagraph { Runs = { new WordRun { Text = "上文" } } });
+        writer.AppendHorizontalRule("FF0000", 12);
+        writer.AppendParagraph(new WordParagraph { Runs = { new WordRun { Text = "下文" } } });
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            writer.Save(tempFile);
+            Assert.True(File.Exists(tempFile));
+            Assert.True(new FileInfo(tempFile).Length > 2000);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
     [Fact(DisplayName = "自定义XML部件—读写customXml往返")]
     public void CustomXmlParts_RoundTrip()
     {

@@ -328,6 +328,26 @@ public class WordWriter : IDisposable
     /// <param name="data">对象集合</param>
     /// <param name="firstRowHeader">首行表头</param>
     /// <param name="style">表格样式</param>
+
+    /// <summary>追加水平分隔线（段落底部边框）</summary>
+    /// <param name="colorHex">线条颜色（16进制RGB，默认 000000）</param>
+    /// <param name="width">线宽（1/8pt，默认 6 = 0.75pt）</param>
+    public void AppendHorizontalRule(String? colorHex = null, Int32 width = 6)
+    {
+        var para = new WordParagraph
+        {
+            Borders = new WordParagraphBorders
+            {
+                Bottom = new WordBorder
+                {
+                    Style = WordBorderStyle.Single,
+                    Width = width,
+                    Color = colorHex ?? "000000"
+                }
+            }
+        };
+        _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
+    }
     public void WriteObjects<T>(IEnumerable<T> data, Boolean firstRowHeader = true, WordTableStyle? style = null) where T : class
     {
         var props = typeof(T).GetProperties();
