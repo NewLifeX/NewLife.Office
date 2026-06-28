@@ -53,6 +53,9 @@ public class PdfWriter : IDisposable
     /// <summary>是否在页脚显示页码</summary>
     public Boolean ShowPageNumbers { get; set; }
 
+    /// <summary>页码格式字符串，{page}=当前页, {total}=总页数。null 时使用默认 "- 1 -" 格式</summary>
+    public String? PageNumberFormat { get; set; }
+
     /// <summary>文档标题（写入 PDF Info 字典）</summary>
     public String? DocumentTitle { get; set; }
 
@@ -252,6 +255,32 @@ public class PdfWriter : IDisposable
             font = EnsureCjkFont();
         _content.AppendLine("BT");
         _content.AppendLine($"/{font.Name} {fontSize:F1} Tf");
+        _content.AppendLine($"{x:F2} {y:F2} Td");
+        if (font.IsCjk)
+            _content.AppendLine($"<{EncodeCjkHex(text)}> Tj");
+        else
+            _content.AppendLine($"({EncodePdfText(text)}) Tj");
+        _content.AppendLine("ET");
+    }
+
+    /// <summary>绘制文本（支持字符间距和词间距）</summary>
+    /// <param name="text">文本内容</param>
+    /// <param name="x">X 坐标（点）</param>
+    /// <param name="y">Y 坐标（点）</param>
+    /// <param name="characterSpacing">字符间距（点），0=默认</param>
+    /// <param name="wordSpacing">词间距（点），0=默认</param>
+    /// <param name="fontSize">字体大小（点）</param>
+    /// <param name="font">字体，null 时自动选择</param>
+    public void DrawText(String text, Single x, Single y, Single characterSpacing, Single wordSpacing, Single fontSize = 12, PdfFont? font = null)
+    {
+        EnsurePage();
+        font ??= ContainsCjk(text) ? EnsureCjkFont() : _fontHelvetica;
+        if (!font.IsCjk && ContainsCjk(text))
+            font = EnsureCjkFont();
+        _content.AppendLine("BT");
+        _content.AppendLine($"/{font.Name} {fontSize:F1} Tf");
+        if (characterSpacing != 0) _content.AppendLine($"{characterSpacing:F2} Tc");
+        if (wordSpacing != 0) _content.AppendLine($"{wordSpacing:F2} Tw");
         _content.AppendLine($"{x:F2} {y:F2} Td");
         if (font.IsCjk)
             _content.AppendLine($"<{EncodeCjkHex(text)}> Tj");
@@ -1782,7 +1811,9 @@ public class PdfWriter : IDisposable
                     hfSb.Append($"BT /{f1Name} 9 Tf\n{MarginLeft} {ftrY:F2} Td\n({EncodePdfText(FooterText)}) Tj\nET\n");
                 if (ShowPageNumbers)
                 {
-                    var pageNumText = $"- {pi + 1} -";
+                    var pageNumText = PageNumberFormat != null
+                        ? PageNumberFormat.Replace("{page}", (pi + 1).ToString()).Replace("{total}", allPages.Count.ToString())
+                        : $"- {pi + 1} -";
                     var pgX = (page.Width - pageNumText.Length * 4f) / 2f;
                     hfSb.Append($"BT /{f1Name} 9 Tf\n{pgX:F2} {ftrY:F2} Td\n({pageNumText}) Tj\nET\n");
                 }

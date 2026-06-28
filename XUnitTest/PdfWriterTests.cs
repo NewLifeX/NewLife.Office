@@ -524,5 +524,46 @@ public class PdfWriterTests
         Assert.Contains("cm", pdf);
         Assert.Contains("Im", pdf);
     }
+
+    [Fact(DisplayName = "页码格式—PageNumberFormat输出自定义格式含{page}/{total}")]
+    public void PageNumberFormat_OutputsCustomFormat()
+    {
+        using var ms = new MemoryStream();
+        using (var writer = new PdfWriter())
+        {
+            writer.PageNumberFormat = "Page {page} of {total}";
+            writer.ShowPageNumbers = true;
+            writer.BeginPage();
+            writer.AppendLine("Page 1 content");
+            writer.EndPage();
+            writer.BeginPage();
+            writer.AppendLine("Page 2 content");
+            writer.EndPage();
+            writer.Save(ms);
+        }
+        ms.Position = 0;
+        using var reader = new StreamReader(ms);
+        var pdf = reader.ReadToEnd();
+        Assert.Contains("Page 1 of 2", pdf);
+        Assert.Contains("Page 2 of 2", pdf);
+    }
+
+    [Fact(DisplayName = "字符间距—DrawText输出Tc/Tw操作符")]
+    public void DrawText_CharacterSpacing_OutputsTc()
+    {
+        using var ms = new MemoryStream();
+        using (var writer = new PdfWriter())
+        {
+            writer.BeginPage();
+            writer.DrawText("Spaced Text", 100, 200, 2.5f, 1.0f, 12);
+            writer.EndPage();
+            writer.Save(ms);
+        }
+        ms.Position = 0;
+        using var reader = new StreamReader(ms);
+        var pdf = reader.ReadToEnd();
+        Assert.Contains("2.50 Tc", pdf);
+        Assert.Contains("1.00 Tw", pdf);
+    }
     #endregion
 }
