@@ -177,9 +177,9 @@
 |------|:---:|:---:|:---:|:---:|:---:|
 | 修改密码保护（SHA-512） | ✅ | ✅ | ❌ | ❌ | ✅ |
 | 打开密码（AES 加密） | ❌ | 部分 | ❌ | ❌ | ✅ |
-| 文档属性（core.xml）写入 | ❌（规划） | ✅ | ❌ | ✅（v0.59） | ✅ |
+| 文档属性（core.xml）写入 | ✅ | ✅ | ❌ | ✅（v0.59） | ✅ |
 | 批注读取 | ✅ | ✅ | ❌ | ❌ | ✅ |
-| 批注写入 | ❌（规划） | ✅ | ❌ | ❌ | ✅ |
+| 批注写入 | ✅ | ✅ | ❌ | ❌ | ✅ |
 | 超链接（文本/形状跳转） | ✅ | ✅ | ❌ | ✅ | ✅ |
 | 超链接（跳转到文件） | ❌ | ✅ | ❌ | ✅（v0.58） | ✅ |
 | Section 分组 | ❌ | ✅ | ❌ | ✅（v0.30） | ✅ |
@@ -403,15 +403,15 @@
 | **图表坐标轴 Min/Max** | ShapeCrawler(v0.45)/Aspose | ✅ 已完成 |
 | **形状旋转角度** | 所有竞品 | ✅ 已完成 |
 | **图片原地替换 API** | ShapeCrawler/Aspose | ✅ 已完成 |
-| **Section 管理** | ShapeCrawler(v0.30)/Aspose | 🔄 规划中 |
+| **Section 管理** | ShapeCrawler(v0.30)/Aspose | ✅ 已完成 |
 
 ### 低优先级（差异化与渲染增强）
 
 | 缺失项 | 对标竞品 | 当前状态 |
 |--------|---------|---------|
 | **背景渐变填充** | 所有竞品 | ✅ 已完成 (S16-03) |
-| **SVG 图片支持** | ShapeCrawler(v0.52)/Aspose | `image/svg+xml` ImagePart 类型未支持 |
-| **上标/下标** | ShapeCrawler/Aspose | `<a:rPr baseline="...">` 未实现 |
+| **SVG 图片支持** | ShapeCrawler(v0.52)/Aspose | ✅ 已完成 (S15-03) |
+| **上标/下标** | ShapeCrawler/Aspose | ✅ 已完成 (S15-06) |
 | **形状 Alt Text** | ShapeCrawler(v0.57)/Aspose | ✅ 已完成 (S16-06) |
 | **pptx → PNG/JPEG 渲染** | Aspose | 需 SkiaSharp/Docnet 外部库，当前为 NotSupportedException |
 | **文本方向** | ShapeCrawler(v0.71)/Aspose | ✅ 已完成 (S16-05) |
