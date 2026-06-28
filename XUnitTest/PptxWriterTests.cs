@@ -983,6 +983,29 @@ public class PptxWriterTests
         Assert.Contains("50000", xml);
     }
 
+    [Fact, System.ComponentModel.DisplayName("形状渐变填充—GradientFill写入gradFill")]
+    public void GradientFill_Shape()
+    {
+        var writer = new PptxWriter();
+        writer.AddSlide(0);
+        var shape = writer.AddShape(0, "rect", 1, 1, 8, 4);
+        shape.GradientType = "linear";
+        shape.GradientColor1 = "4472C4";
+        shape.GradientColor2 = "FFFFFF";
+        shape.GradientAngle = 45;
+
+        using var ms = new MemoryStream();
+        writer.Save(ms);
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true);
+        var slide1 = za.GetEntry("ppt/slides/slide1.xml");
+        Assert.NotNull(slide1);
+        using var sr = new StreamReader(slide1!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("gradFill", xml);
+        Assert.Contains("4472C4", xml);
+    }
+
     [Fact, System.ComponentModel.DisplayName("取消组合—UngroupShapes释放组内形状")]
     public void UngroupShapes_Works()
     {

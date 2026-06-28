@@ -497,6 +497,20 @@ partial class PptxWriter
                 sb.Append($"<a:blip r:embed=\"{sp.ShapeImageRelId}\"/>");
                 sb.Append("<a:stretch><a:fillRect/></a:stretch></a:blipFill>");
             }
+            else if (sp.GradientType != null && sp.GradientColor1 != null && sp.GradientColor2 != null)
+            {
+                var angle = sp.GradientAngle * 60000; // 度 → DrawingML 单位（1/60000 度）
+                var isLinear = sp.GradientType == "linear";
+                sb.Append($"<a:gradFill rotWithShape=\"1\"><a:gsLst>");
+                sb.Append($"<a:gs pos=\"0\"><a:srgbClr val=\"{sp.GradientColor1.TrimStart('#')}\"/></a:gs>");
+                sb.Append($"<a:gs pos=\"100000\"><a:srgbClr val=\"{sp.GradientColor2.TrimStart('#')}\"/></a:gs>");
+                sb.Append("</a:gsLst>");
+                if (isLinear)
+                    sb.Append($"<a:lin ang=\"{angle}\" scaled=\"1\"/>");
+                else
+                    sb.Append("<a:rad sr=\"50000\"/>");
+                sb.Append("<a:tileRect/></a:gradFill>");
+            }
             else if (sp.FillColor != null)
                 sb.Append($"<a:solidFill><a:srgbClr val=\"{sp.FillColor.TrimStart('#')}\"/></a:solidFill>");
             else

@@ -34,6 +34,18 @@ public class PptShape
     /// <summary>图片填充扩展名（默认 "png"），配合 FillImage 使用</summary>
     public String FillImageExt { get; set; } = "png";
 
+    /// <summary>渐变填充类型（"linear" 或 "radial"），null 表示不使用渐变</summary>
+    public String? GradientType { get; set; }
+
+    /// <summary>渐变起始色（16进制 RGB），配合 GradientType 使用</summary>
+    public String? GradientColor1 { get; set; }
+
+    /// <summary>渐变结束色（16进制 RGB），配合 GradientType 使用</summary>
+    public String? GradientColor2 { get; set; }
+
+    /// <summary>渐变角度（度，仅线性渐变有效，0=左到右，90=下到上），默认 90</summary>
+    public Int32 GradientAngle { get; set; } = 90;
+
     /// <summary>形状图片填充的关系 ID（内部用）</summary>
     public String? ShapeImageRelId { get; set; }
 
