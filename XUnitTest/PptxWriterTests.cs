@@ -983,6 +983,23 @@ public class PptxWriterTests
         Assert.Contains("50000", xml);
     }
 
+    [Fact, System.ComponentModel.DisplayName("Z-Order—BringToFront置顶")]
+    public void ZOrder_BringToFront()
+    {
+        var writer = new PptxWriter();
+        writer.AddSlide(0);
+        writer.AddShape(0, "rect", 1, 1, 5, 5);
+        writer.AddShape(0, "ellipse", 2, 2, 5, 5);
+
+        var slide = writer.Slides[0];
+        Assert.Equal(2, slide.Shapes.Count);
+        Assert.Equal("rect", slide.Shapes[0].ShapeType);
+
+        writer.BringToFront(0, 0);
+        Assert.Equal("ellipse", slide.Shapes[0].ShapeType);
+        Assert.Equal("rect", slide.Shapes[1].ShapeType);
+    }
+
     [Fact, System.ComponentModel.DisplayName("股价图—AddStockChart创建并验证")]
     public void StockChart_CreatesSuccessfully()
     {

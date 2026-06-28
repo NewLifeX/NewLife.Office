@@ -549,6 +549,54 @@ public partial class PptxWriter : IDisposable
         return group;
     }
 
+    /// <summary>将指定形状移至最上层（BringToFront）</summary>
+    /// <param name="slideIndex">幻灯片索引（0起始）</param>
+    /// <param name="shapeIndex">形状在 Shapes 列表中的索引</param>
+    public void BringToFront(Int32 slideIndex, Int32 shapeIndex)
+    {
+        var slide = EnsureSlide(slideIndex);
+        if (shapeIndex < 0 || shapeIndex >= slide.Shapes.Count) return;
+        var shape = slide.Shapes[shapeIndex];
+        slide.Shapes.RemoveAt(shapeIndex);
+        slide.Shapes.Add(shape);
+    }
+
+    /// <summary>将指定形状移至最底层（SendToBack）</summary>
+    /// <param name="slideIndex">幻灯片索引（0起始）</param>
+    /// <param name="shapeIndex">形状在 Shapes 列表中的索引</param>
+    public void SendToBack(Int32 slideIndex, Int32 shapeIndex)
+    {
+        var slide = EnsureSlide(slideIndex);
+        if (shapeIndex < 0 || shapeIndex >= slide.Shapes.Count) return;
+        var shape = slide.Shapes[shapeIndex];
+        slide.Shapes.RemoveAt(shapeIndex);
+        slide.Shapes.Insert(0, shape);
+    }
+
+    /// <summary>将指定形状上移一层（BringForward）</summary>
+    /// <param name="slideIndex">幻灯片索引（0起始）</param>
+    /// <param name="shapeIndex">形状在 Shapes 列表中的索引</param>
+    public void BringForward(Int32 slideIndex, Int32 shapeIndex)
+    {
+        var slide = EnsureSlide(slideIndex);
+        if (shapeIndex < 0 || shapeIndex >= slide.Shapes.Count - 1) return;
+        var shape = slide.Shapes[shapeIndex];
+        slide.Shapes.RemoveAt(shapeIndex);
+        slide.Shapes.Insert(shapeIndex + 1, shape);
+    }
+
+    /// <summary>将指定形状下移一层（SendBackward）</summary>
+    /// <param name="slideIndex">幻灯片索引（0起始）</param>
+    /// <param name="shapeIndex">形状在 Shapes 列表中的索引</param>
+    public void SendBackward(Int32 slideIndex, Int32 shapeIndex)
+    {
+        var slide = EnsureSlide(slideIndex);
+        if (shapeIndex < 1 || shapeIndex >= slide.Shapes.Count) return;
+        var shape = slide.Shapes[shapeIndex];
+        slide.Shapes.RemoveAt(shapeIndex);
+        slide.Shapes.Insert(shapeIndex - 1, shape);
+    }
+
     /// <summary>为幻灯片添加页脚文本和/或页码（S04-05）</summary>
     /// /// <param name="slideIndex">幻灯片索引（0起始）</param>
     /// <param name="footerText">页脚文本，null 表示不显示</param>
