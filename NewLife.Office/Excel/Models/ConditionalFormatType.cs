@@ -15,6 +15,12 @@ public enum ExcelConditionalFormatType
     /// <summary>介于</summary>
     Between,
 
+    /// <summary>不等于</summary>
+    NotEqual,
+
+    /// <summary>不介于</summary>
+    NotBetween,
+
     /// <summary>数据条</summary>
     DataBar,
 

@@ -918,5 +918,52 @@ public class ExcelWriterTests
 
         public Int32 Age { get; set; }
     }
+
+    [Fact(DisplayName = "分页符—SetColumnPageBreak写入垂直分页符")]
+    public void SetColumnPageBreak_WritesColBreaks()
+    {
+        var tempFile = Path.GetTempFileName() + ".xlsx";
+        try
+        {
+            using var writer = new ExcelWriter(tempFile);
+            writer.SetColumnPageBreak(null, 3);
+            writer.WriteRow(null, new Object?[] { "A", "B", "C", "D", "E" });
+            writer.Save();
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("xl/worksheets/sheet1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("colBreaks", xml);
+            Assert.Contains("brk", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "条件格式—NotEqual类型写入notEqual操作符")]
+    public void ConditionalFormat_NotEqual_WritesOperator()
+    {
+        var tempFile = Path.GetTempFileName() + ".xlsx";
+        try
+        {
+            using var writer = new ExcelWriter(tempFile);
+            writer.WriteRow(null, new Object?[] { "数值" });
+            writer.WriteRow(null, new Object?[] { 100 });
+            writer.WriteRow(null, new Object?[] { 0 });
+            writer.AddConditionalFormat(null, "A2:A3", ExcelConditionalFormatType.NotEqual, "0", "FF0000");
+            writer.Save();
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("xl/worksheets/sheet1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("notEqual", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
     #endregion
 }

@@ -97,7 +97,7 @@ public class CellStyleTests
         Assert.Equal(4, Enum.GetValues(typeof(ExcelPaperSize)).Length);
 
         // ConditionalFormatType
-        Assert.Equal(6, Enum.GetValues(typeof(ExcelConditionalFormatType)).Length);
+        Assert.Equal(8, Enum.GetValues(typeof(ExcelConditionalFormatType)).Length);
     }
 
     [Fact, DisplayName("Header和Title每次返回新实例")]

@@ -1823,6 +1823,8 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                         "lessThan" => ExcelConditionalFormatType.LessThan,
                         "equal" => ExcelConditionalFormatType.Equal,
                         "between" => ExcelConditionalFormatType.Between,
+                        "notEqual" => ExcelConditionalFormatType.NotEqual,
+                        "notBetween" => ExcelConditionalFormatType.NotBetween,
                         _ => ExcelConditionalFormatType.GreaterThan,
                     };
                     var formulas = rule.Elements().Where(e => e.Name.LocalName == "formula").ToList();

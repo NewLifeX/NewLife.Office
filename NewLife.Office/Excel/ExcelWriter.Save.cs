@@ -669,6 +669,12 @@ partial class ExcelWriter
                         case ExcelConditionalFormatType.Between:
                             sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"between\"><formula>{SecurityElement.Escape(cf.Value)}</formula><formula>{SecurityElement.Escape(cf.Value2)}</formula></cfRule>");
                             break;
+                        case ExcelConditionalFormatType.NotEqual:
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"notEqual\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
+                            break;
+                        case ExcelConditionalFormatType.NotBetween:
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"notBetween\"><formula>{SecurityElement.Escape(cf.Value)}</formula><formula>{SecurityElement.Escape(cf.Value2)}</formula></cfRule>");
+                            break;
                         case ExcelConditionalFormatType.DataBar:
                             sw.Write($"<cfRule type=\"dataBar\" priority=\"{priority++}\"><dataBar><cfvo type=\"min\"/><cfvo type=\"max\"/><color rgb=\"FF{cf.Color ?? "4472C4"}\"/></dataBar></cfRule>");
                             break;

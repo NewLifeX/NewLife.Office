@@ -782,6 +782,19 @@ public partial class ExcelWriter : DisposeBase
             breaks.Add(row);
     }
 
+    /// <summary>设置垂直分页符</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="col">分页符所在列（1基，此列开始新页）</param>
+    public void SetColumnPageBreak(String? sheet, Int32 col)
+    {
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        if (!_sheetColPageBreaks.TryGetValue(sheet, out var breaks))
+            _sheetColPageBreaks[sheet] = breaks = [];
+        if (!breaks.Contains(col))
+            breaks.Add(col);
+    }
+
     /// <summary>在当前工作表中添加结构化表格（OOXML table 元素）</summary>
     /// <param name="range">表格范围（Excel 记法，如 "A1:E10"，含表头行）</param>
     /// <param name="name">表格名称（同时作为表格引用标识）</param>
