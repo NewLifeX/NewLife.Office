@@ -97,5 +97,8 @@ public class WordDocument
     /// Writer 重建 document.xml 时使用，保留源文件对 mc:/wps:/v: 等扩展命名空间的寄存性。
     /// </summary>
     public String? DocumentXmlNsDecls { get; set; }
+
+    /// <summary>文档变量（settings.xml w:docVars），Key=变量名 Value=变量值，用于企业模板元数据驱动</summary>
+    public Dictionary<String, String> DocumentVariables { get; set; } = [];
     #endregion
 }

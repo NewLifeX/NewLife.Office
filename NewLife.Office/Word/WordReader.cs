@@ -344,6 +344,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         doc.StylesXml = ReadZipEntryText("word/styles.xml");
         doc.NumberingXml = ReadZipEntryText("word/numbering.xml");
         doc.SettingsXml = ReadZipEntryText("word/settings.xml");
+        // 解析文档变量
+        if (doc.SettingsXml != null)
+            ParseDocumentVariables(doc.SettingsXml, doc.DocumentVariables);
         doc.DocumentXml = ReadZipEntryText("word/document.xml");
 
         LoadHdrFtr(rels, doc);
@@ -989,6 +992,28 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         if (Int32.TryParse(el.GetAttribute("w:space") ?? el.GetAttribute("space"), out var sp)) pb.Space = sp;
         var color = el.GetAttribute("w:color") ?? el.GetAttribute("color");
         if (!String.IsNullOrEmpty(color)) pb.Color = color;
+    }
+
+    /// <summary>从 settings.xml 解析 w:docVars 文档变量</summary>
+    private static void ParseDocumentVariables(String settingsXml, Dictionary<String, String> vars)
+    {
+        try
+        {
+            var doc = new XmlDocument();
+            doc.LoadXml(settingsXml);
+            var ns = new XmlNamespaceManager(doc.NameTable);
+            ns.AddNamespace("w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
+            var docVars = doc.SelectSingleNode("//w:docVars", ns) as XmlElement;
+            if (docVars == null) return;
+            foreach (XmlElement dv in docVars.SelectNodes("w:docVar", ns))
+            {
+                var name = dv.GetAttribute("w:name");
+                var val = dv.GetAttribute("w:val");
+                if (!String.IsNullOrEmpty(name))
+                    vars[name] = val ?? String.Empty;
+            }
+        }
+        catch { /* 解析失败不影响整体读取 */ }
     }
 
     private static WordSdtElement? ParseSdt(XmlElement sdtEl, XmlNamespaceManager ns)

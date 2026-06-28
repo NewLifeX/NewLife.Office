@@ -873,6 +873,40 @@ public class WordWriterTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
 
+    [Fact(DisplayName = "文档变量—DocumentVariables读写往返")]
+    public void DocumentVariables_RoundTrip()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        var tempFile2 = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using (var w = new WordWriter())
+            {
+                w.AppendParagraph(new WordParagraph { Runs = { new WordRun { Text = "内容" } } });
+                w.Save(tempFile);
+            }
+            using var reader = new WordReader(tempFile);
+            var doc = reader.ReadDocument();
+            doc.DocumentVariables["CompanyName"] = "新生命科技";
+            doc.DocumentVariables["Department"] = "研发部";
+            using var w2 = new WordWriter();
+            w2.Save(tempFile2, doc);
+            // 验证 settings.xml 含有 docVars
+            using var za = new ZipArchive(File.OpenRead(tempFile2), ZipArchiveMode.Read);
+            var entry = za.GetEntry("word/settings.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("w:docVars", xml);
+            Assert.Contains("CompanyName", xml);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+            if (File.Exists(tempFile2)) File.Delete(tempFile2);
+        }
+    }
+
     [Fact(DisplayName = "分隔线—AppendHorizontalRule生成底部分隔段落")]
     public void AppendHorizontalRule_Works()
     {

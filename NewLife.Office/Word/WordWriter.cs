@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Security;
 using System.Text;
+using System.Xml;
 
 namespace NewLife.Office;
 
@@ -44,6 +45,8 @@ public class WordWriter : IDisposable
 
     /// <summary>是否启用只读保护</summary>
     public Boolean ProtectionReadOnly { get; set; }
+
+    private Dictionary<String, String> _documentVariables = [];
     #endregion
 
     #region 构造
@@ -412,9 +415,14 @@ public class WordWriter : IDisposable
         // 仅重新生成 word/document.xml 以支持用户对 Elements 的修改。
         if (_otherParts.Count > 0)
         {
+            // 有文档变量变更时，从透传中移除 settings.xml 以便重新生成
+            if (_documentVariables.Count > 0 && _settingsXml != null && !DocVarsMatch(_settingsXml, _documentVariables))
+                _otherParts.Remove("word/settings.xml");
             foreach (var kv in _otherParts)
                 using (var e = za.CreateEntry(kv.Key).Open())
                     e.Write(kv.Value, 0, kv.Value.Length);
+            if (_documentVariables.Count > 0 && _settingsXml != null && !DocVarsMatch(_settingsXml, _documentVariables))
+                WriteSettings(za);
             WriteDocument(za);
             return;
         }
@@ -475,6 +483,8 @@ public class WordWriter : IDisposable
         PageSettings = document.PageSettings;
         DocumentProperties = document.DocumentProperties;
         ProtectionReadOnly = document.ProtectionReadOnly;
+        _documentVariables = document.DocumentVariables.Count > 0
+            ? new Dictionary<String, String>(document.DocumentVariables) : [];
         if (document.PageSettings.HeaderText == null && document.HeaderText != null)
             PageSettings.HeaderText = document.HeaderText;
         if (document.PageSettings.FooterText == null && document.FooterText != null)
@@ -660,7 +670,16 @@ public class WordWriter : IDisposable
     {
         if (_settingsXml != null)
         {
-            WriteEntry(za, "word/settings.xml", _settingsXml);
+            // 当文档变量与源 settings.xml 一致时，直接透传（保持字节精确）
+            if (_documentVariables.Count > 0 && !DocVarsMatch(_settingsXml, _documentVariables))
+            {
+                var injected = InjectDocVars(_settingsXml, _documentVariables);
+                WriteEntry(za, "word/settings.xml", injected);
+            }
+            else
+            {
+                WriteEntry(za, "word/settings.xml", _settingsXml);
+            }
             return;
         }
 
@@ -670,8 +689,77 @@ public class WordWriter : IDisposable
         sb.Append("<w:defaultTabStop w:val=\"720\"/>");
         if (ProtectionReadOnly)
             sb.Append("<w:documentProtection w:edit=\"readOnly\" w:enforcement=\"1\"/>");
+        if (_documentVariables.Count > 0)
+        {
+            sb.Append("<w:docVars>");
+            foreach (var kv in _documentVariables)
+                sb.Append($"<w:docVar w:name=\"{Esc(kv.Key)}\" w:val=\"{Esc(kv.Value)}\"/>");
+            sb.Append("</w:docVars>");
+        }
         sb.Append("</w:settings>");
         WriteEntry(za, "word/settings.xml", sb.ToString());
+    }
+
+    /// <summary>向 settings.xml 注入文档变量（替换已有 w:docVars 或追加到 w:settings 末尾）</summary>
+    private static String InjectDocVars(String settingsXml, Dictionary<String, String> vars)
+    {
+        var docVarXml = new StringBuilder("<w:docVars>");
+        foreach (var kv in vars)
+            docVarXml.Append($"<w:docVar w:name=\"{Esc(kv.Key)}\" w:val=\"{Esc(kv.Value)}\"/>");
+        docVarXml.Append("</w:docVars>");
+
+        // 如果已有 docVars，替换之
+        var idx1 = settingsXml.IndexOf("<w:docVars", StringComparison.Ordinal);
+        if (idx1 >= 0)
+        {
+            var idx2 = settingsXml.IndexOf("</w:docVars>", idx1, StringComparison.Ordinal);
+            if (idx2 >= 0)
+                return settingsXml[..idx1] + docVarXml + settingsXml[(idx2 + "</w:docVars>".Length)..];
+        }
+
+        // 无 docVars，在 </w:settings> 前插入
+        var endIdx = settingsXml.LastIndexOf("</w:settings>", StringComparison.Ordinal);
+        if (endIdx >= 0)
+            return settingsXml[..endIdx] + docVarXml + settingsXml[endIdx..];
+
+        return settingsXml; // 格式异常，不做修改
+    }
+
+    /// <summary>检查源 settings.xml 中的文档变量是否与给定变量完全一致</summary>
+    private static Boolean DocVarsMatch(String settingsXml, Dictionary<String, String> vars)
+    {
+        if (vars.Count == 0) return true;
+        var existing = new Dictionary<String, String>();
+        ParseDocumentVariablesStatic(settingsXml, existing);
+        if (existing.Count != vars.Count) return false;
+        foreach (var kv in vars)
+        {
+            if (!existing.TryGetValue(kv.Key, out var v) || v != kv.Value)
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>静态解析 settings.xml 中的文档变量（与 WordReader 中逻辑一致）</summary>
+    private static void ParseDocumentVariablesStatic(String settingsXml, Dictionary<String, String> vars)
+    {
+        try
+        {
+            var doc = new XmlDocument();
+            doc.LoadXml(settingsXml);
+            var ns = new XmlNamespaceManager(doc.NameTable);
+            ns.AddNamespace("w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
+            var docVars = doc.SelectSingleNode("//w:docVars", ns) as XmlElement;
+            if (docVars == null) return;
+            foreach (XmlElement dv in docVars.SelectNodes("w:docVar", ns))
+            {
+                var name = dv.GetAttribute("w:name");
+                var val = dv.GetAttribute("w:val");
+                if (!String.IsNullOrEmpty(name))
+                    vars[name] = val ?? String.Empty;
+            }
+        }
+        catch { /* 解析失败忽略 */ }
     }
 
     private void WriteNumbering(ZipArchive za)
