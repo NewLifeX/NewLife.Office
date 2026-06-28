@@ -641,6 +641,25 @@ public class BiffWriterTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
 
+    [Fact, DisplayName("页眉页脚—xls SetHeaderFooter写入HEADER/FOOTER记录")]
+    public void HeaderFooter_Writes()
+    {
+        var tempFile = Path.GetTempFileName() + ".xls";
+        try
+        {
+            using var w = new BiffWriter();
+            w.WriteHeader(["名称"]);
+            w.WriteRow(["测试"]);
+            w.SetHeaderFooter("&C公司报表 &D", "&R第 &P 页");
+            w.Save(tempFile);
+
+            using var reader = new BiffReader(tempFile);
+            var rows = reader.ReadSheet().ToList();
+            Assert.Equal(2, rows.Count);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
     [Fact, DisplayName("页面设置—xls SetPageSetup写入SETUP记录")]
     public void PageSetup_Writes()
     {

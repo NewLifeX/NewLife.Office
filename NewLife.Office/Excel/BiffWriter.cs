@@ -46,6 +46,8 @@ public sealed class BiffWriter : IDisposable
     private const UInt16 RecHyperlink = 0x01B8;
     private const UInt16 RecAutoFilter = 0x009E;
     private const UInt16 RecSetup = 0x00A1;
+    private const UInt16 RecHeader = 0x0014;
+    private const UInt16 RecFooter = 0x0015;
     private const Int32 MaxRecordDataSize = 8224;
 
     // BIFF8 日期纪元：1900-01-01（含 1900 闰年兼容性偏移 +1）
@@ -105,6 +107,9 @@ public sealed class BiffWriter : IDisposable
 
     // 页面设置：Key = sheetName
     private readonly Dictionary<String, (Boolean Landscape, Int32 PaperSize, Double HeaderMargin, Double FooterMargin)> _sheetPageSetups = new(StringComparer.Ordinal);
+
+    // 页眉页脚：Key = sheetName, Value = (header, footer)
+    private readonly Dictionary<String, (String Header, String Footer)> _sheetHeaderFooters = new(StringComparer.Ordinal);
 
     private String _currentSheet = "Sheet1";
     private Boolean _disposed;
@@ -290,6 +295,14 @@ public sealed class BiffWriter : IDisposable
     public void SetPageSetup(Boolean landscape = false, Int32 paperSize = 5, Double headerMargin = 0.3, Double footerMargin = 0.3)
     {
         _sheetPageSetups[_currentSheet] = (landscape, paperSize, headerMargin, footerMargin);
+    }
+
+    /// <summary>设置当前工作表的页眉和页脚文本</summary>
+    /// <param name="header">页眉文本（支持 &L左对齐 &C居中 &R右对齐 &P页码 &D日期）</param>
+    /// <param name="footer">页脚文本</param>
+    public void SetHeaderFooter(String? header = null, String? footer = null)
+    {
+        _sheetHeaderFooters[_currentSheet] = (header ?? String.Empty, footer ?? String.Empty);
     }
 
     #endregion
@@ -574,6 +587,13 @@ public sealed class BiffWriter : IDisposable
             WriteRecord(bw, RecSetup, BuildSetupData(ps.Landscape, ps.PaperSize, ps.HeaderMargin, ps.FooterMargin));
         }
 
+        // HEADER/FOOTER — 页眉页脚
+        if (_sheetHeaderFooters.TryGetValue(sheetName, out var hf))
+        {
+            if (hf.Header.Length > 0) WriteRecord(bw, RecHeader, BuildHeaderFooterData(hf.Header));
+            if (hf.Footer.Length > 0) WriteRecord(bw, RecFooter, BuildHeaderFooterData(hf.Footer));
+        }
+
         // Sheet EOF
         WriteRecord(bw, RecEof, []);
     }
@@ -839,6 +859,18 @@ public sealed class BiffWriter : IDisposable
         writer.Write((UInt16)0);                       // 26-27: fface (first page number? 0=auto)
         writer.Write(0u);                              // 28-31: reserved
         writer.Write((UInt16)0);                       // 32-33: reserved
+        return buf;
+    }
+
+    private static Byte[] BuildHeaderFooterData(String text)
+    {
+        // BIFF8 HEADER/FOOTER: 2(cch) + Unicode string
+        var bytes = Encoding.Unicode.GetBytes(text);
+        var buf = new Byte[2 + bytes.Length];
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)text.Length);
+        if (bytes.Length > 0)
+            Array.Copy(bytes, 0, buf, 2, bytes.Length);
         return buf;
     }
 
