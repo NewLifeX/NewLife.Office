@@ -111,6 +111,9 @@ public class PptShape
 
     /// <summary>线条虚线样式（"dash"/"dot"/"dashDot"/"lgDash" 等），null=实线</summary>
     public String? DashStyle { get; set; }
+
+    /// <summary>文本垂直锚定（"t"=顶部/"ctr"=居中/"b"=底部），null=默认顶部，对应 bodyPr anchor</summary>
+    public String? Anchor { get; set; }
     #endregion
 
     #region 方法
@@ -145,6 +148,20 @@ public class PptShape
             Rotation = Rotation,
             AltText = AltText,
             CornerRadius = CornerRadius,
+            FlipHorizontal = FlipHorizontal,
+            FlipVertical = FlipVertical,
+            TextDirection = TextDirection,
+            TextAutoFit = TextAutoFit,
+            LeftInset = LeftInset,
+            RightInset = RightInset,
+            TopInset = TopInset,
+            BottomInset = BottomInset,
+            DashStyle = DashStyle,
+            Anchor = Anchor,
+            GradientType = GradientType,
+            GradientColor1 = GradientColor1,
+            GradientColor2 = GradientColor2,
+            GradientAngle = GradientAngle,
         };
         return clone;
     }

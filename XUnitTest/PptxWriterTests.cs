@@ -1135,4 +1135,26 @@ public class PptxWriterTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact(DisplayName = "形状Anchor—输出bodyPr anchor属性")]
+    public void Shape_Anchor_OutputsBodyPrAnchor()
+    {
+        using var writer = new PptxWriter();
+        var shape = writer.AddShape(0, "rect", 2, 2, 6, 4);
+        shape.Text = "垂直居中文字";
+        shape.Anchor = "ctr";
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            writer.Save(tempFile);
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("ppt/slides/slide1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("anchor=\"ctr\"", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
 }

@@ -529,12 +529,13 @@ partial class PptxWriter
             {
                 // bodyPr with text direction, autofit, and insets
                 var vertAttr = sp.TextDirection != null ? $" vert=\"{sp.TextDirection}\"" : "";
+                var anchorAttr = sp.Anchor != null ? $" anchor=\"{sp.Anchor}\"" : "";
                 var insetL = sp.LeftInset ?? 25400;
                 var insetR = sp.RightInset ?? 25400;
                 var insetT = sp.TopInset ?? 12700;
                 var insetB = sp.BottomInset ?? 12700;
                 var autoFitXml = sp.TextAutoFit == "norm" ? "<a:normAutofit/>" : sp.TextAutoFit == "noAuto" ? "<a:noAutofit/>" : "";
-                sb.Append($"<p:txBody><a:bodyPr lIns=\"{insetL}\" rIns=\"{insetR}\" tIns=\"{insetT}\" bIns=\"{insetB}\"{vertAttr}>{autoFitXml}</a:bodyPr><a:lstStyle/><a:p><a:r>");
+                sb.Append($"<p:txBody><a:bodyPr lIns=\"{insetL}\" rIns=\"{insetR}\" tIns=\"{insetT}\" bIns=\"{insetB}\"{vertAttr}{anchorAttr}>{autoFitXml}</a:bodyPr><a:lstStyle/><a:p><a:r>");
                 sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{sp.FontSize * 100}\"{(sp.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
                 WriteFontColor(sb, sp.FontColor);
                 WriteFontElements(sb, sp.LatinFontName, sp.EastAsianFontName, sp.ComplexScriptFontName, sp.SymbolFontName);
