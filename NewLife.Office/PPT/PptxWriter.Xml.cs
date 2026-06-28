@@ -538,7 +538,10 @@ partial class PptxWriter
             sb.Append("<p:spPr>");
             var rotAttr = img.Rotation != 0 ? $" rot=\"{img.Rotation}\"" : "";
             sb.Append($"<a:xfrm{rotAttr}><a:off x=\"{img.Left}\" y=\"{img.Top}\"/><a:ext cx=\"{img.Width}\" cy=\"{img.Height}\"/></a:xfrm>");
-            sb.Append("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></p:spPr></p:pic>");
+            if (img.CornerRadius > 0)
+                sb.Append($"<a:prstGeom prst=\"roundRect\"><a:avLst><a:gd name=\"adj\" fmla=\"val {img.CornerRadius}\"/></a:avLst></a:prstGeom></p:spPr></p:pic>");
+            else
+                sb.Append("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></p:spPr></p:pic>");
         }
 
         // videos

@@ -30,5 +30,8 @@ public class PptImage
 
     /// <summary>旋转角度（S15-02），以 60000 分之一度为单位（如 5400000=90°）</summary>
     public Int32 Rotation { get; set; }
+
+    /// <summary>圆角半径（EMU）。设置后图片以圆角矩形裁剪，0 或不设置则为直角</summary>
+    public Int64 CornerRadius { get; set; }
     #endregion
 }

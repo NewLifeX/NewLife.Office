@@ -961,4 +961,25 @@ public class PptxWriterTests
         Assert.Equal(5400000, clone.Rotation);
         Assert.Equal("描述文本", clone.AltText);
     }
+
+    [Fact, System.ComponentModel.DisplayName("图片圆角—写入roundRect几何并验证")]
+    public void ImageCornerRadius_WritesRoundRectGeometry()
+    {
+        var writer = new PptxWriter();
+        writer.AddSlide(0);
+        var img = writer.AddImage(0, [1, 2, 3], "png", 2, 2, 5, 4);
+        img.CornerRadius = 50000;
+
+        using var ms = new MemoryStream();
+        writer.Save(ms);
+
+        ms.Position = 0;
+        using var za = new ZipArchive(ms, ZipArchiveMode.Read, true);
+        var slideEntry = za.GetEntry("ppt/slides/slide1.xml");
+        Assert.NotNull(slideEntry);
+        using var sr = new StreamReader(slideEntry!.Open(), Encoding.UTF8);
+        var xml = sr.ReadToEnd();
+        Assert.Contains("roundRect", xml);
+        Assert.Contains("50000", xml);
+    }
 }
