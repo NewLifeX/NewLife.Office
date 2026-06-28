@@ -615,6 +615,27 @@ public class BiffWriterTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact, DisplayName("超链接—写入URL链接")]
+    public void Hyperlink_WritesUrl()
+    {
+        var tempFile = Path.GetTempFileName() + ".xls";
+        try
+        {
+            using var writer = new BiffWriter();
+            writer.WriteHeader(["链接"]);
+            writer.WriteRow(["点击此处"]);
+            writer.AddHyperlink("https://newlifex.com", 1, 0, "官网");
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            Assert.True(new FileInfo(tempFile).Length > 0);
+            using var reader = new BiffReader(tempFile);
+            var rows = reader.ReadSheet().ToList();
+            Assert.Equal(2, rows.Count);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
     #endregion
 
     #region 辅助类型

@@ -43,6 +43,7 @@ public sealed class BiffWriter : IDisposable
     private const UInt16 RecString = 0x0207;
     private const UInt16 RecWindow2 = 0x023E;
     private const UInt16 RecMergedCells = 0x00E5;
+    private const UInt16 RecHyperlink = 0x01B8;
     private const Int32 MaxRecordDataSize = 8224;
 
     // BIFF8 日期纪元：1900-01-01（含 1900 闰年兼容性偏移 +1）
@@ -93,6 +94,9 @@ public sealed class BiffWriter : IDisposable
 
     // 行高：Key = sheetName, Value = (rowIndex → heightTwips)，默认 255 twips = 约 12.75pt
     private readonly Dictionary<String, Dictionary<Int32, Int32>> _sheetRowHeights = new(StringComparer.Ordinal);
+
+    // 超链接：Key = sheetName, Value = List of (row, col, url, displayText)
+    private readonly Dictionary<String, List<(Int32 Row, Int32 Col, String Url, String? DisplayText)>> _sheetHyperlinks = new(StringComparer.Ordinal);
 
     private String _currentSheet = "Sheet1";
     private Boolean _disposed;
@@ -243,6 +247,21 @@ public sealed class BiffWriter : IDisposable
         }
         // BIFF8 行高单位：twips（1pt = 20 twips）
         map[rowIndex] = (Int32)(heightPoints * 20);
+    }
+
+    /// <summary>在当前工作表末尾添加超链接</summary>
+    /// <param name="url">目标 URL</param>
+    /// <param name="rowIndex">行索引（0基）</param>
+    /// <param name="colIndex">列索引（0基）</param>
+    /// <param name="displayText">显示文本（可选，不指定则使用 URL）</param>
+    public void AddHyperlink(String url, Int32 rowIndex, Int32 colIndex, String? displayText = null)
+    {
+        if (!_sheetHyperlinks.TryGetValue(_currentSheet, out var list))
+        {
+            list = [];
+            _sheetHyperlinks[_currentSheet] = list;
+        }
+        list.Add((rowIndex, colIndex, url, displayText));
     }
 
     #endregion
@@ -506,6 +525,15 @@ public sealed class BiffWriter : IDisposable
             WriteRecord(bw, RecMergedCells, BuildMergedCellsData(merges));
         }
 
+        // HYPERLINK — 超链接
+        if (_sheetHyperlinks.TryGetValue(sheetName, out var hyperlinks) && hyperlinks.Count > 0)
+        {
+            foreach (var (row, col, url, text) in hyperlinks)
+            {
+                WriteRecord(bw, RecHyperlink, BuildHyperlinkData(row, col, row, col, url, text));
+            }
+        }
+
         // Sheet EOF
         WriteRecord(bw, RecEof, []);
     }
@@ -706,6 +734,31 @@ public sealed class BiffWriter : IDisposable
             writer.Write((UInt16)r2);
             writer.Write((UInt16)c1);
             writer.Write((UInt16)c2);
+        }
+        return buf;
+    }
+
+    /// <summary>构建 HYPERLINK 记录</summary>
+    private static Byte[] BuildHyperlinkData(Int32 firstRow, Int32 firstCol, Int32 lastRow, Int32 lastCol, String url, String? description)
+    {
+        // BIFF8 HYPERLINK: 固定28字节头部 + URL + 可选描述
+        var urlBytes = Encoding.UTF8.GetBytes(url);
+        var descBytes = description != null ? Encoding.UTF8.GetBytes(description) : [];
+        var buf = new Byte[28 + urlBytes.Length + descBytes.Length];
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)firstRow);
+        writer.Write((UInt16)lastRow);
+        writer.Write((UInt16)firstCol);
+        writer.Write((UInt16)lastCol);
+        writer.Write(0u);            // guid[0-3] = 0 (standard URL)
+        writer.Write(0u);            // guid[4-7]
+        writer.Write(0u);            // guid[8-11]
+        writer.Write(0u);            // guid[12-15]
+        writer.Write((UInt32)0);     // stream byte count (0 = no moniker stream)
+        writer.Write((UInt16)urlBytes.Length);
+        if (urlBytes.Length > 0)
+        {
+            Array.Copy(urlBytes, 0, buf, 28, urlBytes.Length);
         }
         return buf;
     }
