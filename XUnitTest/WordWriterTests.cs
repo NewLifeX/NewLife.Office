@@ -872,5 +872,28 @@ public class WordWriterTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact(DisplayName = "内容控件—RichText和ComboBox便捷方法")]
+    public void Sdt_RichTextAndComboBox()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.AppendRichTextSdt("富文本内容", tag: "rt", alias: "富文本");
+            writer.AppendComboBoxSdt("选项A", ["选项A", "选项B", "选项C"], tag: "cb");
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var za = new ZipArchive(File.OpenRead(tempFile), ZipArchiveMode.Read);
+            var entry = za.GetEntry("word/document.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("w:sdt", xml);
+            Assert.Contains("富文本内容", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
     #endregion
 }

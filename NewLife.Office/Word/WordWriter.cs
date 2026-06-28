@@ -231,6 +231,36 @@ public class WordWriter : IDisposable
         });
     }
 
+    /// <summary>追加富文本内容控件</summary>
+    /// <param name="content">富文本内容</param>
+    /// <param name="tag">标签（可选）</param>
+    /// <param name="alias">别名（可选）</param>
+    public void AppendRichTextSdt(String content, String? tag = null, String? alias = null)
+    {
+        AppendSdt(new WordSdtElement
+        {
+            SdtType = WordSdtType.RichText,
+            Content = content,
+            Tag = tag,
+            Alias = alias
+        });
+    }
+
+    /// <summary>追加组合框内容控件（可编辑下拉列表）</summary>
+    /// <param name="selectedText">当前选中/输入的文本</param>
+    /// <param name="items">下拉建议项</param>
+    /// <param name="tag">标签</param>
+    public void AppendComboBoxSdt(String selectedText, IEnumerable<String> items, String? tag = null)
+    {
+        AppendSdt(new WordSdtElement
+        {
+            SdtType = WordSdtType.ComboBox,
+            Content = selectedText,
+            ListItems = items.ToList(),
+            Tag = tag
+        });
+    }
+
     /// <summary>追加无序列表</summary>
     /// <param name="items">列表项</param>
     public void AppendBulletList(IEnumerable<String> items)
