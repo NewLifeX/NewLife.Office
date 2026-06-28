@@ -1115,5 +1115,38 @@ public class WordWriterTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact(DisplayName = "表格—ColSpan和RowSpan输出gridSpan和vMerge")]
+    public void TableCell_ColSpan_RowSpan_OutputXml()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            var cell = new WordCell
+            {
+                ColSpan = 3,
+                RowSpan = 2,
+                Paragraphs = { new WordParagraph { Runs = { new WordRun { Text = "跨列跨行" } } } }
+            };
+            var doc = new WordDocument();
+            doc.Elements.Add(new WordElement
+            {
+                Type = WordElementType.Table,
+                TableRows = new List<List<WordCell>> { new() { cell }, new() { new WordCell { RowSpan = 0 } } }
+            });
+            using var writer = new WordWriter();
+            writer.Save(tempFile, doc);
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("word/document.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("<w:gridSpan w:val=\"3\"/>", xml);
+            Assert.Contains("<w:vMerge w:val=\"restart\"/>", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
     #endregion
 }

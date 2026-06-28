@@ -1362,6 +1362,12 @@ public class WordWriter : IDisposable
                     sb.Append($"<w:shd w:fill=\"{bgColor.TrimStart('#')}\" w:val=\"clear\"/>");
                 if (cell.VerticalAlignment != null)
                     sb.Append($"<w:vAlign w:val=\"{cell.VerticalAlignment}\"/>");
+                if (cell.ColSpan > 1)
+                    sb.Append($"<w:gridSpan w:val=\"{cell.ColSpan}\"/>");
+                if (cell.RowSpan > 1)
+                    sb.Append("<w:vMerge w:val=\"restart\"/>");
+                else if (cell.RowSpan == 0)
+                    sb.Append("<w:vMerge/>");
                 sb.Append("</w:tcPr>");
 
                 foreach (var para in cell.Paragraphs)

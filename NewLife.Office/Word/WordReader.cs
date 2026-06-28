@@ -600,6 +600,16 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     else para.DropCapLines = 3;
                 }
             }
+
+            // 分页控制：<w:keepNext/> <w:keepLines/> <w:widowControl>
+            para.KeepNext = pPrEl.SelectSingleNode("w:keepNext", ns) != null;
+            para.KeepLines = pPrEl.SelectSingleNode("w:keepLines", ns) != null;
+            var widowEl = pPrEl.SelectSingleNode("w:widowControl", ns) as XmlElement;
+            if (widowEl != null)
+            {
+                var val = widowEl.GetAttribute("w:val") ?? widowEl.GetAttribute("val");
+                para.WidowControl = val != "0" && val != "false";
+            }
         }
 
         var br = pEl.SelectSingleNode("w:r/w:br", ns) as XmlElement;
