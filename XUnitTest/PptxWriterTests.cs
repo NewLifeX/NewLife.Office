@@ -1162,22 +1162,14 @@ public class PptxWriterTests
     public void ScatterChart_XValues_OutputsXVal()
     {
         using var writer = new PptxWriter();
-        var chart = new PptChart
+        var chart = writer.AddScatterChart(0, ["A", "B", "C"], 1, 1, 8, 6);
+        chart.Title = "Scatter Test";
+        chart.Series.Add(new PptChartSeries
         {
-            ChartType = "scatter",
-            Title = "Scatter Test",
-            Categories = [],
-            Series =
-            {
-                new PptChartSeries
-                {
-                    Name = "Series1",
-                    XValues = [1.0, 2.0, 3.0],
-                    Values = [10.0, 20.0, 15.0]
-                }
-            }
-        };
-        writer.AddChart(0, chart, 1, 1, 8, 6);
+            Name = "Series1",
+            XValues = [1.0, 2.0, 3.0],
+            Values = [10.0, 20.0, 15.0]
+        });
         var tempFile = Path.GetTempFileName() + ".pptx";
         try
         {
@@ -1190,6 +1182,48 @@ public class PptxWriterTests
             var xml = sr.ReadToEnd();
             Assert.Contains("<c:xVal>", xml);
             Assert.Contains("<c:v>2</c:v>", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "演讲者备注—SetNotes写入notesSlide")]
+    public void SetNotes_WritesNotesSlide()
+    {
+        using var writer = new PptxWriter();
+        writer.AddSlide();
+        writer.SetNotes(0, "这是演讲者备注内容");
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            writer.Save(tempFile);
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("ppt/slides/slide1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("演讲者备注内容", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "幻灯片页脚—SetSlideFooter写入页脚和页码")]
+    public void SetSlideFooter_WritesFooter()
+    {
+        using var writer = new PptxWriter();
+        writer.AddSlide();
+        writer.SetSlideFooter(0, "公司机密", true);
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            writer.Save(tempFile);
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("ppt/slides/slide1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("公司机密", xml);
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }

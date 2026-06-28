@@ -987,5 +987,168 @@ public class ExcelWriterTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact(DisplayName = "结构化表格—AddTable写入table元素")]
+    public void AddTable_WritesTableElement()
+    {
+        var tempFile = Path.GetTempFileName() + ".xlsx";
+        try
+        {
+            using var writer = new ExcelWriter(tempFile);
+            writer.WriteRow(null, new Object?[] { "姓名", "年龄", "部门" });
+            writer.WriteRow(null, new Object?[] { "张三", 30, "技术" });
+            writer.WriteRow(null, new Object?[] { "李四", 25, "销售" });
+            writer.AddTable("A1:C3", "EmployeeTable");
+            writer.Save();
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            Assert.NotNull(za.GetEntry("xl/tables/table1.xml"));
+            var entry = za.GetEntry("xl/worksheets/sheet1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("tablePart", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "工作表可见性—UnhideSheet取消隐藏")]
+    public void UnhideSheet_ThenHideSheet_RestoresVisibility()
+    {
+        var tempFile = Path.GetTempFileName() + ".xlsx";
+        try
+        {
+            using var writer = new ExcelWriter(tempFile);
+            writer.HideSheet(null);
+            writer.UnhideSheet(null);
+            writer.WriteRow(null, new Object?[] { "Visible" });
+            writer.Save();
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("xl/workbook.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.DoesNotContain("state=\"hidden\"", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "工作表标签—SetSheetTabColor写入tabColor")]
+    public void SetSheetTabColor_WritesTabColor()
+    {
+        var tempFile = Path.GetTempFileName() + ".xlsx";
+        try
+        {
+            using var writer = new ExcelWriter(tempFile);
+            writer.WriteRow(null, new Object?[] { "Data" });
+            writer.SetSheetTabColor(null, "FF0000");
+            writer.Save();
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("xl/worksheets/sheet1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("tabColor", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "条件格式—NotBetween输出cfRule notBetween")]
+    public void AddConditionalFormat_NotBetween_WritesCfRule()
+    {
+        var tempFile = Path.GetTempFileName() + ".xlsx";
+        try
+        {
+            using var writer = new ExcelWriter(tempFile);
+            writer.WriteRow(null, new Object?[] { "分数" });
+            writer.WriteRow(null, new Object?[] { 45 });
+            writer.WriteRow(null, new Object?[] { 85 });
+            writer.AddConditionalFormat(null, "A2:A3", ExcelConditionalFormatType.NotBetween, "60,80", "FF0000");
+            writer.Save();
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("xl/worksheets/sheet1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("notBetween", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "定义名称—AddDefinedName写入definedNames")]
+    public void AddDefinedName_WritesDefinedNameXml()
+    {
+        var tempFile = Path.GetTempFileName() + ".xlsx";
+        try
+        {
+            using var writer = new ExcelWriter(tempFile);
+            writer.WriteRow(null, new Object?[] { "销售" });
+            writer.AddDefinedName("SalesRange", "Sheet1!$A$1:$A$1");
+            writer.Save();
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            Assert.NotNull(za.GetEntry("xl/workbook.xml"));
+            var entry = za.GetEntry("xl/workbook.xml");
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("definedName", xml);
+            Assert.Contains("SalesRange", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "数据验证—AddRangeValidation写入dataValidation")]
+    public void AddRangeValidation_WritesDataValidation()
+    {
+        var tempFile = Path.GetTempFileName() + ".xlsx";
+        try
+        {
+            using var writer = new ExcelWriter(tempFile);
+            writer.WriteRow(null, new Object?[] { "类型" });
+            writer.WriteRow(null, new Object?[] { "A" });
+            writer.AddRangeValidation(null, "A2:A10", "list", "between", "\"A,B,C\"");
+            writer.Save();
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("xl/worksheets/sheet1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("dataValidation", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "分级显示—SetColumnOutlineLevel写入outlinePr summaryBelow")]
+    public void SetColumnOutlineLevel_WritesOutlinePr()
+    {
+        var tempFile = Path.GetTempFileName() + ".xlsx";
+        try
+        {
+            using var writer = new ExcelWriter(tempFile);
+            writer.WriteRow(null, new Object?[] { "Level1", "Level2", "Detail1", "Detail2" });
+            writer.SetColumnOutlineLevel(null, 0, 1);
+            writer.SetColumnOutlineLevel(null, 1, 1);
+            writer.Save();
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("xl/worksheets/sheet1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("sheetPr", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
     #endregion
 }

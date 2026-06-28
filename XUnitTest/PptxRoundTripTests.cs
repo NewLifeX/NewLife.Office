@@ -864,32 +864,32 @@ public class PptxRoundTripTests
         foreach (var sourcePath in allFiles)
         {
             var fileName = Path.GetFileName(sourcePath);
-            try
+            //try
             {
                 RunSingleFileRoundTrip(sourcePath, OutputDir);
             }
-            catch (Exception ex)
-            {
-                // 取异常消息的前 3 行（第一行是概要，后面是细节）
-                var lines = ex.Message.Split('\n');
-                var msg = String.Join(" | ", lines.Take(3)).Trim();
-                failures.Add((fileName, msg));
-            }
+            //catch (Exception ex)
+            //{
+            //    // 取异常消息的前 3 行（第一行是概要，后面是细节）
+            //    var lines = ex.Message.Split('\n');
+            //    var msg = String.Join(" | ", lines.Take(3)).Trim();
+            //    failures.Add((fileName, msg));
+            //}
         }
 
-        // 汇总报告
-        if (failures.Count > 0)
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine($"\n❌ {failures.Count}/{allFiles.Count} 个文件测试失败:");
-            foreach (var (file, err) in failures)
-                sb.AppendLine($"  [{file}] {err}");
-            Assert.Fail(sb.ToString());
-        }
-        else
-        {
-            XTrace.WriteLine($"\n✅ 全部 {allFiles.Count} 个文件往返测试通过");
-        }
+        //// 汇总报告
+        //if (failures.Count > 0)
+        //{
+        //    var sb = new StringBuilder();
+        //    sb.AppendLine($"\n❌ {failures.Count}/{allFiles.Count} 个文件测试失败:");
+        //    foreach (var (file, err) in failures)
+        //        sb.AppendLine($"  [{file}] {err}");
+        //    Assert.Fail(sb.ToString());
+        //}
+        //else
+        //{
+        //    XTrace.WriteLine($"\n✅ 全部 {allFiles.Count} 个文件往返测试通过");
+        //}
     }
 
     #endregion

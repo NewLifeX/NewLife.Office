@@ -604,5 +604,47 @@ public class PdfWriterTests
         var pdf = reader.ReadToEnd();
         Assert.Contains("DCTDecode", pdf);
     }
+
+    [Fact(DisplayName = "书签—AddBookmark写入PDF书签大纲")]
+    public void AddBookmark_WritesOutline()
+    {
+        using var ms = new MemoryStream();
+        using (var writer = new PdfWriter())
+        {
+            writer.BeginPage();
+            writer.AddBookmark("第一章");
+            writer.AppendLine("Chapter 1 content");
+            writer.AddBookmark("第一节");
+            writer.AppendLine("Section 1.1 content");
+            writer.EndPage();
+            writer.Save(ms);
+        }
+        ms.Position = 0;
+        using var reader = new StreamReader(ms);
+        var pdf = reader.ReadToEnd();
+        Assert.Contains("/Outlines", pdf);
+        Assert.Contains("/PageMode /UseOutlines", pdf);
+    }
+
+    [Fact(DisplayName = "AcroForm—AddTextField/AddCheckBox/AddComboBox写入表单字段")]
+    public void AcroForm_Fields_WritesFormElements()
+    {
+        using var ms = new MemoryStream();
+        using (var writer = new PdfWriter())
+        {
+            writer.BeginPage();
+            writer.AddTextField("txtName", 50, 500, 200, 30, "Stone");
+            writer.AddCheckBox("chkAgree", 50, 450, 20, true);
+            writer.AddComboBox("cmbDept", 50, 400, 200, 30, new List<String> { "技术", "销售", "人事" }, 0);
+            writer.EndPage();
+            writer.Save(ms);
+        }
+        ms.Position = 0;
+        using var reader = new StreamReader(ms);
+        var pdf = reader.ReadToEnd();
+        Assert.Contains("/AcroForm", pdf);
+        Assert.Contains("/Tx", pdf);
+        Assert.Contains("/Btn", pdf);
+    }
     #endregion
 }

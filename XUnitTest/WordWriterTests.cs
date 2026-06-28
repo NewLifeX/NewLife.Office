@@ -1148,5 +1148,73 @@ public class WordWriterTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact(DisplayName = "对象映射—WriteObjects<T>泛型集合写入Word表格")]
+    public void WriteObjects_Generic_WritesTable()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            var users = new[] {
+                new { Name = "张三", Age = 30, Dept = "技术部" },
+                new { Name = "李四", Age = 25, Dept = "销售部" }
+            };
+            writer.WriteObjects(users);
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var reader = new WordReader(tempFile);
+            var rows = reader.ReadTables().FirstOrDefault();
+            Assert.NotNull(rows);
+            Assert.True(rows.Length >= 2);
+            Assert.Contains("张三", rows[1][0]);
+            Assert.Contains("李四", rows[2][0]);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "文档保护—ProtectionReadOnly写入w:documentProtection")]
+    public void ProtectionReadOnly_WritesSettingsXml()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter { ProtectionReadOnly = true };
+            writer.AppendParagraph("受保护文档");
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("word/settings.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("w:documentProtection", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "水印—WatermarkText生成VML形状")]
+    public void WatermarkText_GeneratesVmlShape()
+    {
+        var tempFile = Path.GetTempFileName() + ".docx";
+        try
+        {
+            using var writer = new WordWriter();
+            writer.PageSettings.WatermarkText = "机密文件";
+            writer.AppendParagraph("正文内容");
+            writer.Save(tempFile);
+
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("word/header1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("机密文件", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
     #endregion
 }
