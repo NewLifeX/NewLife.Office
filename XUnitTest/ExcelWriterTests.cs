@@ -31,8 +31,6 @@ public class ExcelWriterTests
 
         writer.Save();
 
-        File.WriteAllBytes("ew.xlsx", ms.ToArray());
-
         // 用 ExcelReader 读取验证类型与数值
         ms.Position = 0;
         var reader = new ExcelReader(ms, Encoding.UTF8);
@@ -213,8 +211,6 @@ public class ExcelWriterTests
         });
 
         w.Save();
-
-        File.WriteAllBytes("ew2.xlsx", ms.ToArray());
 
         ms.Position = 0;
         var r = new ExcelReader(ms, Encoding.UTF8);

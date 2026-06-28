@@ -212,7 +212,7 @@ public class EpubTests
     [DisplayName("集成：写入 epub 文件并读取")]
     public void Integration_WriteFile_ThenReadFile()
     {
-        var dir = Path.Combine("Bin", "UnitTest", "Artifacts");
+        var dir = Path.Combine(AppContext.BaseDirectory, "Artifacts");
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, "test_output.epub");
 

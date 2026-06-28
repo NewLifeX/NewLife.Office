@@ -246,7 +246,7 @@ public class EmlTests
     [DisplayName("集成：写入 EML 文件并从文件读取")]
     public void Integration_WriteFile_ThenReadFile()
     {
-        var dir = Path.Combine("Bin", "UnitTest", "Artifacts");
+        var dir = Path.Combine(AppContext.BaseDirectory, "Artifacts");
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, "test_output.eml");
 

@@ -51,6 +51,7 @@ public partial class PptxWriter : IDisposable
     private readonly List<PptPartContent> _layoutContents = [];
     private readonly List<String> _layoutNames = [];
     private String? _templateThemeXml;
+    private Byte[]? _templateThemeBytes;
     private readonly Dictionary<String, Byte[]> _infraMedia = [];
     // 编程式创建的母版（Phase 5：无需模板文件）
     private readonly List<PptMaster> _progMasters = [];
@@ -994,16 +995,21 @@ public partial class PptxWriter : IDisposable
         _layoutNames.Clear();
         _infraMedia.Clear();
         _templateThemeXml = null;
+        _templateThemeBytes = null;
 
         using var ms = new MemoryStream(templateBytes);
         using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
 
-        // 加载母版（按文件名排序）
+        // 加载母版（按文件名数值排序，避免 slideMaster10 排在 slideMaster2 前面）
         var masterEntries = zip.Entries
             .Where(e => e.FullName.StartsWith("ppt/slideMasters/", StringComparison.OrdinalIgnoreCase)
                      && e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
                      && !e.FullName.Contains("_rels", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(e => e.FullName)
+            .OrderBy(e =>
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(e.FullName, @"slideMaster(\d+)\.xml");
+                return m.Success ? Int32.Parse(m.Groups[1].Value) : 0;
+            })
             .ToList();
 
         foreach (var entry in masterEntries)
@@ -1020,12 +1026,16 @@ public partial class PptxWriter : IDisposable
             _masterContents.Add(content);
         }
 
-        // 加载版式（按文件名排序）
+        // 加载版式（按文件名数值排序，避免 slideLayout10 排在 slideLayout2 前面）
         var layoutEntries = zip.Entries
             .Where(e => e.FullName.StartsWith("ppt/slideLayouts/", StringComparison.OrdinalIgnoreCase)
                      && e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase)
                      && !e.FullName.Contains("_rels", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(e => e.FullName)
+            .OrderBy(e =>
+            {
+                var m = System.Text.RegularExpressions.Regex.Match(e.FullName, @"slideLayout(\d+)\.xml");
+                return m.Success ? Int32.Parse(m.Groups[1].Value) : 0;
+            })
             .ToList();
 
         foreach (var entry in layoutEntries)
@@ -1043,14 +1053,17 @@ public partial class PptxWriter : IDisposable
             _layoutContents.Add(content);
         }
 
-        // 加载主题（优先 theme1.xml，否则取第一个）
+        // 加载主题（优先 theme1.xml，否则取第一个；同时保留原始字节避免 StreamReader 归一化换行符）
         var themeEntry = zip.GetEntry("ppt/theme/theme1.xml")
             ?? zip.Entries.FirstOrDefault(e =>
                 e.FullName.StartsWith("ppt/theme/", StringComparison.OrdinalIgnoreCase)
                 && e.FullName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
         if (themeEntry != null)
         {
-            using var sr = new StreamReader(themeEntry.Open(), Encoding.UTF8);
+            using var themeMs = new MemoryStream();
+            using (var es = themeEntry.Open()) es.CopyTo(themeMs);
+            _templateThemeBytes = themeMs.ToArray();
+            using var sr = new StreamReader(new MemoryStream(_templateThemeBytes), Encoding.UTF8);
             _templateThemeXml = sr.ReadToEnd();
         }
 

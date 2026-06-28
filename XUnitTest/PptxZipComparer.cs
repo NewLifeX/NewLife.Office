@@ -53,15 +53,17 @@ public static class PptxZipComparer
         CompareBinaryPrefix(srcEntries, outEntries, "ppt/slideMasters/", result.Critical);
         CompareBinaryPrefix(srcEntries, outEntries, "ppt/slideLayouts/", result.Critical);
 
-        // 主题：文本内容对比（去 BOM，BOM 差异不影响视觉）
-        var srcTheme = srcEntries.Keys.FirstOrDefault(k =>
-            k.StartsWith("ppt/theme/", StringComparison.OrdinalIgnoreCase) && k.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
-        var outTheme = outEntries.Keys.FirstOrDefault(k =>
-            k.StartsWith("ppt/theme/", StringComparison.OrdinalIgnoreCase) && k.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+        // 主题：固定比较 theme1.xml（LoadMaster 加载此文件，WriteTheme 写入此文件，避免多主题文件时误匹配）
+        var srcTheme = srcEntries.ContainsKey("ppt/theme/theme1.xml") ? "ppt/theme/theme1.xml"
+            : srcEntries.Keys.FirstOrDefault(k =>
+                k.StartsWith("ppt/theme/", StringComparison.OrdinalIgnoreCase) && k.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+        var outTheme = outEntries.ContainsKey("ppt/theme/theme1.xml") ? "ppt/theme/theme1.xml"
+            : outEntries.Keys.FirstOrDefault(k =>
+                k.StartsWith("ppt/theme/", StringComparison.OrdinalIgnoreCase) && k.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
         if (srcTheme != null && outTheme != null)
         {
-            var srcText = StripBom(ReadAllBytes(srcEntries[srcTheme]));
-            var outText = StripBom(ReadAllBytes(outEntries[outTheme]));
+            var srcText = NormalizeLineEndings(StripBom(ReadAllBytes(srcEntries[srcTheme])));
+            var outText = NormalizeLineEndings(StripBom(ReadAllBytes(outEntries[outTheme])));
             if (!srcText.SequenceEqual(outText))
                 result.Critical.Add($"ppt/theme: 主题内容不一致 (src={srcText.Length}B out={outText.Length}B)");
         }
@@ -414,6 +416,29 @@ public static class PptxZipComparer
         if (data.Length >= 3 && data[0] == 0xEF && data[1] == 0xBB && data[2] == 0xBF)
             return data[3..];
         return data;
+    }
+
+    /// <summary>归一化换行符：\r\n → \n（StreamReader.ReadToEnd 会做此转换，导致写出后与原文不同）</summary>
+    private static Byte[] NormalizeLineEndings(Byte[] data)
+    {
+        // 统计 \r\n 对数，预分配结果数组
+        var crlfCount = 0;
+        for (var i = 0; i < data.Length - 1; i++)
+            if (data[i] == 0x0D && data[i + 1] == 0x0A) crlfCount++;
+        if (crlfCount == 0) return data;
+        var result = new Byte[data.Length - crlfCount];
+        var wi = 0;
+        for (var ri = 0; ri < data.Length; ri++)
+        {
+            if (ri < data.Length - 1 && data[ri] == 0x0D && data[ri + 1] == 0x0A)
+            {
+                result[wi++] = 0x0A;
+                ri++; // 跳过 \n
+            }
+            else
+                result[wi++] = data[ri];
+        }
+        return result;
     }
 
     #endregion

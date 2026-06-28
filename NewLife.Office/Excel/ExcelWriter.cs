@@ -242,12 +242,12 @@ public partial class ExcelWriter : DisposeBase
         _xfEntries = InitBuiltinXfEntries();
     }
 
-    /// <summary>销毁释放</summary>
+    /// <summary>销毁释放。仅显式 Dispose 时自动 Save，析构函数不写文件（GC 回收时托管资源可能已释放）</summary>
     /// <param name="disposing"></param>
     protected override void Dispose(Boolean disposing)
     {
         base.Dispose(disposing);
-        if (Stream == null) Save();
+        if (disposing && Stream == null) Save();
     }
 
     private static List<XfEntry> InitBuiltinXfEntries()

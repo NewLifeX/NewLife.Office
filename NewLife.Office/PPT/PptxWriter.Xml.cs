@@ -1300,6 +1300,13 @@ partial class PptxWriter
 
     private void WriteTheme(ZipArchive za)
     {
+        // 优先使用原始字节（避免 StreamReader/StreamWriter 导致的换行符归一化差异）
+        if (_templateThemeBytes != null)
+        {
+            using var es = za.CreateEntry("ppt/theme/theme1.xml").Open();
+            es.Write(_templateThemeBytes, 0, _templateThemeBytes.Length);
+            return;
+        }
         if (_templateThemeXml != null)
         {
             WriteZipEntryText(za, "ppt/theme/theme1.xml", _templateThemeXml);
