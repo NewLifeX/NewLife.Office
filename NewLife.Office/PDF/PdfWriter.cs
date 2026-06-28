@@ -545,6 +545,29 @@ public class PdfWriter : IDisposable
         _content.AppendLine("Q");
     }
 
+    /// <summary>绘制三次贝塞尔曲线</summary>
+    /// <param name="x1">起点 X</param>
+    /// <param name="y1">起点 Y（从底部量起）</param>
+    /// <param name="cp1x">第一个控制点 X</param>
+    /// <param name="cp1y">第一个控制点 Y</param>
+    /// <param name="cp2x">第二个控制点 X</param>
+    /// <param name="cp2y">第二个控制点 Y</param>
+    /// <param name="x2">终点 X</param>
+    /// <param name="y2">终点 Y</param>
+    /// <param name="strokeColorHex">线条颜色（16进制 RGB）</param>
+    /// <param name="lineWidth">线宽（点）</param>
+    public void DrawBezier(Single x1, Single y1, Single cp1x, Single cp1y,
+        Single cp2x, Single cp2y, Single x2, Single y2,
+        String? strokeColorHex = null, Single lineWidth = 0.5f)
+    {
+        EnsurePage();
+        _content.AppendLine("q");
+        _content.AppendLine($"{lineWidth:F2} w");
+        if (strokeColorHex != null) _content.AppendLine(HexToRgbOp(strokeColorHex, false));
+        _content.AppendLine($"{x1:F2} {y1:F2} m {cp1x:F2} {cp1y:F2} {cp2x:F2} {cp2y:F2} {x2:F2} {y2:F2} c S");
+        _content.AppendLine("Q");
+    }
+
     /// <summary>绘制多边形</summary>
     /// <param name="points">顶点序列（至少3个），每项为 (X, Y) 元组</param>
     /// <param name="filled">是否填充</param>

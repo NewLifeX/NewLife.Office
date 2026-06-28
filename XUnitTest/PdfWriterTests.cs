@@ -423,6 +423,22 @@ public class PdfWriterTests
         Assert.True(ms.Length > 0);
     }
 
+    [Fact(DisplayName = "DrawBezier贝塞尔曲线")]
+    public void DrawBezier_Curve()
+    {
+        using var ms = new MemoryStream();
+        var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.DrawBezier(50, 50, 100, 100, 150, 0, 200, 50, "4472C4");
+        writer.Save(ms);
+
+        ms.Position = 0;
+        Assert.True(ms.Length > 0);
+        var content = Encoding.UTF8.GetString(ms.ToArray());
+        Assert.Contains(" m ", content);
+        Assert.Contains(" c S", content);
+    }
+
     [Fact(DisplayName = "DrawGradientRect渐变矩形")]
     public void DrawGradientRect_Vertical()
     {
