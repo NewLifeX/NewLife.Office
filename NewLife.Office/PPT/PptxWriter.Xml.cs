@@ -1011,8 +1011,9 @@ partial class PptxWriter
             sb.Append($"<c:idx val=\"{si}\"/><c:order val=\"{si}\"/>");
             sb.Append($"<c:tx><c:strRef><c:f/><c:strCache><c:ptCount val=\"1\"/><c:pt idx=\"0\"><c:v>{EscXml(ser.Name)}</c:v></c:pt></c:strCache></c:strRef></c:tx>");
             sb.Append($"<c:spPr><a:solidFill><a:srgbClr val=\"{color}\"/></a:solidFill></c:spPr>");
-            // categories
-            if (chart.Categories.Length > 0)
+            // categories — for scatter/bubble, skip and use per-series xVal
+            var isXy = chart.ChartType is "scatter" or "bubble";
+            if (!isXy && chart.Categories.Length > 0)
             {
                 sb.Append("<c:cat><c:strRef><c:f/><c:strCache>");
                 sb.Append($"<c:ptCount val=\"{chart.Categories.Length}\"/>");
@@ -1021,6 +1022,15 @@ partial class PptxWriter
                     sb.Append($"<c:pt idx=\"{ci}\"><c:v>{EscXml(chart.Categories[ci])}</c:v></c:pt>");
                 }
                 sb.Append("</c:strCache></c:strRef></c:cat>");
+            }
+            // xVal for scatter/bubble
+            if (isXy && ser.XValues is { Length: > 0 })
+            {
+                sb.Append("<c:xVal><c:numRef><c:f/><c:numCache>");
+                sb.Append($"<c:ptCount val=\"{ser.XValues.Length}\"/>");
+                for (var xi = 0; xi < ser.XValues.Length; xi++)
+                    sb.Append($"<c:pt idx=\"{xi}\"><c:v>{ser.XValues[xi]}</c:v></c:pt>");
+                sb.Append("</c:numCache></c:numRef></c:xVal>");
             }
             // values
             sb.Append("<c:val><c:numRef><c:f/><c:numCache>");

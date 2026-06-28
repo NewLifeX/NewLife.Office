@@ -1157,4 +1157,40 @@ public class PptxWriterTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
+
+    [Fact(DisplayName = "散点图—XValues输出c:xVal")]
+    public void ScatterChart_XValues_OutputsXVal()
+    {
+        using var writer = new PptxWriter();
+        var chart = new PptChart
+        {
+            ChartType = "scatter",
+            Title = "Scatter Test",
+            Categories = [],
+            Series =
+            {
+                new PptChartSeries
+                {
+                    Name = "Series1",
+                    XValues = [1.0, 2.0, 3.0],
+                    Values = [10.0, 20.0, 15.0]
+                }
+            }
+        };
+        writer.AddChart(0, chart, 1, 1, 8, 6);
+        var tempFile = Path.GetTempFileName() + ".pptx";
+        try
+        {
+            writer.Save(tempFile);
+            Assert.True(File.Exists(tempFile));
+            using var za = ZipFile.OpenRead(tempFile);
+            var entry = za.GetEntry("ppt/charts/chart1.xml");
+            Assert.NotNull(entry);
+            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("<c:xVal>", xml);
+            Assert.Contains("<c:v>2</c:v>", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
 }
