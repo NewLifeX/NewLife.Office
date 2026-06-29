@@ -14,7 +14,7 @@ public class ExcelReaderTests
     public void Test1()
     {
         var type = GetType();
-        var stream = type.Assembly.GetManifestResourceStream(type.Namespace + ".excel.xlsx");
+        var stream = type.Assembly.GetManifestResourceStream("XUnitTest.excel.xlsx");
         Assert.NotNull(stream);
 
         var reader = new ExcelReader(stream, Encoding.UTF8);

@@ -1880,8 +1880,8 @@ public class PdfWriter : IDisposable
         var xrefSb = new StringBuilder();
         xrefSb.AppendLine("xref");
         xrefSb.AppendLine($"0 {totalObjs + 1}");
-        xrefSb.AppendLine("0000000000 65535 f ");
-        foreach (var off in offsets) xrefSb.AppendLine($"{off:D10} 00000 n ");
+        xrefSb.Append("0000000000 65535 f \n");
+        foreach (var off in offsets) xrefSb.Append($"{off:D10} 00000 n \n");
         var xrefBytes = latin1.GetBytes(xrefSb.ToString());
         WriteBytes(xrefBytes, 0, xrefBytes.Length);
 

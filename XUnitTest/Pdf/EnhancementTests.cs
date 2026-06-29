@@ -369,7 +369,7 @@ public class PdfEnhancementTests
     #endregion
 
     #region 注释读取
-    [Fact(Skip = "注解读回需调试 Writer/Reader 间 PDF 对象引用格式细节")]
+    [Fact(DisplayName = "PDF—注释读写往返测试")]
     public void ReadAnnotations_RoundTrip()
     {
         var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pdf");
