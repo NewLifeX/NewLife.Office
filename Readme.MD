@@ -61,6 +61,7 @@ Nuget：NewLife.Office
 - 模板填充：`{{Key}}` 占位符替换，保留原样式
 - `WordHtmlConverter`：docx 转语义化 HTML（段落→`<p>`，表格→`<table>`，标题→`<h1>`-`<h6>`）
 - `WordPdfConverter`：docx 转 PDF（内容映射型，纳入 PdfFluentDocument）
+- `WordEncryptor`：AES-128 加密 docx（ECMA-376 Agile Encryption，OLE2 CFB 容器）
 - `DocReader`：读取 doc 格式（OLE2 容器，提取纯文本和段落结构）
 
 ## 已实现能力（PPT）
@@ -78,7 +79,8 @@ Nuget：NewLife.Office
 - 创建 PDF：文本排版、表格、图片、页眉页脚、中文字体支持（Type0/STSong-Light，UniGB-UCS2-H 编码）
 - `PdfFluentDocument`：声明式布局 API（Row/Column/Text/Image/Table），自动分页
 - PDF 操作：合并/拆分、水印、页面旋转、文字覆盖、可点击链接、书签导航
-- `PdfEncryptor`：加密/权限控制
+- `PdfEncryptor`：加密/权限控制（RC4/AES-128/AES-256）
+- `PdfSigner`：数字签名（PKCS#7 分离签名 + 可见签名域，手动 ASN.1 DER 无外部依赖）
 - 文本提取：逐页/全文，带坐标信息提取
 
 ## 已实现能力（Markdown / RTF / ODS）
@@ -273,8 +275,8 @@ writer.SetRowHeight("Sheet1", 1, 30); // 设置行高
 
 ## 测试状态
 
-- 当前测试集：`407` 项（+12 新增）
-- 通过：`407` 项
+- 当前测试集：`415` 项（+20 新增）
+- 通过：`415` 项
 - 失败：`0` 项
 
 ## 已实现格式概览

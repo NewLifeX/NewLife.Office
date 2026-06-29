@@ -1315,6 +1315,17 @@ public class PdfWriter : IDisposable
                 if (!field.Tooltip.IsNullOrEmpty())
                     sb.Append($"/TU ({EscapePdfText(field.Tooltip!)})\n");
 
+                // 签名字段：预留 /Contents 和签名属性
+                if (field.FieldType == PdfFormFieldType.Sig)
+                {
+                    // 预留 8KB 签名空间（十六进制编码）
+                    var sigPlaceholder = new String('0', 8192 * 2);
+                    sb.Append($"/Contents <{sigPlaceholder}>\n");
+                    sb.Append("/Filter /Adobe.PPKLite\n");
+                    sb.Append("/SubFilter /adbe.pkcs7.detached\n");
+                    sb.Append($"/ByteRange [0 0 0 0]\n");
+                }
+
                 sb.Append(">>");
                 WriteObj(objId, sb.ToString());
 
