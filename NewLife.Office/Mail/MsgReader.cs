@@ -90,14 +90,14 @@ public class MsgReader
         // DisplayTo / DisplayCc（分号分隔）→ 解析到 To/Cc
         var displayTo = ReadString(root, PidTagDisplayTo);
         if (!String.IsNullOrEmpty(displayTo))
-            foreach (var addr in SplitAddresses(displayTo))
+            foreach (var addr in SplitAddresses(displayTo!))
             {
                 msg.To.Add(addr);
             }
 
         var displayCc = ReadString(root, PidTagDisplayCc);
         if (!String.IsNullOrEmpty(displayCc))
-            foreach (var addr in SplitAddresses(displayCc))
+            foreach (var addr in SplitAddresses(displayCc!))
             {
                 msg.Cc.Add(addr);
             }
@@ -189,9 +189,9 @@ public class MsgReader
 
             switch (recipType)
             {
-                case 2: msg.Cc.Add(addr); break;
-                case 3: msg.Bcc.Add(addr); break;
-                default: msg.To.Add(addr); break;  // 1 = TO，0 = 未知时也归 TO
+                case 2: msg.Cc.Add(addr!); break;
+                case 3: msg.Bcc.Add(addr!); break;
+                default: msg.To.Add(addr!); break;  // 1 = TO，0 = 未知时也归 TO
             }
         }
 
@@ -200,7 +200,7 @@ public class MsgReader
         {
             var displayTo = ReadString(root, PidTagDisplayTo);
             if (!String.IsNullOrEmpty(displayTo))
-                foreach (var addr in SplitAddresses(displayTo))
+                foreach (var addr in SplitAddresses(displayTo!))
                 {
                     msg.To.Add(addr);
                 }

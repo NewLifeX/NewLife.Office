@@ -215,13 +215,13 @@ public class XpsWriter
         sb.AppendLine("  xmlns:dcterms=\"http://purl.org/dc/terms/\"");
         sb.AppendLine("  xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">");
         if (!String.IsNullOrEmpty(_properties.Title))
-            sb.AppendLine($"  <dc:title>{Escape(_properties.Title)}</dc:title>");
+            sb.AppendLine($"  <dc:title>{Escape(_properties.Title!)}</dc:title>");
         if (!String.IsNullOrEmpty(_properties.Creator))
-            sb.AppendLine($"  <dc:creator>{Escape(_properties.Creator)}</dc:creator>");
+            sb.AppendLine($"  <dc:creator>{Escape(_properties.Creator!)}</dc:creator>");
         if (!String.IsNullOrEmpty(_properties.Subject))
-            sb.AppendLine($"  <dc:subject>{Escape(_properties.Subject)}</dc:subject>");
+            sb.AppendLine($"  <dc:subject>{Escape(_properties.Subject!)}</dc:subject>");
         if (!String.IsNullOrEmpty(_properties.Description))
-            sb.AppendLine($"  <dc:description>{Escape(_properties.Description)}</dc:description>");
+            sb.AppendLine($"  <dc:description>{Escape(_properties.Description!)}</dc:description>");
         sb.AppendLine("</cp:coreProperties>");
         WriteEntry(zip, "docProps/core.xml", sb.ToString());
         WriteEntry(zip, "_rels/docProps/.rels", "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"/>");

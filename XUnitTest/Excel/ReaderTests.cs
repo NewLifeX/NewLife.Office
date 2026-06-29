@@ -352,8 +352,8 @@ public class ExcelReaderTests
         ms.Position = 0;
         var r = new ExcelReader(ms, Encoding.UTF8);
         var dt = r.ReadDataTable();
-        Assert.Equal(0, dt.Columns.Count);
-        Assert.Equal(0, dt.Rows.Count);
+        Assert.Empty(dt.Columns);
+        Assert.Empty(dt.Rows);
     }
     #endregion
 

@@ -56,7 +56,9 @@ public class EpubIntegrationTests : IntegrationTestBase
         // 按内容验证原始章节存在
         var chapterTitles = readDoc.Chapters.Select(c => c.Title).ToList();
         Assert.Contains("第一章 引言", chapterTitles);
+#pragma warning disable xUnit2012 // Any+Contains 组合无直接 xUnit 等价写法
         Assert.True(readDoc.Chapters.Any(c => c.Content != null && c.Content.Contains("欢迎阅读本书")));
+#pragma warning restore xUnit2012
 
         // 工厂创建
         var factoryReader = OfficeFactory.CreateReader(path);

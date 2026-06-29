@@ -330,11 +330,6 @@ public class WordWriter : IDisposable
         });
     }
 
-    /// <summary>追加对象集合为表格</summary>
-    /// <param name="data">对象集合</param>
-    /// <param name="firstRowHeader">首行表头</param>
-    /// <param name="style">表格样式</param>
-
     /// <summary>追加水平分隔线（段落底部边框）</summary>
     /// <param name="colorHex">线条颜色（16进制RGB，默认 000000）</param>
     /// <param name="width">线宽（1/8pt，默认 6 = 0.75pt）</param>
@@ -1226,7 +1221,6 @@ public class WordWriter : IDisposable
 
     private static void BuildSdtXml(StringBuilder sb, WordSdtElement sdt)
     {
-        const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
         sb.Append("<w:sdt>");
         sb.Append("<w:sdtPr>");

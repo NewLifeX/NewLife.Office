@@ -243,7 +243,7 @@ public sealed class WordHtmlConverter
         return 0;
     }
 
-    /// <summary>HTML 文本转义（& < > " '）</summary>
+    /// <summary>HTML 文本转义（&amp; &lt; &gt; " '）</summary>
     /// <param name="text">原始文本</param>
     /// <returns>转义后文本</returns>
     private static String HtmlEncode(String text)
@@ -265,7 +265,7 @@ public sealed class WordHtmlConverter
         return sb.ToString();
     }
 
-    /// <summary>HTML 属性值转义（& < > "）</summary>
+    /// <summary>HTML 属性值转义（&amp; &lt; &gt; "）</summary>
     /// <param name="value">原始属性值</param>
     /// <returns>转义后属性值</returns>
     private static String HtmlAttrEncode(String value)

@@ -577,8 +577,8 @@ public static class PdfQRCode
             w.WriteByte(0x78); // CMF
             w.WriteByte(0xDA); // FLG: max compression, 32K window
             w.Write(compressedBytes, 0, compressedBytes.Length);
-            var adler = Adler32(raw);
-            WriteUInt32BE(w, (UInt32)((adler >> 24) & 0xFF | (adler >> 8) & 0xFF00 | (adler << 8) & 0xFF0000 | (adler << 24) & 0xFF000000));
+            var adler = (UInt32)Adler32(raw);
+            WriteUInt32BE(w, (adler >> 24) & 0xFF | (adler >> 8) & 0xFF00 | (adler << 8) & 0xFF0000 | (adler << 24) & 0xFF000000);
         });
 
         // IEND

@@ -1005,7 +1005,7 @@ public partial class ExcelWriter : DisposeBase
     /// <summary>添加自定义公式条件格式</summary>
     /// <param name="sheet">工作表名称（可空）</param>
     /// <param name="range">应用范围（如 "A1:A100"）</param>
-    /// <param name="formula">Excel 公式（不含 = 号，如 "A1>100"、"AND(A1>0,B1<10)"）</param>
+    /// <param name="formula">Excel 公式（不含 = 号，如 "A1&gt;100"、"AND(A1&gt;0,B1&lt;10)"）</param>
     /// <param name="color">满足条件时的背景色（RGB十六进制）</param>
     public void AddExpressionConditionalFormat(String? sheet, String range, String formula, String? color)
     {

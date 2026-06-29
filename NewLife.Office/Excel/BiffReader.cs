@@ -729,7 +729,7 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     private static String CsvEscape(String? value)
     {
         if (String.IsNullOrEmpty(value)) return "";
-        if (value.IndexOfAny([',', '"', '\n', '\r']) >= 0)
+        if (value!.IndexOfAny([',', '"', '\n', '\r']) >= 0)
             return "\"" + value.Replace("\"", "\"\"") + "\"";
         return value;
     }
@@ -737,7 +737,7 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     private static String MdEscape(String? value)
     {
         if (String.IsNullOrEmpty(value)) return "";
-        return value.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
+        return value!.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
     }
     #endregion
 }

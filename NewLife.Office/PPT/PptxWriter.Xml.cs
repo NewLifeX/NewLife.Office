@@ -709,7 +709,6 @@ partial class PptxWriter
         // 元素动画（S12-01）
         if (slide.Animations.Count > 0)
         {
-            var animId = 1;
             sb.Append("<p:timing><p:tnLst><p:par><p:cTn id=\"1\" dur=\"indefinite\" fill=\"hold\">");
             sb.Append("<p:stCondLst><p:cond delay=\"0\"/></p:stCondLst></p:cTn><p:childTnLst>");
             foreach (var anim in slide.Animations.OrderBy(a => a.Order))

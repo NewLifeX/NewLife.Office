@@ -60,8 +60,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         public String? GradientType;
         public String? GradientColor1;
         public String? GradientColor2;
-        public String? PatternFgColor;
-        public String? PatternName;
+        public String? PatternFgColor = null;
+        public String? PatternName = null;
+        // 以上字段为 OOXML 兼容预留，当前未赋值
     }
 
     private class BorderInfo
@@ -814,7 +815,8 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
             if (item.FullName.StartsWithIgnoreCase("xl/worksheets/") && item.Name.EndsWithIgnoreCase(".xml"))
             {
                 var name = item.Name.TrimEnd(".xml");
-                if (dic.TryGetValue(name.TrimStart("sheet"), out var str)) name = str;
+                var key = name.StartsWith("sheet") ? name.Substring(5) : name;
+                if (dic.TryGetValue(key, out var str)) name = str;
                 name ??= String.Empty;
 
                 dic2[name] = item;
@@ -1430,7 +1432,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry)) yield break;
 
         // 通过 sheet rels 找到 drawing
-        var sheetIdx = sheetEntry.Name.TrimEnd(".xml").TrimStart("sheet").ToInt(-1);
+        var n = sheetEntry.Name.TrimEnd(".xml");
+        if (n.StartsWith("sheet")) n = n.Substring(5);
+        var sheetIdx = n.ToInt(-1);
         if (sheetIdx < 1) yield break;
         var relsPath = $"xl/worksheets/_rels/sheet{sheetIdx}.xml.rels";
         var relsEntry = _zip.GetEntry(relsPath);
@@ -1878,7 +1882,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         var result = new Dictionary<(Int32, Int32), (String, String)>();
         if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry)) return result;
 
-        var sheetIdx = sheetEntry.Name.TrimEnd(".xml").TrimStart("sheet").ToInt(-1);
+        var n = sheetEntry.Name.TrimEnd(".xml");
+        if (n.StartsWith("sheet")) n = n.Substring(5);
+        var sheetIdx = n.ToInt(-1);
         if (sheetIdx < 1) return result;
 
         var commentsPath = $"xl/comments{sheetIdx}.xml";
@@ -2006,10 +2012,11 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         var tableParts = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("tableParts"));
         if (tableParts == null) return result;
 
-        // 读取工作表关系文件
-        var sheetIdx = sheetEntry.Name.TrimEnd(".xml").TrimStart("sheet").ToInt(-1);
-        if (sheetIdx < 1) return result;
-        var relsPath = $"xl/worksheets/_rels/sheet{sheetIdx}.xml.rels";
+        var n3 = sheetEntry.Name.TrimEnd(".xml");
+        if (n3.StartsWith("sheet")) n3 = n3.Substring(5);
+        var sheetIdx3 = n3.ToInt(-1);
+        if (sheetIdx3 < 1) return result;
+        var relsPath = $"xl/worksheets/_rels/sheet{sheetIdx3}.xml.rels";
         var relsEntry = _zip.GetEntry(relsPath);
         if (relsEntry == null) return result;
 
@@ -2091,7 +2098,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         var drawing = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("drawing"));
         if (drawing == null) return result;
 
-        var sheetIdx = sheetEntry.Name.TrimEnd(".xml").TrimStart("sheet").ToInt(-1);
+        var n = sheetEntry.Name.TrimEnd(".xml");
+        if (n.StartsWith("sheet")) n = n.Substring(5);
+        var sheetIdx = n.ToInt(-1);
         if (sheetIdx < 1) return result;
 
         // 读取 drawing XML 获取图表引用
@@ -2562,7 +2571,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
     private static String CsvEscape(String? value)
     {
         if (String.IsNullOrEmpty(value)) return "";
-        if (value.IndexOfAny([',', '"', '\n', '\r']) >= 0)
+        if (value!.IndexOfAny([',', '"', '\n', '\r']) >= 0)
             return "\"" + value.Replace("\"", "\"\"") + "\"";
         return value;
     }
@@ -2570,7 +2579,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
     private static String MdEscape(String? value)
     {
         if (String.IsNullOrEmpty(value)) return "";
-        return value.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
+        return value!.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
     }
 
     /// <summary>从 docProps/core.xml 读取文档属性</summary>

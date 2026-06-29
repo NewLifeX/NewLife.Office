@@ -1179,7 +1179,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         var isSvg = iext == "svg";
 
         // 检测 asvg:svgBlip（PowerPoint 2016+ SVG 标准格式），使用 SVG 数据覆盖 PNG 缩略图
-        var svgBlip = blip.SelectSingleNode("*[local-name()='svgBlip']") as XmlElement;
+        var svgBlip = blip!.SelectSingleNode("*[local-name()='svgBlip']") as XmlElement;
         if (svgBlip != null)
         {
             var svgEmbedId = svgBlip.GetAttribute("r:embed") ?? svgBlip.GetAttribute("embed");

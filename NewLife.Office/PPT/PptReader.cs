@@ -112,7 +112,7 @@ public sealed class PptReader : IDisposable, ITextExtractable, IMarkdownExtracta
     /// <param name="slides">累积的幻灯片文本列表</param>
     /// <param name="currentSlide">当前幻灯片文本收集器（null 代表还未进入任何幻灯片）</param>
     private static void ScanRecords(Byte[] buf, Int32 start, Int32 end,
-        List<List<String>> slides, List<String> currentSlide)
+        List<List<String>> slides, List<String>? currentSlide)
     {
         var reader = new SpanReader(buf, start, end - start);
         while (reader.Position + 8 <= reader.Capacity)

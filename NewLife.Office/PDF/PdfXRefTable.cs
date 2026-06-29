@@ -320,7 +320,7 @@ public class PdfXRefTable
         return val;
     }
 
-    /// <summary>读取 PDF 字典字符串（<< ... >>），处理嵌套</summary>
+    /// <summary>读取 PDF 字典字符串（&lt;&lt; ... &gt;&gt;），处理嵌套</summary>
     private static String? ReadDictString(String text, Int32 start)
     {
         var pos = start;

@@ -3,7 +3,7 @@ namespace NewLife.Office;
 /// <summary>Excel 结构化表格（OOXML table 元素）</summary>
 /// <remarks>
 /// 对应 Open XML 规范中的 xl/tables/tableN.xml 部件及 &lt;tableParts&gt; 引用。
-/// 通过 <see cref="ExcelWriter.AddTable"/> 写入，Reader.ReadTables() 读取。
+/// 通过 ExcelWriter.AddTable 写入，Reader.ReadTables() 读取。
 /// <example>
 /// <code>
 /// writer.AddTable("A1:E10", "销售明细", "TableStyleMedium9");

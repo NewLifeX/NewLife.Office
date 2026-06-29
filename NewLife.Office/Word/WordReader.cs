@@ -1243,7 +1243,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
     private static WordParagraphStyle ParseStyleId(String? styleId)
     {
         if (String.IsNullOrEmpty(styleId)) return WordParagraphStyle.Normal;
-        return styleId.ToLowerInvariant() switch
+        return styleId!.ToLowerInvariant() switch
         {
             "heading1" or "1" or "heading 1" => WordParagraphStyle.Heading1,
             "heading2" or "2" or "heading 2" => WordParagraphStyle.Heading2,
@@ -1315,7 +1315,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
     private static String MdEscape(String? value)
     {
         if (String.IsNullOrEmpty(value)) return "";
-        return value.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
+        return value!.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
     }
     #endregion
 }

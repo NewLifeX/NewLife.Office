@@ -303,7 +303,9 @@ public class WordRoundTripTests : IntegrationTestBase
         Assert.Contains("红色文本", GetBodyText(doc1));
         Assert.Contains("删除线文本", GetBodyText(doc1));
         Assert.Contains("带边框段落", GetBodyText(doc1));
+#pragma warning disable xUnit2012 // Any+Contains 组合无直接 xUnit 等价写法
         Assert.True(doc1.Hyperlinks.Any(h => h.Url.Contains("newlifex")));
+#pragma warning restore xUnit2012
     }
 
     #region 严谨断言和辅助

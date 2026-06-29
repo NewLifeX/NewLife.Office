@@ -302,7 +302,7 @@ public sealed class BiffWriter : IDisposable
     }
 
     /// <summary>设置当前工作表的页眉和页脚文本</summary>
-    /// <param name="header">页眉文本（支持 &L左对齐 &C居中 &R右对齐 &P页码 &D日期）</param>
+    /// <param name="header">页眉文本（支持 &amp;L左对齐 &amp;C居中 &amp;R右对齐 &amp;P页码 &amp;D日期）</param>
     /// <param name="footer">页脚文本</param>
     public void SetHeaderFooter(String? header = null, String? footer = null)
     {

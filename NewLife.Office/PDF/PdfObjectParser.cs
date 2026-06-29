@@ -90,8 +90,6 @@ public static class PdfObjectParser
 
         var latin1 = Encoding.GetEncoding(28591);
         var parseText = latin1.GetString(data);
-        var valuePos = 0; // 临时位置，实际在流内
-
         // 使用简化的解析（对象流内的值不含间接对象头部）
         var valText2 = Encoding.ASCII.GetString(streamData, first + targetOffset, streamData.Length - first - targetOffset);
         return ParseTopLevelValue(valText2, 0, out _);

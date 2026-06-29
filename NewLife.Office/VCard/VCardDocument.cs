@@ -45,10 +45,10 @@ public class VCardDocument : ITextExtractable, IMarkdownExtractable
             foreach (var addr in c.Addresses)
             {
                 var parts = new List<String>();
-                if (!String.IsNullOrEmpty(addr.Country)) parts.Add(addr.Country);
-                if (!String.IsNullOrEmpty(addr.Region)) parts.Add(addr.Region);
-                if (!String.IsNullOrEmpty(addr.City)) parts.Add(addr.City);
-                if (!String.IsNullOrEmpty(addr.Street)) parts.Add(addr.Street);
+                if (!String.IsNullOrEmpty(addr.Country)) parts.Add(addr.Country!);
+                if (!String.IsNullOrEmpty(addr.Region)) parts.Add(addr.Region!);
+                if (!String.IsNullOrEmpty(addr.City)) parts.Add(addr.City!);
+                if (!String.IsNullOrEmpty(addr.Street)) parts.Add(addr.Street!);
                 if (parts.Count > 0)
                     sb.AppendLine($"地址: {String.Join(" ", parts)}" + (String.IsNullOrEmpty(addr.Type) ? "" : $" ({addr.Type})"));
             }
@@ -87,10 +87,10 @@ public class VCardDocument : ITextExtractable, IMarkdownExtractable
             foreach (var addr in c.Addresses)
             {
                 var parts = new List<String>();
-                if (!String.IsNullOrEmpty(addr.Country)) parts.Add(addr.Country);
-                if (!String.IsNullOrEmpty(addr.Region)) parts.Add(addr.Region);
-                if (!String.IsNullOrEmpty(addr.City)) parts.Add(addr.City);
-                if (!String.IsNullOrEmpty(addr.Street)) parts.Add(addr.Street);
+                if (!String.IsNullOrEmpty(addr.Country)) parts.Add(addr.Country!);
+                if (!String.IsNullOrEmpty(addr.Region)) parts.Add(addr.Region!);
+                if (!String.IsNullOrEmpty(addr.City)) parts.Add(addr.City!);
+                if (!String.IsNullOrEmpty(addr.Street)) parts.Add(addr.Street!);
                 if (parts.Count > 0)
                     sb.AppendLine($"- **地址**: {String.Join(" ", parts)}" + (String.IsNullOrEmpty(addr.Type) ? "" : $" ({addr.Type})"));
             }

@@ -175,7 +175,7 @@ public sealed class RtfDocument : ITextExtractable, IMarkdownExtractable
     private static String MdEscape(String? value)
     {
         if (String.IsNullOrEmpty(value)) return "";
-        return value.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
+        return value!.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
     }
     #endregion
 }

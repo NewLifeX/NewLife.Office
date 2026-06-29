@@ -66,7 +66,7 @@ public class VCardIntegrationTests : IntegrationTestBase
         Assert.Equal("zhangsan@example.com", contacts[0].Emails[0].Address);
 
         Assert.Equal("李四", contacts[1].FullName);
-        Assert.Equal(1, contacts[1].Phones.Count);
+        Assert.Single(contacts[1].Phones);
 
         // 工厂创建
         var factoryReader = OfficeFactory.CreateReader(path);

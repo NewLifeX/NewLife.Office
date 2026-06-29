@@ -69,7 +69,7 @@ public class EmlMessage : ITextExtractable, IMarkdownExtractable
         if (!String.IsNullOrEmpty(TextBody))
             sb.Append(TextBody);
         else if (!String.IsNullOrEmpty(HtmlBody))
-            sb.Append(StripHtml(HtmlBody));
+            sb.Append(StripHtml(HtmlBody!));
 
         return sb.ToString();
     }
@@ -89,7 +89,7 @@ public class EmlMessage : ITextExtractable, IMarkdownExtractable
         if (!String.IsNullOrEmpty(TextBody))
             sb.Append(TextBody);
         else if (!String.IsNullOrEmpty(HtmlBody))
-            sb.Append(StripHtml(HtmlBody));
+            sb.Append(StripHtml(HtmlBody!));
 
         return sb.ToString();
     }
