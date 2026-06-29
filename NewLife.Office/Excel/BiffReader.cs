@@ -535,8 +535,7 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
         {
             // 浮点：将 RK 高 30 位放入 double 的高 30 位
             var d64 = ((Int64)(rk & unchecked((Int32)0xFFFFFFFC))) << 32;
-            var bytes = BitConverter.GetBytes(d64);
-            value = BitConverter.ToDouble(bytes, 0);
+            value = BitConverter.Int64BitsToDouble(d64);
         }
 
         // bit 1 = 0 表示乘以 100，否则不处理（注意：BIFF8 中 bit1=1 表示 ÷100）

@@ -1,4 +1,5 @@
 using System.Text;
+using NewLife.Buffers;
 
 namespace NewLife.Office;
 
@@ -145,20 +146,20 @@ public class MsgReader
         var data = propsStream.Data;
         // MAPI 属性头为 16 字节（根存储）或 8 字节（子存储）
         var offset = store.Parent == null ? 16 : 8;
-        var tag = $"{propId}0003";  // PT_LONG
+        var targetId = propId.ToUpperInvariant();
 
         while (offset + 16 <= data.Length)
         {
-            var propTag = BitConverter.ToString(data, offset, 4).Replace("-", "").ToUpperInvariant();
-            var typePart = propTag.Substring(4, 4);
-            var idPart   = propTag[..4];
+            // 属性标签：低 2 字节 = ID，高 2 字节 = 类型（0x0003 = PT_LONG）
+            var reader = new SpanReader(data, offset, 4);
+            var tagId = reader.ReadUInt16();
+            var tagType = reader.ReadUInt16();
 
-            if (idPart == propId.ToUpperInvariant() && typePart == "0300")
+            if (tagId.ToString("X4") == targetId && tagType == 0x0003)
             {
-                // 值在 offset+8 的 4 字节
-                return BitConverter.IsLittleEndian
-                    ? (data[offset + 8] | (data[offset + 9] << 8) | (data[offset + 10] << 16) | (data[offset + 11] << 24))
-                    : throw new InvalidOperationException("Big-endian not supported");
+                // 值在 offset+8 的 4 字节，小端存储
+                var valReader = new SpanReader(data, offset + 8, 4);
+                return (Int32)valReader.ReadUInt32();
             }
             offset += 16;
         }

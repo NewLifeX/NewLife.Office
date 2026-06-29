@@ -1,4 +1,5 @@
 using System.Text;
+using NewLife.Buffers;
 using NewLife.Collections;
 using NewLife.Office;
 
@@ -72,7 +73,8 @@ public sealed class DocReader : IDisposable, ITextExtractable, IMarkdownExtracta
 
     private static void ValidateFib(Byte[] buf)
     {
-        var wIdent = ReadUInt16(buf, 0);
+        var reader = new SpanReader(buf, 0, 2);
+        var wIdent = reader.ReadUInt16();
         // 0xA5EC = Word 二进制文档；0xA5DC = Word 模板
         if (wIdent != 0xA5EC && wIdent != 0xA5DC)
             throw new InvalidDataException($"不支持的文档格式：wIdent = 0x{wIdent:X4}，仅支持 Word 97-2003 二进制格式。");
@@ -177,79 +179,95 @@ public sealed class DocReader : IDisposable, ITextExtractable, IMarkdownExtracta
         if (buf.Length < 300) return String.Empty;
 
         // ─── 1. 定位 FibRgFcLcb97 中的 fcClx / lcbClx ──────────────────────
-        var csw = (Int32)ReadUInt16(buf, 32);         // FIB base = 32 bytes
+        var reader = new SpanReader(buf, 32, buf.Length - 32);
+        var csw = (Int32)reader.ReadUInt16();         // FIB base = 32 bytes
         if (csw < 1) csw = 14;                        // Word 97 默认 14
 
         var cslwOffset = 34 + csw * 2;
         if (cslwOffset + 2 > buf.Length) return String.Empty;
 
-        var cslw = (Int32)ReadUInt16(buf, cslwOffset);
+        reader = new SpanReader(buf, cslwOffset, buf.Length - cslwOffset);
+        var cslw = (Int32)reader.ReadUInt16();
         if (cslw < 1) cslw = 22;                      // Word 97 默认 22
 
         // FibRgFcLcb97 起始偏移
         var fcLcbStart = cslwOffset + 2 + cslw * 4 + 2;
         // CLX 条目在 FibRgFcLcb97 中的索引为 13
         var fcClxPos = fcLcbStart + 13 * 8;
-        var lcbClxPos = fcClxPos + 4;
 
-        if (lcbClxPos + 4 > buf.Length) return String.Empty;
+        if (fcClxPos + 8 > buf.Length) return String.Empty;
 
-        var fcClx = (Int32)ReadUInt32(buf, fcClxPos);
-        var lcbClx = (Int32)ReadUInt32(buf, lcbClxPos);
+        reader = new SpanReader(buf, fcClxPos, 8);
+        var fcClx = (Int32)reader.ReadUInt32();
+        var lcbClx = (Int32)reader.ReadUInt32();
 
         if (fcClx < 0 || lcbClx <= 0 || (Int64)fcClx + lcbClx > buf.Length)
             return String.Empty;
 
         // ─── 2. 解析 CLX ──────────────────────────────────────────────────────
-        var clxEnd = fcClx + lcbClx;
-        var pos = fcClx;
+        var clxReader = new SpanReader(buf, fcClx, lcbClx);
+        var lcbPlcPcd = 0;
+        var foundPcdt = false;
 
-        // 跳过所有 PRC 记录（clxt = 0x01）
-        while (pos < clxEnd && buf[pos] == 0x01)
+        while (clxReader.Position < clxReader.Capacity)
         {
-            pos++;       // clxt
-            if (pos + 2 > clxEnd) break;
-            var cbGrpprl = (Int16)(ReadUInt16(buf, pos));
-            pos += 2 + cbGrpprl;
+            var clxt = clxReader.ReadByte();
+            if (clxt == 0x01)
+            {
+                // PRC 记录：跳过
+                if (clxReader.Position + 2 > clxReader.Capacity) break;
+                var cbGrpprl = (Int16)clxReader.ReadUInt16();
+                clxReader.Advance(cbGrpprl);
+            }
+            else if (clxt == 0x02)
+            {
+                // PCDT 记录
+                if (clxReader.Position + 4 > clxReader.Capacity) return String.Empty;
+                lcbPlcPcd = (Int32)clxReader.ReadUInt32();
+                foundPcdt = true;
+                break;
+            }
+            else
+            {
+                // 未知 clxt 类型，无法继续
+                return String.Empty;
+            }
         }
 
-        // 必须是 PCDT 记录（clxt = 0x02）
-        if (pos >= clxEnd || buf[pos] != 0x02) return String.Empty;
-        pos++;  // clxt
+        if (!foundPcdt) return String.Empty;
 
-        if (pos + 4 > clxEnd) return String.Empty;
-        var lcbPlcPcd = (Int32)ReadUInt32(buf, pos);
-        pos += 4;
-
-        var plcPcdStart = pos;
-        var plcPcdEnd = pos + lcbPlcPcd;
-        if (plcPcdEnd > clxEnd) plcPcdEnd = clxEnd;
+        var plcPcdStart = fcClx + (Int32)clxReader.Position;
+        var plcPcdEnd = plcPcdStart + lcbPlcPcd;
+        if (plcPcdEnd > fcClx + lcbClx) plcPcdEnd = fcClx + lcbClx;
 
         // ─── 3. 解析 PlcPcd：(n+1) 个 CP 值 + n 个 PCD（各8字节）───────────
         // n = (lcbPlcPcd - 4) / 12
         var pieceCount = (lcbPlcPcd - 4) / 12;
         if (pieceCount <= 0) return String.Empty;
 
-        // CP 数组的起始偏移（相对于 buf）
-        var cpArrayPos = plcPcdStart;
-        // PCD 数组紧随 (pieceCount+1) 个 CP 之后
-        var pcdArrayPos = plcPcdStart + (pieceCount + 1) * 4;
+        // CP 数组：pieceCount+1 个 UInt32 值
+        var cpReader = new SpanReader(buf, plcPcdStart, (pieceCount + 1) * 4);
+        // PCD 数组：pieceCount 个 8 字节结构
+        var pcdReader = new SpanReader(buf, plcPcdStart + (pieceCount + 1) * 4, pieceCount * 8);
 
         // ─── 4. 提取每个 piece 的文本 ─────────────────────────────────────
         var sb = Pool.StringBuilder.Get();
+        var cpStart = (Int32)cpReader.ReadUInt32();
 
         for (var i = 0; i < pieceCount; i++)
         {
-            var cpStart = (Int32)ReadUInt32(buf, cpArrayPos + i * 4);
-            var cpEnd = (Int32)ReadUInt32(buf, cpArrayPos + (i + 1) * 4);
+            var cpEnd = (Int32)cpReader.ReadUInt32();
             var charCount = cpEnd - cpStart;
-            if (charCount <= 0) continue;
-
-            var pcdOffset = pcdArrayPos + i * 8;
-            if (pcdOffset + 8 > plcPcdEnd) break;
 
             // PCD 结构 8 字节：clsPcd(2) + FcCompressed(4) + Prm(2)
-            var fcCompressed = (Int32)ReadUInt32(buf, pcdOffset + 2);
+            pcdReader.Advance(2);
+            var fcCompressed = (Int32)pcdReader.ReadUInt32();
+            pcdReader.Advance(2);
+
+            cpStart = cpEnd;
+
+            if (charCount <= 0) continue;
+
             var fCompressed = ((fcCompressed >> 30) & 1) == 1;
             var fc = fcCompressed & 0x3FFFFFFF;
 
@@ -275,9 +293,10 @@ public sealed class DocReader : IDisposable, ITextExtractable, IMarkdownExtracta
                 if (byteOffset < 0 || byteOffset + byteCount > buf.Length)
                     continue;
 
+                var textReader = new SpanReader(buf, byteOffset, byteCount);
                 for (var c = 0; c < charCount; c++)
                 {
-                    var ch = (Char)ReadUInt16(buf, byteOffset + c * 2);
+                    var ch = (Char)textReader.ReadUInt16();
                     AppendDocChar(sb, ch, keepTableMarkers);
                 }
             }
@@ -312,16 +331,6 @@ public sealed class DocReader : IDisposable, ITextExtractable, IMarkdownExtracta
                 break;
         }
     }
-
-    #endregion
-
-    #region 字节工具
-
-    private static UInt16 ReadUInt16(Byte[] buf, Int32 pos) =>
-        (UInt16)(buf[pos] | (buf[pos + 1] << 8));
-
-    private static UInt32 ReadUInt32(Byte[] buf, Int32 pos) =>
-        (UInt32)(buf[pos] | (buf[pos + 1] << 8) | (buf[pos + 2] << 16) | (buf[pos + 3] << 24));
 
     #endregion
 

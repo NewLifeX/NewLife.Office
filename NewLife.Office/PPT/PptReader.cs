@@ -1,4 +1,5 @@
 using System.Text;
+using NewLife.Buffers;
 using NewLife.Office;
 
 namespace NewLife.Office;
@@ -113,29 +114,30 @@ public sealed class PptReader : IDisposable, ITextExtractable, IMarkdownExtracta
     private static void ScanRecords(Byte[] buf, Int32 start, Int32 end,
         List<List<String>> slides, List<String> currentSlide)
     {
-        var pos = start;
-        while (pos + 8 <= end)
+        var reader = new SpanReader(buf, start, end - start);
+        while (reader.Position + 8 <= reader.Capacity)
         {
-            var verType = ReadUInt16(buf, pos);
-            var recType = ReadUInt16(buf, pos + 2);
-            var recLen = (Int32)ReadUInt32(buf, pos + 4);
+            var verType = reader.ReadUInt16();
+            var recType = reader.ReadUInt16();
+            var recLen = (Int32)reader.ReadUInt32();
             var recVer = verType & 0x0F;
-            pos += 8;
 
-            if (recLen < 0 || pos + recLen > end) break;
+            if (recLen < 0 || reader.Position + recLen > reader.Capacity) break;
+
+            var bodyStart = start + (Int32)reader.Position;
 
             if (recType == RecTextCharsAtom && recLen >= 2)
             {
                 // UTF-16LE 文本：每字符 2 字节，长度需按 2 对齐
                 var charBytes = recLen & ~1;
-                var text = Encoding.Unicode.GetString(buf, pos, charBytes).TrimEnd('\r', '\n');
+                var text = Encoding.Unicode.GetString(buf, bodyStart, charBytes).TrimEnd('\r', '\n');
                 if (text.Length > 0)
                     (currentSlide ?? GetOrAddSlide(slides))?.Add(text);
             }
             else if (recType == RecTextBytesAtom && recLen >= 1)
             {
-                // ANSI 文本：直接字节→字符映射（ISO-8859-1）
-                var text = DecodeLatin1(buf, pos, recLen).TrimEnd('\r', '\n');
+                // ANSI 文本：通过 Latin-1 编码批量转换
+                var text = DecodeLatin1(buf.AsSpan(bodyStart, recLen)).TrimEnd('\r', '\n');
                 if (text.Length > 0)
                     (currentSlide ?? GetOrAddSlide(slides))?.Add(text);
             }
@@ -147,16 +149,16 @@ public sealed class PptReader : IDisposable, ITextExtractable, IMarkdownExtracta
                     // 进入一个新幻灯片
                     var slideTexts = new List<String>();
                     slides.Add(slideTexts);
-                    ScanRecords(buf, pos, pos + recLen, slides, slideTexts);
+                    ScanRecords(buf, bodyStart, bodyStart + recLen, slides, slideTexts);
                 }
                 else
                 {
                     // 其他容器—继续在当前幻灯片上下文中递归
-                    ScanRecords(buf, pos, pos + recLen, slides, currentSlide);
+                    ScanRecords(buf, bodyStart, bodyStart + recLen, slides, currentSlide);
                 }
             }
 
-            pos += recLen;
+            reader.Advance(recLen);
         }
     }
 
@@ -169,30 +171,13 @@ public sealed class PptReader : IDisposable, ITextExtractable, IMarkdownExtracta
         return slides[slides.Count - 1];
     }
 
-    /// <summary>ISO-8859-1 字节→字符映射</summary>
-    /// <param name="data">字节数组</param>
-    /// <param name="pos">起始偏移</param>
-    /// <param name="count">字节数</param>
+    /// <summary>ISO-8859-1 字节→字符批量转换</summary>
+    /// <param name="data">字节切片</param>
     /// <returns>解码后的字符串</returns>
-    private static String DecodeLatin1(Byte[] data, Int32 pos, Int32 count)
+    private static String DecodeLatin1(ReadOnlySpan<Byte> data)
     {
-        var chars = new Char[count];
-        for (var i = 0; i < count; i++)
-        {
-            chars[i] = (Char)data[pos + i];
-        }
-        return new String(chars);
+        return Encoding.GetEncoding(28591).GetString(data);
     }
-
-    #endregion
-
-    #region 字节工具
-
-    private static UInt16 ReadUInt16(Byte[] buf, Int32 pos) =>
-        (UInt16)(buf[pos] | (buf[pos + 1] << 8));
-
-    private static UInt32 ReadUInt32(Byte[] buf, Int32 pos) =>
-        (UInt32)(buf[pos] | (buf[pos + 1] << 8) | (buf[pos + 2] << 16) | (buf[pos + 3] << 24));
 
     #endregion
 

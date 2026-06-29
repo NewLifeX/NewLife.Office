@@ -1,4 +1,5 @@
 using System.Text;
+using NewLife.Buffers;
 
 namespace NewLife.Office;
 
@@ -561,7 +562,7 @@ public static class PdfQRCode
             for (var r = 0; r < height; r++)
             {
                 raw[r * (1 + width * 4)] = 0; // filter: None
-                Array.Copy(rgba, r * width * 4, raw, r * (1 + width * 4) + 1, width * 4);
+                rgba.AsSpan(r * width * 4, width * 4).CopyTo(raw.AsSpan(r * (1 + width * 4) + 1, width * 4));
             }
 
             // zlib 压缩（Deflate）
@@ -600,22 +601,22 @@ public static class PdfQRCode
         // 数据
         ms.Write(data, 0, data.Length);
         // CRC32（类型 + 数据）
-        var crcInput = new Byte[4 + data.Length];
-        Array.Copy(typeBytes, 0, crcInput, 0, 4);
-        Array.Copy(data, 0, crcInput, 4, data.Length);
+        Span<Byte> crcInput = stackalloc Byte[4 + data.Length];
+        typeBytes.AsSpan().CopyTo(crcInput);
+        data.AsSpan().CopyTo(crcInput.Slice(4));
         var crc = Crc32(crcInput);
         WriteUInt32BE(ms, crc);
     }
 
     private static void WriteUInt32BE(Stream ms, UInt32 value)
     {
-        ms.WriteByte((Byte)(value >> 24));
-        ms.WriteByte((Byte)(value >> 16));
-        ms.WriteByte((Byte)(value >> 8));
-        ms.WriteByte((Byte)value);
+        var buf = new Byte[4];
+        var writer = new SpanWriter(buf) { IsLittleEndian = false };
+        writer.Write(value);
+        ms.Write(buf, 0, 4);
     }
 
-    private static UInt32 Crc32(Byte[] data)
+    private static UInt32 Crc32(ReadOnlySpan<Byte> data)
     {
         var crc = 0xFFFFFFFFu;
         for (var i = 0; i < data.Length; i++)
