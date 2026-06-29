@@ -35,6 +35,7 @@ public class WordWriter : IDisposable
     // 原始 XML 透传（非空时覆盖生成默认）
     private String? _stylesXml;
     private String? _numberingXml;
+    private WordNumbering? _numbering;    // 程序化编号定义（与 NumberingXml 二选一）
     private String? _settingsXml;
     private String? _sectPrXml;           // sectPr 原始 XML
     private String? _documentXmlNsDecls;  // document.xml 根元素命名空间声明
@@ -469,6 +470,7 @@ public class WordWriter : IDisposable
         _orderedStartOverrides.Clear();
         _stylesXml = document.StylesXml;
         _numberingXml = document.NumberingXml;
+        _numbering = document.Numbering;
         _settingsXml = document.SettingsXml;
         _sectPrXml = document.SectPrXml;
         _documentXmlNsDecls = document.DocumentXmlNsDecls;
@@ -776,6 +778,14 @@ public class WordWriter : IDisposable
         if (!hasBullets && !hasOrdered) return;
 
         const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+
+        // 使用 WordNumbering 模型生成（程序化创建自定义列表）
+        if (_numbering != null)
+        {
+            WriteNumberingFromModel(za, W);
+            return;
+        }
+
         var hasMultiLevel = _elements.Any(e => e.Type == WordElementType.Paragraph && e.Paragraph?.ListLevel > 0);
         var maxLevel = hasMultiLevel ? 3 : 1;
 
@@ -813,6 +823,67 @@ public class WordWriter : IDisposable
                 sb.Append($"<w:lvlText w:val=\"%{l + 1}.\"/><w:lvlJc w:val=\"left\"/>");
                 var indent = 720 + l * 720;
                 sb.Append($"<w:pPr><w:ind w:left=\"{indent}\" w:hanging=\"360\"/></w:pPr>");
+                sb.Append("</w:lvl>");
+            }
+            sb.Append("</w:abstractNum>");
+            sb.Append("<w:num w:numId=\"2\"><w:abstractNumId w:val=\"1\"/></w:num>");
+
+            // numId=3: 有序列表（含 startOverride 的变体）
+            if (_orderedStartOverrides.Count > 0)
+            {
+                sb.Append("<w:num w:numId=\"3\"><w:abstractNumId w:val=\"1\"/>");
+                foreach (var kv in _orderedStartOverrides)
+                {
+                    sb.Append($"<w:lvlOverride w:ilvl=\"{kv.Key}\"><w:startOverride w:val=\"{kv.Value}\"/></w:lvlOverride>");
+                }
+                sb.Append("</w:num>");
+            }
+        }
+
+        sb.Append("</w:numbering>");
+        WriteEntry(za, "word/numbering.xml", sb.ToString());
+    }
+
+    /// <summary>从 WordNumbering 模型生成 numbering.xml</summary>
+    private void WriteNumberingFromModel(ZipArchive za, String wNs)
+    {
+        var num = _numbering!;
+        var sb = new StringBuilder();
+        sb.Append($"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><w:numbering xmlns:w=\"{wNs}\">");
+
+        var hasBullets = num.Levels.Any(l => l.Format == "bullet");
+        var hasOrdered = num.Levels.Any(l => l.Format != "bullet");
+
+        // 抽象编号定义 0：bullet 列表
+        if (hasBullets)
+        {
+            sb.Append("<w:abstractNum w:abstractNumId=\"0\">");
+            sb.Append("<w:multiLevelType w:val=\"hybridMultilevel\"/>");
+            foreach (var lvl in num.Levels.Where(l => l.Format == "bullet").OrderBy(l => l.Level))
+            {
+                var bulletChar = lvl.BulletChar ?? lvl.Text ?? "\uF0B7";
+                sb.Append($"<w:lvl w:ilvl=\"{lvl.Level}\"><w:start w:val=\"{lvl.StartAt}\"/><w:numFmt w:val=\"bullet\"/>");
+                sb.Append($"<w:lvlText w:val=\"{Esc(bulletChar)}\"/><w:lvlJc w:val=\"left\"/>");
+                sb.Append($"<w:pPr><w:ind w:left=\"{lvl.Indent}\" w:hanging=\"{lvl.HangingIndent}\"/></w:pPr>");
+                var fontName = lvl.BulletFontName ?? "Symbol";
+                sb.Append($"<w:rPr><w:rFonts w:ascii=\"{fontName}\" w:hAnsi=\"{fontName}\" w:hint=\"default\"/></w:rPr>");
+                sb.Append("</w:lvl>");
+            }
+            sb.Append("</w:abstractNum>");
+            sb.Append("<w:num w:numId=\"1\"><w:abstractNumId w:val=\"0\"/></w:num>");
+        }
+
+        // 抽象编号定义 1：有序列表
+        if (hasOrdered)
+        {
+            sb.Append("<w:abstractNum w:abstractNumId=\"1\">");
+            sb.Append("<w:multiLevelType w:val=\"hybridMultilevel\"/>");
+            foreach (var lvl in num.Levels.Where(l => l.Format != "bullet").OrderBy(l => l.Level))
+            {
+                var lvlText = lvl.Text ?? $"%{lvl.Level + 1}.";
+                sb.Append($"<w:lvl w:ilvl=\"{lvl.Level}\"><w:start w:val=\"{lvl.StartAt}\"/><w:numFmt w:val=\"{lvl.Format}\"/>");
+                sb.Append($"<w:lvlText w:val=\"{Esc(lvlText)}\"/><w:lvlJc w:val=\"left\"/>");
+                sb.Append($"<w:pPr><w:ind w:left=\"{lvl.Indent}\" w:hanging=\"{lvl.HangingIndent}\"/></w:pPr>");
                 sb.Append("</w:lvl>");
             }
             sb.Append("</w:abstractNum>");

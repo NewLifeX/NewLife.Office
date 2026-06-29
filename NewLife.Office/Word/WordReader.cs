@@ -343,6 +343,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         // 保存原始 XML 部件，用于 Writer 完美还原视觉效果
         doc.StylesXml = ReadZipEntryText("word/styles.xml");
         doc.NumberingXml = ReadZipEntryText("word/numbering.xml");
+        // 解析编号定义到模型（无损往返时 NumberingXml 已足够，模型解析便于程序化修改）
+        if (doc.NumberingXml != null)
+            doc.Numbering = ParseNumbering(doc.NumberingXml);
         doc.SettingsXml = ReadZipEntryText("word/settings.xml");
         // 解析文档变量
         if (doc.SettingsXml != null)
@@ -1024,6 +1027,101 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
             }
         }
         catch { /* 解析失败不影响整体读取 */ }
+    }
+
+    /// <summary>解析 numbering.xml 到 WordNumbering 模型</summary>
+    private static WordNumbering? ParseNumbering(String numberingXml)
+    {
+        try
+        {
+            var doc = new XmlDocument();
+            doc.LoadXml(numberingXml);
+            var ns = new XmlNamespaceManager(doc.NameTable);
+            ns.AddNamespace("w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
+
+            // 收集所有 num/abstractNumId
+            var absNumIds = new HashSet<String>();
+            var numNodes = doc.SelectNodes("//w:num", ns);
+            if (numNodes != null)
+            {
+                foreach (XmlElement numEl in numNodes)
+                {
+                    var absIdEl = numEl.SelectSingleNode("w:abstractNumId", ns) as XmlElement;
+                    var absId = absIdEl?.GetAttribute("w:val");
+                    if (absId != null) absNumIds.Add(absId);
+                }
+            }
+
+            if (absNumIds.Count == 0) return null;
+
+            var numbering = new WordNumbering();
+            if (numNodes!.Count > 0)
+            {
+                var firstNum = (XmlElement)numNodes[0]!;
+                if (Int32.TryParse(firstNum.GetAttribute("w:numId"), out var nid))
+                    numbering.NumberingId = nid;
+            }
+
+            // 合并所有 abstractNum 的级别定义
+            foreach (var absId in absNumIds)
+            {
+                var absNumEl = doc.SelectSingleNode($"//w:abstractNum[@w:abstractNumId='{absId}']", ns) as XmlElement;
+                if (absNumEl == null) continue;
+
+                var lvlNodes = absNumEl.SelectNodes("w:lvl", ns);
+                if (lvlNodes == null) continue;
+
+                foreach (XmlElement lvlEl in lvlNodes)
+                {
+                    var ilvlStr = lvlEl.GetAttribute("w:ilvl");
+                    var fmt = (lvlEl.SelectSingleNode("w:numFmt", ns) as XmlElement)?.GetAttribute("w:val") ?? "decimal";
+                    var text = (lvlEl.SelectSingleNode("w:lvlText", ns) as XmlElement)?.GetAttribute("w:val");
+                    var startStr = (lvlEl.SelectSingleNode("w:start", ns) as XmlElement)?.GetAttribute("w:val");
+
+                    var level = new WordNumberingLevel { Format = fmt, Text = text };
+                    if (Int32.TryParse(ilvlStr, out var ilvl)) level.Level = ilvl;
+                    if (Int32.TryParse(startStr, out var startVal)) level.StartAt = startVal;
+
+                    var pPr = lvlEl.SelectSingleNode("w:pPr", ns) as XmlElement;
+                    if (pPr != null)
+                    {
+                        var ind = pPr.SelectSingleNode("w:ind", ns) as XmlElement;
+                        if (ind != null)
+                        {
+                            var leftStr = ind.GetAttribute("w:left");
+                            var hangStr = ind.GetAttribute("w:hanging");
+                            if (Int32.TryParse(leftStr, out var leftVal)) level.Indent = leftVal;
+                            if (Int32.TryParse(hangStr, out var hangVal)) level.HangingIndent = hangVal;
+                        }
+                    }
+
+                    // bullet 格式额外属性
+                    if (fmt == "bullet")
+                    {
+                        var rPr = lvlEl.SelectSingleNode("w:rPr", ns) as XmlElement;
+                        if (rPr != null)
+                        {
+                            var rFonts = rPr.SelectSingleNode("w:rFonts", ns) as XmlElement;
+                            if (rFonts != null)
+                                level.BulletFontName = rFonts.GetAttribute("w:ascii");
+                        }
+                        level.BulletChar = text;
+                    }
+
+                    numbering.Levels.Add(level);
+                }
+            }
+
+            // 快捷字段
+            if (numbering.Levels.Count > 0)
+            {
+                numbering.Format = numbering.Levels[0].Format;
+                numbering.BulletChar = numbering.Levels[0].BulletChar;
+            }
+
+            return numbering.Levels.Count > 0 ? numbering : null;
+        }
+        catch { return null; }
     }
 
     private static WordSdtElement? ParseSdt(XmlElement sdtEl, XmlNamespaceManager ns)

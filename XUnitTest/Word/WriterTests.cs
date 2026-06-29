@@ -294,6 +294,78 @@ public class WordWriterTests
     }
     #endregion
 
+    #region 自定义编号定义（WordNumbering模型）
+    [Fact(DisplayName = "自定义编号—WordNumbering模型生成多级列表")]
+    public void CustomNumbering_FromModel()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
+        try
+        {
+            // 使用 WordNumbering 模型定义自定义列表格式
+            var num = new WordNumbering { NumberingId = 1 };
+            num.Levels.Add(new WordNumberingLevel
+            {
+                Level = 0, Format = "decimal", Text = "%1.", StartAt = 1,
+                Indent = 720, HangingIndent = 360,
+            });
+            num.Levels.Add(new WordNumberingLevel
+            {
+                Level = 1, Format = "lowerLetter", Text = "%2)", StartAt = 1,
+                Indent = 1440, HangingIndent = 360,
+            });
+            num.Levels.Add(new WordNumberingLevel
+            {
+                Level = 0, Format = "bullet", BulletChar = "✓",
+                BulletFontName = "Symbol", Indent = 720, HangingIndent = 360,
+            });
+
+            // 通过 WordDocument 模型注入
+            var doc = new WordDocument { Numbering = num };
+            doc.Elements.Add(new WordElement
+            {
+                Type = WordElementType.Paragraph,
+                Paragraph = new WordParagraph
+                {
+                    Runs = { new WordRun { Text = "有序一级" } },
+                    IsOrderedList = true, ListLevel = 0,
+                },
+            });
+            doc.Elements.Add(new WordElement
+            {
+                Type = WordElementType.Paragraph,
+                Paragraph = new WordParagraph
+                {
+                    Runs = { new WordRun { Text = "有序二级" } },
+                    IsOrderedList = true, ListLevel = 1,
+                },
+            });
+            doc.Elements.Add(new WordElement
+            {
+                Type = WordElementType.Paragraph,
+                Paragraph = new WordParagraph
+                {
+                    Runs = { new WordRun { Text = "项目符号" } },
+                    IsBullet = true, ListLevel = 0,
+                },
+            });
+
+            using var writer = new WordWriter();
+            writer.Save(tempFile, doc);
+
+            Assert.True(File.Exists(tempFile));
+
+            // 读取回验证编号定义已解析
+            using var reader = new WordReader(tempFile);
+            var readDoc = reader.ReadDocument();
+            Assert.NotNull(readDoc.Numbering);
+            Assert.NotEmpty(readDoc.Numbering!.Levels);
+            Assert.Contains(readDoc.Numbering.Levels, l => l.Format == "decimal");
+            Assert.Contains(readDoc.Numbering.Levels, l => l.Format == "bullet");
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
+
     #region 有序（编号）列表
     [Fact(DisplayName = "有序列表写入—decimal编号，往返验证")]
     public void WriteOrderedList_DecimalNumbering()
