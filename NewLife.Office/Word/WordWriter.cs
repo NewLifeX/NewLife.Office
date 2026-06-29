@@ -1,4 +1,6 @@
+using System.Collections;
 using System.IO.Compression;
+using System.Reflection;
 using System.Security;
 using System.Text;
 using System.Xml;
@@ -352,22 +354,43 @@ public class WordWriter : IDisposable
         };
         _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
     }
+    /// <summary>将对象集合写入 Word 表格</summary>
+    /// <typeparam name="T">对象类型</typeparam>
+    /// <param name="data">对象集合</param>
+    /// <param name="firstRowHeader">是否将第一行作为表头</param>
+    /// <param name="style">表格样式</param>
     public void WriteObjects<T>(IEnumerable<T> data, Boolean firstRowHeader = true, WordTableStyle? style = null) where T : class
     {
-        var props = typeof(T).GetProperties();
-        var headers = props.Select(p =>
-        {
-            var dn = p.GetCustomAttributes(typeof(System.ComponentModel.DisplayNameAttribute), false)
-                      .OfType<System.ComponentModel.DisplayNameAttribute>().FirstOrDefault()?.DisplayName;
-            var desc = p.GetCustomAttributes(typeof(System.ComponentModel.DescriptionAttribute), false)
-                        .OfType<System.ComponentModel.DescriptionAttribute>().FirstOrDefault()?.Description;
-            return dn ?? desc ?? p.Name;
-        }).ToArray();
+        WriteObjects(data, firstRowHeader, style, 0);
+    }
+
+    /// <summary>将对象集合写入 Word 表格，支持嵌套对象属性展开</summary>
+    /// <typeparam name="T">对象类型</typeparam>
+    /// <param name="data">对象集合</param>
+    /// <param name="firstRowHeader">是否将第一行作为表头</param>
+    /// <param name="style">表格样式</param>
+    /// <param name="maxDepth">嵌套对象展开深度（0=仅扁平属性，1=展开一层嵌套属性，2=展开两层，以此类推）</param>
+    /// <remarks>
+    /// 当 maxDepth > 0 时，嵌套对象的属性将按 Parent.Child 格式展平为列名。
+    /// 例如 Order.Customer.Name 会生成列 "Customer.Name"。
+    /// 集合属性（IEnumerable）不会被展开为子表格，仅展平其直接子属性。
+    /// </remarks>
+    public void WriteObjects<T>(IEnumerable<T> data, Boolean firstRowHeader, WordTableStyle? style = null, Int32 maxDepth = 0) where T : class
+    {
+        var headers = new List<String>();
+        var propPaths = new List<PropPathEntry>();
+
+        CollectProperties(typeof(T), [], headers, propPaths, maxDepth);
 
         var allRows = new List<IEnumerable<String>> { headers };
         foreach (var item in data)
         {
-            allRows.Add(props.Select(p => Convert.ToString(p.GetValue(item)) ?? String.Empty).ToArray());
+            if (item == null) continue;
+            allRows.Add(propPaths.Select(pp =>
+            {
+                var value = ResolveNestedValue(item, pp.Property, pp.Path);
+                return Convert.ToString(value) ?? String.Empty;
+            }).ToArray());
         }
 
         AppendTable(allRows, firstRowHeader, style);
@@ -1533,6 +1556,95 @@ public class WordWriter : IDisposable
 
         sb.Append("</Properties>");
         WriteEntry(za, "docProps/custom.xml", sb.ToString());
+    }
+    #endregion
+
+    #region 辅助
+    /// <summary>属性路径条目</summary>
+    private struct PropPathEntry
+    {
+        public PropertyInfo Property;
+        public String[] Path;
+    }
+
+    /// <summary>递归收集属性路径，支持嵌套对象展开</summary>
+    private static void CollectProperties(Type type, String[] prefixPath, List<String> headers, List<PropPathEntry> entries, Int32 maxDepth)
+    {
+        foreach (var prop in type.GetProperties())
+        {
+            if (prop.GetIndexParameters().Length > 0) continue;
+
+            var currentPath = new String[prefixPath.Length + 1];
+            Array.Copy(prefixPath, 0, currentPath, 0, prefixPath.Length);
+            currentPath[prefixPath.Length] = prop.Name;
+
+            var headerName = GetHeaderName(prop, currentPath);
+
+            if (maxDepth > 0 && IsExpandableType(prop.PropertyType))
+            {
+                CollectProperties(prop.PropertyType, currentPath, headers, entries, maxDepth - 1);
+            }
+            else
+            {
+                headers.Add(headerName);
+                entries.Add(new PropPathEntry { Property = prop, Path = currentPath });
+            }
+        }
+    }
+
+    /// <summary>获取属性的列名（优先 DisplayName，其次是属性名）</summary>
+    private static String GetHeaderName(PropertyInfo prop, String[] path)
+    {
+        var dn = prop.GetCustomAttributes(typeof(System.ComponentModel.DisplayNameAttribute), false)
+                      .OfType<System.ComponentModel.DisplayNameAttribute>().FirstOrDefault()?.DisplayName;
+        var desc = prop.GetCustomAttributes(typeof(System.ComponentModel.DescriptionAttribute), false)
+                        .OfType<System.ComponentModel.DescriptionAttribute>().FirstOrDefault()?.Description;
+        var leafName = dn ?? desc ?? prop.Name;
+
+        // 扁平属性直接返回
+        if (path.Length <= 1) return leafName;
+
+        // 嵌套属性：ParentProp.LeafDisplayName
+        var parentName = path[0];
+        return parentName + "." + leafName;
+    }
+
+    /// <summary>判断类型是否可展开（嵌套对象，非基础类型）</summary>
+    private static Boolean IsExpandableType(Type type)
+    {
+        if (type.IsPrimitive || type == typeof(String) || type == typeof(Decimal)
+            || type == typeof(DateTime) || type == typeof(Guid) || type == typeof(TimeSpan))
+            return false;
+
+        if (type.IsEnum) return false;
+        if (type.IsGenericType && typeof(IEnumerable).IsAssignableFrom(type)) return false;
+
+        // 跳过 Nullable<T>
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+            return false;
+
+        return true;
+    }
+
+    /// <summary>根据属性路径解析嵌套对象的值</summary>
+    /// <param name="root">根对象</param>
+    /// <param name="leafProp">叶子属性</param>
+    /// <param name="path">完整属性路径</param>
+    /// <returns>属性值</returns>
+    private static Object? ResolveNestedValue(Object root, PropertyInfo leafProp, String[] path)
+    {
+        Object? current = root;
+        // 遍历路径中的每个中间对象属性（不含最后的叶子属性）
+        for (var i = 0; i < path.Length - 1; i++)
+        {
+            if (current == null) return null;
+            var intermediateProp = current.GetType().GetProperty(path[i]);
+            if (intermediateProp == null) return null;
+            current = intermediateProp.GetValue(current);
+        }
+
+        if (current == null) return null;
+        return leafProp.GetValue(current);
     }
     #endregion
 }

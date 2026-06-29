@@ -273,8 +273,8 @@ writer.SetRowHeight("Sheet1", 1, 30); // 设置行高
 
 ## 测试状态
 
-- 当前测试集：`395` 项
-- 通过：`395` 项
+- 当前测试集：`407` 项（+12 新增）
+- 通过：`407` 项
 - 失败：`0` 项
 
 ## 已实现格式概览
@@ -282,10 +282,10 @@ writer.SetRowHeight("Sheet1", 1, 30); // 设置行高
 | 格式 | 读取 | 写入 | 模板 | 转换 | 说明 |
 |------|:---:|:---:|:---:|:---:|------|
 | **Excel xlsx** | ✅ | ✅ | ✅ | — | 含样式/图表/透视表/条件格式/图片 |
-| **Excel xls** | ✅ | 🔄规划 | — | — | OLE2/BIFF8，BiffReader 已实现读取 |
+| **Excel xls** | ✅ | ✅ | — | — | OLE2/BIFF8，BiffReader+BiffWriter 读写双全，含样式/合并/超链接/筛选/页面设置 |
 | **Word docx** | ✅ | ✅ | ✅ | HTML/PDF | 含段落/表格/图片/页眉页脚 |
 | **Word doc** | ✅ | — | — | — | MS-DOC，DocReader 提取纯文本 |
-| **PPT pptx** | ✅ | ✅ | ✅ | 🔄规划 | 含文本框/图片/表格/图表/母版 |
+| **PPT pptx** | ✅ | ✅ | ✅ | PDF | 含文本框/图片/表格/图表/母版/动画/批注/Section；PPT→PDF 文本映射型已实现 |
 | **PPT ppt** | ✅ | — | — | — | MS-PPT，PptReader 提取幻灯片文本 |
 | **PDF** | ✅ | ✅ | — | — | 含 Fluent API/合并/拆分/加密 |
 | **Markdown** | ✅ | ✅ | — | HTML/Word/PDF | CommonMark + GFM，含 AST 模型，→Word/→PDF 已实现 |
@@ -321,13 +321,13 @@ NewLife.Office/
 
 以下功能已在路线图中，但尚未实现：
 
-### 写入 xls（BIFF8，Excel 97-2003）
+### PPT → 图片
 
-- 生成合法 BIFF8 工作簿流并写入 OLE2 容器
+- pptx 每张幻灯片渲染为 PNG/JPEG 图像（需外部渲染库 SkiaSharp/Docnet.Core，当前抛出 `NotSupportedException`）
 
-### PPT → PDF / 图片
+### PDF 页面渲染为图片
 
-- pptx 每张幻灯片转换为 PDF 页面或 PNG/JPEG 图像
+- PDF 每页渲染为 PNG/JPEG（需外部渲染库）
 
 ### ODS 合并单元格
 

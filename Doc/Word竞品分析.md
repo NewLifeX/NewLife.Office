@@ -599,21 +599,21 @@ var doc = new XWPFDocument(File.OpenRead("source.docx"));
 
 ### 阶段 W3.0（中期）—— 高级场景覆盖
 
-| 编号 | 功能 | 说明 |
-|------|------|------|
-| W10-01 | 分栏（Columns） | 在 `WordPageSettings` 中增加分栏设置 |
-| W10-02 | 内容控件读取 | 读取 SDT（Structured Document Tag），提取控件类型和内容 |
-| W10-03 | docx→PDF 增强 | 通过 LibreOffice headless 集成实现高保真转换 |
-| W10-04 | 对象映射增强 | 支持复杂对象（嵌套属性/集合）→ Word 表格 |
-| W10-05 | 文本替换增强 | 支持正则替换、范围替换、保留格式替换 |
+| 编号 | 功能 | 说明 | 状态 |
+|------|------|------|:---:|
+| W10-01 | 分栏（Columns） | 在 `WordPageSettings` 中增加分栏设置 | ✅ 完成 |
+| W10-02 | 内容控件读取 | 读取 SDT（Structured Document Tag），提取控件类型和内容 | ✅ 完成 |
+| W10-03 | docx→PDF 增强 | LibreOffice headless 高保真转换 | 🚫 外部依赖 |
+| W10-04 | 对象映射增强 | 支持复杂对象（嵌套属性/集合）→ Word 表格 | ❌ 规划 |
+| W10-05 | 文本替换增强 | 支持正则替换、范围替换、保留格式替换 | ❌ 规划 |
 
 ### 阶段 W4.0（远期）—— 商业级能力补全
 
-| 编号 | 功能 | 说明 |
-|------|------|------|
-| W11-01 | Mail Merge 域 | 支持 MERGEFIELD 域代码的读写 |
-| W11-02 | 文档加密 | AES 加密的 docx 读写 |
-| W11-03 | 自定义 XML 部件 | 读取/写入 CustomXmlPart |
+| 编号 | 功能 | 说明 | 状态 |
+|------|------|------|:---:|
+| W11-01 | Mail Merge 域 | MERGEFIELD 域代码生成已完成，执行引擎远期规划 | ⚠️ 部分 |
+| W11-02 | 文档加密 | AES 加密 docx 读写 | 🚫 不计划 |
+| W11-03 | 自定义 XML 部件 | 读取/写入 CustomXmlPart | ✅ 完成 |
 
 ---
 

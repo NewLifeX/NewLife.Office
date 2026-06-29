@@ -403,7 +403,7 @@
 | **图表坐标轴 Min/Max** | ShapeCrawler(v0.45)/Aspose | ✅ 已完成 |
 | **形状旋转角度** | 所有竞品 | ✅ 已完成 |
 | **图片原地替换 API** | ShapeCrawler/Aspose | ✅ 已完成 |
-| **Section 管理** | ShapeCrawler(v0.30)/Aspose | 🔄 规划 |
+| **Section 管理** | ShapeCrawler(v0.30)/Aspose | ✅ 已完成 |
 
 ### 低优先级（差异化与渲染增强）
 
@@ -472,10 +472,10 @@
 
 ### 长期（渲染与高级导出）
 
-12. 🔄 **SVG 图片**：读写 `image/svg+xml`
+12. ✅ **SVG 图片**：读写 `image/svg+xml` (S15-03)
 13. ✅ **背景渐变填充**：`<p:bgPr><a:gradFill>` (S16-03)
-14. 🔄 **pptx → PNG/JPEG**：SkiaSharp/Docnet 集成
-15. 🔄 **Section 管理**：`PptDocument.Sections` 读写
+14. 🔄 **pptx → PNG/JPEG**：需外部渲染库 SkiaSharp/Docnet，当前 NotSupportedException
+15. ✅ **Section 管理**：`PptDocument.Sections` 读写 (S13-04)
 
 ---
 
