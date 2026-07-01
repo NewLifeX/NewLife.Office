@@ -8,6 +8,8 @@
 
 办公自动化库  
 
+[English](Readme_EN.MD) | 简体中文
+
 源码： https://github.com/NewLifeX/NewLife.Office  
 Nuget：NewLife.Office  
 
@@ -52,6 +54,12 @@ Nuget：NewLife.Office
 - `ReadSheet()` 读取工作表行数据
 - `ReadObjects<T>()` 对象映射导入
 - 支持字符串、数字、布尔、日期、RK 编码等多种单元格类型
+
+### BiffWriter（xls 写入）
+
+- 生成 BIFF8 格式文件，支持样式（字体/填充/边框/颜色）、合并单元格、行高
+- 超链接、自动筛选、页面设置、页眉页脚、冻结窗格
+- 公式写入、列宽设置、工作表保护
 
 ## 已实现能力（Word）
 
@@ -275,8 +283,8 @@ writer.SetRowHeight("Sheet1", 1, 30); // 设置行高
 
 ## 测试状态
 
-- 当前测试集：`415` 项（+20 新增）
-- 通过：`415` 项
+- 当前测试集：`694` 项
+- 通过：`694` 项
 - 失败：`0` 项
 
 ## 已实现格式概览

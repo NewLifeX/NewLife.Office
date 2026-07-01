@@ -1,11 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net45;netstandard2.0;netstandard2.1</TargetFrameworks>
-    <AssemblyTitle>Excel导入导出</AssemblyTitle>
-    <Description>办公自动化库，支持Excel文件读写、导入导出、单元格操作等功能</Description>
+    <AssemblyTitle>办公自动化库</AssemblyTitle>
+    <Description>办公自动化库，支持 Excel（xlsx/xls）、Word（docx/doc）、PPT（pptx/ppt）、PDF、Markdown、RTF、ODS、Email（eml/msg）、iCalendar、vCard、EPUB、XPS 等格式的读写、模板填充与格式转换，零外部依赖，MIT 许可</Description>
     <Company>新生命开发团队</Company>
     <Copyright>©2002-2026 新生命开发团队</Copyright>
-    <VersionPrefix>1.1</VersionPrefix>
+    <VersionPrefix>1.2</VersionPrefix>
     <VersionSuffix>$([System.DateTime]::Now.ToString(`yyyy.MMdd`))</VersionSuffix>
     <Version>$(VersionPrefix).$(VersionSuffix)</Version>
     <FileVersion>$(Version)</FileVersion>
@@ -24,12 +24,12 @@
   <PropertyGroup>
     <PackageId>$(AssemblyName)</PackageId>
     <Authors>$(Company)</Authors>
-    <PackageProjectUrl>https://newlifex.com/core</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/NewLifeX/NewLife.Office</PackageProjectUrl>
     <PackageIcon>leaf.png</PackageIcon>
     <RepositoryUrl>https://github.com/NewLifeX/NewLife.Office</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>新生命团队;X组件;NewLife;$(AssemblyName)</PackageTags>
-    <PackageReleaseNotes>新增 ITextExtractable/IMarkdownExtractable 统一文本提取接口；全格式覆盖，Excel/Word/PPT/PDF/RTF/ODS/EML/iCal/vCard/EPUB/XPS 均实现接口；OfficeFactory 新增 ReadText() 和 ReadMarkdown() 一行提取静态方法</PackageReleaseNotes>
+    <PackageReleaseNotes>xls BiffWriter 全面补全，样式/合并/冻结/超链接/筛选/页面设置/公式与 xlsx 功能平齐；xlsx 命名范围/结构化表格/富文本渐变填充/图表集成/迷你图/数据透视表筛选/对角线边框等高保真全量补齐；Word AES-128 加密/邮件合并引擎/多级列表模型/表格合并/孤行控制/首页奇偶页不同页眉页脚/文档变量/自定义XML部件/SDT内容控件/交叉引用/发光阴影/首字下沉/行号/分栏；PPT 雷达图/股价图/曲面图/散点图数值X轴/Z-Order图层/取消组合/渐变填充/翻转/SVG读写/图片圆角/Section管理/Morph切换；PDF PKCS#7数字签名/JPEG直通/全部绘图原语透传/注释读写/PdfTable/表格提取/PDF/A合规/AES加密/LZW+RLE解码/嵌入附件/QR码；测试 415→694 项；文档全面审计同步</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
@@ -38,14 +38,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.201">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.300">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="NewLife.Core" Version="11.14.2026.402" />
+    <PackageReference Include="NewLife.Core" Version="11.17.2026.701" />
   </ItemGroup>
 
   <ItemGroup>
