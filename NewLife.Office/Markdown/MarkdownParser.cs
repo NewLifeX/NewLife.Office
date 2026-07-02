@@ -371,20 +371,17 @@ internal sealed class MarkdownParser
             else alignments.Add("");
         }
 
-        var table = new MarkdownBlock { Type = MarkdownBlockType.Table };
+        var table = new TableBlock();
 
         // Header row
-        var headerRow = new MarkdownBlock { Type = MarkdownBlockType.TableRow };
+        var headerRow = new TableRowBlock();
         var headerCells = SplitTableRow(lines[0]);
         for (var i = 0; i < headerCells.Count; i++)
         {
-            var cell = new MarkdownBlock
-            {
-                Type = MarkdownBlockType.TableCell,
-                IsHeader = true,
-                Alignment = i < alignments.Count ? alignments[i] : "",
-            };
-            cell.Inlines.AddRange(ParseInline(headerCells[i].Trim()));
+            var cell = new TableCellBlock(
+                ParseInline(headerCells[i].Trim()),
+                isHeader: true,
+                alignment: i < alignments.Count ? alignments[i] : "");
             headerRow.Children.Add(cell);
         }
         table.Children.Add(headerRow);
@@ -392,18 +389,15 @@ internal sealed class MarkdownParser
         // Data rows
         for (var r = 2; r < lines.Count; r++)
         {
-            var dataRow = new MarkdownBlock { Type = MarkdownBlockType.TableRow };
+            var dataRow = new TableRowBlock();
             var dataCells = SplitTableRow(lines[r]);
             for (var i = 0; i < alignments.Count; i++)
             {
-                var cell = new MarkdownBlock
-                {
-                    Type = MarkdownBlockType.TableCell,
-                    IsHeader = false,
-                    Alignment = i < alignments.Count ? alignments[i] : "",
-                };
                 var cellText = i < dataCells.Count ? dataCells[i].Trim() : "";
-                cell.Inlines.AddRange(ParseInline(cellText));
+                var cell = new TableCellBlock(
+                    ParseInline(cellText),
+                    isHeader: false,
+                    alignment: i < alignments.Count ? alignments[i] : "");
                 dataRow.Children.Add(cell);
             }
             table.Children.Add(dataRow);

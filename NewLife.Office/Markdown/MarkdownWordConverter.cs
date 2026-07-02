@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using NewLife.Office;
+using NewLife.Office.Word;
 
 namespace NewLife.Office.Markdown;
 
@@ -42,8 +43,9 @@ public sealed class MarkdownWordConverter
         switch (block.Type)
         {
             case MarkdownBlockType.Heading:
-                var headingText = InlinesToPlainText(block.Inlines);
-                writer.AppendHeading(headingText, block.Level);
+                var h = (HeadingBlock)block;
+                var headingText = block.GetPlainText();
+                writer.AppendHeading(headingText, h.Level);
                 break;
 
             case MarkdownBlockType.Paragraph:
@@ -53,8 +55,9 @@ public sealed class MarkdownWordConverter
                 break;
 
             case MarkdownBlockType.CodeBlock:
-                var codePara = writer.AppendParagraph(block.RawText, WordParagraphStyle.Normal,
-                    new WordRunProperties { FontName = "Courier New", FontSize = 10f });
+                var cb = (CodeBlock)block;
+                var codePara = writer.AppendParagraph(cb.RawText, ParagraphStyle.Normal,
+                    new RunProperties { FontName = "Courier New", FontSize = 10f });
                 break;
 
             case MarkdownBlockType.BlockQuote:
@@ -83,9 +86,10 @@ public sealed class MarkdownWordConverter
                 break;
 
             case MarkdownBlockType.HtmlBlock:
+                var hb = (HtmlBlock)block;
                 // HTML 块以纯文本形式保留
-                if (!String.IsNullOrWhiteSpace(block.RawText))
-                    writer.AppendParagraph(block.RawText.Trim());
+                if (!String.IsNullOrWhiteSpace(hb.RawText))
+                    writer.AppendParagraph(hb.RawText.Trim());
                 break;
         }
     }
@@ -98,7 +102,7 @@ public sealed class MarkdownWordConverter
             if (row.Type != MarkdownBlockType.TableRow) continue;
             var cells = row.Children
                 .Where(c => c.Type == MarkdownBlockType.TableCell)
-                .Select(c => InlinesToPlainText(c.Inlines));
+                .Select(c => c.GetPlainText());
             rows.Add(cells);
         }
         if (rows.Count > 0)
@@ -107,10 +111,10 @@ public sealed class MarkdownWordConverter
     #endregion
 
     #region 行内处理
-    private static List<WordRun> InlinesToWordRuns(List<MarkdownInline> inlines,
+    private static List<Run> InlinesToWordRuns(List<MarkdownInline> inlines,
         Boolean bold = false, Boolean italic = false, Boolean code = false)
     {
-        var result = new List<WordRun>();
+        var result = new List<Run>();
         foreach (var inline in inlines)
         {
             switch (inline.Type)
@@ -138,17 +142,17 @@ public sealed class MarkdownWordConverter
 
                 case MarkdownInlineType.Strikethrough:
                     // Word 不原生支持删除线映射，以灰色文字代替
-                    result.Add(new WordRun
+                    result.Add(new Run
                     {
-                        Text = InlinesToPlainText(inline.Children),
-                        Properties = new WordRunProperties { ForeColor = "808080" },
+                        Text = inline.GetPlainText(),
+                        Properties = new RunProperties { ForeColor = "808080" },
                     });
                     break;
 
                 case MarkdownInlineType.Link:
                     // 超链接文字 + 链接地址作为括号文本
                     var linkText = inline.Children.Count > 0
-                        ? InlinesToPlainText(inline.Children)
+                        ? inline.GetPlainText()
                         : inline.Href;
                     result.Add(MakeRun(linkText, bold, italic, code));
                     break;
@@ -159,7 +163,7 @@ public sealed class MarkdownWordConverter
 
                 case MarkdownInlineType.HardBreak:
                 case MarkdownInlineType.SoftBreak:
-                    result.Add(new WordRun { Text = " " });
+                    result.Add(new Run { Text = " " });
                     break;
 
                 case MarkdownInlineType.RawHtml:
@@ -170,14 +174,14 @@ public sealed class MarkdownWordConverter
         return result;
     }
 
-    private static WordRun MakeRun(String text, Boolean bold, Boolean italic, Boolean code)
+    private static Run MakeRun(String text, Boolean bold, Boolean italic, Boolean code)
     {
         if (!bold && !italic && !code)
-            return new WordRun { Text = text };
-        return new WordRun
+            return new Run { Text = text };
+        return new Run
         {
             Text = text,
-            Properties = new WordRunProperties
+            Properties = new RunProperties
             {
                 Bold = bold,
                 Italic = italic,
@@ -185,37 +189,6 @@ public sealed class MarkdownWordConverter
                 FontSize = code ? 10f : null,
             },
         };
-    }
-
-    private static String InlinesToPlainText(List<MarkdownInline> inlines)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (var inline in inlines)
-        {
-            switch (inline.Type)
-            {
-                case MarkdownInlineType.Text:
-                case MarkdownInlineType.Code:
-                case MarkdownInlineType.RawHtml:
-                    sb.Append(inline.Text);
-                    break;
-                case MarkdownInlineType.Strong:
-                case MarkdownInlineType.Emphasis:
-                case MarkdownInlineType.StrongEmphasis:
-                case MarkdownInlineType.Strikethrough:
-                case MarkdownInlineType.Link:
-                    sb.Append(InlinesToPlainText(inline.Children));
-                    break;
-                case MarkdownInlineType.Image:
-                    sb.Append(inline.Alt);
-                    break;
-                case MarkdownInlineType.HardBreak:
-                case MarkdownInlineType.SoftBreak:
-                    sb.Append(' ');
-                    break;
-            }
-        }
-        return sb.ToString();
     }
 
     private static List<String> CollectListItemTexts(MarkdownBlock listBlock)
@@ -226,9 +199,9 @@ public sealed class MarkdownWordConverter
             if (item.Type != MarkdownBlockType.ListItem) continue;
             // 取第一段文本
             if (item.Inlines.Count > 0)
-                items.Add(InlinesToPlainText(item.Inlines));
+                items.Add(item.GetPlainText());
             else if (item.Children.Count > 0)
-                items.Add(InlinesToPlainText(item.Children[0].Inlines));
+                items.Add(item.Children[0].GetPlainText());
         }
         return items;
     }

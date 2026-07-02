@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using NewLife.Office.Pdf;
 
 namespace NewLife.Office.Markdown;
 
@@ -31,7 +32,7 @@ public sealed class MarkdownPdfConverter
     /// <returns>PDF 字节数组</returns>
     public Byte[] ToBytes(MarkdownDocument doc)
     {
-        using var pdf = new PdfFluentDocument();
+        using var pdf = new PdfDocumentBuilder();
         Convert(doc, pdf);
         using var ms = new MemoryStream();
         pdf.Save(ms);
@@ -41,7 +42,7 @@ public sealed class MarkdownPdfConverter
     /// <summary>将 Markdown 文档写入 PDF 文档对象</summary>
     /// <param name="doc">Markdown 文档</param>
     /// <param name="pdf">目标 PDF 文档</param>
-    public void Convert(MarkdownDocument doc, PdfFluentDocument pdf)
+    public void Convert(MarkdownDocument doc, PdfDocumentBuilder pdf)
     {
         foreach (var block in doc.Blocks)
         {
@@ -51,13 +52,14 @@ public sealed class MarkdownPdfConverter
     #endregion
 
     #region 块处理
-    private void WriteBlock(MarkdownBlock block, PdfFluentDocument pdf, Int32 depth)
+    private void WriteBlock(MarkdownBlock block, PdfDocumentBuilder pdf, Int32 depth)
     {
         switch (block.Type)
         {
             case MarkdownBlockType.Heading:
-                var headingText = InlinesToPlainText(block.Inlines);
-                var headingSize = block.Level switch
+                var h = (HeadingBlock)block;
+                var headingText = block.GetPlainText();
+                var headingSize = h.Level switch
                 {
                     1 => H1FontSize,
                     2 => H2FontSize,
@@ -70,7 +72,7 @@ public sealed class MarkdownPdfConverter
                 break;
 
             case MarkdownBlockType.Paragraph:
-                var paraText = InlinesToPlainText(block.Inlines);
+                var paraText = block.GetPlainText();
                 if (!String.IsNullOrWhiteSpace(paraText))
                 {
                     pdf.AddText(paraText, BodyFontSize);
@@ -79,8 +81,9 @@ public sealed class MarkdownPdfConverter
                 break;
 
             case MarkdownBlockType.CodeBlock:
+                var cb = (CodeBlock)block;
                 pdf.AddEmptyLine(2f);
-                foreach (var line in block.RawText.Split('\n'))
+                foreach (var line in cb.RawText.Split('\n'))
                 {
                     pdf.AddText(line.TrimEnd(), CodeFontSize, indentX: 20f);
                 }
@@ -93,7 +96,7 @@ public sealed class MarkdownPdfConverter
                     // 引用块内容以缩进形式呈现
                     if (child.Type == MarkdownBlockType.Paragraph)
                     {
-                        var quoteText = InlinesToPlainText(child.Inlines);
+                        var quoteText = child.GetPlainText();
                         pdf.AddText("  " + quoteText, BodyFontSize, indentX: 20f);
                         pdf.AddEmptyLine(2f);
                     }
@@ -106,23 +109,20 @@ public sealed class MarkdownPdfConverter
                 foreach (var item in block.Children)
                 {
                     if (item.Type != MarkdownBlockType.ListItem) continue;
-                    var itemText = item.Inlines.Count > 0
-                        ? InlinesToPlainText(item.Inlines)
-                        : (item.Children.Count > 0 ? InlinesToPlainText(item.Children[0].Inlines) : "");
+                    var itemText = item.GetPlainText();
                     pdf.AddText("• " + itemText, BodyFontSize, indentX: 20f);
                 }
                 pdf.AddEmptyLine(4f);
                 break;
 
             case MarkdownBlockType.OrderedList:
-                var idx = block.OrderedStart;
+                var ol = (OrderedListBlock)block;
+                var idx = ol.OrderedStart;
                 foreach (var item in block.Children)
                 {
                     if (item.Type != MarkdownBlockType.ListItem) continue;
-                    var itemText = item.Inlines.Count > 0
-                        ? InlinesToPlainText(item.Inlines)
-                        : (item.Children.Count > 0 ? InlinesToPlainText(item.Children[0].Inlines) : "");
-                    pdf.AddText($"{idx++}. " + itemText, BodyFontSize, indentX: 20f);
+                    var oItemText = item.GetPlainText();
+                    pdf.AddText($"{idx++}. " + oItemText, BodyFontSize, indentX: 20f);
                 }
                 pdf.AddEmptyLine(4f);
                 break;
@@ -138,13 +138,14 @@ public sealed class MarkdownPdfConverter
                 break;
 
             case MarkdownBlockType.HtmlBlock:
-                if (!String.IsNullOrWhiteSpace(block.RawText))
-                    pdf.AddText(block.RawText.Trim(), BodyFontSize);
+                var hb = (HtmlBlock)block;
+                if (!String.IsNullOrWhiteSpace(hb.RawText))
+                    pdf.AddText(hb.RawText.Trim(), BodyFontSize);
                 break;
         }
     }
 
-    private void WriteTable(MarkdownBlock tableBlock, PdfFluentDocument pdf)
+    private void WriteTable(MarkdownBlock tableBlock, PdfDocumentBuilder pdf)
     {
         var rows = new List<String[]>();
         foreach (var row in tableBlock.Children)
@@ -152,7 +153,7 @@ public sealed class MarkdownPdfConverter
             if (row.Type != MarkdownBlockType.TableRow) continue;
             var cells = row.Children
                 .Where(c => c.Type == MarkdownBlockType.TableCell)
-                .Select(c => InlinesToPlainText(c.Inlines))
+                .Select(c => c.GetPlainText())
                 .ToArray();
             rows.Add(cells);
         }
@@ -161,39 +162,6 @@ public sealed class MarkdownPdfConverter
             pdf.AddTable(rows, firstRowHeader: true);
             pdf.AddEmptyLine(4f);
         }
-    }
-    #endregion
-
-    #region 行内处理
-    private static String InlinesToPlainText(List<MarkdownInline> inlines)
-    {
-        var sb = new System.Text.StringBuilder();
-        foreach (var inline in inlines)
-        {
-            switch (inline.Type)
-            {
-                case MarkdownInlineType.Text:
-                case MarkdownInlineType.Code:
-                case MarkdownInlineType.RawHtml:
-                    sb.Append(inline.Text);
-                    break;
-                case MarkdownInlineType.Strong:
-                case MarkdownInlineType.Emphasis:
-                case MarkdownInlineType.StrongEmphasis:
-                case MarkdownInlineType.Strikethrough:
-                case MarkdownInlineType.Link:
-                    sb.Append(InlinesToPlainText(inline.Children));
-                    break;
-                case MarkdownInlineType.Image:
-                    sb.Append(inline.Alt);
-                    break;
-                case MarkdownInlineType.HardBreak:
-                case MarkdownInlineType.SoftBreak:
-                    sb.Append(' ');
-                    break;
-            }
-        }
-        return sb.ToString();
     }
     #endregion
 }

@@ -85,7 +85,7 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
           .AppendLine("<head>")
           .AppendLine("<meta charset=\"UTF-8\">")
           .AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">")
-          .Append("<title>").Append(HtmlEncode(title)).AppendLine("</title>")
+          .Append("<title>").Append(MarkdownHtmlConverter.HtmlEncode(title)).AppendLine("</title>")
           .AppendLine("<style>")
           .AppendLine("body{font-family:-apple-system,BlinkMacSystemFont,\"Segoe UI\",Helvetica,Arial,sans-serif;font-size:16px;line-height:1.6;max-width:900px;margin:0 auto;padding:2rem;color:#1a1a2e}")
           .AppendLine("h1,h2,h3,h4,h5,h6{margin-top:1.5rem;margin-bottom:.5rem;font-weight:600}")
@@ -113,9 +113,6 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
         return sb.ToString();
     }
 
-    private static String HtmlEncode(String s) => s
-        .Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
-        .Replace("\"", "&quot;");
     #endregion
 
     #region Word/PDF 转换
@@ -195,10 +192,10 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
                 sb.AppendLine();
                 break;
             case MarkdownBlockType.CodeBlock:
-                sb.AppendLine(block.RawText);
+                sb.AppendLine(((CodeBlock)block).RawText);
                 break;
             case MarkdownBlockType.HtmlBlock:
-                sb.AppendLine(block.RawText);
+                sb.AppendLine(((HtmlBlock)block).RawText);
                 break;
             case MarkdownBlockType.ThematicBreak:
                 sb.AppendLine();
@@ -242,17 +239,4 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
         }
     }
     #endregion
-}
-
-/// <summary>Markdown → HTML 转换选项</summary>
-public sealed class MarkdownHtmlOptions
-{
-    /// <summary>是否为代码块添加 language-xxx CSS 类（默认 true）</summary>
-    public Boolean AddLanguageClass { get; set; } = true;
-
-    /// <summary>是否在链接上添加 target="_blank"（默认 false）</summary>
-    public Boolean ExternalLinkTarget { get; set; }
-
-    /// <summary>是否对链接添加 rel="noopener noreferrer"（默认 false）</summary>
-    public Boolean SafeLinks { get; set; }
 }

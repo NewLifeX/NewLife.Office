@@ -3,8 +3,6 @@ namespace NewLife.Office.Markdown;
 /// <summary>Markdown 块级元素类型</summary>
 public enum MarkdownBlockType
 {
-    /// <summary>文档根节点</summary>
-    Document,
     /// <summary>标题（H1–H6，通过 Level 区分）</summary>
     Heading,
     /// <summary>普通段落</summary>

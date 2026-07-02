@@ -29,7 +29,8 @@ internal sealed class MarkdownWriter
         switch (block.Type)
         {
             case MarkdownBlockType.Heading:
-                sb.Append(new String('#', block.Level)).Append(' ');
+                var h = (HeadingBlock)block;
+                sb.Append(new String('#', h.Level)).Append(' ');
                 WriteInlines(sb, block.Inlines);
                 sb.AppendLine();
                 sb.AppendLine();
@@ -43,9 +44,10 @@ internal sealed class MarkdownWriter
                 break;
 
             case MarkdownBlockType.CodeBlock:
-                var fence = block.Language == null || !block.Language.Contains("~") ? "```" : "~~~";
-                sb.Append(pad).Append(fence).AppendLine(block.Language ?? "");
-                foreach (var codeLine in block.RawText.Split('\n'))
+                var cb = (CodeBlock)block;
+                var fence = cb.Language == null || !cb.Language.Contains("~") ? "```" : "~~~";
+                sb.Append(pad).Append(fence).AppendLine(cb.Language ?? "");
+                foreach (var codeLine in cb.RawText.Split('\n'))
                 {
                     sb.Append(pad).AppendLine(codeLine);
                 }
@@ -76,7 +78,8 @@ internal sealed class MarkdownWriter
                 break;
 
             case MarkdownBlockType.OrderedList:
-                var num = block.OrderedStart;
+                var ol = (OrderedListBlock)block;
+                var num = ol.OrderedStart;
                 foreach (var item in block.Children)
                 {
                     WriteListItem(sb, item, true, num++, indent);
@@ -90,7 +93,8 @@ internal sealed class MarkdownWriter
                 break;
 
             case MarkdownBlockType.HtmlBlock:
-                sb.AppendLine(block.RawText);
+                var hb = (HtmlBlock)block;
+                sb.AppendLine(hb.RawText);
                 sb.AppendLine();
                 break;
 
@@ -113,8 +117,9 @@ internal sealed class MarkdownWriter
 
         sb.Append(pad).Append(marker);
 
-        if (item.IsTaskItem)
-            sb.Append(item.IsChecked ? "[x] " : "[ ] ");
+        var li = item as ListItemBlock;
+        if (li != null && li.IsTaskItem)
+            sb.Append(li.IsChecked ? "[x] " : "[ ] ");
 
         if (item.Inlines.Count > 0)
         {
@@ -164,7 +169,8 @@ internal sealed class MarkdownWriter
         sb.Append('|');
         foreach (var cell in headerRow.Children)
         {
-            var align = cell.Alignment;
+            var tc = cell as TableCellBlock;
+            var align = tc?.Alignment ?? "";
             sb.Append(align == "center" ? " :---: " : align == "right" ? " ---: " : " --- ");
             sb.Append('|');
         }

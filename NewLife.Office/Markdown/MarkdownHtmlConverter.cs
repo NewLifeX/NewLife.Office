@@ -67,7 +67,8 @@ internal sealed class MarkdownHtmlConverter
                 sb.AppendLine("</ul>");
                 break;
             case MarkdownBlockType.OrderedList:
-                var start = block.OrderedStart > 1 ? " start=\"" + block.OrderedStart + "\"" : "";
+                var ol = (OrderedListBlock)block;
+                var start = ol.OrderedStart > 1 ? " start=\"" + ol.OrderedStart + "\"" : "";
                 sb.AppendLine("<ol" + start + ">");
                 foreach (var child in block.Children)
                 {
@@ -85,7 +86,8 @@ internal sealed class MarkdownHtmlConverter
                 sb.AppendLine("<hr />");
                 break;
             case MarkdownBlockType.HtmlBlock:
-                sb.AppendLine(block.RawText);
+                var hb = (HtmlBlock)block;
+                sb.AppendLine(hb.RawText);
                 break;
             default:
                 break;
@@ -97,7 +99,8 @@ internal sealed class MarkdownHtmlConverter
     /// <param name="block">标题块</param>
     private void RenderHeading(StringBuilder sb, MarkdownBlock block)
     {
-        var level = block.Level < 1 ? 1 : block.Level > 6 ? 6 : block.Level;
+        var h = (HeadingBlock)block;
+        var level = h.Level < 1 ? 1 : h.Level > 6 ? 6 : h.Level;
         var tag = "h" + level;
         // 生成可链接的锚点 id
         var id = block.GetPlainText().ToLower()
@@ -117,12 +120,13 @@ internal sealed class MarkdownHtmlConverter
     /// <param name="block">代码块</param>
     private void RenderCodeBlock(StringBuilder sb, MarkdownBlock block)
     {
+        var cb = (CodeBlock)block;
         var codeAttr = "";
-        if (_options.AddLanguageClass && !String.IsNullOrEmpty(block.Language))
-            codeAttr = " class=\"language-" + HtmlEncode(block.Language) + "\"";
+        if (_options.AddLanguageClass && !String.IsNullOrEmpty(cb.Language))
+            codeAttr = " class=\"language-" + HtmlEncode(cb.Language) + "\"";
 
         sb.Append("<pre><code" + codeAttr + ">");
-        sb.Append(HtmlEncode(block.RawText ?? ""));
+        sb.Append(HtmlEncode(cb.RawText ?? ""));
         sb.AppendLine("</code></pre>");
     }
 
@@ -131,10 +135,11 @@ internal sealed class MarkdownHtmlConverter
     /// <param name="block">列表项块</param>
     private void RenderListItem(StringBuilder sb, MarkdownBlock block)
     {
+        var li = (ListItemBlock)block;
         sb.Append("<li>");
-        if (block.IsTaskItem)
+        if (li.IsTaskItem)
         {
-            var checked_ = block.IsChecked ? " checked=\"\"" : "";
+            var checked_ = li.IsChecked ? " checked=\"\"" : "";
             sb.Append("<input type=\"checkbox\" disabled=\"\"" + checked_ + " /> ");
         }
 
@@ -195,7 +200,8 @@ internal sealed class MarkdownHtmlConverter
         var tag = isHeader ? "th" : "td";
         foreach (var cell in row.Children)
         {
-            var align = cell.Alignment == null ? "" : " style=\"text-align:" + cell.Alignment + "\"";
+            var tc = (TableCellBlock)cell;
+            var align = tc.Alignment == null ? "" : " style=\"text-align:" + tc.Alignment + "\"";
             sb.Append("<" + tag + align + ">");
             RenderInlines(sb, cell.Inlines);
             sb.AppendLine("</" + tag + ">");
@@ -322,7 +328,7 @@ internal sealed class MarkdownHtmlConverter
     /// <summary>HTML编码文本内容</summary>
     /// <param name="text">原始文本</param>
     /// <returns>编码后文本</returns>
-    private static String HtmlEncode(String text)
+    internal static String HtmlEncode(String text)
     {
         if (text == null || text.Length == 0) return "";
         return text

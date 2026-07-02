@@ -1,0 +1,18 @@
+namespace NewLife.Office.Markdown;
+
+/// <summary>有序列表块</summary>
+public sealed class OrderedListBlock : MarkdownBlock
+{
+    /// <summary>起始序号</summary>
+    public Int32 OrderedStart { get; set; } = 1;
+
+    /// <summary>创建有序列表</summary>
+    /// <param name="items">列表项</param>
+    /// <param name="start">起始序号</param>
+    public OrderedListBlock(IEnumerable<MarkdownBlock> items, Int32 start = 1)
+    {
+        Type = MarkdownBlockType.OrderedList;
+        OrderedStart = start;
+        Children.AddRange(items);
+    }
+}
