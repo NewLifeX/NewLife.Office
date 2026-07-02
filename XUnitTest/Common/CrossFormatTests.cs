@@ -1,6 +1,18 @@
 ﻿using System.ComponentModel;
 using NewLife.Office;
+using NewLife.Office.Calendar;
+using NewLife.Office.Epub;
+using NewLife.Office.Excel;
+using NewLife.Office.Mail;
+using NewLife.Office.Markdown;
 using NewLife.Office.Ods;
+using NewLife.Office.Ole2;
+using NewLife.Office.Pdf;
+using NewLife.Office.Ppt;
+using NewLife.Office.Rtf;
+using NewLife.Office.VCard;
+using NewLife.Office.Word;
+using NewLife.Office.Xps;
 using Xunit;
 
 namespace XUnitTest.Common;
@@ -86,7 +98,7 @@ public class CrossFormatTests : IntegrationTestBase
         var emlPath = Path.Combine(OutputDir, "contact_source.eml");
         var vcfPath = Path.Combine(OutputDir, "extracted_from_eml.vcf");
 
-        var msg = new EmlMessage
+        var msg = new Message
         {
             From = "John Doe <john@example.com>",
             Subject = "联系人提取测试",
@@ -97,11 +109,11 @@ public class CrossFormatTests : IntegrationTestBase
 
         // 从 EML 提取发件人信息创建 VCard
         var readMsg = new EmlReader().Read(emlPath);
-        var contact = new VCardContact
+        var contact = new Contact
         {
             FullName = "John Doe",
         };
-        contact.Emails.Add(new VCardEmail { Address = "john@example.com", Type = "WORK" });
+        contact.Emails.Add(new Email { Address = "john@example.com", Type = "WORK" });
         new VCardWriter().Write(contact, vcfPath);
 
         Assert.True(File.Exists(vcfPath));

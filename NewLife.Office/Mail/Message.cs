@@ -1,14 +1,14 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Mail;
 
 /// <summary>EML 邮件消息（RFC 5322 + MIME）</summary>
 /// <remarks>
 /// 表示一封完整的 EML 格式邮件，包含头部字段、正文和附件。
 /// 支持 text/plain、text/html 正文和 multipart/* 结构。
 /// </remarks>
-public class EmlMessage : ITextExtractable, IMarkdownExtractable
+public class Message : ITextExtractable, IMarkdownExtractable
 {
     #region 属性
 
@@ -43,10 +43,10 @@ public class EmlMessage : ITextExtractable, IMarkdownExtractable
     public String? HtmlBody { get; set; }
 
     /// <summary>附件列表</summary>
-    public List<EmlAttachment> Attachments { get; } = [];
+    public List<Attachment> Attachments { get; } = [];
 
     /// <summary>内嵌图片（Content-ID → 附件）</summary>
-    public Dictionary<String, EmlAttachment> InlineImages { get; } = [];
+    public Dictionary<String, Attachment> InlineImages { get; } = [];
 
     /// <summary>原始头部字段（保留扩展字段）</summary>
     public Dictionary<String, String> Headers { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -107,7 +107,7 @@ public class EmlMessage : ITextExtractable, IMarkdownExtractable
 }
 
 /// <summary>EML 附件</summary>
-public class EmlAttachment
+public class Attachment
 {
     #region 属性
 

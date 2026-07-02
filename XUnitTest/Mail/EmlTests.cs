@@ -1,9 +1,22 @@
 using System.ComponentModel;
 using System.Text;
 using NewLife.Office;
+using NewLife.Office.Calendar;
+using NewLife.Office.Epub;
+using NewLife.Office.Excel;
+using NewLife.Office.Mail;
+using NewLife.Office.Markdown;
+using NewLife.Office.Ods;
+using NewLife.Office.Ole2;
+using NewLife.Office.Pdf;
+using NewLife.Office.Ppt;
+using NewLife.Office.Rtf;
+using NewLife.Office.VCard;
+using NewLife.Office.Word;
+using NewLife.Office.Xps;
 using Xunit;
 
-namespace XUnitTest.Other;
+namespace XUnitTest.Mail;
 
 /// <summary>EML 邮件格式读写测试</summary>
 public class EmlTests
@@ -137,7 +150,7 @@ public class EmlTests
     [DisplayName("写入纯文本邮件")]
     public void Write_PlainText_ContainsHeaders()
     {
-        var msg = new EmlMessage
+        var msg = new Message
         {
             From = "alice@example.com",
             Subject = "Test Subject",
@@ -158,7 +171,7 @@ public class EmlTests
     [DisplayName("写入包含 HTML 和文本的邮件（multipart/alternative）")]
     public void Write_HtmlAndText_MultipartAlternative()
     {
-        var msg = new EmlMessage
+        var msg = new Message
         {
             From = "a@b.com",
             Subject = "Alt Test",
@@ -179,13 +192,13 @@ public class EmlTests
     [DisplayName("写入带附件的邮件（multipart/mixed）")]
     public void Write_WithAttachment_MultipartMixed()
     {
-        var msg = new EmlMessage
+        var msg = new Message
         {
             From = "a@b.com",
             TextBody = "body",
         };
         msg.To.Add("b@c.com");
-        msg.Attachments.Add(new EmlAttachment
+        msg.Attachments.Add(new Attachment
         {
             FileName = "doc.txt",
             ContentType = "text/plain",
@@ -204,7 +217,7 @@ public class EmlTests
     [DisplayName("往返测试：写入后读取还原邮件内容")]
     public void RoundTrip_WriteAndRead_PreservesContent()
     {
-        var original = new EmlMessage
+        var original = new Message
         {
             From = "sender@test.com",
             Subject = "Round-trip Test",
@@ -228,7 +241,7 @@ public class EmlTests
     [DisplayName("写入中文主题使用 Base64 编码")]
     public void Write_ChineseSubject_EncodedAsBase64()
     {
-        var msg = new EmlMessage { From = "a@b.com", Subject = "中文主题" };
+        var msg = new Message { From = "a@b.com", Subject = "中文主题" };
         msg.To.Add("x@y.com");
 
         var writer = new EmlWriter();
@@ -250,7 +263,7 @@ public class EmlTests
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, "test_output.eml");
 
-        var original = new EmlMessage
+        var original = new Message
         {
             From = "test@newlife.org",
             Subject = "集成测试邮件",
@@ -259,7 +272,7 @@ public class EmlTests
         };
         original.To.Add("user@example.com");
         original.Cc.Add("admin@newlife.org");
-        original.Attachments.Add(new EmlAttachment
+        original.Attachments.Add(new Attachment
         {
             FileName = "readme.txt",
             ContentType = "text/plain",

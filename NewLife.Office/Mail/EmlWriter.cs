@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Mail;
 
 /// <summary>EML 邮件文件写入器（RFC 5322 + MIME）</summary>
 /// <remarks>
@@ -17,7 +17,7 @@ public class EmlWriter
     /// <summary>将 EML 消息写入文件</summary>
     /// <param name="message">邮件消息</param>
     /// <param name="path">输出文件路径</param>
-    public void Write(EmlMessage message, String path)
+    public void Write(Message message, String path)
     {
         var content = Build(message);
         File.WriteAllText(path, content, Encoding.UTF8);
@@ -26,7 +26,7 @@ public class EmlWriter
     /// <summary>将 EML 消息写入流</summary>
     /// <param name="message">邮件消息</param>
     /// <param name="stream">可写输出流</param>
-    public void Write(EmlMessage message, Stream stream)
+    public void Write(Message message, Stream stream)
     {
         var content = Build(message);
         var bytes = Encoding.UTF8.GetBytes(content);
@@ -36,7 +36,7 @@ public class EmlWriter
     /// <summary>将 EML 消息序列化为字符串</summary>
     /// <param name="message">邮件消息</param>
     /// <returns>EML 格式的字符串</returns>
-    public String Build(EmlMessage message)
+    public String Build(Message message)
     {
         var sb = new StringBuilder();
         var boundary1 = GenerateBoundary("alt");
@@ -117,7 +117,7 @@ public class EmlWriter
 
     #region 私有方法
 
-    private static void AppendBodyPart(StringBuilder sb, String boundary, EmlMessage message,
+    private static void AppendBodyPart(StringBuilder sb, String boundary, Message message,
         Boolean hasText, Boolean hasHtml, Boolean multiBody)
     {
         if (multiBody)
@@ -158,7 +158,7 @@ public class EmlWriter
         }
     }
 
-    private static void AppendAttachment(StringBuilder sb, String boundary, EmlAttachment att, Boolean inline = false)
+    private static void AppendAttachment(StringBuilder sb, String boundary, Attachment att, Boolean inline = false)
     {
         sb.AppendLine($"--{boundary}");
         sb.AppendLine($"Content-Type: {att.ContentType}");

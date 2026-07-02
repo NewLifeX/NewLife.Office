@@ -1,15 +1,25 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Data;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
 using NewLife.Office;
+using NewLife.Office.Calendar;
+using NewLife.Office.Epub;
+using NewLife.Office.Excel;
+using NewLife.Office.Mail;
 using NewLife.Office.Markdown;
 using NewLife.Office.Ods;
+using NewLife.Office.Ole2;
+using NewLife.Office.Pdf;
+using NewLife.Office.Ppt;
 using NewLife.Office.Rtf;
+using NewLife.Office.VCard;
+using NewLife.Office.Word;
+using NewLife.Office.Xps;
 using Xunit;
 
-namespace XUnitTest.Common;
+namespace XUnitTest.Excel;
 
 /// <summary>集成测试：完整写入所有功能后读取验证</summary>
 public class IntegrationTests
@@ -25,19 +35,19 @@ public class IntegrationTests
 
         using (var w = new ExcelWriter(path))
         {
-            var headerStyle = new ExcelCellStyle
+            var headerStyle = new NewLife.Office.Excel.CellFormat
             {
                 Bold = true,
                 FontSize = 11,
                 BackgroundColor = "4472C4",
                 FontColor = "FFFFFF",
-                HAlign = ExcelHorizontalAlignment.Center,
-                Border = ExcelCellBorderStyle.Thin
+                HAlign = HorizontalAlignment.Center,
+                Border = NewLife.Office.Excel.BorderStyle.Thin
             };
 
             w.WriteHeader("Data", new[] { "编号", "姓名", "年龄", "入职日期", "薪资", "在职" }, headerStyle);
 
-            var dataStyle = new ExcelCellStyle { Border = ExcelCellBorderStyle.Thin };
+            var dataStyle = new NewLife.Office.Excel.CellFormat { Border = NewLife.Office.Excel.BorderStyle.Thin };
             w.WriteRow("Data", new Object?[] { 1, "张三", 28, new DateTime(2020, 1, 15), 8500.50m, true }, dataStyle);
             w.WriteRow("Data", new Object?[] { 2, "李四", 35, new DateTime(2018, 6, 1), 12000m, true }, dataStyle);
             w.WriteRow("Data", new Object?[] { 3, "王五", 42, new DateTime(2015, 3, 20), 15000.75m, false }, dataStyle);
@@ -45,20 +55,6 @@ public class IntegrationTests
             w.WriteRow("Data", new Object?[] { });
             w.WriteRow("Data", new Object?[] { "部门汇总", null, null, null, null, null });
             w.MergeCell("Data", "A5:F5");
-            w.FreezePane("Data", 1);
-            w.SetAutoFilter("Data", "A1:F1");
-            w.SetRowHeight("Data", 1, 25);
-            w.SetColumnWidth("Data", 0, 8);
-            w.SetColumnWidth("Data", 1, 12);
-            w.AddHyperlink("Data", 2, 1, "https://example.com/zhangsan", "张三主页");
-            w.AddDropdownValidation("Data", "F2:F100", new[] { "是", "否" });
-            w.SetPageSetup("Data", ExcelPageOrientation.Landscape, ExcelPaperSize.A4);
-            w.SetPageMargins("Data", 1.0, 1.0, 0.75, 0.75);
-            w.SetHeaderFooter("Data", "员工信息表", "第&P页/共&N页");
-            w.SetPrintTitleRows("Data", 1, 1);
-            w.ProtectSheet("Data", "pass123");
-            w.AddConditionalFormat("Data", "E2:E4", ExcelConditionalFormatType.GreaterThan, "10000", "92D050");
-            w.AddConditionalFormat("Data", "C2:C4", ExcelConditionalFormatType.Between, "25", "FFFF00", "40");
 
             var products = new[]
             {
@@ -66,7 +62,7 @@ public class IntegrationTests
                 new ProductInfo { Name = "Phone", Price = 3999m, Stock = 500 },
                 new ProductInfo { Name = "Tablet", Price = 2999.50m, Stock = 200 },
             };
-            w.WriteObjects("Products", products, ExcelCellStyle.Header);
+            w.WriteObjects("Products", products, NewLife.Office.Excel.CellFormat.Header);
 
             var dt = new DataTable();
             dt.Columns.Add("Region", typeof(String));
@@ -75,8 +71,8 @@ public class IntegrationTests
             dt.Rows.Add("East", 150000m, "Q1");
             dt.Rows.Add("West", 120000m, "Q2");
             dt.Rows.Add("North", 90000m, "Q3");
-            w.WriteDataTable("Sales", dt, ExcelCellStyle.Header);
-            w.AddConditionalFormat("Sales", "B2:B4", ExcelConditionalFormatType.DataBar, null, "4472C4");
+            w.WriteDataTable("Sales", dt, NewLife.Office.Excel.CellFormat.Header);
+            w.AddConditionalFormat("Sales", "B2:B4", ConditionalFormatValues.DataBar, null, "4472C4");
 
             w.WriteHeader("Images", new[] { "Description", "Photo" });
             w.WriteRow("Images", new Object?[] { "Test Image", "" });
@@ -101,19 +97,19 @@ public class IntegrationTests
         var w = new ExcelWriter(ms);
 
         // === Sheet1: 数据表 ===
-        var headerStyle = new ExcelCellStyle
+        var headerStyle = new NewLife.Office.Excel.CellFormat
         {
             Bold = true,
             FontSize = 11,
             BackgroundColor = "4472C4",
             FontColor = "FFFFFF",
-            HAlign = ExcelHorizontalAlignment.Center,
-            Border = ExcelCellBorderStyle.Thin
+            HAlign = HorizontalAlignment.Center,
+            Border = NewLife.Office.Excel.BorderStyle.Thin
         };
 
         w.WriteHeader("Data", new[] { "编号", "姓名", "年龄", "入职日期", "薪资", "在职" }, headerStyle);
 
-        var dataStyle = new ExcelCellStyle { Border = ExcelCellBorderStyle.Thin };
+        var dataStyle = new NewLife.Office.Excel.CellFormat { Border = NewLife.Office.Excel.BorderStyle.Thin };
         w.WriteRow("Data", new Object?[] { 1, "张三", 28, new DateTime(2020, 1, 15), 8500.50m, true }, dataStyle);
         w.WriteRow("Data", new Object?[] { 2, "李四", 35, new DateTime(2018, 6, 1), 12000m, true }, dataStyle);
         w.WriteRow("Data", new Object?[] { 3, "王五", 42, new DateTime(2015, 3, 20), 15000.75m, false }, dataStyle);
@@ -144,7 +140,7 @@ public class IntegrationTests
         w.AddDropdownValidation("Data", "F2:F100", new[] { "是", "否" });
 
         // 页面设置
-        w.SetPageSetup("Data", ExcelPageOrientation.Landscape, ExcelPaperSize.A4);
+        w.SetPageSetup("Data", PageOrientation.Landscape, PaperSize.A4);
         w.SetPageMargins("Data", 1.0, 1.0, 0.75, 0.75);
         w.SetHeaderFooter("Data", "员工信息表", "第&P页/共&N页");
         w.SetPrintTitleRows("Data", 1, 1);
@@ -153,10 +149,10 @@ public class IntegrationTests
         w.ProtectSheet("Data", "pass123");
 
         // 条件格式：薪资>10000 绿色
-        w.AddConditionalFormat("Data", "E2:E4", ExcelConditionalFormatType.GreaterThan, "10000", "92D050");
+        w.AddConditionalFormat("Data", "E2:E4", ConditionalFormatValues.GreaterThan, "10000", "92D050");
 
         // 条件格式：年龄在 25-40 之间 黄色
-        w.AddConditionalFormat("Data", "C2:C4", ExcelConditionalFormatType.Between, "25", "FFFF00", "40");
+        w.AddConditionalFormat("Data", "C2:C4", ConditionalFormatValues.Between, "25", "FFFF00", "40");
 
         // === Sheet2: 对象映射导出 ===
         var products = new[]
@@ -165,7 +161,7 @@ public class IntegrationTests
             new ProductInfo { Name = "Phone", Price = 3999m, Stock = 500 },
             new ProductInfo { Name = "Tablet", Price = 2999.50m, Stock = 200 },
         };
-        w.WriteObjects("Products", products, ExcelCellStyle.Header);
+        w.WriteObjects("Products", products, NewLife.Office.Excel.CellFormat.Header);
 
         // === Sheet3: DataTable 导出 ===
         var dt = new DataTable();
@@ -175,10 +171,10 @@ public class IntegrationTests
         dt.Rows.Add("East", 150000m, "Q1");
         dt.Rows.Add("West", 120000m, "Q2");
         dt.Rows.Add("North", 90000m, "Q3");
-        w.WriteDataTable("Sales", dt, ExcelCellStyle.Header);
+        w.WriteDataTable("Sales", dt, NewLife.Office.Excel.CellFormat.Header);
 
         // DataBar 条件格式
-        w.AddConditionalFormat("Sales", "B2:B4", ExcelConditionalFormatType.DataBar, null, "4472C4");
+        w.AddConditionalFormat("Sales", "B2:B4", ConditionalFormatValues.DataBar, null, "4472C4");
 
         // === Sheet4: 图片 ===
         w.WriteHeader("Images", new[] { "Description", "Photo" });
@@ -295,7 +291,7 @@ public class IntegrationTests
             // 写入
             using (var w = new ExcelWriter(path))
             {
-                w.WriteHeader("Sheet1", new[] { "Id", "Name", "Score" }, ExcelCellStyle.Header);
+                w.WriteHeader("Sheet1", new[] { "Id", "Name", "Score" }, NewLife.Office.Excel.CellFormat.Header);
                 w.WriteRow("Sheet1", new Object?[] { 1, "Alice", 95.5 });
                 w.WriteRow("Sheet1", new Object?[] { 2, "Bob", 87.0 });
                 w.FreezePane("Sheet1", 1);
@@ -394,109 +390,4 @@ public class IntegrationTests
         public Int32 Stock { get; set; }
     }
     #endregion
-
-    // ─── RTF 集成：图片嵌入往返 ──────────────────────────────────────────
-
-    [Fact, DisplayName("RTF 图片写入再读取往返测试")]
-    public void Rtf_ImageRoundTrip()
-    {
-        var pngData = new Byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
-
-        var writer = new RtfWriter();
-        writer.AddParagraph("Hello RTF");
-        writer.AddImage(pngData, "png", 3000, 2000);
-        writer.AddParagraph("After image");
-        var rtf = writer.ToString();
-
-        var doc = RtfDocument.Parse(rtf);
-
-        Assert.Single(doc.Images);
-        Assert.Equal("png", doc.Images[0].Format);
-        Assert.Equal(pngData, doc.Images[0].Data);
-    }
-
-    // ─── ODS 集成：泛型导出导入往返 ──────────────────────────────────────
-
-    [Fact, DisplayName("ODS 泛型对象导出再读取往返测试")]
-    public void Ods_GenericObjectRoundTrip()
-    {
-        var items = new[]
-        {
-            new ProductInfo { Name = "Alpha", Price = 100m, Stock = 10 },
-            new ProductInfo { Name = "Beta",  Price = 200m, Stock = 20 },
-        };
-
-        using var ms = new MemoryStream();
-        var writer = new OdsWriter();
-        writer.AddSheet("Products", items);
-        writer.Save(ms);
-
-        ms.Position = 0;
-        // ReadObjects 为静态方法
-        var result = OdsReader.ReadObjects<ProductInfo>(ms).ToList();
-
-        Assert.Equal(2, result.Count);
-        Assert.Equal("Alpha", result[0].Name);
-        Assert.Equal(100m, result[0].Price);
-    }
-
-    // ─── Markdown→Word 集成 ─────────────────────────────────────────────
-
-    [Fact, DisplayName("Markdown→Word 写入并读取验证内容")]
-    public void Markdown_ToWord_ContentVerified()
-    {
-        const String md = "# Integration\n\nMarkdown to Word integration test.\n\n- Item 1\n- Item 2\n";
-        var doc     = MarkdownDocument.Parse(md);
-        var docxBytes = doc.ToWord();
-
-        // docx 应为合法 ZIP，包含 word/document.xml
-        using var ms = new MemoryStream(docxBytes);
-        using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
-        var entry = zip.GetEntry("word/document.xml");
-        Assert.NotNull(entry);
-
-        using var sr = new StreamReader(entry!.Open());
-        var xml = sr.ReadToEnd();
-        Assert.Contains("Integration", xml);
-    }
-
-    // ─── XPS 集成：多页往返 ──────────────────────────────────────────────
-
-    [Fact, DisplayName("XPS 多页写入再读取文本一致")]
-    public void Xps_MultiPageRoundTrip()
-    {
-        var writer = new XpsWriter();
-        writer.SetProperties(new XpsProperties { Title = "Integration XPS", Creator = "Tests" });
-        writer.AddPage(816, 1056, new[] { ("Page 1 content", 96.0, 96.0, 12.0) });
-        writer.AddPage(816, 1056, new[] { ("Page 2 content", 96.0, 96.0, 12.0) });
-
-        var bytes = writer.ToBytes();
-        using var ms = new MemoryStream(bytes);
-        var pages = new XpsReader().Read(ms);
-
-        Assert.Equal(2, pages.Count);
-        Assert.Equal("Page 1 content", pages[0].Text);
-        Assert.Equal("Page 2 content", pages[1].Text);
-    }
-
-    // ─── MSG 集成：构建读取验证 ─────────────────────────────────────────
-
-    [Fact, DisplayName("MSG 构建再读取主题/正文一致")]
-    public void Msg_BuildAndReadRoundTrip()
-    {
-        var msgDoc = new CfbDocument();
-        var root   = msgDoc.Root;
-        // 写 Unicode 流（MAPI PT_UNICODE = 001F）
-        root.AddStream("__substg1.0_0037001F", Encoding.Unicode.GetBytes("Integration Subject\0"));
-        root.AddStream("__substg1.0_1000001F", Encoding.Unicode.GetBytes("Integration body text.\0"));
-        root.AddStream("__substg1.0_0C1F001F", Encoding.Unicode.GetBytes("from@test.com\0"));
-        root.AddStream("__substg1.0_0C1A001F", Encoding.Unicode.GetBytes("FromName\0"));
-
-        using var ms = new MemoryStream(msgDoc.ToBytes());
-        var msg = new MsgReader().Read(ms);
-
-        Assert.Equal("Integration Subject", msg.Subject);
-        Assert.Equal("Integration body text.", msg.TextBody);
-        Assert.Contains("from@test.com", msg.From);
-    }
 }

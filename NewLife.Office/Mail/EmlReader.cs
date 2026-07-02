@@ -1,7 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Mail;
 
 /// <summary>EML 邮件文件读取器（RFC 5322 + MIME）</summary>
 /// <remarks>
@@ -16,7 +16,7 @@ public class EmlReader
     /// <summary>从文件路径读取 EML</summary>
     /// <param name="path">EML 文件路径</param>
     /// <returns>解析后的邮件消息</returns>
-    public EmlMessage Read(String path)
+    public Message Read(String path)
     {
         var bytes = File.ReadAllBytes(path);
         return Parse(bytes);
@@ -25,7 +25,7 @@ public class EmlReader
     /// <summary>从流读取 EML</summary>
     /// <param name="stream">包含 EML 内容的可读流</param>
     /// <returns>解析后的邮件消息</returns>
-    public EmlMessage Read(Stream stream)
+    public Message Read(Stream stream)
     {
         using var ms = new MemoryStream();
         stream.CopyTo(ms);
@@ -35,7 +35,7 @@ public class EmlReader
     /// <summary>从字节数组解析 EML</summary>
     /// <param name="data">EML 原始字节</param>
     /// <returns>解析后的邮件消息</returns>
-    public EmlMessage Parse(Byte[] data)
+    public Message Parse(Byte[] data)
     {
         // 用 Latin-1 保白字节（Unicode 0-255 与 ISO-8859-1 一一对应）
         var text = BytesToLatin1(data);
@@ -45,9 +45,9 @@ public class EmlReader
     /// <summary>从文本字符串解析 EML</summary>
     /// <param name="text">EML 文本内容（Latin-1 编码保持字节完整）</param>
     /// <returns>解析后的邮件消息</returns>
-    public EmlMessage ParseText(String text)
+    public Message ParseText(String text)
     {
-        var msg = new EmlMessage();
+        var msg = new Message();
         var lines = SplitLines(text);
         var pos = 0;
 
@@ -153,7 +153,7 @@ public class EmlReader
         return headers;
     }
 
-    private static void ParseBody(EmlMessage msg, String contentType, String body,
+    private static void ParseBody(Message msg, String contentType, String body,
         Dictionary<String, String> headers)
     {
         var ctLower = contentType.ToLowerInvariant();
@@ -182,7 +182,7 @@ public class EmlReader
         }
     }
 
-    private static void ParseMultipart(EmlMessage msg, String body, String boundary, Boolean alternative)
+    private static void ParseMultipart(Message msg, String body, String boundary, Boolean alternative)
     {
         var delimiter = "--" + boundary;
         var endDelimiter = "--" + boundary + "--";
@@ -214,7 +214,7 @@ public class EmlReader
         }
     }
 
-    private static void ProcessPart(EmlMessage msg, String partText, Boolean alternative)
+    private static void ProcessPart(Message msg, String partText, Boolean alternative)
     {
         var lines = SplitLines(partText);
         var pos = 0;
@@ -257,7 +257,7 @@ public class EmlReader
         if (isAttachment || (!ctLower.StartsWith("text/", StringComparison.Ordinal) && !ctLower.StartsWith("multipart/", StringComparison.Ordinal)))
         {
             // 附件
-            var att = new EmlAttachment
+            var att = new Attachment
             {
                 ContentType = contentType.Split(';')[0].Trim(),
                 ContentId = contentId?.Trim(),

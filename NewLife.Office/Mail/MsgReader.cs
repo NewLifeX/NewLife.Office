@@ -1,7 +1,8 @@
 using System.Text;
 using NewLife.Buffers;
+using NewLife.Office.Ole2;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Mail;
 
 /// <summary>Outlook MSG 邮件文件读取器（OLE2/CFB 容器，MAPI 属性）</summary>
 /// <remarks>
@@ -53,7 +54,7 @@ public class MsgReader
     /// <summary>从文件路径读取 MSG</summary>
     /// <param name="path">MSG 文件路径</param>
     /// <returns>解析后的邮件消息</returns>
-    public EmlMessage Read(String path)
+    public Message Read(String path)
     {
         using var doc = CfbDocument.Open(path);
         return ParseMsg(doc.Root);
@@ -62,7 +63,7 @@ public class MsgReader
     /// <summary>从流读取 MSG</summary>
     /// <param name="stream">包含 MSG OLE2 内容的可寻址流</param>
     /// <returns>解析后的邮件消息</returns>
-    public EmlMessage Read(Stream stream)
+    public Message Read(Stream stream)
     {
         using var doc = CfbDocument.Open(stream, leaveOpen: true);
         return ParseMsg(doc.Root);
@@ -72,9 +73,9 @@ public class MsgReader
 
     #region 解析核心
 
-    private EmlMessage ParseMsg(CfbStorage root)
+    private Message ParseMsg(CfbStorage root)
     {
-        var msg = new EmlMessage();
+        var msg = new Message();
 
         msg.Subject  = ReadString(root, PidTagSubject);
         msg.TextBody = ReadString(root, PidTagBody);
@@ -166,7 +167,7 @@ public class MsgReader
         return 0;
     }
 
-    private static void ParseRecipients(CfbStorage root, EmlMessage msg)
+    private static void ParseRecipients(CfbStorage root, Message msg)
     {
         // 如果 To 已经有内容（来自 DisplayTo），则不再重复添加
         var alreadyHasTo = msg.To.Count > 0;
@@ -207,7 +208,7 @@ public class MsgReader
         }
     }
 
-    private static void ParseAttachments(CfbStorage root, EmlMessage msg)
+    private static void ParseAttachments(CfbStorage root, Message msg)
     {
         foreach (var storage in root.Storages)
         {
@@ -224,7 +225,7 @@ public class MsgReader
 
             if (dataBinStream == null) continue;
 
-            var attach = new EmlAttachment
+            var attach = new Attachment
             {
                 FileName    = filename ?? "attachment",
                 ContentType = mimeTag ?? "application/octet-stream",
