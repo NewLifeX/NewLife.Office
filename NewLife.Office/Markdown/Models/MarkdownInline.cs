@@ -106,6 +106,12 @@ public sealed class MarkdownInline
     /// <summary>创建软换行节点</summary>
     /// <returns>行内元素</returns>
     public static MarkdownInline CreateSoftBreak() => new() { Type = MarkdownInlineType.SoftBreak };
+
+    /// <summary>创建原始 HTML 行内片段</summary>
+    /// <param name="html">HTML 文本</param>
+    /// <returns>行内元素</returns>
+    public static MarkdownInline CreateRawHtml(String html) =>
+        new() { Type = MarkdownInlineType.RawHtml, Text = html };
     #endregion
 
     #region 方法

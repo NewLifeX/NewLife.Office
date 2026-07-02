@@ -52,14 +52,38 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
         var text = File.ReadAllText(path, Encoding.UTF8);
         return Parse(text);
     }
+
+    /// <summary>从 HTML 字符串解析文档（反向转换，MD04）</summary>
+    /// <param name="html">HTML 文本</param>
+    /// <param name="options">转换选项（null 使用默认）</param>
+    /// <returns>已解析的文档对象</returns>
+    /// <remarks>
+    /// 支持 h1-h6/p/em/strong/b/i/a/img/ul/ol/li/table/tr/td/th/blockquote/code/pre/hr/br/del 等常用标签。
+    /// </remarks>
+    public static MarkdownDocument FromHtml(String html, HtmlToMarkdownOptions? options = null)
+    {
+        if (String.IsNullOrEmpty(html)) return new MarkdownDocument();
+        return new HtmlToMarkdownConverter(options).Convert(html);
+    }
+
+    /// <summary>从 HTML 流解析文档</summary>
+    /// <param name="stream">输入流（UTF-8 或带 BOM）</param>
+    /// <param name="options">转换选项（null 使用默认）</param>
+    /// <returns>已解析的文档对象</returns>
+    public static MarkdownDocument FromHtml(Stream stream, HtmlToMarkdownOptions? options = null)
+    {
+        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        return FromHtml(reader.ReadToEnd(), options);
+    }
     #endregion
 
     #region 输出
     /// <summary>序列化为 Markdown 文本</summary>
+    /// <param name="bulletChar">无序列表项目符号（默认 "-"），可设为 "*" 或 "+"</param>
     /// <returns>Markdown 字符串</returns>
-    public String ToMarkdown()
+    public String ToMarkdown(String bulletChar = "-")
     {
-        var writer = new MarkdownWriter();
+        var writer = new MarkdownWriter(bulletChar);
         return writer.ToMarkdown(this);
     }
 

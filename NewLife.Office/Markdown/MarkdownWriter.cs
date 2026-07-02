@@ -6,6 +6,19 @@ namespace NewLife.Office.Markdown;
 /// <remarks>将 <see cref="MarkdownDocument"/> 序列化为 CommonMark + GFM 格式的 Markdown 文本。</remarks>
 internal sealed class MarkdownWriter
 {
+    #region 属性
+    private readonly String _bulletChar;
+    #endregion
+
+    #region 构造
+    /// <summary>实例化</summary>
+    /// <param name="bulletChar">无序列表项目符号</param>
+    public MarkdownWriter(String bulletChar = "-")
+    {
+        _bulletChar = bulletChar ?? "-";
+    }
+    #endregion
+
     #region 入口
     /// <summary>将文档序列化为 Markdown 字符串</summary>
     /// <param name="doc">文档</param>
@@ -23,7 +36,7 @@ internal sealed class MarkdownWriter
     #endregion
 
     #region 块
-    private static void WriteBlock(StringBuilder sb, MarkdownBlock block, Int32 indent)
+    private void WriteBlock(StringBuilder sb, MarkdownBlock block, Int32 indent)
     {
         var pad = new String(' ', indent);
         switch (block.Type)
@@ -105,7 +118,7 @@ internal sealed class MarkdownWriter
         }
     }
 
-    private static void WriteListItem(StringBuilder sb, MarkdownBlock item, Boolean ordered,
+    private void WriteListItem(StringBuilder sb, MarkdownBlock item, Boolean ordered,
         Int32 number, Int32 indent)
     {
         var pad = new String(' ', indent);
@@ -113,7 +126,7 @@ internal sealed class MarkdownWriter
         if (ordered)
             marker = $"{number}. ";
         else
-            marker = "- ";
+            marker = _bulletChar + " ";
 
         sb.Append(pad).Append(marker);
 
@@ -125,6 +138,16 @@ internal sealed class MarkdownWriter
         {
             WriteInlines(sb, item.Inlines);
             sb.AppendLine();
+
+            // 如果有子块（嵌套列表等），继续输出子块
+            if (item.Children.Count > 0)
+            {
+                var childIndent = indent + marker.Length;
+                foreach (var child in item.Children)
+                {
+                    WriteBlock(sb, child, childIndent);
+                }
+            }
         }
         else if (item.Children.Count > 0)
         {
@@ -150,7 +173,7 @@ internal sealed class MarkdownWriter
         }
     }
 
-    private static void WriteTable(StringBuilder sb, MarkdownBlock table)
+    private void WriteTable(StringBuilder sb, MarkdownBlock table)
     {
         if (table.Children.Count == 0) return;
         var headerRow = table.Children[0];
@@ -193,7 +216,7 @@ internal sealed class MarkdownWriter
     #endregion
 
     #region 行内
-    private static void WriteInlines(StringBuilder sb, List<MarkdownInline> inlines)
+    private void WriteInlines(StringBuilder sb, List<MarkdownInline> inlines)
     {
         foreach (var inline in inlines)
         {
@@ -201,7 +224,7 @@ internal sealed class MarkdownWriter
         }
     }
 
-    private static void WriteInline(StringBuilder sb, MarkdownInline inline)
+    private void WriteInline(StringBuilder sb, MarkdownInline inline)
     {
         switch (inline.Type)
         {

@@ -153,7 +153,7 @@ public class MarkdownTests
     public void Parse_TaskItem_Unchecked()
     {
         var doc = MarkdownDocument.Parse("- [ ] Todo item");
-        var item = doc.Blocks[0].Children[0];
+        var item = (ListItemBlock)doc.Blocks[0].Children[0];
         Assert.True(item.IsTaskItem);
         Assert.False(item.IsChecked);
     }
