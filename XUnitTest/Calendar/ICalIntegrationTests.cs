@@ -1,10 +1,10 @@
 ﻿using System.ComponentModel;
 using NewLife.Office;
+using NewLife.Office.Calendar;
 using Xunit;
-
 using XUnitTest.Common;
 
-namespace XUnitTest.Other;
+namespace XUnitTest.Calendar;
 
 /// <summary>iCal 日历格式集成测试</summary>
 public class ICalIntegrationTests : IntegrationTestBase

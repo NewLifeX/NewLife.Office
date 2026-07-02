@@ -1,6 +1,6 @@
 ﻿using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Calendar;
 
 /// <summary>iCal 日历文档（RFC 5545）</summary>
 /// <remarks>包含一组日历事件（VEVENT）和待办（VTODO）</remarks>

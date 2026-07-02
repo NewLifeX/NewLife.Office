@@ -2,7 +2,7 @@
 using System.Text;
 using System.Xml;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Epub;
 
 /// <summary>EPUB 电子书读取器，支持 EPUB 2/3</summary>
 public class EpubReader

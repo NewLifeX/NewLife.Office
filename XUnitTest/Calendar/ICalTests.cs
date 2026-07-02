@@ -1,8 +1,9 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using NewLife.Office;
+using NewLife.Office.Calendar;
 using Xunit;
 
-namespace XUnitTest.Other;
+namespace XUnitTest.Calendar;
 
 /// <summary>iCal 日历格式读写测试</summary>
 public class ICalTests

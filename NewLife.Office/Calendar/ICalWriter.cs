@@ -1,6 +1,6 @@
-using System.Text;
+﻿using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Calendar;
 
 /// <summary>iCal 日历文件写入器（RFC 5545）</summary>
 /// <remarks>

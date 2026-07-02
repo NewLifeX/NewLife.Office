@@ -1,7 +1,7 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Epub;
 
 /// <summary>EPUB 电子书写入器，生成 EPUB 3 格式</summary>
 public class EpubWriter

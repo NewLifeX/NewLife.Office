@@ -1,7 +1,7 @@
 ﻿using System.Text;
 using System.Text.RegularExpressions;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Epub;
 
 /// <summary>EPUB 电子书文档模型</summary>
 public class EpubDocument : ITextExtractable, IMarkdownExtractable

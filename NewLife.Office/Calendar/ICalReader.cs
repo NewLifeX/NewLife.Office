@@ -1,7 +1,7 @@
 ﻿using System.Globalization;
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Calendar;
 
 /// <summary>iCal 日历文件读取器（RFC 5545）</summary>
 /// <remarks>
