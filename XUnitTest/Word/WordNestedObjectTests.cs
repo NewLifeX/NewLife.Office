@@ -1,4 +1,17 @@
 using NewLife.Office;
+using NewLife.Office.Calendar;
+using NewLife.Office.Epub;
+using NewLife.Office.Excel;
+using NewLife.Office.Mail;
+using NewLife.Office.Markdown;
+using NewLife.Office.Ods;
+using NewLife.Office.Ole2;
+using NewLife.Office.Pdf;
+using NewLife.Office.Ppt;
+using NewLife.Office.Rtf;
+using NewLife.Office.VCard;
+using NewLife.Office.Word;
+using NewLife.Office.Xps;
 using Xunit;
 
 namespace XUnitTest.Word;

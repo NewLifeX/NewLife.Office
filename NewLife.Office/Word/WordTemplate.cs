@@ -2,7 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word 模板填充器</summary>
 /// <remarks>

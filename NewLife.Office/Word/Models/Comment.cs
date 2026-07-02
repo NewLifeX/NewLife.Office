@@ -1,11 +1,11 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word 批注（审阅注释）</summary>
 /// <remarks>
 /// 对应 OOXML <c>comments.xml</c> 中的 <c>w:comment</c> 元素。
 /// <example>
 /// <code>
-/// var comment = new WordComment
+/// var comment = new Comment
 /// {
 ///     Id = 1,
 ///     Author = "张三",
@@ -16,7 +16,7 @@ namespace NewLife.Office;
 /// </code>
 /// </example>
 /// </remarks>
-public class WordComment
+public class Comment
 {
     #region 属性
     /// <summary>批注 ID（文档内唯一）</summary>
@@ -35,6 +35,6 @@ public class WordComment
     public String? Text { get; set; }
 
     /// <summary>批注内容段落列表（支持富文本格式），优先级高于 Text</summary>
-    public List<WordParagraph> Paragraphs { get; set; } = [];
+    public List<Paragraph> Paragraphs { get; set; } = [];
     #endregion
 }

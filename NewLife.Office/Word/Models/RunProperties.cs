@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Word;
 
 /// <summary>文字格式属性</summary>
-public class WordRunProperties
+public class RunProperties
 {
     #region 属性
     /// <summary>粗体</summary>
@@ -31,7 +31,7 @@ public class WordRunProperties
     /// <summary>下标（与 Superscript 互斥，对应 OOXML w:vertAlign w:val="subscript"）</summary>
     public Boolean Subscript { get; set; }
 
-    /// <summary>下划线样式。设置任意值即自动视为 Underline=true；支持 single/double/dotted/dash/wave/thick/wavyDouble/words 等，见 <see cref="WordUnderlineStyles"/></summary>
+    /// <summary>下划线样式。设置任意值即自动视为 Underline=true；支持 single/double/dotted/dash/wave/thick/wavyDouble/words 等，见 <see cref="UnderlineStyles"/></summary>
     /// <remarks>为 null 且 Underline=true 时 Writer 输出默认 single；为 null 且 Underline=false 时不输出下划线。</remarks>
     public String? UnderlineStyle { get; set; }
 

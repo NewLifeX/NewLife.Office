@@ -2,7 +2,7 @@
 using System.Text;
 using System.Xml;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word docx 转 HTML 转换器</summary>
 /// <remarks>

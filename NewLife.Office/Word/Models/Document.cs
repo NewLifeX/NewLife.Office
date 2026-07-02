@@ -1,10 +1,10 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word 文档完整模型，承载读写往返所需全部信息</summary>
 /// <remarks>
 /// 纯数据容器（POCO），不含读写逻辑。
 /// 由 <see cref="WordReader.ReadDocument"/> 产出，
-/// 由 <see cref="WordWriter.Save(String, WordDocument)"/> 消费。
+/// 由 <see cref="WordWriter.Save(String, Document)"/> 消费。
 /// <para>典型用法：</para>
 /// <code>
 /// // 读取
@@ -13,24 +13,24 @@ namespace NewLife.Office;
 ///
 /// // 修改
 /// doc.DocumentProperties.Title = "新标题";
-/// doc.Elements.Insert(0, new WordElement { Type = WordElementType.Paragraph, Paragraph = new WordParagraph { Style = WordParagraphStyle.Heading1, Runs = { new WordRun { Text = "新增标题" } } } });
+/// doc.Elements.Insert(0, new Element { Type = ElementType.Paragraph, Paragraph = new Paragraph { Style = ParagraphStyle.Heading1, Runs = { new Run { Text = "新增标题" } } } });
 ///
 /// // 写入
 /// using var writer = new WordWriter();
 /// writer.Save("output.docx", doc);
 /// </code>
 /// </remarks>
-public class WordDocument
+public class Document
 {
     #region 属性
     /// <summary>文档元素列表（段落/表格/图片），按文档顺序排列</summary>
-    public List<WordElement> Elements { get; set; } = [];
+    public List<Element> Elements { get; set; } = [];
 
     /// <summary>页面设置（尺寸/边距/方向/页眉页脚）</summary>
-    public WordPageSettings PageSettings { get; set; } = new();
+    public PageSettings PageSettings { get; set; } = new();
 
     /// <summary>文档属性（标题/作者/主题/描述）</summary>
-    public WordDocumentProperties DocumentProperties { get; set; } = new();
+    public DocumentProperties DocumentProperties { get; set; } = new();
 
     /// <summary>图片数据字典，key 为关系ID（如 rId4），value 为(扩展名, 字节数据)</summary>
     public Dictionary<String, (String Extension, Byte[] Data)> Images { get; set; } = [];
@@ -45,22 +45,22 @@ public class WordDocument
     public String? FooterText { get; set; }
 
     /// <summary>富文本页眉列表（default/first/even 三种类型），Writer 优先使用，为空时回退到 HeaderText</summary>
-    public List<WordHeader> Headers { get; set; } = [];
+    public List<Header> Headers { get; set; } = [];
 
     /// <summary>富文本页脚列表（default/first/even 三种类型），Writer 优先使用，为空时回退到 FooterText</summary>
-    public List<WordFooter> Footers { get; set; } = [];
+    public List<Footer> Footers { get; set; } = [];
 
     /// <summary>文档批注列表（审阅评论）</summary>
-    public List<WordComment> Comments { get; set; } = [];
+    public List<Comment> Comments { get; set; } = [];
 
     /// <summary>内容控件列表（SDT）</summary>
-    public List<WordSdtElement> SdtElements { get; set; } = [];
+    public List<SdtElement> SdtElements { get; set; } = [];
 
     /// <summary>自定义 XML 部件（customXml/item*.xml），Key 为部件名（如 item1.xml），Value 为 XML 原始字节</summary>
     public Dictionary<String, Byte[]> CustomXmlParts { get; set; } = [];
 
     /// <summary>编号/列表定义（程序化创建列表时使用，与 NumberingXml 二选一）</summary>
-    public WordNumbering? Numbering { get; set; }
+    public Numbering? Numbering { get; set; }
 
     /// <summary>是否启用只读保护</summary>
     public Boolean ProtectionReadOnly { get; set; }

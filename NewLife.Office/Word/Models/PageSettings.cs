@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Word;
 
 /// <summary>页面设置</summary>
-public class WordPageSettings
+public class PageSettings
 {
     #region 属性
     /// <summary>页面宽度（twips，1440 twips = 1英寸）</summary>
@@ -41,10 +41,10 @@ public class WordPageSettings
     public Int32 ColumnSpacing { get; set; } = 720;
 
     /// <summary>页面边框设置（null 表示无边框）</summary>
-    public WordPageBorder? PageBorder { get; set; }
+    public PageBorder? PageBorder { get; set; }
 
     /// <summary>行号设置（null 表示无行号）</summary>
-    public WordLineNumberSettings? LineNumber { get; set; }
+    public LineNumberSettings? LineNumber { get; set; }
 
     /// <summary>首页不同页眉页脚（对应 w:titlePg）</summary>
     public Boolean TitlePage { get; set; }
@@ -55,7 +55,7 @@ public class WordPageSettings
 }
 
 /// <summary>行号设置</summary>
-public class WordLineNumberSettings
+public class LineNumberSettings
 {
     /// <summary>起始编号（默认 1）</summary>
     public Int32 Start { get; set; } = 1;
@@ -71,7 +71,7 @@ public class WordLineNumberSettings
 }
 
 /// <summary>页面边框设置</summary>
-public class WordPageBorder
+public class PageBorder
 {
     /// <summary>上边框样式（single/double/dotted/dash/thick/wave 等）</summary>
     public String? Top { get; set; }

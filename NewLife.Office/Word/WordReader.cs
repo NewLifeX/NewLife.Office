@@ -2,7 +2,7 @@
 using System.Text;
 using System.Xml;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word docx 读取器</summary>
 /// <remarks>
@@ -125,9 +125,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
     /// <summary>获取文档属性</summary>
     /// <returns>属性对象</returns>
-    public WordProperties GetProperties()
+    public Properties GetProperties()
     {
-        var props = new WordProperties();
+        var props = new Properties();
         var entry = _zip.GetEntry("docProps/core.xml");
         if (entry == null) return props;
 
@@ -152,7 +152,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>读取自定义文档属性（docProps/custom.xml）</summary>
-    private void ReadCustomProperties(WordDocumentProperties props)
+    private void ReadCustomProperties(DocumentProperties props)
     {
         var entry = _zip.GetEntry("docProps/custom.xml");
         if (entry == null) return;
@@ -234,9 +234,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
     #region 文档模型读取
     /// <summary>读取完整文档模型（含格式、图片、表格、页面设置等）</summary>
-    public WordDocument ReadDocument()
+    public Document ReadDocument()
     {
-        var doc = new WordDocument();
+        var doc = new Document();
         var xml = LoadDocumentXml();
         var ns = WmlNs(xml);
         var rels = LoadRels();
@@ -299,7 +299,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     {
                         se.RawXml = el.OuterXml;
                         doc.SdtElements.Add(se);
-                        doc.Elements.Add(new WordElement { Type = WordElementType.Sdt, Sdt = se, RawXml = el.OuterXml });
+                        doc.Elements.Add(new Element { Type = ElementType.Sdt, Sdt = se, RawXml = el.OuterXml });
                     }
                 }
                 else if (el.LocalName == "sectPr")
@@ -381,7 +381,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>收集所有 ZIP 部件（除 word/document.xml 外）到 OtherParts，用于透传模式保真</summary>
-    private void CollectOtherParts(WordDocument doc)
+    private void CollectOtherParts(Document doc)
     {
         foreach (var entry in _zip.Entries)
         {
@@ -450,9 +450,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return map;
     }
 
-    private Dictionary<String, WordRunProperties> LoadStyles()
+    private Dictionary<String, RunProperties> LoadStyles()
     {
-        var map = new Dictionary<String, WordRunProperties>(StringComparer.OrdinalIgnoreCase);
+        var map = new Dictionary<String, RunProperties>(StringComparer.OrdinalIgnoreCase);
         var entry = _zip.GetEntry("word/styles.xml");
         if (entry == null) return map;
         var doc = new XmlDocument();
@@ -475,9 +475,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
     #endregion
 
     #region 段落解析
-    private WordElement ParsePara(XmlElement pEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, WordRunProperties> styleMap)
+    private Element ParsePara(XmlElement pEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, RunProperties> styleMap)
     {
-        var para = new WordParagraph();
+        var para = new Paragraph();
         var isPageBreak = false;
         var isBullet = false;
         var isOrderedList = false;
@@ -490,7 +490,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         }
 
         var pPr = pEl.SelectSingleNode("w:pPr", ns);
-        WordRunProperties? styleDefaults = null;
+        RunProperties? styleDefaults = null;
         if (pPr is XmlElement pPrEl)
         {
             var pStyle = pPrEl.SelectSingleNode("w:pStyle", ns) as XmlElement;
@@ -564,7 +564,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
             var pBdr = pPrEl.SelectSingleNode("w:pBdr", ns) as XmlElement;
             if (pBdr != null)
             {
-                var borders = new WordParagraphBorders();
+                var borders = new ParagraphBorders();
                 borders.Top    = ParseSingleBorder(pBdr.SelectSingleNode("w:top", ns) as XmlElement);
                 borders.Bottom = ParseSingleBorder(pBdr.SelectSingleNode("w:bottom", ns) as XmlElement);
                 borders.Left   = ParseSingleBorder(pBdr.SelectSingleNode("w:left", ns) as XmlElement);
@@ -577,12 +577,12 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
             var tabsEl = pPrEl.SelectSingleNode("w:tabs", ns) as XmlElement;
             if (tabsEl != null)
             {
-                var list = new List<WordTabStop>();
+                var list = new List<TabStop>();
                 foreach (XmlElement tabEl in tabsEl.SelectNodes("w:tab", ns)!)
                 {
                     var pos = tabEl.GetAttribute("w:pos") ?? tabEl.GetAttribute("pos");
                     if (!Int32.TryParse(pos, out var pv)) continue;
-                    var ts = new WordTabStop { Position = pv };
+                    var ts = new TabStop { Position = pv };
                     ts.Alignment = tabEl.GetAttribute("w:val") ?? tabEl.GetAttribute("val") ?? "left";
                     var leader = tabEl.GetAttribute("w:leader") ?? tabEl.GetAttribute("leader");
                     if (!String.IsNullOrEmpty(leader) && leader != "none") ts.Leader = leader;
@@ -654,12 +654,12 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
             }
         }
 
-        return new WordElement { Type = WordElementType.Paragraph, Paragraph = para };
+        return new Element { Type = ElementType.Paragraph, Paragraph = para };
     }
 
-    private static WordRun ParseRun(XmlElement rEl, XmlNamespaceManager ns, String? hyperlinkRelId)
+    private static Run ParseRun(XmlElement rEl, XmlNamespaceManager ns, String? hyperlinkRelId)
     {
-        var run = new WordRun { HyperlinkRelId = hyperlinkRelId };
+        var run = new Run { HyperlinkRelId = hyperlinkRelId };
         var rPr = rEl.SelectSingleNode("w:rPr", ns) as XmlElement;
         if (rPr != null)
             run.Properties = ParseRunPr(rPr, ns, hyperlinkRelId != null);
@@ -668,9 +668,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return run;
     }
 
-    private static WordRunProperties ParseRunPr(XmlElement rPrEl, XmlNamespaceManager ns, Boolean isHyperlink)
+    private static RunProperties ParseRunPr(XmlElement rPrEl, XmlNamespaceManager ns, Boolean isHyperlink)
     {
-        var p = new WordRunProperties();
+        var p = new RunProperties();
         if (rPrEl.SelectSingleNode("w:b", ns) != null) p.Bold = true;
         if (rPrEl.SelectSingleNode("w:i", ns) != null) p.Italic = true;
         if (rPrEl.SelectSingleNode("w:u", ns) != null) p.Underline = true;
@@ -735,13 +735,13 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return p;
     }
 
-    private static void ApplyStyleDefaults(WordRun run, WordRunProperties? defaults)
+    private static void ApplyStyleDefaults(Run run, RunProperties? defaults)
     {
         if (defaults == null) return;
         var rp = run.Properties;
         if (rp == null)
         {
-            var np = new WordRunProperties();
+            var np = new RunProperties();
             if (defaults.Bold) np.Bold = true;
             if (defaults.Italic) np.Italic = true;
             if (defaults.Underline) np.Underline = true;
@@ -763,23 +763,23 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>解析单边边框 XML 元素（w:top / w:bottom / w:left / w:right）</summary>
-    private static WordBorder? ParseSingleBorder(XmlElement? el)
+    private static Border? ParseSingleBorder(XmlElement? el)
     {
         if (el == null) return null;
         var val = el.GetAttribute("w:val") ?? el.GetAttribute("val");
         if (String.IsNullOrEmpty(val) || val == "none" || val == "nil") return null;
-        var border = new WordBorder
+        var border = new Border
         {
             Style = val switch
             {
-                "single"     => WordBorderStyle.Single,
-                "thick"      => WordBorderStyle.Thick,
-                "double"     => WordBorderStyle.Double,
-                "dotted"     => WordBorderStyle.Dotted,
-                "dashed"     => WordBorderStyle.Dashed,
-                "dotDash"    => WordBorderStyle.DotDash,
-                "dotDotDash" => WordBorderStyle.DotDotDash,
-                _            => WordBorderStyle.Single,
+                "single"     => BorderStyle.Single,
+                "thick"      => BorderStyle.Thick,
+                "double"     => BorderStyle.Double,
+                "dotted"     => BorderStyle.Dotted,
+                "dashed"     => BorderStyle.Dashed,
+                "dotDash"    => BorderStyle.DotDash,
+                "dotDotDash" => BorderStyle.DotDotDash,
+                _            => BorderStyle.Single,
             }
         };
         border.Color = el.GetAttribute("w:color") ?? el.GetAttribute("color");
@@ -792,11 +792,11 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
     #endregion
 
     #region 表格/图片/节属性
-    private WordElement ParseTable(XmlElement tblEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, WordRunProperties> styleMap)
+    private Element ParseTable(XmlElement tblEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, RunProperties> styleMap)
     {
-        var rows = new List<List<WordCell>>();
+        var rows = new List<List<Cell>>();
         var firstRowHeader = false;
-        var style = new WordTableStyle();
+        var style = new TableStyle();
 
         var tblPr = tblEl.SelectSingleNode("w:tblPr", ns) as XmlElement;
         if (tblPr != null)
@@ -828,7 +828,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
         foreach (XmlElement tr in tblEl.SelectNodes("w:tr", ns)!)
         {
-            var cells = new List<WordCell>();
+            var cells = new List<Cell>();
             var trPr = tr.SelectSingleNode("w:trPr", ns);
             if (trPr != null && trPr.SelectSingleNode("w:tblHeader", ns) != null)
                 firstRowHeader = true;
@@ -837,18 +837,18 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
             if (cells.Count > 0) rows.Add(cells);
         }
 
-        return new WordElement
+        return new Element
         {
-            Type = WordElementType.Table,
+            Type = ElementType.Table,
             TableRows = rows,
             TableFirstRowHeader = firstRowHeader,
             TableStyle = style,
         };
     }
 
-    private static WordCell ParseCell(XmlElement tcEl, XmlNamespaceManager ns)
+    private static Cell ParseCell(XmlElement tcEl, XmlNamespaceManager ns)
     {
-        var cell = new WordCell();
+        var cell = new Cell();
         var tcPr = tcEl.SelectSingleNode("w:tcPr", ns) as XmlElement;
         if (tcPr != null)
         {
@@ -866,7 +866,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
         foreach (XmlElement pEl in tcEl.SelectNodes("w:p", ns)!)
         {
-            var para = new WordParagraph();
+            var para = new Paragraph();
             foreach (XmlNode child in pEl.ChildNodes)
             {
                 if (child is XmlElement el && el.LocalName == "r")
@@ -883,7 +883,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return cell;
     }
 
-    private WordElement? ParseDrawing(XmlElement drawing, XmlNamespaceManager ns, Dictionary<String, String> rels, WordDocument doc)
+    private Element? ParseDrawing(XmlElement drawing, XmlNamespaceManager ns, Dictionary<String, String> rels, Document doc)
     {
         var inline = drawing.SelectSingleNode("wp:inline", ns) as XmlElement
             ?? drawing.SelectSingleNode("wp:anchor", ns) as XmlElement;
@@ -915,10 +915,10 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
             }
         }
 
-        return new WordElement
+        return new Element
         {
-            Type = WordElementType.Image,
-            Image = new WordImage
+            Type = ElementType.Image,
+            Image = new Image
             {
                 RelId = rId,
                 WidthEmu = cx > 0 ? cx : 3600000,
@@ -928,7 +928,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         };
     }
 
-    private static void ParseSectPr(XmlElement sectPr, XmlNamespaceManager ns, WordDocument doc)
+    private static void ParseSectPr(XmlElement sectPr, XmlNamespaceManager ns, Document doc)
     {
         var ps = doc.PageSettings;
         var pgSz = sectPr.SelectSingleNode("w:pgSz", ns) as XmlElement;
@@ -960,7 +960,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         var pgBorders = sectPr.SelectSingleNode("w:pgBorders", ns) as XmlElement;
         if (pgBorders != null)
         {
-            var pb = new WordPageBorder();
+            var pb = new PageBorder();
             var offset = pgBorders.GetAttribute("w:offsetFrom") ?? pgBorders.GetAttribute("offsetFrom");
             if (offset == "text") pb.OffsetFrom = 0;
 
@@ -983,7 +983,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         var lnNumType = sectPr.SelectSingleNode("w:lnNumType", ns) as XmlElement;
         if (lnNumType != null)
         {
-            var ln = new WordLineNumberSettings();
+            var ln = new LineNumberSettings();
             if (Int32.TryParse(lnNumType.GetAttribute("w:start") ?? lnNumType.GetAttribute("start"), out var st)) ln.Start = st;
             if (Int32.TryParse(lnNumType.GetAttribute("w:countBy") ?? lnNumType.GetAttribute("countBy"), out var cb)) ln.CountBy = cb;
             if (Int32.TryParse(lnNumType.GetAttribute("w:distance") ?? lnNumType.GetAttribute("distance"), out var dist)) ln.Distance = dist;
@@ -999,7 +999,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         if (ftrRef != null) { var rId = ftrRef.GetAttribute("r:id"); if (rId != null) ps.FooterText = rId; }
     }
 
-    private static void ParsePgBorderAttrs(XmlElement el, WordPageBorder pb)
+    private static void ParsePgBorderAttrs(XmlElement el, PageBorder pb)
     {
         if (Int32.TryParse(el.GetAttribute("w:sz") ?? el.GetAttribute("sz"), out var sz)) pb.Size = sz;
         if (Int32.TryParse(el.GetAttribute("w:space") ?? el.GetAttribute("space"), out var sp)) pb.Space = sp;
@@ -1029,8 +1029,8 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         catch { /* 解析失败不影响整体读取 */ }
     }
 
-    /// <summary>解析 numbering.xml 到 WordNumbering 模型</summary>
-    private static WordNumbering? ParseNumbering(String numberingXml)
+    /// <summary>解析 numbering.xml 到 Numbering 模型</summary>
+    private static Numbering? ParseNumbering(String numberingXml)
     {
         try
         {
@@ -1054,7 +1054,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
             if (absNumIds.Count == 0) return null;
 
-            var numbering = new WordNumbering();
+            var numbering = new Numbering();
             if (numNodes!.Count > 0)
             {
                 var firstNum = (XmlElement)numNodes[0]!;
@@ -1078,7 +1078,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     var text = (lvlEl.SelectSingleNode("w:lvlText", ns) as XmlElement)?.GetAttribute("w:val");
                     var startStr = (lvlEl.SelectSingleNode("w:start", ns) as XmlElement)?.GetAttribute("w:val");
 
-                    var level = new WordNumberingLevel { Format = fmt, Text = text };
+                    var level = new NumberingLevel { Format = fmt, Text = text };
                     if (Int32.TryParse(ilvlStr, out var ilvl)) level.Level = ilvl;
                     if (Int32.TryParse(startStr, out var startVal)) level.StartAt = startVal;
 
@@ -1124,9 +1124,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         catch { return null; }
     }
 
-    private static WordSdtElement? ParseSdt(XmlElement sdtEl, XmlNamespaceManager ns)
+    private static SdtElement? ParseSdt(XmlElement sdtEl, XmlNamespaceManager ns)
     {
-        var sdt = new WordSdtElement();
+        var sdt = new SdtElement();
 
         // 解析 sdtPr 获取控件类型和标签
         var sdtPr = sdtEl.SelectSingleNode("w:sdtPr", ns) as XmlElement;
@@ -1138,21 +1138,21 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
                 ?? (sdtPr.SelectSingleNode("w:alias", ns) as XmlElement)?.GetAttribute("val");
 
             if (sdtPr.SelectSingleNode("w:date", ns) != null)
-                sdt.SdtType = WordSdtType.Date;
+                sdt.SdtType = SdtType.Date;
             else if (sdtPr.SelectSingleNode("w:dropDownList", ns) != null)
-                sdt.SdtType = WordSdtType.DropDownList;
+                sdt.SdtType = SdtType.DropDownList;
             else if (sdtPr.SelectSingleNode("w:comboBox", ns) != null)
-                sdt.SdtType = WordSdtType.ComboBox;
+                sdt.SdtType = SdtType.ComboBox;
             else if (sdtPr.SelectSingleNode("w:checkBox", ns) != null)
-                sdt.SdtType = WordSdtType.CheckBox;
+                sdt.SdtType = SdtType.CheckBox;
             else if (sdtPr.SelectSingleNode("w:picture", ns) != null)
-                sdt.SdtType = WordSdtType.Picture;
+                sdt.SdtType = SdtType.Picture;
             else if (sdtPr.SelectSingleNode("w:repeatingSection", ns) != null)
-                sdt.SdtType = WordSdtType.RepeatingSection;
+                sdt.SdtType = SdtType.RepeatingSection;
             else if (sdtPr.SelectSingleNode("w:richText", ns) != null)
-                sdt.SdtType = WordSdtType.RichText;
+                sdt.SdtType = SdtType.RichText;
             else
-                sdt.SdtType = WordSdtType.PlainText; // 默认纯文本
+                sdt.SdtType = SdtType.PlainText; // 默认纯文本
         }
 
         // 提取内容文本（sdtContent 内的 w:t 文本）
@@ -1168,7 +1168,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return sdt;
     }
 
-    private void LoadHdrFtr(Dictionary<String, String> rels, WordDocument doc)
+    private void LoadHdrFtr(Dictionary<String, String> rels, Document doc)
     {
         var headerRId = doc.PageSettings.HeaderText;
         if (headerRId != null && rels.TryGetValue(headerRId, out var headerTarget))
@@ -1188,7 +1188,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         doc.PageSettings.FooterText = doc.FooterText;
     }
 
-    private String? LoadHdrFtrText(String target, WordDocument doc)
+    private String? LoadHdrFtrText(String target, Document doc)
     {
         var entry = _zip.GetEntry($"word/{target}");
         if (entry == null) return null;
@@ -1235,23 +1235,23 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return sb.Length > 0 ? sb.ToString() : null;
     }
 
-    private static Boolean IsEmptyPara(WordParagraph p)
+    private static Boolean IsEmptyPara(Paragraph p)
     {
         return !p.IsPageBreak && !p.IsBullet && p.BookmarkName == null && p.Runs.Count == 0;
     }
 
-    private static WordParagraphStyle ParseStyleId(String? styleId)
+    private static ParagraphStyle ParseStyleId(String? styleId)
     {
-        if (String.IsNullOrEmpty(styleId)) return WordParagraphStyle.Normal;
+        if (String.IsNullOrEmpty(styleId)) return ParagraphStyle.Normal;
         return styleId!.ToLowerInvariant() switch
         {
-            "heading1" or "1" or "heading 1" => WordParagraphStyle.Heading1,
-            "heading2" or "2" or "heading 2" => WordParagraphStyle.Heading2,
-            "heading3" or "3" or "heading 3" => WordParagraphStyle.Heading3,
-            "heading4" or "4" or "heading 4" => WordParagraphStyle.Heading4,
-            "heading5" or "5" or "heading 5" => WordParagraphStyle.Heading5,
-            "heading6" or "6" or "heading 6" => WordParagraphStyle.Heading6,
-            _ => WordParagraphStyle.Normal,
+            "heading1" or "1" or "heading 1" => ParagraphStyle.Heading1,
+            "heading2" or "2" or "heading 2" => ParagraphStyle.Heading2,
+            "heading3" or "3" or "heading 3" => ParagraphStyle.Heading3,
+            "heading4" or "4" or "heading 4" => ParagraphStyle.Heading4,
+            "heading5" or "5" or "heading 5" => ParagraphStyle.Heading5,
+            "heading6" or "6" or "heading 6" => ParagraphStyle.Heading6,
+            _ => ParagraphStyle.Normal,
         };
     }
     #endregion

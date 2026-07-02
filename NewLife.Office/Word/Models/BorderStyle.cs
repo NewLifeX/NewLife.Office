@@ -1,7 +1,7 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word 边框线型</summary>
-public enum WordBorderStyle
+public enum BorderStyle
 {
     /// <summary>无边框</summary>
     None = 0,

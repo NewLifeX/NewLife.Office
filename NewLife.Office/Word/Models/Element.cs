@@ -1,32 +1,32 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Word;
 
 /// <summary>文档元素联合类型</summary>
-public class WordElement
+public class Element
 {
     /// <summary>类型</summary>
-    public WordElementType Type { get; set; }
+    public ElementType Type { get; set; }
 
     /// <summary>段落（Type=Paragraph 时有效）</summary>
-    public WordParagraph? Paragraph { get; set; }
+    public Paragraph? Paragraph { get; set; }
 
     /// <summary>表格行集合（Type=Table 时有效）</summary>
-    public List<List<WordCell>>? TableRows { get; set; }
+    public List<List<Cell>>? TableRows { get; set; }
 
     /// <summary>首行是否表头（Type=Table 时有效）</summary>
     public Boolean TableFirstRowHeader { get; set; }
 
     /// <summary>表格样式（Type=Table 时有效）</summary>
-    public WordTableStyle? TableStyle { get; set; }
+    public TableStyle? TableStyle { get; set; }
 
     /// <summary>表格模型（Type=Table 时使用，比 TableRows 更丰富支持行级属性）</summary>
     /// <remarks>Table 与 TableRows 二选一，Writer 优先使用 Table。</remarks>
-    public WordTable? Table { get; set; }
+    public Table? Table { get; set; }
 
     /// <summary>图片（Type=Image 时有效）</summary>
-    public WordImage? Image { get; set; }
+    public Image? Image { get; set; }
 
     /// <summary>内容控件（Type=Sdt 时有效）</summary>
-    public WordSdtElement? Sdt { get; set; }
+    public SdtElement? Sdt { get; set; }
 
     /// <summary>
     /// 元素原始 XML，由 Reader 将对应 <c>w:p</c>/<c>w:tbl</c> 的 OuterXml 存入。

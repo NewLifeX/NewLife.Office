@@ -1,6 +1,19 @@
 ﻿using System.IO.Compression;
 using System.Text;
 using NewLife.Office;
+using NewLife.Office.Calendar;
+using NewLife.Office.Epub;
+using NewLife.Office.Excel;
+using NewLife.Office.Mail;
+using NewLife.Office.Markdown;
+using NewLife.Office.Ods;
+using NewLife.Office.Ole2;
+using NewLife.Office.Pdf;
+using NewLife.Office.Ppt;
+using NewLife.Office.Rtf;
+using NewLife.Office.VCard;
+using NewLife.Office.Word;
+using NewLife.Office.Xps;
 using Xunit;
 
 namespace XUnitTest.Word;
@@ -115,7 +128,7 @@ public class WordWriterTests
             Assert.Equal("Name", doc.SdtElements[0].Tag);
             Assert.Equal("姓名", doc.SdtElements[0].Alias);
             Assert.Contains("张三", doc.SdtElements[0].Content);
-            Assert.Equal(WordSdtType.PlainText, doc.SdtElements[0].SdtType);
+            Assert.Equal(SdtType.PlainText, doc.SdtElements[0].SdtType);
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
@@ -135,7 +148,7 @@ public class WordWriterTests
             using var reader = new WordReader(tempFile);
             var doc = reader.ReadDocument();
             Assert.NotEmpty(doc.SdtElements);
-            Assert.Equal(WordSdtType.Date, doc.SdtElements[0].SdtType);
+            Assert.Equal(SdtType.Date, doc.SdtElements[0].SdtType);
             Assert.Contains("2026-06-27", doc.SdtElements[0].Content);
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
@@ -156,7 +169,7 @@ public class WordWriterTests
             using var reader = new WordReader(tempFile);
             var doc = reader.ReadDocument();
             Assert.NotEmpty(doc.SdtElements);
-            Assert.Equal(WordSdtType.DropDownList, doc.SdtElements[0].SdtType);
+            Assert.Equal(SdtType.DropDownList, doc.SdtElements[0].SdtType);
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
@@ -175,7 +188,7 @@ public class WordWriterTests
             using var reader = new WordReader(tempFile);
             var doc = reader.ReadDocument();
             Assert.NotEmpty(doc.SdtElements);
-            Assert.Equal(WordSdtType.PlainText, doc.SdtElements[0].SdtType);
+            Assert.Equal(SdtType.PlainText, doc.SdtElements[0].SdtType);
             Assert.Contains("默认类型", doc.SdtElements[0].Content);
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
@@ -191,8 +204,8 @@ public class WordWriterTests
         {
             using var writer = new WordWriter();
             writer.AppendHeading("第一章", 1);
-            writer.AppendParagraph("这是第一章的内容。", WordParagraphStyle.Normal,
-                new WordRunProperties { Bold = true, FontSize = 12 });
+            writer.AppendParagraph("这是第一章的内容。", ParagraphStyle.Normal,
+                new RunProperties { Bold = true, FontSize = 12 });
             writer.AppendPageBreak();
             writer.AppendHeading("第二章", 2);
             writer.AppendParagraph("这是第二章的内容。");
@@ -202,14 +215,14 @@ public class WordWriterTests
             var doc = reader.ReadDocument();
             Assert.True(doc.Elements.Count >= 4);
             var heading1 = doc.Elements[0];
-            Assert.Equal(WordElementType.Paragraph, heading1.Type);
-            Assert.Equal(WordParagraphStyle.Heading1, heading1.Paragraph!.Style);
+            Assert.Equal(ElementType.Paragraph, heading1.Type);
+            Assert.Equal(ParagraphStyle.Heading1, heading1.Paragraph!.Style);
             var pageBreak = doc.Elements[2];
-            Assert.Equal(WordElementType.Paragraph, pageBreak.Type);
+            Assert.Equal(ElementType.Paragraph, pageBreak.Type);
             Assert.True(pageBreak.Paragraph!.IsPageBreak);
             var heading2 = doc.Elements[3];
-            Assert.Equal(WordElementType.Paragraph, heading2.Type);
-            Assert.Equal(WordParagraphStyle.Heading2, heading2.Paragraph!.Style);
+            Assert.Equal(ElementType.Paragraph, heading2.Type);
+            Assert.Equal(ParagraphStyle.Heading2, heading2.Paragraph!.Style);
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
@@ -285,7 +298,7 @@ public class WordWriterTests
             using var reader = new WordReader(tempFile);
             var doc = reader.ReadDocument();
             Assert.Equal(6, doc.Elements.Count);
-            Assert.Equal(WordParagraphStyle.Heading1, doc.Elements[0].Paragraph!.Style);
+            Assert.Equal(ParagraphStyle.Heading1, doc.Elements[0].Paragraph!.Style);
             Assert.False(doc.Elements[1].Paragraph!.IsBullet);
             Assert.True(doc.Elements[2].Paragraph!.IsBullet);
             Assert.False(doc.Elements[5].Paragraph!.IsBullet);
@@ -294,57 +307,57 @@ public class WordWriterTests
     }
     #endregion
 
-    #region 自定义编号定义（WordNumbering模型）
-    [Fact(DisplayName = "自定义编号—WordNumbering模型生成多级列表")]
+    #region 自定义编号定义（Numbering模型）
+    [Fact(DisplayName = "自定义编号—Numbering模型生成多级列表")]
     public void CustomNumbering_FromModel()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
-            // 使用 WordNumbering 模型定义自定义列表格式
-            var num = new WordNumbering { NumberingId = 1 };
-            num.Levels.Add(new WordNumberingLevel
+            // 使用 Numbering 模型定义自定义列表格式
+            var num = new Numbering { NumberingId = 1 };
+            num.Levels.Add(new NumberingLevel
             {
                 Level = 0, Format = "decimal", Text = "%1.", StartAt = 1,
                 Indent = 720, HangingIndent = 360,
             });
-            num.Levels.Add(new WordNumberingLevel
+            num.Levels.Add(new NumberingLevel
             {
                 Level = 1, Format = "lowerLetter", Text = "%2)", StartAt = 1,
                 Indent = 1440, HangingIndent = 360,
             });
-            num.Levels.Add(new WordNumberingLevel
+            num.Levels.Add(new NumberingLevel
             {
                 Level = 0, Format = "bullet", BulletChar = "✓",
                 BulletFontName = "Symbol", Indent = 720, HangingIndent = 360,
             });
 
-            // 通过 WordDocument 模型注入
-            var doc = new WordDocument { Numbering = num };
-            doc.Elements.Add(new WordElement
+            // 通过 Document 模型注入
+            var doc = new Document { Numbering = num };
+            doc.Elements.Add(new Element
             {
-                Type = WordElementType.Paragraph,
-                Paragraph = new WordParagraph
+                Type = ElementType.Paragraph,
+                Paragraph = new Paragraph
                 {
-                    Runs = { new WordRun { Text = "有序一级" } },
+                    Runs = { new Run { Text = "有序一级" } },
                     IsOrderedList = true, ListLevel = 0,
                 },
             });
-            doc.Elements.Add(new WordElement
+            doc.Elements.Add(new Element
             {
-                Type = WordElementType.Paragraph,
-                Paragraph = new WordParagraph
+                Type = ElementType.Paragraph,
+                Paragraph = new Paragraph
                 {
-                    Runs = { new WordRun { Text = "有序二级" } },
+                    Runs = { new Run { Text = "有序二级" } },
                     IsOrderedList = true, ListLevel = 1,
                 },
             });
-            doc.Elements.Add(new WordElement
+            doc.Elements.Add(new Element
             {
-                Type = WordElementType.Paragraph,
-                Paragraph = new WordParagraph
+                Type = ElementType.Paragraph,
+                Paragraph = new Paragraph
                 {
-                    Runs = { new WordRun { Text = "项目符号" } },
+                    Runs = { new Run { Text = "项目符号" } },
                     IsBullet = true, ListLevel = 0,
                 },
             });
@@ -437,16 +450,16 @@ public class WordWriterTests
         try
         {
             using var writer = new WordWriter();
-            var para0 = new WordParagraph { IsOrderedList = true, ListLevel = 0 };
-            para0.Runs.Add(new WordRun { Text = "一级条目" });
+            var para0 = new Paragraph { IsOrderedList = true, ListLevel = 0 };
+            para0.Runs.Add(new Run { Text = "一级条目" });
             writer.AppendParagraph(para0);
 
-            var para1 = new WordParagraph { IsOrderedList = true, ListLevel = 1 };
-            para1.Runs.Add(new WordRun { Text = "二级条目" });
+            var para1 = new Paragraph { IsOrderedList = true, ListLevel = 1 };
+            para1.Runs.Add(new Run { Text = "二级条目" });
             writer.AppendParagraph(para1);
 
-            var para2 = new WordParagraph { IsOrderedList = true, ListLevel = 2 };
-            para2.Runs.Add(new WordRun { Text = "三级条目" });
+            var para2 = new Paragraph { IsOrderedList = true, ListLevel = 2 };
+            para2.Runs.Add(new Run { Text = "三级条目" });
             writer.AppendParagraph(para2);
 
             writer.Save(tempFile);
@@ -477,7 +490,7 @@ public class WordWriterTests
             var doc = reader.ReadDocument();
             Assert.NotEmpty(doc.Elements);
             Assert.NotNull(doc.Elements[0].Sdt);
-            Assert.Equal(WordSdtType.PlainText, doc.Elements[0].Sdt!.SdtType);
+            Assert.Equal(SdtType.PlainText, doc.Elements[0].Sdt!.SdtType);
             Assert.Equal("field1", doc.Elements[0].Sdt!.Tag);
             Assert.Equal("字段1", doc.Elements[0].Sdt!.Alias);
         }
@@ -497,7 +510,7 @@ public class WordWriterTests
             using var reader = new WordReader(tempFile);
             var doc = reader.ReadDocument();
             Assert.NotNull(doc.Elements[0].Sdt);
-            Assert.Equal(WordSdtType.Date, doc.Elements[0].Sdt!.SdtType);
+            Assert.Equal(SdtType.Date, doc.Elements[0].Sdt!.SdtType);
             Assert.Equal("birthDate", doc.Elements[0].Sdt!.Tag);
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
@@ -516,7 +529,7 @@ public class WordWriterTests
             using var reader = new WordReader(tempFile);
             var doc = reader.ReadDocument();
             Assert.NotNull(doc.Elements[0].Sdt);
-            Assert.Equal(WordSdtType.DropDownList, doc.Elements[0].Sdt!.SdtType);
+            Assert.Equal(SdtType.DropDownList, doc.Elements[0].Sdt!.SdtType);
             Assert.Equal("choice", doc.Elements[0].Sdt!.Tag);
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
@@ -542,11 +555,11 @@ public class WordWriterTests
             // 常规段落
             Assert.Null(doc.Elements[0].Sdt);
             // SDT 纯文本
-            Assert.Equal(WordSdtType.PlainText, doc.Elements[1].Sdt!.SdtType);
+            Assert.Equal(SdtType.PlainText, doc.Elements[1].Sdt!.SdtType);
             // SDT 日期
-            Assert.Equal(WordSdtType.Date, doc.Elements[2].Sdt!.SdtType);
+            Assert.Equal(SdtType.Date, doc.Elements[2].Sdt!.SdtType);
             // SDT 下拉
-            Assert.Equal(WordSdtType.DropDownList, doc.Elements[3].Sdt!.SdtType);
+            Assert.Equal(SdtType.DropDownList, doc.Elements[3].Sdt!.SdtType);
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
@@ -629,7 +642,7 @@ public class WordWriterTests
         {
             using var writer = new WordWriter();
             writer.AppendParagraph("带页面边框的文档");
-            writer.PageSettings.PageBorder = new WordPageBorder
+            writer.PageSettings.PageBorder = new PageBorder
             {
                 Top = "single", Bottom = "single", Left = "single", Right = "single",
                 Color = "FF0000", Size = 8, Space = 24
@@ -720,7 +733,7 @@ public class WordWriterTests
         try
         {
             using var writer = new WordWriter();
-            writer.PageSettings.LineNumber = new WordLineNumberSettings
+            writer.PageSettings.LineNumber = new LineNumberSettings
             {
                 Start = 10,
                 CountBy = 2,
@@ -766,7 +779,7 @@ public class WordWriterTests
         try
         {
             using var writer = new WordWriter();
-            writer.PageSettings.LineNumber = new WordLineNumberSettings
+            writer.PageSettings.LineNumber = new LineNumberSettings
             {
                 Start = 1,
                 CountBy = 1,
@@ -794,8 +807,8 @@ public class WordWriterTests
         try
         {
             using var writer = new WordWriter();
-            var para = new WordParagraph { DropCapLines = 3 };
-            para.Runs.Add(new WordRun { Text = "首字下沉的段落内容测试首字下沉效果。" });
+            var para = new Paragraph { DropCapLines = 3 };
+            para.Runs.Add(new Run { Text = "首字下沉的段落内容测试首字下沉效果。" });
             writer.AppendParagraph(para);
             writer.Save(tempFile);
 
@@ -836,7 +849,7 @@ public class WordWriterTests
         try
         {
             using var writer = new WordWriter();
-            writer.AppendBookmarkedParagraph("被引用的章节", "Chapter1", WordParagraphStyle.Heading1);
+            writer.AppendBookmarkedParagraph("被引用的章节", "Chapter1", ParagraphStyle.Heading1);
             writer.AppendCrossRef("Chapter1", "1");
             writer.Save(tempFile);
 
@@ -859,11 +872,11 @@ public class WordWriterTests
         try
         {
             using var writer = new WordWriter();
-            var para = new WordParagraph();
-            para.Runs.Add(new WordRun
+            var para = new Paragraph();
+            para.Runs.Add(new Run
             {
                 Text = "发光文字",
-                Properties = new WordRunProperties
+                Properties = new RunProperties
                 {
                     FontSize = 14,
                     GlowColor = "FFD700",
@@ -892,11 +905,11 @@ public class WordWriterTests
         try
         {
             using var writer = new WordWriter();
-            var para = new WordParagraph();
-            para.Runs.Add(new WordRun
+            var para = new Paragraph();
+            para.Runs.Add(new Run
             {
                 Text = "阴影文字",
-                Properties = new WordRunProperties
+                Properties = new RunProperties
                 {
                     FontSize = 16,
                     ShadowColor = "808080",
@@ -954,7 +967,7 @@ public class WordWriterTests
         {
             using (var w = new WordWriter())
             {
-                w.AppendParagraph(new WordParagraph { Runs = { new WordRun { Text = "内容" } } });
+                w.AppendParagraph(new Paragraph { Runs = { new Run { Text = "内容" } } });
                 w.Save(tempFile);
             }
             using var reader = new WordReader(tempFile);
@@ -983,9 +996,9 @@ public class WordWriterTests
     public void AppendHorizontalRule_Works()
     {
         using var writer = new WordWriter();
-        writer.AppendParagraph(new WordParagraph { Runs = { new WordRun { Text = "上文" } } });
+        writer.AppendParagraph(new Paragraph { Runs = { new Run { Text = "上文" } } });
         writer.AppendHorizontalRule("FF0000", 12);
-        writer.AppendParagraph(new WordParagraph { Runs = { new WordRun { Text = "下文" } } });
+        writer.AppendParagraph(new Paragraph { Runs = { new Run { Text = "下文" } } });
         var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
@@ -1005,7 +1018,7 @@ public class WordWriterTests
             // 创建含自定义XML部件的docx
             using (var writer = new WordWriter())
             {
-                writer.AppendParagraph(new WordParagraph { Runs = { new WordRun { Text = "测试" } } });
+                writer.AppendParagraph(new Paragraph { Runs = { new Run { Text = "测试" } } });
                 writer.Save(tempFile);
             }
             // 读取并添加自定义XML
@@ -1039,8 +1052,8 @@ public class WordWriterTests
         try
         {
             using var writer = new WordWriter();
-            var p = new WordParagraph { IsOrderedList = true, ListStartOverride = 5 };
-            p.Runs.Add(new WordRun { Text = "从5开始的条目" });
+            var p = new Paragraph { IsOrderedList = true, ListStartOverride = 5 };
+            p.Runs.Add(new Run { Text = "从5开始的条目" });
             writer.AppendParagraph(p);
             writer.Save(tempFile);
 
@@ -1085,10 +1098,10 @@ public class WordWriterTests
         try
         {
             using var writer = new WordWriter();
-            var para = new WordParagraph
+            var para = new Paragraph
             {
-                Runs = { new WordRun { Text = "标题不孤行" } },
-                Style = WordParagraphStyle.Heading1,
+                Runs = { new Run { Text = "标题不孤行" } },
+                Style = ParagraphStyle.Heading1,
                 KeepNext = true,
                 KeepLines = true
             };
@@ -1113,9 +1126,9 @@ public class WordWriterTests
         try
         {
             using var writer = new WordWriter();
-            var para = new WordParagraph
+            var para = new Paragraph
             {
-                Runs = { new WordRun { Text = "允许孤行" } },
+                Runs = { new Run { Text = "允许孤行" } },
                 WidowControl = false
             };
             writer.AppendParagraph(para);
@@ -1138,16 +1151,16 @@ public class WordWriterTests
         var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
-            var cell = new WordCell
+            var cell = new Cell
             {
                 VerticalAlignment = "center",
-                Paragraphs = { new WordParagraph { Runs = { new WordRun { Text = "居中文字" } } } }
+                Paragraphs = { new Paragraph { Runs = { new Run { Text = "居中文字" } } } }
             };
-            var doc = new WordDocument();
-            doc.Elements.Add(new WordElement
+            var doc = new Document();
+            doc.Elements.Add(new Element
             {
-                Type = WordElementType.Table,
-                TableRows = new List<List<WordCell>> { new() { cell } },
+                Type = ElementType.Table,
+                TableRows = new List<List<Cell>> { new() { cell } },
                 TableFirstRowHeader = false
             });
             using var writer = new WordWriter();
@@ -1194,17 +1207,17 @@ public class WordWriterTests
         var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
         try
         {
-            var cell = new WordCell
+            var cell = new Cell
             {
                 ColSpan = 3,
                 RowSpan = 2,
-                Paragraphs = { new WordParagraph { Runs = { new WordRun { Text = "跨列跨行" } } } }
+                Paragraphs = { new Paragraph { Runs = { new Run { Text = "跨列跨行" } } } }
             };
-            var doc = new WordDocument();
-            doc.Elements.Add(new WordElement
+            var doc = new Document();
+            doc.Elements.Add(new Element
             {
-                Type = WordElementType.Table,
-                TableRows = new List<List<WordCell>> { new() { cell }, new() { new WordCell { RowSpan = 0 } } }
+                Type = ElementType.Table,
+                TableRows = new List<List<Cell>> { new() { cell }, new() { new Cell { RowSpan = 0 } } }
             });
             using var writer = new WordWriter();
             writer.Save(tempFile, doc);

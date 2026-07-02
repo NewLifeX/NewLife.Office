@@ -2,7 +2,9 @@ using System.IO.Compression;
 using System.Xml;
 using NewLife.Office;
 
-namespace NewLife.Office;
+using NewLife.Office.Pdf;
+
+namespace NewLife.Office.Word;
 
 /// <summary>Word docx 转 PDF 转换器（低保真内容映射型）</summary>
 /// <remarks>
@@ -56,7 +58,7 @@ public sealed class WordPdfConverter
     /// <returns>PDF 字节数组</returns>
     public Byte[] ConvertToBytes(Stream stream)
     {
-        using var pdf = new PdfFluentDocument();
+        using var pdf = new FluentDocument();
         Render(stream, pdf);
         return pdf.ToBytes();
     }
@@ -75,7 +77,7 @@ public sealed class WordPdfConverter
     /// <param name="outputPath">输出 PDF 路径</param>
     public void ConvertToFile(Stream stream, String outputPath)
     {
-        using var pdf = new PdfFluentDocument();
+        using var pdf = new FluentDocument();
         Render(stream, pdf);
         pdf.Save(outputPath);
     }
@@ -103,8 +105,8 @@ public sealed class WordPdfConverter
 
     /// <summary>解析 docx 并将内容写入 PDF 文档</summary>
     /// <param name="stream">docx 流</param>
-    /// <param name="pdf">目标 PdfFluentDocument</param>
-    private void Render(Stream stream, PdfFluentDocument pdf)
+    /// <param name="pdf">目标 FluentDocument</param>
+    private void Render(Stream stream, FluentDocument pdf)
     {
         using var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
 
@@ -137,7 +139,7 @@ public sealed class WordPdfConverter
     /// <param name="para">段落 XML 元素</param>
     /// <param name="ns">命名空间管理器</param>
     /// <param name="pdf">目标 PDF 文档</param>
-    private void RenderParagraph(XmlElement para, XmlNamespaceManager ns, PdfFluentDocument pdf)
+    private void RenderParagraph(XmlElement para, XmlNamespaceManager ns, FluentDocument pdf)
     {
         // 提取段落文本
         var textBuilder = new System.Text.StringBuilder();
@@ -172,7 +174,7 @@ public sealed class WordPdfConverter
     /// <param name="tbl">表格 XML 元素</param>
     /// <param name="ns">命名空间管理器</param>
     /// <param name="pdf">目标 PDF 文档</param>
-    private static void RenderTable(XmlElement tbl, XmlNamespaceManager ns, PdfFluentDocument pdf)
+    private static void RenderTable(XmlElement tbl, XmlNamespaceManager ns, FluentDocument pdf)
     {
         var rows = new List<String[]>();
         foreach (XmlElement tr in tbl.SelectNodes("w:tr", ns)!)

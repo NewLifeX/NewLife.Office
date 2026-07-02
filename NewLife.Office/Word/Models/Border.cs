@@ -1,19 +1,19 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word 单边边框样式</summary>
 /// <remarks>
 /// 描述段落、表格或单元格的一条边的边框，包括线型、颜色和粗细。
 /// <example>
 /// <code>
-/// var border = new WordBorder { Style = WordBorderStyle.Single, Color = "000000", Width = 4 };
+/// var border = new Border { Style = BorderStyle.Single, Color = "000000", Width = 4 };
 /// </code>
 /// </example>
 /// </remarks>
-public class WordBorder
+public class Border
 {
     #region 属性
     /// <summary>边框线型</summary>
-    public WordBorderStyle Style { get; set; } = WordBorderStyle.Single;
+    public BorderStyle Style { get; set; } = BorderStyle.Single;
 
     /// <summary>边框颜色（16进制 RGB，无 # 前缀），null 表示自动/继承</summary>
     public String? Color { get; set; }

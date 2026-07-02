@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Word;
 
 /// <summary>文档属性</summary>
-public class WordDocumentProperties
+public class DocumentProperties
 {
     #region 属性
     /// <summary>标题</summary>

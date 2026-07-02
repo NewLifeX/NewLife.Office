@@ -1,11 +1,11 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Word;
 
 /// <summary>表格单元格</summary>
-public class WordCell
+public class Cell
 {
     #region 属性
     /// <summary>段落集合</summary>
-    public List<WordParagraph> Paragraphs { get; } = [];
+    public List<Paragraph> Paragraphs { get; } = [];
 
     /// <summary>背景色（16进制 RGB）</summary>
     public String? BackgroundColor { get; set; }

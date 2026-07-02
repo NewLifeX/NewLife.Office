@@ -1,20 +1,20 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word 编号/列表定义</summary>
 /// <remarks>
-/// 比透传 <see cref="WordDocument.NumberingXml"/> 更易于程序化创建多层列表。
-/// 在 <see cref="WordDocument.Numbering"/> 中定义，通过 <see cref="WordParagraph.StyleId"/>
+/// 比透传 <see cref="Document.NumberingXml"/> 更易于程序化创建多层列表。
+/// 在 <see cref="Document.Numbering"/> 中定义，通过 <see cref="Paragraph.StyleId"/>
 /// 与段落关联（如 "ListParagraph"）或通过编号 ID 引用。
 /// <example>
 /// <code>
-/// var num = new WordNumbering { NumberingId = 1 };
-/// num.Levels.Add(new WordNumberingLevel { Level = 0, Format = "decimal", Text = "%1.", Indent = 720 });
-/// num.Levels.Add(new WordNumberingLevel { Level = 1, Format = "lowerLetter", Text = "%2)", Indent = 1440 });
+/// var num = new Numbering { NumberingId = 1 };
+/// num.Levels.Add(new NumberingLevel { Level = 0, Format = "decimal", Text = "%1.", Indent = 720 });
+/// num.Levels.Add(new NumberingLevel { Level = 1, Format = "lowerLetter", Text = "%2)", Indent = 1440 });
 /// doc.Numbering = num;
 /// </code>
 /// </example>
 /// </remarks>
-public class WordNumbering
+public class Numbering
 {
     #region 属性
     /// <summary>编号定义 ID（文档内唯一）</summary>
@@ -27,6 +27,6 @@ public class WordNumbering
     public String? BulletChar { get; set; }
 
     /// <summary>多层编号级别定义（最多 9 层，索引 0-8）</summary>
-    public List<WordNumberingLevel> Levels { get; set; } = [];
+    public List<NumberingLevel> Levels { get; set; } = [];
     #endregion
 }

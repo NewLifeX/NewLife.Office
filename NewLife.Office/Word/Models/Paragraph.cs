@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Word;
 
 /// <summary>段落</summary>
-public class WordParagraph
+public class Paragraph
 {
     #region 属性
     /// <summary>原始样式标识符（如 "Heading2"、"2"、自定义样式名），用于精确往返保留</summary>
@@ -9,10 +9,10 @@ public class WordParagraph
     public String? StyleId { get; set; }
 
     /// <summary>段落样式（枚举，Normal/Heading1~6），由 StyleId 或新建文档时设置</summary>
-    public WordParagraphStyle Style { get; set; } = WordParagraphStyle.Normal;
+    public ParagraphStyle Style { get; set; } = ParagraphStyle.Normal;
 
     /// <summary>文字段集合</summary>
-    public List<WordRun> Runs { get; } = [];
+    public List<Run> Runs { get; } = [];
 
     /// <summary>对齐方式（left/center/right/both）</summary>
     public String? Alignment { get; set; }
@@ -55,10 +55,10 @@ public class WordParagraph
     public String? BackgroundColor { get; set; }
 
     /// <summary>制表位集合，null 表示未设置（对应 OOXML w:tabs）</summary>
-    public List<WordTabStop>? TabStops { get; set; }
+    public List<TabStop>? TabStops { get; set; }
 
     /// <summary>段落边框，null 表示无边框（对应 OOXML w:pBdr）</summary>
-    public WordParagraphBorders? Borders { get; set; }
+    public ParagraphBorders? Borders { get; set; }
 
     /// <summary>首字下沉行数（0 或 null 表示不启用首字下沉），对应 w:framePr w:dropCap="drop"</summary>
     public Int32? DropCapLines { get; set; }

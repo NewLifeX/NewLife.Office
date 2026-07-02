@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Word;
 
 /// <summary>表格样式配置</summary>
-public class WordTableStyle
+public class TableStyle
 {
     #region 属性
     /// <summary>边框颜色（16进制 RGB，默认黑色）</summary>

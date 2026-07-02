@@ -2,6 +2,8 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using NewLife.Office;
+using NewLife.Office.Pdf;
+using NewLife.Office.Word;
 using Xunit;
 
 using XUnitTest.Common;
@@ -38,8 +40,8 @@ public class WordRoundTripTests : IntegrationTestBase
             w.AppendTable(tableData);
 
             w.AppendHeading("第三章 格式化文本", 2);
-            w.AppendParagraph("普通段落文本。", WordParagraphStyle.Normal,
-                new WordRunProperties { FontSize = 14f, Bold = true });
+            w.AppendParagraph("普通段落文本。", ParagraphStyle.Normal,
+                new RunProperties { FontSize = 14f, Bold = true });
             w.AppendParagraph("这是另一个段落。");
 
             w.AppendHeading("附录", 3);
@@ -118,7 +120,7 @@ public class WordRoundTripTests : IntegrationTestBase
             var outputPath = Path.Combine(outDir, $"{fileName}.docx");
 
             // 读取源文件（用 MemoryStream 避免 Word 独占锁导致 ZipFile.OpenRead 失败）
-            WordDocument sourceDoc;
+            Document sourceDoc;
             try
             {
                 var sourceBytes = ReadAllBytesShared(sourcePath);
@@ -135,7 +137,7 @@ public class WordRoundTripTests : IntegrationTestBase
             }
 
             Assert.NotEmpty(sourceDoc.Elements);
-            Console.WriteLine($"[{fileName}] 源文件: {sourceDoc.Elements.Count} 元素 (P={sourceDoc.Elements.Count(e=>e.Type==WordElementType.Paragraph)} T={sourceDoc.Elements.Count(e=>e.Type==WordElementType.Table)} I={sourceDoc.Elements.Count(e=>e.Type==WordElementType.Image)})");
+            Console.WriteLine($"[{fileName}] 源文件: {sourceDoc.Elements.Count} 元素 (P={sourceDoc.Elements.Count(e=>e.Type==ElementType.Paragraph)} T={sourceDoc.Elements.Count(e=>e.Type==ElementType.Table)} I={sourceDoc.Elements.Count(e=>e.Type==ElementType.Image)})");
 
             // 写入并重新读取
             try
@@ -154,7 +156,7 @@ public class WordRoundTripTests : IntegrationTestBase
             Assert.True(File.Exists(outputPath), $"输出文件 {outputPath} 应存在");
 
             // 用 MemoryStream 读回避免 ZIP 文件锁问题
-            WordDocument outputDoc;
+            Document outputDoc;
             try
             {
                 var outputBytes = ReadAllBytesShared(outputPath);
@@ -170,7 +172,7 @@ public class WordRoundTripTests : IntegrationTestBase
                 continue;
             }
 
-            Console.WriteLine($"[{fileName}] 输出文件: {outputDoc.Elements.Count} 元素 (P={outputDoc.Elements.Count(e=>e.Type==WordElementType.Paragraph)} T={outputDoc.Elements.Count(e=>e.Type==WordElementType.Table)} I={outputDoc.Elements.Count(e=>e.Type==WordElementType.Image)})");
+            Console.WriteLine($"[{fileName}] 输出文件: {outputDoc.Elements.Count} 元素 (P={outputDoc.Elements.Count(e=>e.Type==ElementType.Paragraph)} T={outputDoc.Elements.Count(e=>e.Type==ElementType.Table)} I={outputDoc.Elements.Count(e=>e.Type==ElementType.Image)})");
 
             // 严谨比较
             AssertDocumentsEqual(sourceDoc, outputDoc, fileName);
@@ -193,22 +195,22 @@ public class WordRoundTripTests : IntegrationTestBase
             w.AppendHeading("一级标题", 1);
             w.AppendHeading("二级标题", 2);
 
-            w.AppendParagraph("粗体文本", WordParagraphStyle.Normal, new WordRunProperties { Bold = true, FontSize = 14f });
-            w.AppendParagraph("斜体文本", WordParagraphStyle.Normal, new WordRunProperties { Italic = true, FontSize = 12f });
-            w.AppendParagraph("红色文本", WordParagraphStyle.Normal, new WordRunProperties { ForeColor = "FF0000", FontSize = 16f });
-            w.AppendParagraph("带下划线蓝色大字", WordParagraphStyle.Normal, new WordRunProperties { Underline = true, ForeColor = "0000FF", FontSize = 18f, FontName = "Arial" });
+            w.AppendParagraph("粗体文本", ParagraphStyle.Normal, new RunProperties { Bold = true, FontSize = 14f });
+            w.AppendParagraph("斜体文本", ParagraphStyle.Normal, new RunProperties { Italic = true, FontSize = 12f });
+            w.AppendParagraph("红色文本", ParagraphStyle.Normal, new RunProperties { ForeColor = "FF0000", FontSize = 16f });
+            w.AppendParagraph("带下划线蓝色大字", ParagraphStyle.Normal, new RunProperties { Underline = true, ForeColor = "0000FF", FontSize = 18f, FontName = "Arial" });
 
             // 混合格式段落
             w.AppendFormattedParagraph(new[]
             {
-                new WordRun { Text = "混合：", Properties = new WordRunProperties { Bold = true } },
-                new WordRun { Text = "粗体+", Properties = new WordRunProperties { Bold = true, FontSize = 14f } },
-                new WordRun { Text = "红色斜体", Properties = new WordRunProperties { Italic = true, ForeColor = "FF0000" } },
-                new WordRun { Text = " 普通" },
+                new Run { Text = "混合：", Properties = new RunProperties { Bold = true } },
+                new Run { Text = "粗体+", Properties = new RunProperties { Bold = true, FontSize = 14f } },
+                new Run { Text = "红色斜体", Properties = new RunProperties { Italic = true, ForeColor = "FF0000" } },
+                new Run { Text = " 普通" },
             });
 
             // 超链接
-            w.AppendHyperlink("访问官网", "https://newlifex.com", new WordRunProperties { FontSize = 12f });
+            w.AppendHyperlink("访问官网", "https://newlifex.com", new RunProperties { FontSize = 12f });
 
             // 对齐
             var leftPara = w.AppendParagraph("左对齐");
@@ -220,7 +222,7 @@ public class WordRoundTripTests : IntegrationTestBase
 
             // 表格
             w.AppendHeading("数据表格", 2);
-            var tableStyle = new WordTableStyle { BorderColor = "333333", BorderSize = 6, HeaderBgColor = "4472C4", StripeColor = "D9E2F3" };
+            var tableStyle = new TableStyle { BorderColor = "333333", BorderSize = 6, HeaderBgColor = "4472C4", StripeColor = "D9E2F3" };
             w.AppendTable(new[] { new[] { "产品", "价格", "库存" }, new[] { "笔记本", "5999", "100" }, new[] { "手机", "3999", "500" } }, true, tableStyle);
 
             // 列表
@@ -228,54 +230,54 @@ public class WordRoundTripTests : IntegrationTestBase
 
             // 分页
             w.AppendPageBreak();
-            w.AppendParagraph("分页后内容", WordParagraphStyle.Normal, new WordRunProperties { FontSize = 14f, Bold = true });
+            w.AppendParagraph("分页后内容", ParagraphStyle.Normal, new RunProperties { FontSize = 14f, Bold = true });
 
             // 缩进段落
             var indentPara = w.AppendParagraph("首行缩进段落");
             indentPara.FirstLineIndent = 480;
 
             // W09-01: 删除线
-            w.AppendParagraph("删除线文本", WordParagraphStyle.Normal, new WordRunProperties { Strikethrough = true });
+            w.AppendParagraph("删除线文本", ParagraphStyle.Normal, new RunProperties { Strikethrough = true });
 
             // W09-02: 上标（X²）
             var supPara = w.AppendFormattedParagraph(new[]
             {
-                new WordRun { Text = "X" },
-                new WordRun { Text = "2", Properties = new WordRunProperties { Superscript = true } },
+                new Run { Text = "X" },
+                new Run { Text = "2", Properties = new RunProperties { Superscript = true } },
             });
 
             // W09-02: 下标（H₂O）
             var subPara = w.AppendFormattedParagraph(new[]
             {
-                new WordRun { Text = "H" },
-                new WordRun { Text = "2", Properties = new WordRunProperties { Subscript = true } },
-                new WordRun { Text = "O" },
+                new Run { Text = "H" },
+                new Run { Text = "2", Properties = new RunProperties { Subscript = true } },
+                new Run { Text = "O" },
             });
 
             // W09-01: 下划线样式（波浪线）
-            w.AppendParagraph("波浪下划线", WordParagraphStyle.Normal, new WordRunProperties { UnderlineStyle = WordUnderlineStyles.Wave });
+            w.AppendParagraph("波浪下划线", ParagraphStyle.Normal, new RunProperties { UnderlineStyle = UnderlineStyles.Wave });
 
             // W09-04: 字符间距加宽
-            w.AppendParagraph("加宽字符间距", WordParagraphStyle.Normal, new WordRunProperties { CharacterSpacing = 40f });
+            w.AppendParagraph("加宽字符间距", ParagraphStyle.Normal, new RunProperties { CharacterSpacing = 40f });
 
             // W09-04: 字符缩放
-            w.AppendParagraph("字符缩放150%", WordParagraphStyle.Normal, new WordRunProperties { CharacterScaling = 150 });
+            w.AppendParagraph("字符缩放150%", ParagraphStyle.Normal, new RunProperties { CharacterScaling = 150 });
 
             // W09-03: 段落边框（上下边框）
             var borderPara = w.AppendParagraph("带边框段落");
-            borderPara.Borders = new WordParagraphBorders
+            borderPara.Borders = new ParagraphBorders
             {
-                Top    = new WordBorder { Style = WordBorderStyle.Single, Color = "FF0000", Width = 12 },
-                Bottom = new WordBorder { Style = WordBorderStyle.Double, Color = "0000FF", Width = 8 },
-                Left   = new WordBorder { Style = WordBorderStyle.Dotted, Color = "00AA00", Width = 4 },
+                Top    = new Border { Style = BorderStyle.Single, Color = "FF0000", Width = 12 },
+                Bottom = new Border { Style = BorderStyle.Double, Color = "0000FF", Width = 8 },
+                Left   = new Border { Style = BorderStyle.Dotted, Color = "00AA00", Width = 4 },
             };
 
             // W09-01: 制表位
             var tabPara = w.AppendParagraph("姓名\t部门\t薪资");
-            tabPara.TabStops = new List<WordTabStop>
+            tabPara.TabStops = new List<TabStop>
             {
-                new WordTabStop { Position = 3600, Alignment = "left" },
-                new WordTabStop { Position = 7200, Alignment = "right", Leader = "dot" },
+                new TabStop { Position = 3600, Alignment = "left" },
+                new TabStop { Position = 7200, Alignment = "right", Leader = "dot" },
             };
 
             w.Save(path);
@@ -284,7 +286,7 @@ public class WordRoundTripTests : IntegrationTestBase
         Assert.True(File.Exists(path));
 
         // 第一轮读取
-        WordDocument doc1;
+        Document doc1;
         using (var reader = new WordReader(path)) { doc1 = reader.ReadDocument(); }
 
         // 第一轮写入
@@ -292,7 +294,7 @@ public class WordRoundTripTests : IntegrationTestBase
         using (var writer = new WordWriter()) { writer.Save(path2, doc1); }
 
         // 第二轮读取
-        WordDocument doc2;
+        Document doc2;
         using (var reader = new WordReader(path2)) { doc2 = reader.ReadDocument(); }
 
         // 严谨比较
@@ -333,18 +335,18 @@ public class WordRoundTripTests : IntegrationTestBase
         return result.Trim();
     }
 
-    /// <summary>从 WordDocument 提取正文纯文本</summary>
-    private static String GetBodyText(WordDocument doc)
+    /// <summary>从 Document 提取正文纯文本</summary>
+    private static String GetBodyText(Document doc)
     {
         var sb = new StringBuilder();
         foreach (var el in doc.Elements)
         {
-            if (el.Type == WordElementType.Paragraph && el.Paragraph != null)
+            if (el.Type == ElementType.Paragraph && el.Paragraph != null)
             {
                 foreach (var r in el.Paragraph.Runs) sb.Append(r.Text);
                 sb.AppendLine();
             }
-            else if (el.Type == WordElementType.Table && el.TableRows != null)
+            else if (el.Type == ElementType.Table && el.TableRows != null)
             {
                 foreach (var row in el.TableRows)
                 {
@@ -361,8 +363,8 @@ public class WordRoundTripTests : IntegrationTestBase
         return sb.ToString();
     }
 
-    /// <summary>严谨比较两个 WordDocument，确保结构、格式、内容完全一致</summary>
-    private static void AssertDocumentsEqual(WordDocument a, WordDocument b, String context)
+    /// <summary>严谨比较两个 Document，确保结构、格式、内容完全一致</summary>
+    private static void AssertDocumentsEqual(Document a, Document b, String context)
     {
         // 元素数量必须相等
         Assert.True(a.Elements.Count == b.Elements.Count,
@@ -392,13 +394,13 @@ public class WordRoundTripTests : IntegrationTestBase
                 // 没有 RawXml 时用模型属性比较
                 switch (ae.Type)
                 {
-                    case WordElementType.Paragraph:
+                    case ElementType.Paragraph:
                         AssertParagraphsEqual(ae.Paragraph, be.Paragraph, context, i);
                         break;
-                    case WordElementType.Table:
+                    case ElementType.Table:
                         AssertTablesEqual(ae, be, context, i);
                         break;
-                    case WordElementType.Image:
+                    case ElementType.Image:
                         AssertImagesEqual(ae, be, context, i);
                         break;
                 }
@@ -476,7 +478,7 @@ public class WordRoundTripTests : IntegrationTestBase
         }
     }
 
-    private static void AssertParagraphsEqual(WordParagraph? a, WordParagraph? b, String context, Int32 idx)
+    private static void AssertParagraphsEqual(Paragraph? a, Paragraph? b, String context, Int32 idx)
     {
         Assert.NotNull(a);
         Assert.NotNull(b);
@@ -601,7 +603,7 @@ public class WordRoundTripTests : IntegrationTestBase
     }
 
     /// <summary>比较单边边框</summary>
-    private static void AssertBorderEqual(WordBorder? a, WordBorder? b, String context, Int32 idx, String edge)
+    private static void AssertBorderEqual(Border? a, Border? b, String context, Int32 idx, String edge)
     {
         if (a == null && b == null) return;
         Assert.True(a != null && b != null,
@@ -614,7 +616,7 @@ public class WordRoundTripTests : IntegrationTestBase
         Assert.Equal(a.Width, b.Width);
     }
 
-    private static void AssertTablesEqual(WordElement a, WordElement b, String context, Int32 idx)
+    private static void AssertTablesEqual(Element a, Element b, String context, Int32 idx)
     {
         var aRows = a.TableRows;
         var bRows = b.TableRows;
@@ -657,7 +659,7 @@ public class WordRoundTripTests : IntegrationTestBase
         }
     }
 
-    private static void AssertImagesEqual(WordElement a, WordElement b, String context, Int32 idx)
+    private static void AssertImagesEqual(Element a, Element b, String context, Int32 idx)
     {
         var ai = a.Image;
         var bi = b.Image;

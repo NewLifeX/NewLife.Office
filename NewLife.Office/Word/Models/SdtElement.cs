@@ -1,15 +1,15 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>内容控件（SDT）元素，对应 OOXML <c>w:sdt</c></summary>
 /// <remarks>
 /// 结构化文档标签（Structured Document Tag），用于在 Word 文档中嵌入
 /// 表单控件或受约束的内容区域。支持读写双向。
 /// </remarks>
-public class WordSdtElement
+public class SdtElement
 {
     #region 属性
     /// <summary>内容控件类型</summary>
-    public WordSdtType SdtType { get; set; } = WordSdtType.PlainText;
+    public SdtType SdtType { get; set; } = SdtType.PlainText;
 
     /// <summary>标签（<c>w:tag</c> 属性值），用于标识控件</summary>
     public String? Tag { get; set; }

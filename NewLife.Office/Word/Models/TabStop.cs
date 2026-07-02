@@ -1,21 +1,21 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word 制表位</summary>
 /// <remarks>
 /// 对应 OOXML w:tab 元素，定义段落内的制表位位置、对齐方式和前导符。
-/// 赋值到 <see cref="WordParagraph.TabStops"/> 集合后，Writer 会在 w:pPr/w:tabs 中生成对应 XML。
+/// 赋值到 <see cref="Paragraph.TabStops"/> 集合后，Writer 会在 w:pPr/w:tabs 中生成对应 XML。
 /// <example>
 /// <code>
 /// var para = writer.AppendParagraph("姓名\t部门\t薪资");
-/// para.TabStops = new List&lt;WordTabStop&gt;
+/// para.TabStops = new List&lt;TabStop&gt;
 /// {
-///     new WordTabStop { Position = 3600, Alignment = "left" },
-///     new WordTabStop { Position = 7200, Alignment = "right", Leader = "dot" },
+///     new TabStop { Position = 3600, Alignment = "left" },
+///     new TabStop { Position = 7200, Alignment = "right", Leader = "dot" },
 /// };
 /// </code>
 /// </example>
 /// </remarks>
-public class WordTabStop
+public class TabStop
 {
     #region 属性
     /// <summary>制表位位置（缇，twips），相对于段落左边缘</summary>

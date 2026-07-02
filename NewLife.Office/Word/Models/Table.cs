@@ -1,37 +1,37 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word 表格独立模型</summary>
 /// <remarks>
-/// 比 <c>WordElement.TableRows</c>（嵌套列表）更丰富：支持行级属性、表格宽度、对齐和四边边框。
-/// 在 <see cref="WordElement"/> 中通过 <see cref="WordElement.Table"/> 属性使用。
+/// 比 <c>Element.TableRows</c>（嵌套列表）更丰富：支持行级属性、表格宽度、对齐和四边边框。
+/// 在 <see cref="Element"/> 中通过 <see cref="Element.Table"/> 属性使用。
 /// <example>
 /// <code>
-/// var table = new WordTable
+/// var table = new Table
 /// {
 ///     FirstRowHeader = true,
-///     Style = new WordTableStyle { HeaderBgColor = "4472C4", HeaderBold = true },
-///     Borders = WordTableBorders.All(WordBorderStyle.Single),
+///     Style = new TableStyle { HeaderBgColor = "4472C4", HeaderBold = true },
+///     Borders = TableBorders.All(BorderStyle.Single),
 /// };
-/// table.Rows.Add(new WordTableRow
+/// table.Rows.Add(new TableRow
 /// {
 ///     IsHeader = true,
-///     Cells = [new WordCell { Paragraphs = { new WordParagraph { Runs = { new WordRun { Text = "姓名" } } } } },
-///              new WordCell { Paragraphs = { new WordParagraph { Runs = { new WordRun { Text = "部门" } } } } }],
+///     Cells = [new Cell { Paragraphs = { new Paragraph { Runs = { new Run { Text = "姓名" } } } } },
+///              new Cell { Paragraphs = { new Paragraph { Runs = { new Run { Text = "部门" } } } } }],
 /// });
 /// </code>
 /// </example>
 /// </remarks>
-public class WordTable
+public class Table
 {
     #region 属性
     /// <summary>表格行集合</summary>
-    public List<WordTableRow> Rows { get; set; } = [];
+    public List<TableRow> Rows { get; set; } = [];
 
     /// <summary>表格样式（表头背景/斑马纹等）</summary>
-    public WordTableStyle? Style { get; set; }
+    public TableStyle? Style { get; set; }
 
     /// <summary>四边边框配置，null 表示使用默认样式</summary>
-    public WordTableBorders? Borders { get; set; }
+    public TableBorders? Borders { get; set; }
 
     /// <summary>表格总宽度（缇，twips），null 表示自动（铺满可用宽度）</summary>
     public Int32? Width { get; set; }

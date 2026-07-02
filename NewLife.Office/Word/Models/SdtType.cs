@@ -1,7 +1,7 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
-/// <summary>内容控件类型</summary>
-public enum WordSdtType
+/// <summary>SDT 控件类型</summary>
+public enum SdtType
 {
     /// <summary>纯文本</summary>
     PlainText,

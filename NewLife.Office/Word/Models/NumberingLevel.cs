@@ -1,7 +1,7 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
-/// <summary>Word 编号（列表）层级定义</summary>
-public class WordNumberingLevel
+/// <summary>Word 编号级别</summary>
+public class NumberingLevel
 {
     #region 属性
     /// <summary>层级索引（0-8），0 为最顶层</summary>
@@ -29,6 +29,6 @@ public class WordNumberingLevel
     public Int32 HangingIndent { get; set; } = 360;
 
     /// <summary>编号文字格式（字体/大小/粗斜/颜色等）</summary>
-    public WordRunProperties? RunProperties { get; set; }
+    public RunProperties? RunProperties { get; set; }
     #endregion
 }

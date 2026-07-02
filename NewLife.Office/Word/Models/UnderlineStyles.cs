@@ -1,8 +1,8 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word 下划线样式常量（对应 OOXML w:u/@w:val）</summary>
-/// <remarks>引用此常量可避免手写字符串，如 WordUnderlineStyles.Wave</remarks>
-public static class WordUnderlineStyles
+/// <remarks>引用此常量可避免手写字符串，如 UnderlineStyles.Wave</remarks>
+public static class UnderlineStyles
 {
     /// <summary>单线（默认）</summary>
     public const String Single = "single";

@@ -1,7 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
+using NewLife.Office.Ole2;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word 文档加密器，实现 ECMA-376 Agile Encryption（AES + SHA-512）</summary>
 /// <remarks>

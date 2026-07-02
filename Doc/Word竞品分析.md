@@ -51,7 +51,7 @@ graph TD
     I --> J[NewLife.Core]
 ```
 
-> **NewLife.Office 定位**：MIT 许可下功能最全面的 Word 文档库，以文档模型（`WordDocument`）为核心，实现 docx 高保真读写往返，覆盖从程序化创建、模板填充到格式转换的完整链路。唯一在 MIT 许可下同时支持 docx 读写模型 + doc 读取 + 模板 + 转换的开源方案。
+> **NewLife.Office 定位**：MIT 许可下功能最全面的 Word 文档库，以文档模型（`Document`）为核心，实现 docx 高保真读写往返，覆盖从程序化创建、模板填充到格式转换的完整链路。唯一在 MIT 许可下同时支持 docx 读写模型 + doc 读取 + 模板 + 转换的开源方案。
 
 ---
 
@@ -231,10 +231,10 @@ graph TD
 ```
 docx 文件
     ↓ WordReader.ReadDocument()
-WordDocument (模型)
+Document (模型)
     ├── Elements[]          程序化访问（段落/表格/图片）
-    │   ├── WordParagraph   StyleId + Alignment + Indent + Spacing + Runs
-    │   ├── WordTable       完整表格模型
+    │   ├── Paragraph   StyleId + Alignment + Indent + Spacing + Runs
+    │   ├── Table       完整表格模型
     │   └── RawXml          每个元素保留原始 XML ★
     ├── Images[]             图片二进制
     ├── Hyperlinks[]         超链接关系
@@ -398,13 +398,13 @@ using var reader = new WordReader("source.docx");
 var doc = reader.ReadDocument();
 doc.DocumentProperties.Title = "新标题";
 // 在开头插入新段落
-doc.Elements.Insert(0, new WordElement
+doc.Elements.Insert(0, new Element
 {
-    Type = WordElementType.Paragraph,
-    Paragraph = new WordParagraph
+    Type = ElementType.Paragraph,
+    Paragraph = new Paragraph
     {
-        Style = WordParagraphStyle.Heading1,
-        Runs = { new WordRun { Text = "新增章节" } }
+        Style = ParagraphStyle.Heading1,
+        Runs = { new Run { Text = "新增章节" } }
     }
 });
 using var writer = new WordWriter();
@@ -591,9 +591,9 @@ var doc = new XWPFDocument(File.OpenRead("source.docx"));
 
 | 编号 | 功能 | 说明 | 状态 |
 |------|------|------|------|
-| W09-01 | 制表位模型 | `WordParagraph.TabStops`（`WordTabStop`），支持位置/对齐/前导符 | ✅ 完成 |
+| W09-01 | 制表位模型 | `Paragraph.TabStops`（`TabStop`），支持位置/对齐/前导符 | ✅ 完成 |
 | W09-02 | 上标/下标 | `WordRunProperties.Superscript`/`Subscript` | ✅ 完成 |
-| W09-03 | 段落边框 | `WordParagraph.Borders`（`WordParagraphBorders`），四边独立 | ✅ 完成 |
+| W09-03 | 段落边框 | `Paragraph.Borders`（`ParagraphBorders`），四边独立 | ✅ 完成 |
 | W09-04 | 字符间距/缩放 | `WordRunProperties.CharacterSpacing`/`CharacterScaling` | ✅ 完成 |
 | W09-05 | 删除线/下划线样式 | `WordRunProperties.Strikethrough`/`UnderlineStyle`（`WordUnderlineStyles` 常量类） | ✅ 完成 |
 

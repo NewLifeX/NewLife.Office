@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Word;
 
 /// <summary>文档元素类型</summary>
-public enum WordElementType
+public enum ElementType
 {
     /// <summary>段落</summary>
     Paragraph,

@@ -5,7 +5,7 @@ using System.Security;
 using System.Text;
 using System.Xml;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word docx 写入器</summary>
 /// <remarks>
@@ -19,14 +19,14 @@ public class WordWriter : IDisposable
     public Encoding Encoding { get; set; } = Encoding.UTF8;
 
     /// <summary>页面设置</summary>
-    public WordPageSettings PageSettings { get; set; } = new();
+    public PageSettings PageSettings { get; set; } = new();
 
     /// <summary>文档属性</summary>
-    public WordDocumentProperties DocumentProperties { get; set; } = new();
+    public DocumentProperties DocumentProperties { get; set; } = new();
     #endregion
 
     #region 私有字段
-    private readonly List<WordElement> _elements = [];
+    private readonly List<Element> _elements = [];
     private readonly List<(String RelId, String Url)> _hyperlinkRels = [];
     private readonly List<(String RelId, String Ext, Byte[] Data)> _imageRels = [];
     private Int32 _relCounter = 1;
@@ -37,7 +37,7 @@ public class WordWriter : IDisposable
     // 原始 XML 透传（非空时覆盖生成默认）
     private String? _stylesXml;
     private String? _numberingXml;
-    private WordNumbering? _numbering;    // 程序化编号定义（与 NumberingXml 二选一）
+    private Numbering? _numbering;    // 程序化编号定义（与 NumberingXml 二选一）
     private String? _settingsXml;
     private String? _sectPrXml;           // sectPr 原始 XML
     private String? _documentXmlNsDecls;  // document.xml 根元素命名空间声明
@@ -61,12 +61,12 @@ public class WordWriter : IDisposable
     #endregion
 
     #region 段落方法
-    /// <summary>追加段落（WordParagraph 对象）</summary>
+    /// <summary>追加段落（Paragraph 对象）</summary>
     /// <param name="para">段落对象</param>
     /// <returns>段落对象</returns>
-    public WordParagraph AppendParagraph(WordParagraph para)
+    public Paragraph AppendParagraph(Paragraph para)
     {
-        _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
+        _elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para });
         return para;
     }
 
@@ -74,11 +74,11 @@ public class WordWriter : IDisposable
     /// <param name="text">文本内容</param>
     /// <param name="style">段落样式</param>
     /// <returns>段落对象（可进一步设置间距/缩进等属性）</returns>
-    public WordParagraph AppendParagraph(String text, WordParagraphStyle style = WordParagraphStyle.Normal)
+    public Paragraph AppendParagraph(String text, ParagraphStyle style = ParagraphStyle.Normal)
     {
-        var para = new WordParagraph { Style = style };
-        para.Runs.Add(new WordRun { Text = text });
-        _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
+        var para = new Paragraph { Style = style };
+        para.Runs.Add(new Run { Text = text });
+        _elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para });
         return para;
     }
 
@@ -87,11 +87,11 @@ public class WordWriter : IDisposable
     /// <param name="style">段落样式</param>
     /// <param name="runProps">文字格式</param>
     /// <returns>段落对象</returns>
-    public WordParagraph AppendParagraph(String text, WordParagraphStyle style, WordRunProperties runProps)
+    public Paragraph AppendParagraph(String text, ParagraphStyle style, RunProperties runProps)
     {
-        var para = new WordParagraph { Style = style };
-        para.Runs.Add(new WordRun { Text = text, Properties = runProps });
-        _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
+        var para = new Paragraph { Style = style };
+        para.Runs.Add(new Run { Text = text, Properties = runProps });
+        _elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para });
         return para;
     }
 
@@ -99,11 +99,11 @@ public class WordWriter : IDisposable
     /// <param name="text">标题文本</param>
     /// <param name="level">标题级别（1-6）</param>
     /// <returns>段落对象</returns>
-    public WordParagraph AppendHeading(String text, Int32 level = 1)
+    public Paragraph AppendHeading(String text, Int32 level = 1)
     {
         if (level < 1) level = 1;
         if (level > 6) level = 6;
-        return AppendParagraph(text, (WordParagraphStyle)level);
+        return AppendParagraph(text, (ParagraphStyle)level);
     }
 
     /// <summary>追加多格式 Run 的段落</summary>
@@ -111,11 +111,11 @@ public class WordWriter : IDisposable
     /// <param name="style">段落样式</param>
     /// <param name="alignment">对齐（left/center/right/both）</param>
     /// <returns>段落对象</returns>
-    public WordParagraph AppendFormattedParagraph(IEnumerable<WordRun> runs, WordParagraphStyle style = WordParagraphStyle.Normal, String? alignment = null)
+    public Paragraph AppendFormattedParagraph(IEnumerable<Run> runs, ParagraphStyle style = ParagraphStyle.Normal, String? alignment = null)
     {
-        var para = new WordParagraph { Style = style, Alignment = alignment };
+        var para = new Paragraph { Style = style, Alignment = alignment };
         para.Runs.AddRange(runs);
-        _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
+        _elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para });
         return para;
     }
 
@@ -124,13 +124,13 @@ public class WordWriter : IDisposable
     /// <param name="url">目标 URL</param>
     /// <param name="runProps">可选文字格式</param>
     /// <returns>段落对象</returns>
-    public WordParagraph AppendHyperlink(String displayText, String url, WordRunProperties? runProps = null)
+    public Paragraph AppendHyperlink(String displayText, String url, RunProperties? runProps = null)
     {
         var relId = $"rHyp{_relCounter++}";
         _hyperlinkRels.Add((relId, url));
-        var para = new WordParagraph();
-        para.Runs.Add(new WordRun { Text = displayText, Properties = runProps, HyperlinkRelId = relId });
-        _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
+        var para = new Paragraph();
+        para.Runs.Add(new Run { Text = displayText, Properties = runProps, HyperlinkRelId = relId });
+        _elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para });
         return para;
     }
 
@@ -139,7 +139,7 @@ public class WordWriter : IDisposable
     /// <param name="bookmarkName">书签名称</param>
     /// <param name="style">段落样式</param>
     /// <returns>段落对象</returns>
-    public WordParagraph AppendBookmarkedParagraph(String text, String bookmarkName, WordParagraphStyle style = WordParagraphStyle.Normal)
+    public Paragraph AppendBookmarkedParagraph(String text, String bookmarkName, ParagraphStyle style = ParagraphStyle.Normal)
     {
         var para = AppendParagraph(text, style);
         para.BookmarkName = bookmarkName;
@@ -158,7 +158,7 @@ public class WordWriter : IDisposable
             + $"<w:r><w:t>{Esc(displayText)}</w:t></w:r>"
             + "<w:r><w:fldChar w:fldCharType=\"end\"/></w:r>"
             + "</w:p>";
-        _elements.Add(new WordElement { Type = WordElementType.Paragraph, RawXml = xml });
+        _elements.Add(new Element { Type = ElementType.Paragraph, RawXml = xml });
     }
 
     /// <summary>追加邮件合并域（MERGEFIELD）</summary>
@@ -176,21 +176,21 @@ public class WordWriter : IDisposable
             + $"<w:r><w:t>«{Esc(fieldName)}»</w:t></w:r>"
             + "<w:r><w:fldChar w:fldCharType=\"end\"/></w:r>"
             + "</w:p>";
-        _elements.Add(new WordElement { Type = WordElementType.Paragraph, RawXml = xml });
+        _elements.Add(new Element { Type = ElementType.Paragraph, RawXml = xml });
     }
 
     /// <summary>追加分页符</summary>
     public void AppendPageBreak()
     {
-        var para = new WordParagraph { IsPageBreak = true };
-        _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
+        var para = new Paragraph { IsPageBreak = true };
+        _elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para });
     }
 
     /// <summary>追加内容控件（SDT）</summary>
     /// <param name="sdt">SDT 内容控件元素</param>
-    public void AppendSdt(WordSdtElement sdt)
+    public void AppendSdt(SdtElement sdt)
     {
-        _elements.Add(new WordElement { Type = WordElementType.Sdt, Sdt = sdt });
+        _elements.Add(new Element { Type = ElementType.Sdt, Sdt = sdt });
     }
 
     /// <summary>追加纯文本内容控件</summary>
@@ -199,9 +199,9 @@ public class WordWriter : IDisposable
     /// <param name="alias">别名（可选，用于展示名称）</param>
     public void AppendPlainTextSdt(String content, String? tag = null, String? alias = null)
     {
-        AppendSdt(new WordSdtElement
+        AppendSdt(new SdtElement
         {
-            SdtType = WordSdtType.PlainText,
+            SdtType = SdtType.PlainText,
             Content = content,
             Tag = tag,
             Alias = alias
@@ -214,9 +214,9 @@ public class WordWriter : IDisposable
     /// <param name="tag">标签</param>
     public void AppendDateSdt(String dateText, String dateFormat = "yyyy-MM-dd", String? tag = null)
     {
-        AppendSdt(new WordSdtElement
+        AppendSdt(new SdtElement
         {
-            SdtType = WordSdtType.Date,
+            SdtType = SdtType.Date,
             Content = dateText,
             DateFormat = dateFormat,
             Tag = tag
@@ -229,9 +229,9 @@ public class WordWriter : IDisposable
     /// <param name="tag">标签</param>
     public void AppendDropDownListSdt(String selectedText, IEnumerable<String> items, String? tag = null)
     {
-        AppendSdt(new WordSdtElement
+        AppendSdt(new SdtElement
         {
-            SdtType = WordSdtType.DropDownList,
+            SdtType = SdtType.DropDownList,
             Content = selectedText,
             ListItems = items.ToList(),
             Tag = tag
@@ -244,9 +244,9 @@ public class WordWriter : IDisposable
     /// <param name="alias">别名（可选）</param>
     public void AppendRichTextSdt(String content, String? tag = null, String? alias = null)
     {
-        AppendSdt(new WordSdtElement
+        AppendSdt(new SdtElement
         {
-            SdtType = WordSdtType.RichText,
+            SdtType = SdtType.RichText,
             Content = content,
             Tag = tag,
             Alias = alias
@@ -259,9 +259,9 @@ public class WordWriter : IDisposable
     /// <param name="tag">标签</param>
     public void AppendComboBoxSdt(String selectedText, IEnumerable<String> items, String? tag = null)
     {
-        AppendSdt(new WordSdtElement
+        AppendSdt(new SdtElement
         {
-            SdtType = WordSdtType.ComboBox,
+            SdtType = SdtType.ComboBox,
             Content = selectedText,
             ListItems = items.ToList(),
             Tag = tag
@@ -274,9 +274,9 @@ public class WordWriter : IDisposable
     {
         foreach (var item in items)
         {
-            var para = new WordParagraph { IsBullet = true };
-            para.Runs.Add(new WordRun { Text = item });
-            _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
+            var para = new Paragraph { IsBullet = true };
+            para.Runs.Add(new Run { Text = item });
+            _elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para });
         }
     }
 
@@ -286,9 +286,9 @@ public class WordWriter : IDisposable
     {
         foreach (var (text, level) in items)
         {
-            var para = new WordParagraph { IsBullet = true, ListLevel = level };
-            para.Runs.Add(new WordRun { Text = text });
-            _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
+            var para = new Paragraph { IsBullet = true, ListLevel = level };
+            para.Runs.Add(new Run { Text = text });
+            _elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para });
         }
     }
 
@@ -298,9 +298,9 @@ public class WordWriter : IDisposable
     {
         foreach (var item in items)
         {
-            var para = new WordParagraph { IsOrderedList = true };
-            para.Runs.Add(new WordRun { Text = item });
-            _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
+            var para = new Paragraph { IsOrderedList = true };
+            para.Runs.Add(new Run { Text = item });
+            _elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para });
         }
     }
     #endregion
@@ -310,20 +310,20 @@ public class WordWriter : IDisposable
     /// <param name="rows">行集合，每行为列字符串集合</param>
     /// <param name="firstRowHeader">首行是否表头</param>
     /// <param name="style">表格样式，null=默认黑色边框</param>
-    public void AppendTable(IEnumerable<IEnumerable<String>> rows, Boolean firstRowHeader = false, WordTableStyle? style = null)
+    public void AppendTable(IEnumerable<IEnumerable<String>> rows, Boolean firstRowHeader = false, TableStyle? style = null)
     {
         var tableRows = rows.Select(row => row.Select(cellText =>
         {
-            var cell = new WordCell();
-            var para = new WordParagraph();
-            para.Runs.Add(new WordRun { Text = cellText });
+            var cell = new Cell();
+            var para = new Paragraph();
+            para.Runs.Add(new Run { Text = cellText });
             cell.Paragraphs.Add(para);
             return cell;
         }).ToList()).ToList();
 
-        _elements.Add(new WordElement
+        _elements.Add(new Element
         {
-            Type = WordElementType.Table,
+            Type = ElementType.Table,
             TableRows = tableRows,
             TableFirstRowHeader = firstRowHeader,
             TableStyle = style,
@@ -335,26 +335,26 @@ public class WordWriter : IDisposable
     /// <param name="width">线宽（1/8pt，默认 6 = 0.75pt）</param>
     public void AppendHorizontalRule(String? colorHex = null, Int32 width = 6)
     {
-        var para = new WordParagraph
+        var para = new Paragraph
         {
-            Borders = new WordParagraphBorders
+            Borders = new ParagraphBorders
             {
-                Bottom = new WordBorder
+                Bottom = new Border
                 {
-                    Style = WordBorderStyle.Single,
+                    Style = BorderStyle.Single,
                     Width = width,
                     Color = colorHex ?? "000000"
                 }
             }
         };
-        _elements.Add(new WordElement { Type = WordElementType.Paragraph, Paragraph = para });
+        _elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para });
     }
     /// <summary>将对象集合写入 Word 表格</summary>
     /// <typeparam name="T">对象类型</typeparam>
     /// <param name="data">对象集合</param>
     /// <param name="firstRowHeader">是否将第一行作为表头</param>
     /// <param name="style">表格样式</param>
-    public void WriteObjects<T>(IEnumerable<T> data, Boolean firstRowHeader = true, WordTableStyle? style = null) where T : class
+    public void WriteObjects<T>(IEnumerable<T> data, Boolean firstRowHeader = true, TableStyle? style = null) where T : class
     {
         WriteObjects(data, firstRowHeader, style, 0);
     }
@@ -370,7 +370,7 @@ public class WordWriter : IDisposable
     /// 例如 Order.Customer.Name 会生成列 "Customer.Name"。
     /// 集合属性（IEnumerable）不会被展开为子表格，仅展平其直接子属性。
     /// </remarks>
-    public void WriteObjects<T>(IEnumerable<T> data, Boolean firstRowHeader, WordTableStyle? style = null, Int32 maxDepth = 0) where T : class
+    public void WriteObjects<T>(IEnumerable<T> data, Boolean firstRowHeader, TableStyle? style = null, Int32 maxDepth = 0) where T : class
     {
         var headers = new List<String>();
         var propPaths = new List<PropPathEntry>();
@@ -403,7 +403,7 @@ public class WordWriter : IDisposable
         var relId = $"rImg{_imgCounter++}";
         var ext = extension.TrimStart('.').ToLowerInvariant();
         _imageRels.Add((relId, ext, imageData));
-        var img = new WordImage
+        var img = new Image
         {
             ImageData = imageData,
             Extension = ext,
@@ -411,7 +411,7 @@ public class WordWriter : IDisposable
             WidthEmu = (Int64)(widthCm * 360000),
             HeightEmu = (Int64)(heightCm * 360000),
         };
-        _elements.Add(new WordElement { Type = WordElementType.Image, Image = img });
+        _elements.Add(new Element { Type = ElementType.Image, Image = img });
     }
     #endregion
 
@@ -474,14 +474,14 @@ public class WordWriter : IDisposable
     }
 
     /// <summary>保存文档模型到文件</summary>
-    public void Save(String path, WordDocument document)
+    public void Save(String path, Document document)
     {
         using var fs = new FileStream(path.GetFullPath(), FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
         Save(fs, document);
     }
 
     /// <summary>保存文档模型到流</summary>
-    public void Save(Stream stream, WordDocument document)
+    public void Save(Stream stream, Document document)
     {
         _elements.Clear(); _imageRels.Clear(); _hyperlinkRels.Clear();
         _relCounter = 1; _imgCounter = 1; _bookmarkId = 1;
@@ -513,7 +513,7 @@ public class WordWriter : IDisposable
     }
 
     /// <summary>追加文档元素</summary>
-    public void AppendDocument(WordDocument document)
+    public void AppendDocument(Document document)
     {
         _elements.AddRange(document.Elements);
         foreach (var kv in document.Images) _imageRels.Add((kv.Key, kv.Value.Extension, kv.Value.Data));
@@ -586,7 +586,7 @@ public class WordWriter : IDisposable
         sb.Append("<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>");
         sb.Append("<Override PartName=\"/word/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml\"/>");
         sb.Append("<Override PartName=\"/word/settings.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml\"/>");
-        if (_numberingXml != null || _elements.Any(e => e.Type == WordElementType.Paragraph && e.Paragraph?.IsBullet == true))
+        if (_numberingXml != null || _elements.Any(e => e.Type == ElementType.Paragraph && e.Paragraph?.IsBullet == true))
             sb.Append("<Override PartName=\"/word/numbering.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml\"/>");
         var ps = PageSettings;
         if (ps.HeaderText != null || ps.WatermarkText != null)
@@ -791,20 +791,20 @@ public class WordWriter : IDisposable
         }
 
         // 检查是否有任何列表项需要编号定义
-        var hasBullets = _elements.Any(e => e.Type == WordElementType.Paragraph && e.Paragraph?.IsBullet == true);
-        var hasOrdered = _elements.Any(e => e.Type == WordElementType.Paragraph && e.Paragraph?.IsOrderedList == true);
+        var hasBullets = _elements.Any(e => e.Type == ElementType.Paragraph && e.Paragraph?.IsBullet == true);
+        var hasOrdered = _elements.Any(e => e.Type == ElementType.Paragraph && e.Paragraph?.IsOrderedList == true);
         if (!hasBullets && !hasOrdered) return;
 
         const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
-        // 使用 WordNumbering 模型生成（程序化创建自定义列表）
+        // 使用 Numbering 模型生成（程序化创建自定义列表）
         if (_numbering != null)
         {
             WriteNumberingFromModel(za, W);
             return;
         }
 
-        var hasMultiLevel = _elements.Any(e => e.Type == WordElementType.Paragraph && e.Paragraph?.ListLevel > 0);
+        var hasMultiLevel = _elements.Any(e => e.Type == ElementType.Paragraph && e.Paragraph?.ListLevel > 0);
         var maxLevel = hasMultiLevel ? 3 : 1;
 
         var sb = new StringBuilder();
@@ -862,7 +862,7 @@ public class WordWriter : IDisposable
         WriteEntry(za, "word/numbering.xml", sb.ToString());
     }
 
-    /// <summary>从 WordNumbering 模型生成 numbering.xml</summary>
+    /// <summary>从 Numbering 模型生成 numbering.xml</summary>
     private void WriteNumberingFromModel(ZipArchive za, String wNs)
     {
         var num = _numbering!;
@@ -984,16 +984,16 @@ public class WordWriter : IDisposable
             {
                 switch (el.Type)
                 {
-                    case WordElementType.Paragraph when el.Paragraph != null:
+                    case ElementType.Paragraph when el.Paragraph != null:
                         BuildParagraphXml(sb, el.Paragraph);
                         break;
-                    case WordElementType.Table when el.TableRows != null:
+                    case ElementType.Table when el.TableRows != null:
                         BuildTableXml(sb, el.TableRows, el.TableFirstRowHeader, el.TableStyle);
                         break;
-                    case WordElementType.Image when el.Image != null:
+                    case ElementType.Image when el.Image != null:
                         BuildImageXml(sb, el.Image);
                         break;
-                    case WordElementType.Sdt:
+                    case ElementType.Sdt:
                         if (el.RawXml != null)
                             sb.Append(el.RawXml);
                         else if (el.Sdt != null)
@@ -1102,7 +1102,7 @@ public class WordWriter : IDisposable
         WriteEntry(za, "word/footer1.xml", sb.ToString());
     }
 
-    private void BuildParagraphXml(StringBuilder sb, WordParagraph para)
+    private void BuildParagraphXml(StringBuilder sb, Paragraph para)
     {
         // 书签开始标记放在 <w:p> 之前（包住整段）
         if (para.BookmarkName != null)
@@ -1118,7 +1118,7 @@ public class WordWriter : IDisposable
         }
 
         // paragraph properties
-        var hasPPr = para.StyleId != null || para.Style != WordParagraphStyle.Normal || para.Alignment != null
+        var hasPPr = para.StyleId != null || para.Style != ParagraphStyle.Normal || para.Alignment != null
             || para.IndentLeft.HasValue || para.IndentRight.HasValue || para.FirstLineIndent.HasValue
             || para.SpaceBefore.HasValue || para.SpaceAfter.HasValue || para.LineSpacingPct.HasValue
             || para.IsBullet || para.IsOrderedList || para.BackgroundColor != null
@@ -1133,7 +1133,7 @@ public class WordWriter : IDisposable
             if (!para.WidowControl) sb.Append("<w:widowControl w:val=\"0\"/>");
             if (para.StyleId != null)
                 sb.Append($"<w:pStyle w:val=\"{Esc(para.StyleId)}\"/>");
-            else if (para.Style != WordParagraphStyle.Normal)
+            else if (para.Style != ParagraphStyle.Normal)
                 sb.Append($"<w:pStyle w:val=\"Heading{(Int32)para.Style}\"/>");
             if (para.Alignment != null)
                 sb.Append($"<w:jc w:val=\"{para.Alignment}\"/>");
@@ -1219,7 +1219,7 @@ public class WordWriter : IDisposable
         sb.Append("</w:p>");
     }
 
-    private static void BuildSdtXml(StringBuilder sb, WordSdtElement sdt)
+    private static void BuildSdtXml(StringBuilder sb, SdtElement sdt)
     {
 
         sb.Append("<w:sdt>");
@@ -1238,11 +1238,11 @@ public class WordWriter : IDisposable
         // 占位符文本
         var placeholder = sdt.SdtType switch
         {
-            WordSdtType.PlainText => "单击或点击输入文字",
-            WordSdtType.RichText => "单击或点击输入文字",
-            WordSdtType.Date => "单击或点击输入日期",
-            WordSdtType.DropDownList => "选择一项",
-            WordSdtType.ComboBox => "选择或输入一项",
+            SdtType.PlainText => "单击或点击输入文字",
+            SdtType.RichText => "单击或点击输入文字",
+            SdtType.Date => "单击或点击输入日期",
+            SdtType.DropDownList => "选择一项",
+            SdtType.ComboBox => "选择或输入一项",
             _ => "单击或点击输入文字"
         };
         sb.Append($"<w:placeholder><w:docPart w:val=\"{Esc(placeholder)}\"/></w:placeholder>");
@@ -1250,13 +1250,13 @@ public class WordWriter : IDisposable
         // 类型特定属性
         switch (sdt.SdtType)
         {
-            case WordSdtType.PlainText:
+            case SdtType.PlainText:
                 sb.Append("<w:text/>");
                 break;
-            case WordSdtType.RichText:
+            case SdtType.RichText:
                 sb.Append("<w:richText/>");
                 break;
-            case WordSdtType.Date:
+            case SdtType.Date:
                 sb.Append("<w:date>");
                 var fmt = sdt.DateFormat ?? "yyyy-MM-dd";
                 sb.Append($"<w:dateFormat w:val=\"{Esc(fmt)}\"/>");
@@ -1265,7 +1265,7 @@ public class WordWriter : IDisposable
                 sb.Append("<w:calendar w:val=\"gregorian\"/>");
                 sb.Append("</w:date>");
                 break;
-            case WordSdtType.DropDownList:
+            case SdtType.DropDownList:
                 sb.Append("<w:dropDownList>");
                 if (sdt.ListItems != null)
                 {
@@ -1274,7 +1274,7 @@ public class WordWriter : IDisposable
                 }
                 sb.Append("</w:dropDownList>");
                 break;
-            case WordSdtType.ComboBox:
+            case SdtType.ComboBox:
                 sb.Append("<w:comboBox>");
                 if (sdt.ListItems != null)
                 {
@@ -1283,7 +1283,7 @@ public class WordWriter : IDisposable
                 }
                 sb.Append("</w:comboBox>");
                 break;
-            case WordSdtType.CheckBox:
+            case SdtType.CheckBox:
                 sb.Append("<w:checkbox><w:checked w:val=\"0\"/><w:checkedState w:val=\"☒\"/><w:uncheckedState w:val=\"☐\"/></w:checkbox>");
                 break;
         }
@@ -1299,7 +1299,7 @@ public class WordWriter : IDisposable
         sb.Append("</w:sdt>");
     }
 
-    private static void BuildRunXml(StringBuilder sb, WordRun run)
+    private static void BuildRunXml(StringBuilder sb, Run run)
     {
         if (run.HyperlinkRelId != null)
             sb.Append($"<w:hyperlink r:id=\"{run.HyperlinkRelId}\" w:history=\"1\">");
@@ -1354,18 +1354,18 @@ public class WordWriter : IDisposable
     }
 
     /// <summary>生成单边段落边框 XML（w:top / w:left / w:bottom / w:right）</summary>
-    private static void AppendBorderXml(StringBuilder sb, String edge, WordBorder? border)
+    private static void AppendBorderXml(StringBuilder sb, String edge, Border? border)
     {
-        if (border == null || border.Style == WordBorderStyle.None) return;
+        if (border == null || border.Style == BorderStyle.None) return;
         var val = border.Style switch
         {
-            WordBorderStyle.Single     => "single",
-            WordBorderStyle.Thick      => "thick",
-            WordBorderStyle.Double     => "double",
-            WordBorderStyle.Dotted     => "dotted",
-            WordBorderStyle.Dashed     => "dashed",
-            WordBorderStyle.DotDash    => "dotDash",
-            WordBorderStyle.DotDotDash => "dotDotDash",
+            BorderStyle.Single     => "single",
+            BorderStyle.Thick      => "thick",
+            BorderStyle.Double     => "double",
+            BorderStyle.Dotted     => "dotted",
+            BorderStyle.Dashed     => "dashed",
+            BorderStyle.DotDash    => "dotDash",
+            BorderStyle.DotDotDash => "dotDotDash",
             _                          => "single",
         };
         sb.Append($"<w:{edge} w:val=\"{val}\" w:sz=\"{border.Width}\" w:space=\"1\"");
@@ -1375,7 +1375,7 @@ public class WordWriter : IDisposable
         sb.Append("/>");
     }
 
-    private static void AppendPgBorderXml(StringBuilder sb, String edge, String? style, WordPageBorder pb)
+    private static void AppendPgBorderXml(StringBuilder sb, String edge, String? style, PageBorder pb)
     {
         if (style == null || style == "none") return;
         sb.Append($"<w:{edge} w:val=\"{style}\" w:sz=\"{pb.Size}\" w:space=\"{pb.Space}\"");
@@ -1383,7 +1383,7 @@ public class WordWriter : IDisposable
         sb.Append("/>");
     }
 
-    private void BuildTableXml(StringBuilder sb, List<List<WordCell>> tableRows, Boolean firstRowHeader, WordTableStyle? style = null)
+    private void BuildTableXml(StringBuilder sb, List<List<Cell>> tableRows, Boolean firstRowHeader, TableStyle? style = null)
     {
         var ps = PageSettings;
         var borderColor = style?.BorderColor ?? "000000";
@@ -1465,7 +1465,7 @@ public class WordWriter : IDisposable
                     {
                         foreach (var run in para.Runs)
                         {
-                            run.Properties ??= new WordRunProperties();
+                            run.Properties ??= new RunProperties();
                             run.Properties.Bold = true;
                         }
                     }
@@ -1478,7 +1478,7 @@ public class WordWriter : IDisposable
         sb.Append("</w:tbl>");
     }
 
-    private static void BuildImageXml(StringBuilder sb, WordImage img)
+    private static void BuildImageXml(StringBuilder sb, Image img)
     {
         var id = Math.Abs(img.RelId.GetHashCode());
         sb.Append("<w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">");

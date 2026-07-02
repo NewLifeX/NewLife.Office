@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Word;
 
 /// <summary>Word 段落样式</summary>
-public enum WordParagraphStyle
+public enum ParagraphStyle
 {
     /// <summary>普通</summary>
     Normal,

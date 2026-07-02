@@ -1,14 +1,14 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word 表格行</summary>
 /// <remarks>
 /// 对应 OOXML <c>w:tr</c> 元素，持有行级属性和单元格集合。
 /// </remarks>
-public class WordTableRow
+public class TableRow
 {
     #region 属性
     /// <summary>单元格集合</summary>
-    public List<WordCell> Cells { get; set; } = [];
+    public List<Cell> Cells { get; set; } = [];
 
     /// <summary>行高（缇，twips，1 twip = 1/20 磅），null 表示自动高度</summary>
     public Int32? Height { get; set; }

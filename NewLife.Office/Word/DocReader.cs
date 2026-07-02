@@ -2,8 +2,9 @@ using System.Text;
 using NewLife.Buffers;
 using NewLife.Collections;
 using NewLife.Office;
+using NewLife.Office.Ole2;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Word;
 
 /// <summary>Word 97-2003 二进制（.doc）文档读取器</summary>
 /// <remarks>
