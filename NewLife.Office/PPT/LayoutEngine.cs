@@ -1,17 +1,17 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 幻灯片自动排版引擎</summary>
 /// <remarks>
-/// 根据 <see cref="PptSlide.Layout"/> 策略和各元素的 <see cref="PptTextBox.Role"/>，
+/// 根据 <see cref="Slide.Layout"/> 策略和各元素的 <see cref="TextBox.Role"/>，
 /// 自动计算 16:9 画布上每个元素的坐标，并直接写入 Left/Top/Width/Height（EMU 单位）。
 /// <para>画布尺寸：33.87cm × 19.05cm（16:9）。边距：左/右 2cm，顶部 1.5cm。</para>
 /// <example>
 /// <code>
-/// var slide = new PptSlide { Layout = "title_content" };
-/// slide.TextBoxes.Add(new PptTextBox { Text = "标题", Role = "title" });
-/// slide.TextBoxes.Add(new PptTextBox { Text = "正文内容", Role = "body" });
+/// var slide = new Slide { Layout = "title_content" };
+/// slide.TextBoxes.Add(new TextBox { Text = "标题", Role = "title" });
+/// slide.TextBoxes.Add(new TextBox { Text = "正文内容", Role = "body" });
 /// // 柱状图
-/// var chart = new PptChart { ChartType = "bar" };
+/// var chart = new Chart { ChartType = "bar" };
 /// slide.Charts.Add(chart);
 ///
 /// LayoutEngine.Apply(slide);  // 自动计算并写入所有元素坐标
@@ -42,7 +42,7 @@ public static class LayoutEngine
     #region 公共方法
     /// <summary>根据 slide.Layout 策略自动计算所有元素坐标，并写入各元素的 Left/Top/Width/Height</summary>
     /// <param name="slide">目标幻灯片</param>
-    public static void Apply(PptSlide slide)
+    public static void Apply(Slide slide)
     {
         var strategy = (slide.Layout ?? "title_content").ToLowerInvariant();
         switch (strategy)
@@ -58,7 +58,7 @@ public static class LayoutEngine
 
     #region 布局策略
     // ── title_content（默认）──────────────────────────────────────────
-    private static void ApplyTitleContent(PptSlide slide)
+    private static void ApplyTitleContent(Slide slide)
     {
         var curY = MarginT;
 
@@ -140,7 +140,7 @@ public static class LayoutEngine
     }
 
     // ── title_only（封面）────────────────────────────────────────────
-    private static void ApplyTitleOnly(PptSlide slide)
+    private static void ApplyTitleOnly(Slide slide)
     {
         var title = FindRole(slide, "title") ?? slide.TextBoxes.FirstOrDefault();
         SetRect(title, MarginL, SlideH / 2 - 2.0, ContentW, 4.0);
@@ -151,7 +151,7 @@ public static class LayoutEngine
     }
 
     // ── two_column（双栏）────────────────────────────────────────────
-    private static void ApplyTwoColumn(PptSlide slide)
+    private static void ApplyTwoColumn(Slide slide)
     {
         var colW = (ContentW - 1.0) / 2;
         var curY = MarginT;
@@ -188,7 +188,7 @@ public static class LayoutEngine
     }
 
     // ── chart_only（全幅图表）────────────────────────────────────────
-    private static void ApplyChartOnly(PptSlide slide)
+    private static void ApplyChartOnly(Slide slide)
     {
         var title = FindRole(slide, "title");
         if (title != null)
@@ -203,7 +203,7 @@ public static class LayoutEngine
     }
 
     // ── blank（流式布局）─────────────────────────────────────────────
-    private static void ApplyBlank(PptSlide slide)
+    private static void ApplyBlank(Slide slide)
     {
         var curY = MarginT;
         foreach (Object elem in slide.TextBoxes.Cast<Object>()
@@ -219,11 +219,11 @@ public static class LayoutEngine
     #endregion
 
     #region 辅助方法
-    private static PptTextBox? FindRole(PptSlide slide, String role) =>
+    private static TextBox? FindRole(Slide slide, String role) =>
         slide.TextBoxes.FirstOrDefault(tb => tb.Role == role);
 
-    /// <summary>设置 PptTextBox 坐标（cm → EMU）</summary>
-    private static void SetRect(PptTextBox? tb, Double x, Double y, Double w, Double h)
+    /// <summary>设置 TextBox 坐标（cm → EMU）</summary>
+    private static void SetRect(TextBox? tb, Double x, Double y, Double w, Double h)
     {
         if (tb == null) return;
         tb.Left   = (Int64)(x * CmToEmu);
@@ -232,7 +232,7 @@ public static class LayoutEngine
         tb.Height = (Int64)(h * CmToEmu);
     }
 
-    private static void SetRectTable(PptTable table, Double x, Double y, Double w, Double h)
+    private static void SetRectTable(Table table, Double x, Double y, Double w, Double h)
     {
         table.Left   = (Int64)(x * CmToEmu);
         table.Top    = (Int64)(y * CmToEmu);
@@ -240,7 +240,7 @@ public static class LayoutEngine
         table.Height = (Int64)(h * CmToEmu);
     }
 
-    private static void SetRectChart(PptChart chart, Double x, Double y, Double w, Double h)
+    private static void SetRectChart(Chart chart, Double x, Double y, Double w, Double h)
     {
         chart.Left   = (Int64)(x * CmToEmu);
         chart.Top    = (Int64)(y * CmToEmu);
@@ -248,7 +248,7 @@ public static class LayoutEngine
         chart.Height = (Int64)(h * CmToEmu);
     }
 
-    private static void SetRectImage(PptImage image, Double x, Double y, Double w, Double h)
+    private static void SetRectImage(Picture image, Double x, Double y, Double w, Double h)
     {
         image.Left   = (Int64)(x * CmToEmu);
         image.Top    = (Int64)(y * CmToEmu);
@@ -260,19 +260,19 @@ public static class LayoutEngine
     {
         switch (elem)
         {
-            case PptTextBox tb: SetRect(tb, x, y, w, h);         break;
-            case PptTable t:    SetRectTable(t, x, y, w, h);     break;
-            case PptChart c:    SetRectChart(c, x, y, w, h);     break;
-            case PptImage img:  SetRectImage(img, x, y, w, h);   break;
+            case TextBox tb: SetRect(tb, x, y, w, h);         break;
+            case Table t:    SetRectTable(t, x, y, w, h);     break;
+            case Chart c:    SetRectChart(c, x, y, w, h);     break;
+            case Picture img:  SetRectImage(img, x, y, w, h);   break;
         }
     }
 
     private static Double GetHeight(Object elem) => elem switch
     {
-        PptTable   => 6.0,
-        PptChart   => 9.0,
-        PptImage   => 7.0,
-        PptTextBox tb => tb.Role == "kpi" ? 3.5 : 2.5,
+        Table   => 6.0,
+        Chart   => 9.0,
+        Picture   => 7.0,
+        TextBox tb => tb.Role == "kpi" ? 3.5 : 2.5,
         _          => 2.5,
     };
     #endregion

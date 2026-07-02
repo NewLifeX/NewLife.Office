@@ -1,5 +1,7 @@
 ﻿using System.Text;
 using NewLife.Office;
+using NewLife.Office.Ole2;
+using NewLife.Office.Ppt;
 using Xunit;
 
 namespace XUnitTest.Ppt;

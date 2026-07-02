@@ -1,6 +1,7 @@
 ﻿using System.IO.Compression;
 using System.Text;
 using NewLife.Office;
+using NewLife.Office.Ppt;
 using Xunit;
 
 namespace XUnitTest.Ppt;

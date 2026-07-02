@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 连接线/连接器</summary>
 /// <remarks>
@@ -6,7 +6,7 @@ namespace NewLife.Office;
 /// 对标 OOXML <c>p:cxnSp</c>（Connection Shape）元素。
 /// <example>
 /// <code>
-/// var connector = new PptConnector
+/// var connector = new ConnectionShape
 /// {
 ///     ConnectorType = "elbow",
 ///     Left = 0, Top = 0, Width = (Int64)(10 * 360000), Height = (Int64)(5 * 360000),
@@ -18,7 +18,7 @@ namespace NewLife.Office;
 /// </code>
 /// </example>
 /// </remarks>
-public class PptConnector
+public class ConnectionShape
 {
     #region 属性
     /// <summary>左边距（EMU）</summary>

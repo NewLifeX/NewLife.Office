@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 嵌入图表</summary>
-public class PptChart
+public class Chart
 {
     #region 属性
     /// <summary>图表类型（bar/line/pie/area/scatter）</summary>
@@ -14,7 +14,7 @@ public class PptChart
     public String[] Categories { get; set; } = [];
 
     /// <summary>系列集合</summary>
-    public List<PptChartSeries> Series { get; } = [];
+    public List<ChartSeries> Series { get; } = [];
 
     /// <summary>左边距（EMU）</summary>
     public Int64 Left { get; set; }

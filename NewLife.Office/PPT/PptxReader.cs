@@ -1,9 +1,9 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Xml;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PowerPoint pptx 读取器</summary>
 /// <remarks>
@@ -104,7 +104,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
     /// <summary>读取所有幻灯片摘要</summary>
     /// <returns>幻灯片摘要序列</returns>
-    public IEnumerable<PptSlideSummary> ReadSlides()
+    public IEnumerable<SlideSummary> ReadSlides()
     {
         var count = GetSlideCount();
         for (var i = 0; i < count; i++)
@@ -112,7 +112,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
             var entry = _zip.GetEntry($"ppt/slides/slide{i + 1}.xml");
             if (entry == null) continue;
 
-            var summary = new PptSlideSummary { Index = i };
+            var summary = new SlideSummary { Index = i };
             var doc = LoadXml(entry);
             const String A = "http://schemas.openxmlformats.org/drawingml/2006/main";
             var ns = new XmlNamespaceManager(doc.NameTable);
@@ -146,7 +146,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                 var xfrm = sp.SelectSingleNode(".//*[local-name()='xfrm']");
                 var off = xfrm?.SelectSingleNode(".//*[local-name()='off']");
                 var ext = xfrm?.SelectSingleNode(".//*[local-name()='ext']");
-                summary.Shapes.Add(new PptShape
+                summary.Shapes.Add(new Shape
                 {
                     Id = Int32.TryParse(id, out var idNum) ? idNum : 0,
                     ShapeType = spTypAttr,
@@ -184,7 +184,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     /// 对生成工具创建的 pptx 文件，通常只有一个母版（slideMaster1.xml）。
     /// </remarks>
     /// <returns>母版信息列表</returns>
-    public IEnumerable<PptMasterInfo> ReadSlideMasters()
+    public IEnumerable<SlideMasterInfo> ReadSlideMasters()
     {
         ThrowIfDisposed();
         var masters = _zip.Entries
@@ -198,7 +198,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         foreach (var entry in masters)
         {
             var doc = LoadXml(entry);
-            var mi = new PptMasterInfo { Index = idx++, Name = Path.GetFileNameWithoutExtension(entry.Name) };
+            var mi = new SlideMasterInfo { Index = idx++, Name = Path.GetFileNameWithoutExtension(entry.Name) };
 
             // 背景色
             var bgNode = doc.SelectSingleNode("//*[local-name()='bg']//*[local-name()='srgbClr']") as XmlElement;
@@ -227,7 +227,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     /// 解析 ppt/slideLayouts/*.xml，返回版式名称及类型。
     /// </remarks>
     /// <returns>版式信息列表</returns>
-    public IEnumerable<PptLayoutInfo> ReadSlideLayouts()
+    public IEnumerable<SlideLayoutInfo> ReadSlideLayouts()
     {
         ThrowIfDisposed();
         var layouts = _zip.Entries
@@ -242,7 +242,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         {
             var doc = LoadXml(entry);
             var root = doc.DocumentElement;
-            var li = new PptLayoutInfo
+            var li = new SlideLayoutInfo
             {
                 Index = idx++,
                 Name = Path.GetFileNameWithoutExtension(entry.Name),
@@ -260,7 +260,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     /// </remarks>
     /// <param name="slideIndex">幻灯片索引（0 起始）</param>
     /// <returns>该页所有图表的数据集合</returns>
-    public IEnumerable<PptChartInfo> ReadChartData(Int32 slideIndex)
+    public IEnumerable<ChartInfo> ReadChartData(Int32 slideIndex)
     {
         ThrowIfDisposed();
         var relsEntry = _zip.GetEntry($"ppt/slides/_rels/slide{slideIndex + 1}.xml.rels");
@@ -283,7 +283,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
             const String C = "http://schemas.openxmlformats.org/drawingml/2006/chart";
             var cns = new XmlNamespaceManager(chartDoc.NameTable);
             cns.AddNamespace("c", C);
-            var info = new PptChartInfo { ChartNumber = ++chartNum };
+            var info = new ChartInfo { ChartNumber = ++chartNum };
             // 图表类型
             var chartTypeNode = chartDoc.SelectSingleNode("//*[substring(local-name(), string-length(local-name())-4) = 'Chart'][@*]", null);
             info.ChartType = chartTypeNode?.LocalName?.Replace("Chart", String.Empty) ?? "bar";
@@ -309,7 +309,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     if (Double.TryParse(v.InnerText, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
                         vals.Add(d);
                 }
-                info.Series.Add(new PptChartSeriesData { Name = serName, Values = vals.ToArray() });
+                info.Series.Add(new ChartSeriesData { Name = serName, Values = vals.ToArray() });
             }
             yield return info;
         }
@@ -368,13 +368,13 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     /// <summary>完整读取指定幻灯片为内存对象（含文本框/形状/图片/表格/图表/组/备注/切换动画/超链接/视频）</summary>
     /// <param name="slideIndex">幻灯片索引（0起始）</param>
     /// <returns>完整的幻灯片对象</returns>
-    public PptSlide ReadSlide(Int32 slideIndex)
+    public Slide ReadSlide(Int32 slideIndex)
     {
         ThrowIfDisposed();
         var entry = _zip.GetEntry($"ppt/slides/slide{slideIndex + 1}.xml");
         if (entry == null) throw new ArgumentOutOfRangeException(nameof(slideIndex), $"幻灯片 {slideIndex} 不存在");
 
-        var slide = new PptSlide();
+        var slide = new Slide();
         var doc = LoadXml(entry);
         var rels = ReadSlideRels(slideIndex);
 
@@ -417,18 +417,18 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
     /// <summary>完整读取所有幻灯片为内存对象</summary>
     /// <returns>幻灯片对象序列</returns>
-    public IEnumerable<PptSlide> ReadAllSlides()
+    public IEnumerable<Slide> ReadAllSlides()
     {
         var count = GetSlideCount();
         for (var i = 0; i < count; i++)
             yield return ReadSlide(i);
     }
 
-    /// <summary>读取整个演示文稿为 PptDocument 数据模型</summary>
-    /// <returns>包含全部幻灯片和文档属性的 PptDocument</returns>
-    public PptDocument ReadDocument()
+    /// <summary>读取整个演示文稿为 Presentation 数据模型</summary>
+    /// <returns>包含全部幻灯片和文档属性的 Presentation</returns>
+    public Presentation ReadDocument()
     {
-        var doc = new PptDocument
+        var doc = new Presentation
         {
             SlideWidth  = SlideWidth,
             SlideHeight = SlideHeight,
@@ -448,7 +448,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     /// <summary>从幻灯片关系文件解析所用版式索引</summary>
     /// <param name="slide">目标幻灯片</param>
     /// <param name="slideRels">幻灯片关系映射</param>
-    private static void ParseLayoutIndex(PptSlide slide, Dictionary<String, (String Target, String Type)> slideRels)
+    private static void ParseLayoutIndex(Slide slide, Dictionary<String, (String Target, String Type)> slideRels)
     {
         foreach (var kv in slideRels)
         {
@@ -485,7 +485,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>从 presentation.xml 解析节（Section）信息</summary>
-    private List<PptSection>? ParseSections()
+    private List<Section>? ParseSections()
     {
         var entry = _zip.GetEntry("ppt/presentation.xml");
         if (entry == null) return null;
@@ -497,7 +497,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         var sectionNodes = doc.SelectNodes("//p14:section", ns);
         if (sectionNodes == null || sectionNodes.Count == 0) return null;
 
-        var sections = new List<PptSection>();
+        var sections = new List<Section>();
         foreach (XmlElement secEl in sectionNodes)
         {
             var name = secEl.GetAttribute("name");
@@ -513,7 +513,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                         indices.Add(id - 256);
                 }
             }
-            sections.Add(new PptSection { Name = name, SlideIndices = indices });
+            sections.Add(new Section { Name = name, SlideIndices = indices });
         }
         return sections.Count > 0 ? sections : null;
     }
@@ -593,7 +593,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>解析幻灯片背景（纯色或图片），三级回退：slide rels → layout rels → master rels</summary>
-    private void ParseSlideBackground(XmlDocument doc, PptSlide slide, Int32 slideIndex,
+    private void ParseSlideBackground(XmlDocument doc, Slide slide, Int32 slideIndex,
         Dictionary<String, (String Target, String Type)> slideRels)
     {
         var bg = doc.SelectSingleNode("//*[local-name()='bg']") as XmlElement;
@@ -651,7 +651,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         Byte[] data;
         using (var ms = new MemoryStream())
         using (var es = mediaEntry.Open()) { es.CopyTo(ms); data = ms.ToArray(); }
-        slide.BackgroundImage = new PptImage { Data = data, Extension = ext, IsSvg = ext == "svg" };
+        slide.BackgroundImage = new Picture { Data = data, Extension = ext, IsSvg = ext == "svg" };
     }
 
     private static Boolean TryResolveBgImage(String embedId,
@@ -717,7 +717,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>解析形状或文本框</summary>
-    private void ParseShapeOrTextBox(XmlElement sp, PptSlide slide, Dictionary<String, (String Target, String Type)> rels,
+    private void ParseShapeOrTextBox(XmlElement sp, Slide slide, Dictionary<String, (String Target, String Type)> rels,
         Dictionary<String, DefaultRunProps>? layoutDefaults = null)
     {
         var hasTxBody = sp.SelectSingleNode(".//*[local-name()='txBody']") != null;
@@ -746,7 +746,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
         if (hasTxBody)
         {
-            var tb = new PptTextBox { Left = left, Top = top, Width = width, Height = height, Rotation = rotation, AltText = altText };
+            var tb = new TextBox { Left = left, Top = top, Width = width, Height = height, Rotation = rotation, AltText = altText };
             if (fillColor != null) tb.BackgroundColor = fillColor;
 
             var txBody = sp.SelectSingleNode(".//*[local-name()='txBody']") as XmlElement;
@@ -784,7 +784,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
             {
                 foreach (XmlElement para in paraNodes)
                 {
-                    var pp = new PptParagraph();
+                    var pp = new Paragraph();
                     var pPr = para.SelectSingleNode(".//*[local-name()='pPr']") as XmlElement;
                     var lvl = pPr?.GetAttribute("lvl") ?? "0";
                     if (Int32.TryParse(lvl, out var lv)) pp.Level = lv;
@@ -833,7 +833,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     {
                         foreach (XmlElement r in runs)
                         {
-                            var run = ParseTextRun(r, rels, lstDefaults, lvl, pDefRPr);
+                            var run = ParseRun(r, rels, lstDefaults, lvl, pDefRPr);
                             if (run != null)
                             {
                                 pp.Runs.Add(run);
@@ -858,8 +858,8 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                 var text = ft.ToString();
                 if (text.Length > 0)
                 {
-                    var pp = new PptParagraph();
-                    var dr = new PptTextRun { Text = text, FontSize = 18 };
+                    var pp = new Paragraph();
+                    var dr = new Run { Text = text, FontSize = 18 };
                     if (lstDefaults.TryGetValue("0", out var ld) || lstDefaults.TryGetValue("", out ld))
                     { if (ld.FontSize > 0) dr.FontSize = ld.FontSize; dr.LatinFontName = ld.LatinFontName; dr.EastAsianFontName = ld.EastAsianFontName; }
                     pp.Runs.Add(dr);
@@ -896,7 +896,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         }
         else
         {
-            slide.Shapes.Add(new PptShape
+            slide.Shapes.Add(new Shape
             {
                 ShapeType = shapeType, Left = left, Top = top, Width = width, Height = height,
                 FillColor = fillColor, LineColor = lineColor, LineWidth = (Int32)lineWidth,
@@ -906,13 +906,13 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>解析单个文本片段（a:r），可接收段落级默认值</summary>
-    private static PptTextRun? ParseTextRun(XmlElement r, Dictionary<String, (String Target, String Type)> rels,
+    private static Run? ParseRun(XmlElement r, Dictionary<String, (String Target, String Type)> rels,
         Dictionary<String, DefaultRunProps>? lstDefaults = null, String lvl = "0", XmlElement? pDefRPr = null)
     {
         var t = r.SelectSingleNode(".//*[local-name()='t']") as XmlElement;
         var text = t?.InnerText;
         if (text == null) return null;
-        var run = new PptTextRun { Text = text };
+        var run = new Run { Text = text };
         DefaultRunProps? defaults = null;
         if (lstDefaults != null && lstDefaults.TryGetValue(lvl, out var ld)) defaults = ld;
         var rPr = r.SelectSingleNode(".//*[local-name()='rPr']") as XmlElement;
@@ -988,7 +988,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return run;
     }
 
-    private static void ApplyDefaults(PptTextRun run, XmlElement? defRPr, Boolean boldExplicit = false)
+    private static void ApplyDefaults(Run run, XmlElement? defRPr, Boolean boldExplicit = false)
     {
         if (defRPr == null) return;
         if (run.FontSize <= 0)
@@ -1019,7 +1019,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         }
     }
 
-    private static void ApplyDefaults(PptTextRun run, DefaultRunProps def, Boolean boldExplicit = false)
+    private static void ApplyDefaults(Run run, DefaultRunProps def, Boolean boldExplicit = false)
     {
         if (run.FontSize <= 0 && def.FontSize > 0) run.FontSize = def.FontSize;
         if (!boldExplicit && !run.Bold) run.Bold = def.Bold;
@@ -1107,9 +1107,9 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return p;
     }
 
-    private static PptTextRun CreateDefaultRun(String text, Dictionary<String, DefaultRunProps> lstDefaults, String lvl, XmlElement? pDefRPr)
+    private static Run CreateDefaultRun(String text, Dictionary<String, DefaultRunProps> lstDefaults, String lvl, XmlElement? pDefRPr)
     {
-        var run = new PptTextRun { Text = text, FontSize = 18 };
+        var run = new Run { Text = text, FontSize = 18 };
         ApplyDefaults(run, pDefRPr);
         if (lstDefaults.TryGetValue(lvl, out var ld)) ApplyDefaults(run, ld);
         else if (lstDefaults.TryGetValue("", out var gd2)) ApplyDefaults(run, gd2);
@@ -1117,7 +1117,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>解析图片或视频（p:pic）</summary>
-    private void ParsePicture(XmlElement pic, PptSlide slide, Dictionary<String, (String Target, String Type)> rels)
+    private void ParsePicture(XmlElement pic, Slide slide, Dictionary<String, (String Target, String Type)> rels)
     {
         var xfrmEl = pic.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement;
         var (left, top, width, height) = ParseXfrm(xfrmEl);
@@ -1154,7 +1154,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     Byte[] data;
                     using (var ms = new MemoryStream())
                     using (var es = me.Open()) { es.CopyTo(ms); data = ms.ToArray(); }
-                    var vid = new PptVideo { Data = data, Extension = ext, Left = left, Top = top, Width = width, Height = height };
+                    var vid = new Video { Data = data, Extension = ext, Left = left, Top = top, Width = width, Height = height };
                     if (thumbData != null)
                     {
                         vid.ThumbnailData = thumbData;
@@ -1199,10 +1199,10 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
             }
         }
 
-        slide.Images.Add(new PptImage { Data = idata, Extension = iext, Left = left, Top = top, Width = width, Height = height, IsSvg = isSvg, Rotation = rotation });
+        slide.Images.Add(new Picture { Data = idata, Extension = iext, Left = left, Top = top, Width = width, Height = height, IsSvg = isSvg, Rotation = rotation });
     }
 
-    private void ParseGraphicFrame(XmlElement gf, PptSlide slide, Dictionary<String, (String Target, String Type)> rels)
+    private void ParseGraphicFrame(XmlElement gf, Slide slide, Dictionary<String, (String Target, String Type)> rels)
     {
         var (left, top, width, height) = ParseXfrm(gf.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement);
         var tbl = gf.SelectSingleNode(".//*[local-name()='tbl']") as XmlElement;
@@ -1216,9 +1216,9 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         }
     }
 
-    private static void ParseTable(XmlElement tbl, Int64 left, Int64 top, Int64 width, Int64 height, PptSlide slide)
+    private static void ParseTable(XmlElement tbl, Int64 left, Int64 top, Int64 width, Int64 height, Slide slide)
     {
-        var table = new PptTable { Left = left, Top = top, Width = width, Height = height };
+        var table = new Table { Left = left, Top = top, Width = width, Height = height };
         var gcs = tbl.SelectNodes(".//*[local-name()='gridCol']");
         if (gcs != null)
         {
@@ -1270,7 +1270,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     var rpr2 = tc.SelectSingleNode(".//*[local-name()='rPr']") as XmlElement;
                     if (tpr2 != null || rpr2 != null)
                     {
-                        var cs = new PptCellStyle();
+                        var cs = new CellStyle();
                         var bg = tpr2?.SelectSingleNode(".//*[local-name()='srgbClr']") as XmlElement;
                         if (bg != null) cs.BackgroundColor = bg.GetAttribute("val");
                         if (rpr2 != null)
@@ -1286,7 +1286,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                     // 解析表格边框（S11-02 Reader 侧）
                     if (tpr2 != null)
                     {
-                        var border = new PptCellBorder();
+                        var border = new CellBorder();
                         var hasBorder = false;
                         var lnL = tpr2.SelectSingleNode("*[local-name()='lnL']") as XmlElement;
                         var lnR = tpr2.SelectSingleNode("*[local-name()='lnR']") as XmlElement;
@@ -1314,7 +1314,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         slide.Tables.Add(table);
     }
 
-    private void ParseChartFromRel(String target, Int64 left, Int64 top, Int64 width, Int64 height, PptSlide slide)
+    private void ParseChartFromRel(String target, Int64 left, Int64 top, Int64 width, Int64 height, Slide slide)
     {
         var cp = "ppt/" + target.TrimStart('.').TrimStart('/');
         var ce = _zip.GetEntry(cp);
@@ -1323,7 +1323,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         const String C = "http://schemas.openxmlformats.org/drawingml/2006/chart";
         var cns = new XmlNamespaceManager(cd.NameTable);
         cns.AddNamespace("c", C);
-        var chart = new PptChart { Left = left, Top = top, Width = width, Height = height };
+        var chart = new Chart { Left = left, Top = top, Width = width, Height = height };
         var ctn = cd.SelectSingleNode("//*[substring(local-name(), string-length(local-name())-4) = 'Chart'][@*]", null);
         chart.ChartType = ctn?.LocalName?.Replace("Chart", String.Empty) ?? "bar";
         var tn = cd.SelectSingleNode("//c:title//c:rich//a:t", cns) as XmlElement;
@@ -1341,16 +1341,16 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
             var vals = new List<Double>();
             foreach (XmlElement v in ser.SelectNodes(".//c:val//c:numCache/c:pt/c:v", cns)!)
             { if (Double.TryParse(v.InnerText, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) vals.Add(d); }
-            chart.Series.Add(new PptChartSeries { Name = sn, Values = vals.ToArray() });
+            chart.Series.Add(new ChartSeries { Name = sn, Values = vals.ToArray() });
         }
         slide.Charts.Add(chart);
     }
 
-    private void ParseGroup(XmlElement grpSp, PptSlide slide, Dictionary<String, (String Target, String Type)> rels,
+    private void ParseGroup(XmlElement grpSp, Slide slide, Dictionary<String, (String Target, String Type)> rels,
         Dictionary<String, DefaultRunProps>? layoutDefaults = null)
     {
         var (left, top, width, height) = ParseXfrm(grpSp.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement);
-        var g = new PptGroup { Left = left, Top = top, Width = width, Height = height };
+        var g = new GroupShape { Left = left, Top = top, Width = width, Height = height };
         foreach (XmlNode child in grpSp.ChildNodes)
         {
             if (child is not XmlElement el) continue;
@@ -1364,7 +1364,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         slide.Groups.Add(g);
     }
 
-    private void ParseShapeOrTextBoxInGroup(XmlElement sp, PptGroup g, Dictionary<String, (String Target, String Type)> rels,
+    private void ParseShapeOrTextBoxInGroup(XmlElement sp, GroupShape g, Dictionary<String, (String Target, String Type)> rels,
         Dictionary<String, DefaultRunProps>? layoutDefaults = null)
     {
         var isTB = sp.SelectSingleNode(".//*[local-name()='cNvSpPr']")?.Attributes?["txBox"]?.Value == "1";
@@ -1426,7 +1426,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         }
 
         if (isTB)
-            g.TextBoxes.Add(new PptTextBox
+            g.TextBoxes.Add(new TextBox
             {
                 Left = l, Top = t, Width = w, Height = h, Text = text, BackgroundColor = fc,
                 FontSize = fontSize > 0 ? fontSize : 18, Bold = bold, FontColor = fontColor,
@@ -1434,7 +1434,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                 ComplexScriptFontName = csFn, SymbolFontName = symFn,
             });
         else
-            g.Shapes.Add(new PptShape
+            g.Shapes.Add(new Shape
             {
                 Left = l, Top = t, Width = w, Height = h, ShapeType = st, Text = text, FillColor = fc,
                 FontSize = fontSize > 0 ? fontSize : 14, Bold = bold, FontColor = fontColor,
@@ -1443,13 +1443,13 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
             });
     }
 
-    private void ParsePictureInGroup(XmlElement pic, PptGroup g, Dictionary<String, (String Target, String Type)> rels)
+    private void ParsePictureInGroup(XmlElement pic, GroupShape g, Dictionary<String, (String Target, String Type)> rels)
     {
         var (l, t, w, h) = ParseXfrm(pic.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement);
-        g.Shapes.Add(new PptShape { Left = l, Top = t, Width = w, Height = h, ShapeType = "rect", Text = "[图片]" });
+        g.Shapes.Add(new Shape { Left = l, Top = t, Width = w, Height = h, ShapeType = "rect", Text = "[图片]" });
     }
 
-    private void ParseGroupInGroup(XmlElement inner, PptGroup pg, Dictionary<String, (String Target, String Type)> rels,
+    private void ParseGroupInGroup(XmlElement inner, GroupShape pg, Dictionary<String, (String Target, String Type)> rels,
         Dictionary<String, DefaultRunProps>? layoutDefaults = null)
     {
         foreach (XmlNode child in inner.ChildNodes)
@@ -1464,7 +1464,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         }
     }
 
-    private static void ParseNotes(XmlDocument doc, PptSlide slide)
+    private static void ParseNotes(XmlDocument doc, Slide slide)
     {
         var n = doc.SelectSingleNode("//*[local-name()='notes']");
         if (n == null) return;
@@ -1474,13 +1474,13 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         if (text.Length > 0) slide.Notes = text;
     }
 
-    private static void ParseTransition(XmlDocument doc, PptSlide slide)
+    private static void ParseTransition(XmlDocument doc, Slide slide)
     {
         var trans = doc.SelectSingleNode("//*[local-name()='transition']") as XmlElement;
         if (trans == null) return;
         var dur = trans.GetAttribute("dur");
         var ac = trans.GetAttribute("advClick");
-        var tr = new PptTransition
+        var tr = new Transition
         {
             DurationMs = dur.Length > 0 && Int32.TryParse(dur, out var d) ? d : 500,
             AdvanceOnClick = ac != "0",
@@ -1498,7 +1498,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>解析连接器（S13-02 Reader 侧）</summary>
-    private static void ParseConnector(XmlElement cxnSp, PptSlide slide)
+    private static void ParseConnector(XmlElement cxnSp, Slide slide)
     {
         var xfrm = cxnSp.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement;
         var (l, t, w, h) = ParseXfrm(xfrm);
@@ -1511,7 +1511,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         var tailEnd = ln?.SelectSingleNode("*[local-name()='tailEnd']") as XmlElement;
         var headEnd = ln?.SelectSingleNode("*[local-name()='headEnd']") as XmlElement;
         var prstDash = ln?.SelectSingleNode("*[local-name()='prstDash']") as XmlElement;
-        slide.Connectors.Add(new PptConnector
+        slide.Connectors.Add(new ConnectionShape
         {
             Left = l, Top = t, Width = w, Height = h,
             ConnectorType = ct.Length > 0 ? ct : "straight",
@@ -1524,7 +1524,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>解析幻灯片批注（S13-01 Reader 侧）</summary>
-    private void ParseSlideComments(Int32 slideIndex, PptSlide slide)
+    private void ParseSlideComments(Int32 slideIndex, Slide slide)
     {
         var commentsEntry = _zip.GetEntry($"ppt/comments/comment{slideIndex + 1}.xml");
         if (commentsEntry == null) return;
@@ -1544,7 +1544,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         var idx = 0;
         foreach (XmlElement cm in doc.SelectNodes("//*[local-name()='cm']")!)
         {
-            var c = new PptComment { Index = ++idx };
+            var c = new Comment { Index = ++idx };
             c.Author = authorMap.TryGetValue(cm.GetAttribute("authorId"), out var name) ? name : cm.GetAttribute("authorId");
             var dtStr = cm.GetAttribute("dt");
             if (DateTime.TryParse(dtStr, out var dt)) c.Date = dt;
@@ -1567,7 +1567,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>解析幻灯片元素动画（S12 Reader 侧）</summary>
-    private static void ParseSlideAnimations(XmlDocument sldDoc, PptSlide slide)
+    private static void ParseSlideAnimations(XmlDocument sldDoc, Slide slide)
     {
         var timing = sldDoc.SelectSingleNode("//*[local-name()='timing']") as XmlElement;
         if (timing == null) return;
@@ -1582,14 +1582,14 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
                 // 识别动画类型：animEffect(进入)/animEmph(强调)/animMotion(路径)
                 var category = localName switch
                 {
-                    "animEffect" => PptAnimationCategory.Entrance,
-                    "animEmph" => PptAnimationCategory.Emphasis,
-                    "animMotion" => PptAnimationCategory.MotionPath,
-                    _ => PptAnimationCategory.Entrance,
+                    "animEffect" => AnimationCategory.Entrance,
+                    "animEmph" => AnimationCategory.Emphasis,
+                    "animMotion" => AnimationCategory.MotionPath,
+                    _ => AnimationCategory.Entrance,
                 };
                 var cBhvr = el.SelectSingleNode("*[local-name()='cBhvr']") as XmlElement;
                 if (cBhvr == null) continue;
-                var anim = new PptAnimation
+                var anim = new Animation
                 {
                     Order = order++,
                     Category = category,
@@ -1615,7 +1615,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     private static Int64 ParseDuration(String val) => Int64.TryParse(val, out var ms) ? ms : 0;
 
     /// <summary>解析文档属性（S14-03 Reader 侧）</summary>
-    private void ParseDocProps(PptDocument doc)
+    private void ParseDocProps(Presentation doc)
     {
         // core.xml
         var coreEntry = _zip.GetEntry("docProps/core.xml");
@@ -1639,7 +1639,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>解析全局页眉页脚（S13-03 Reader 侧）</summary>
-    private void ParseHeaderFooter(PptDocument doc)
+    private void ParseHeaderFooter(Presentation doc)
     {
         var presEntry = _zip.GetEntry("ppt/presentation.xml");
         if (presEntry == null) return;
@@ -1651,7 +1651,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
         var dt = hf.GetAttribute("dt");
         var fdt = hf.GetAttribute("fdt");
         var dfmt = hf.GetAttribute("dfmt");
-        doc.HeaderFooter = new PptHeaderFooter
+        doc.HeaderFooter = new HeaderFooter
         {
             ShowFooter = footer.Length > 0,
             FooterText = footer.Length > 0 ? footer : null,

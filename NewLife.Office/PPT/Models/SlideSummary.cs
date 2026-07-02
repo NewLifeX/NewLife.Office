@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 幻灯片摘要</summary>
-public class PptSlideSummary
+public class SlideSummary
 {
     #region 属性
     /// <summary>幻灯片索引（0起始）</summary>
@@ -11,6 +11,6 @@ public class PptSlideSummary
     public String Text { get; set; } = String.Empty;
 
     /// <summary>形状集合</summary>
-    public List<PptShape> Shapes { get; } = [];
+    public List<Shape> Shapes { get; } = [];
     #endregion
 }

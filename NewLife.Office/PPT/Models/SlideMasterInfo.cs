@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 幻灯片母版信息（S04-01）</summary>
-public class PptMasterInfo
+public class SlideMasterInfo
 {
     #region 属性
     /// <summary>母版索引（0起始）</summary>

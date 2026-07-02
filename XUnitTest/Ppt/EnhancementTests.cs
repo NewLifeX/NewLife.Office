@@ -1,4 +1,5 @@
 ﻿using NewLife.Office;
+using NewLife.Office.Ppt;
 using Xunit;
 
 namespace XUnitTest.Ppt;
@@ -10,7 +11,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—表格添加行")]
     public void PptTable_AddRow()
     {
-        var tbl = new PptTable();
+        var tbl = new Table();
         tbl.Rows.Add(new[] { "列A", "列B" });
         tbl.AddRow(new[] { "数据1", "数据2" });
         Assert.Equal(2, tbl.Rows.Count);
@@ -20,7 +21,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—表格删除行")]
     public void PptTable_RemoveRow()
     {
-        var tbl = new PptTable();
+        var tbl = new Table();
         tbl.Rows.Add(new[] { "A", "B" });
         tbl.Rows.Add(new[] { "C", "D" });
         tbl.RemoveRow(0);
@@ -31,7 +32,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—表格插入列")]
     public void PptTable_AddColumn()
     {
-        var tbl = new PptTable();
+        var tbl = new Table();
         tbl.Rows.Add(new[] { "A", "B" });
         tbl.AddColumn(1, "新列");
         Assert.Equal(3, tbl.Rows[0].Length);
@@ -48,7 +49,7 @@ public class PptxEnhancementTests
         {
             using var writer = new PptxWriter();
             writer.AddSlide();
-            var tbl = new PptTable
+            var tbl = new Table
             {
                 Left = 1000000, Top = 1000000, Width = 8000000, Height = 4000000,
                 FirstRowHeader = true
@@ -83,9 +84,9 @@ public class PptxEnhancementTests
         {
             using var writer = new PptxWriter();
             writer.AddSlide();
-            var tb = new PptTextBox { Left = 1000000, Top = 1000000, Width = 5000000, Height = 1000000 };
-            tb.Runs.Add(new PptTextRun { Text = "E=mc", FontSize = 18 });
-            tb.Runs.Add(new PptTextRun { Text = "2", FontSize = 12, Superscript = true });
+            var tb = new TextBox { Left = 1000000, Top = 1000000, Width = 5000000, Height = 1000000 };
+            tb.Runs.Add(new Run { Text = "E=mc", FontSize = 18 });
+            tb.Runs.Add(new Run { Text = "2", FontSize = 12, Superscript = true });
             writer.Slides[0].TextBoxes.Add(tb);
             writer.Save(tempFile);
 
@@ -105,10 +106,10 @@ public class PptxEnhancementTests
         {
             using var writer = new PptxWriter();
             writer.AddSlide();
-            var tb = new PptTextBox { Left = 1000000, Top = 1000000, Width = 5000000, Height = 1000000 };
-            tb.Runs.Add(new PptTextRun { Text = "H", FontSize = 18 });
-            tb.Runs.Add(new PptTextRun { Text = "2", FontSize = 12, Subscript = true });
-            tb.Runs.Add(new PptTextRun { Text = "O", FontSize = 18 });
+            var tb = new TextBox { Left = 1000000, Top = 1000000, Width = 5000000, Height = 1000000 };
+            tb.Runs.Add(new Run { Text = "H", FontSize = 18 });
+            tb.Runs.Add(new Run { Text = "2", FontSize = 12, Subscript = true });
+            tb.Runs.Add(new Run { Text = "O", FontSize = 18 });
             writer.Slides[0].TextBoxes.Add(tb);
             writer.Save(tempFile);
 
@@ -125,14 +126,14 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—TableStyleGuid 自定义")]
     public void TableStyleGuid_Custom()
     {
-        var tbl = new PptTable { TableStyleGuid = "{D2719A1E-8E4F-4A8D-8AA2-D3E4E5B6F7A8}" };
+        var tbl = new Table { TableStyleGuid = "{D2719A1E-8E4F-4A8D-8AA2-D3E4E5B6F7A8}" };
         Assert.Equal("{D2719A1E-8E4F-4A8D-8AA2-D3E4E5B6F7A8}", tbl.TableStyleGuid);
     }
 
     [Fact(DisplayName = "PPT—TableStyleGuid 默认 null")]
     public void TableStyleGuid_DefaultNull()
     {
-        var tbl = new PptTable();
+        var tbl = new Table();
         Assert.Null(tbl.TableStyleGuid);
     }
     #endregion
@@ -150,8 +151,8 @@ public class PptxEnhancementTests
             slide.BackgroundGradientType = "linear";
             slide.BackgroundGradientColor1 = "FF0000";
             slide.BackgroundGradientColor2 = "0000FF";
-            var tb = new PptTextBox { Left = 1000000, Top = 1000000, Width = 5000000, Height = 1000000 };
-            tb.Runs.Add(new PptTextRun { Text = "渐变背景", FontSize = 18 });
+            var tb = new TextBox { Left = 1000000, Top = 1000000, Width = 5000000, Height = 1000000 };
+            tb.Runs.Add(new Run { Text = "渐变背景", FontSize = 18 });
             slide.TextBoxes.Add(tb);
             writer.Save(tempFile);
 
@@ -170,7 +171,7 @@ public class PptxEnhancementTests
     [Fact(DisplayName = "PPT—SVG图片 IsSvg属性")]
     public void SvgImage_IsSvg()
     {
-        var img = new PptImage { IsSvg = true, Extension = "svg" };
+        var img = new Picture { IsSvg = true, Extension = "svg" };
         Assert.True(img.IsSvg);
     }
 
@@ -184,7 +185,7 @@ public class PptxEnhancementTests
             var svgData = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"100\"><rect width=\"100\" height=\"100\" fill=\"red\"/></svg>"u8.ToArray();
             using var writer = new PptxWriter();
             writer.AddSlide();
-            writer.Slides[0].Images.Add(new PptImage
+            writer.Slides[0].Images.Add(new Picture
             {
                 Data = svgData,
                 Extension = "svg",
@@ -210,7 +211,7 @@ public class PptxEnhancementTests
             using var writer = new PptxWriter();
             var slide = writer.AddSlide();
             var svgData = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"50\" height=\"50\"><circle r=\"20\" fill=\"blue\"/></svg>"u8.ToArray();
-            slide.Images.Add(new PptImage
+            slide.Images.Add(new Picture
             {
                 Data = svgData,
                 Extension = "svg",
@@ -245,7 +246,7 @@ public class PptxEnhancementTests
         {
             using var writer = new PptxWriter();
             writer.AddSlide();
-            writer.Slides[0].Shapes.Add(new PptShape
+            writer.Slides[0].Shapes.Add(new Shape
             {
                 ShapeType = "rect",
                 Left = 1000000, Top = 1000000, Width = 3000000, Height = 2000000,
@@ -270,12 +271,12 @@ public class PptxEnhancementTests
         {
             using var writer = new PptxWriter();
             writer.AddSlide();
-            var tb = new PptTextBox
+            var tb = new TextBox
             {
                 Left = 1000000, Top = 1000000, Width = 5000000, Height = 1000000,
                 AltText = "标题文本框"
             };
-            tb.Runs.Add(new PptTextRun { Text = "标题", FontSize = 24 });
+            tb.Runs.Add(new Run { Text = "标题", FontSize = 24 });
             writer.Slides[0].TextBoxes.Add(tb);
             writer.Save(tempFile);
 
@@ -295,7 +296,7 @@ public class PptxEnhancementTests
         {
             using var writer = new PptxWriter();
             writer.AddSlide();
-            writer.Slides[0].Shapes.Add(new PptShape
+            writer.Slides[0].Shapes.Add(new Shape
             {
                 ShapeType = "roundRect",
                 Left = 1000000, Top = 1000000, Width = 5000000, Height = 3000000,
@@ -379,7 +380,7 @@ public class PptxEnhancementTests
             writer.AddSlide();
             writer.AddSlide();
             writer.AddSlide();
-            writer.Sections = new List<PptSection>
+            writer.Sections = new List<Section>
             {
                 new() { Name = "第一章", SlideIndices = [0, 1] },
                 new() { Name = "第二章", SlideIndices = [2] }

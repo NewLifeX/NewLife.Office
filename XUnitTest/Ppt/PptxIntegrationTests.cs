@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel;
 using NewLife.Office;
+using NewLife.Office.Ppt;
 using Xunit;
 
 using XUnitTest.Common;
@@ -29,7 +30,7 @@ public class PptxTests : IntegrationTestBase
             // 幻灯片3: 表格
             var slide3 = w.AddSlide();
             w.AddTextBox(2, "数据统计", 1, 1, 22, 2, fontSize: 28, bold: true);
-            var table = new PptTable
+            var table = new Table
             {
                 Left = 360000 * 2,
                 Top = 360000 * 4,

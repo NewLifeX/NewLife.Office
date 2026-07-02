@@ -4,7 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using NewLife.Buffers;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PowerPoint pptx 写入器</summary>
 /// <remarks>
@@ -22,16 +22,16 @@ public partial class PptxWriter : IDisposable
     public Int64 SlideHeight { get; set; } = 6858000;
 
     /// <summary>幻灯片集合</summary>
-    public List<PptSlide> Slides { get; } = [];
+    public List<Slide> Slides { get; } = [];
 
     /// <summary>主题强调色（6个，默认 Office 配色，可通过 SetAccentColors 修改）</summary>
     public String[] AccentColors { get; set; } = ["4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F79646"];
 
     /// <summary>全局页眉页脚设置（S13-03），null 表示不加页脚</summary>
-    public PptHeaderFooter? HeaderFooter { get; set; }
+    public HeaderFooter? HeaderFooter { get; set; }
 
     /// <summary>节（Section）列表（S13-04），按节组织幻灯片，null 表示不使用节</summary>
-    public List<PptSection>? Sections { get; set; }
+    public List<Section>? Sections { get; set; }
     #endregion
 
     #region 私有字段
@@ -47,19 +47,19 @@ public partial class PptxWriter : IDisposable
     // 跨文件复制的媒体文件：(文件名, 字节数据)
     private readonly List<(String Name, Byte[] Data)> _rawSlideMedia = [];
     // 从模板加载的母版/版式/主题（S04-Master）
-    private readonly List<PptPartContent> _masterContents = [];
-    private readonly List<PptPartContent> _layoutContents = [];
+    private readonly List<PartContent> _masterContents = [];
+    private readonly List<PartContent> _layoutContents = [];
     private readonly List<String> _layoutNames = [];
     private String? _templateThemeXml;
     private Byte[]? _templateThemeBytes;
     private readonly Dictionary<String, Byte[]> _infraMedia = [];
     // 编程式创建的母版（Phase 5：无需模板文件）
-    private readonly List<PptMaster> _progMasters = [];
+    private readonly List<SlideMaster> _progMasters = [];
     // 嵌入字体：文件名→字节数据（ppt/fonts/*.fntdata）
     private readonly Dictionary<String, Byte[]> _embeddedFonts = [];
 
-    // 文档属性（docProps，S14-01/S14-02），从 PptDocument.Properties 委托  
-    private PptDocumentProperties? _documentProperties;
+    // 文档属性（docProps，S14-01/S14-02），从 Presentation.Properties 委托  
+    private DocumentProperties? _documentProperties;
 
     /// <summary>最小有效 PNG（1×1 黑色像素，67 字节），用作视频无缩略图时的占位</summary>
     private static readonly Byte[] MinimalPng =
@@ -88,10 +88,10 @@ public partial class PptxWriter : IDisposable
     /// <summary>添加新幻灯片</summary>
     /// <param name="layoutIndex">版式索引（0起始），超出范围时自动修正到末尾版式</param>
     /// <returns>新幻灯片对象</returns>
-    public PptSlide AddSlide(Int32 layoutIndex = 0)
+    public Slide AddSlide(Int32 layoutIndex = 0)
     {
         var maxIdx = Math.Max(0, GetLayoutCount() - 1);
-        var slide = new PptSlide { LayoutIndex = Math.Min(Math.Max(0, layoutIndex), maxIdx) };
+        var slide = new Slide { LayoutIndex = Math.Min(Math.Max(0, layoutIndex), maxIdx) };
         Slides.Add(slide);
         return slide;
     }
@@ -106,11 +106,11 @@ public partial class PptxWriter : IDisposable
     /// <param name="fontSize">字号（磅）</param>
     /// <param name="bold">粗体</param>
     /// <returns>文本框对象</returns>
-    public PptTextBox AddTextBox(Int32 slideIndex, String text, Double leftCm, Double topCm,
+    public TextBox AddTextBox(Int32 slideIndex, String text, Double leftCm, Double topCm,
         Double widthCm, Double heightCm, Int32 fontSize = 18, Boolean bold = false)
     {
         var slide = EnsureSlide(slideIndex);
-        var tb = new PptTextBox
+        var tb = new TextBox
         {
             Text = text,
             Left = CmToEmu(leftCm),
@@ -133,11 +133,11 @@ public partial class PptxWriter : IDisposable
     /// <param name="widthCm">宽度（厘米）</param>
     /// <param name="heightCm">高度（厘米）</param>
     /// <returns>图片对象</returns>
-    public PptImage AddImage(Int32 slideIndex, Byte[] imageData, String extension,
+    public Picture AddImage(Int32 slideIndex, Byte[] imageData, String extension,
         Double leftCm, Double topCm, Double widthCm, Double heightCm)
     {
         var slide = EnsureSlide(slideIndex);
-        var img = new PptImage
+        var img = new Picture
         {
             Data = imageData,
             Extension = extension.TrimStart('.').ToLowerInvariant(),
@@ -176,11 +176,11 @@ public partial class PptxWriter : IDisposable
     /// <param name="widthCm">宽度（厘米）</param>
     /// <param name="heightCm">高度（厘米）</param>
     /// <returns>视频对象</returns>
-    public PptVideo AddVideo(Int32 slideIndex, Byte[] mediaData, String extension,
+    public Video AddVideo(Int32 slideIndex, Byte[] mediaData, String extension,
         Double leftCm, Double topCm, Double widthCm, Double heightCm)
     {
         var slide = EnsureSlide(slideIndex);
-        var vid = new PptVideo
+        var vid = new Video
         {
             Data = mediaData,
             Extension = extension.TrimStart('.').ToLowerInvariant(),
@@ -204,11 +204,11 @@ public partial class PptxWriter : IDisposable
     /// <param name="widthCm">宽度（厘米）</param>
     /// <param name="firstRowHeader">首行表头</param>
     /// <returns>表格对象</returns>
-    public PptTable AddTable(Int32 slideIndex, IEnumerable<String[]> rows,
+    public Table AddTable(Int32 slideIndex, IEnumerable<String[]> rows,
         Double leftCm = 1, Double topCm = 2, Double widthCm = 22, Boolean firstRowHeader = true)
     {
         var slide = EnsureSlide(slideIndex);
-        var tbl = new PptTable
+        var tbl = new Table
         {
             Left = CmToEmu(leftCm),
             Top = CmToEmu(topCm),
@@ -239,7 +239,7 @@ public partial class PptxWriter : IDisposable
     /// <param name="type">切换类型（fade/push/wipe/zoom/split/cut）</param>
     /// <param name="durationMs">时长（毫秒）</param>
     public void SetTransition(Int32 slideIndex, String type = "fade", Int32 durationMs = 500)
-        => EnsureSlide(slideIndex).Transition = new PptTransition { Type = type, DurationMs = durationMs };
+        => EnsureSlide(slideIndex).Transition = new Transition { Type = type, DurationMs = durationMs };
 
     /// <summary>设置幻灯片尺寸（厘米）</summary>
     /// <param name="widthCm">宽度（厘米，默认 16:9 = 33.87cm）</param>
@@ -273,10 +273,10 @@ public partial class PptxWriter : IDisposable
     /// <summary>复制幻灯片（浅拷贝，图片/文本框引用相同）</summary>
     /// <param name="sourceIndex">源幻灯片索引</param>
     /// <returns>新幻灯片对象</returns>
-    public PptSlide CloneSlide(Int32 sourceIndex)
+    public Slide CloneSlide(Int32 sourceIndex)
     {
         var src = EnsureSlide(sourceIndex);
-        var clone = new PptSlide { BackgroundColor = src.BackgroundColor, Notes = src.Notes };
+        var clone = new Slide { BackgroundColor = src.BackgroundColor, Notes = src.Notes };
         foreach (var tb in src.TextBoxes) clone.TextBoxes.Add(tb);
         foreach (var img in src.Images) clone.Images.Add(img);
         foreach (var tbl in src.Tables) clone.Tables.Add(tbl);
@@ -294,12 +294,12 @@ public partial class PptxWriter : IDisposable
     /// <param name="heightCm">高度（厘米）</param>
     /// <param name="fillColor">填充色（16进制 RGB）</param>
     /// <returns>图形对象</returns>
-    public PptShape AddShape(Int32 slideIndex, String shapeType,
+    public Shape AddShape(Int32 slideIndex, String shapeType,
         Double leftCm, Double topCm, Double widthCm, Double heightCm,
         String? fillColor = null)
     {
         var slide = EnsureSlide(slideIndex);
-        var sp = new PptShape
+        var sp = new Shape
         {
             ShapeType = shapeType,
             Left = CmToEmu(leftCm),
@@ -316,14 +316,14 @@ public partial class PptxWriter : IDisposable
     /// <param name="slideIndex">幻灯片索引</param>
     /// <param name="shapeIndex">形状索引</param>
     /// <returns>克隆后的形状</returns>
-    public PptShape DuplicateShape(Int32 slideIndex, Int32 shapeIndex)
+    public Shape DuplicateShape(Int32 slideIndex, Int32 shapeIndex)
     {
         var slide = EnsureSlide(slideIndex);
         if (shapeIndex < 0 || shapeIndex >= slide.Shapes.Count)
             throw new ArgumentOutOfRangeException(nameof(shapeIndex));
 
         var src = slide.Shapes[shapeIndex];
-        var clone = new PptShape
+        var clone = new Shape
         {
             Id = 0, // 写入时自动分配新 ID
             Text = src.Text,
@@ -358,7 +358,7 @@ public partial class PptxWriter : IDisposable
     /// <param name="widthCm">宽度（厘米）</param>
     /// <param name="heightCm">高度（厘米）</param>
     /// <returns>图表对象</returns>
-    public PptChart AddBarChart(Int32 slideIndex, String[] categories,
+    public Chart AddBarChart(Int32 slideIndex, String[] categories,
         Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
         => AddChart(slideIndex, "bar", categories, leftCm, topCm, widthCm, heightCm);
 
@@ -370,7 +370,7 @@ public partial class PptxWriter : IDisposable
     /// <param name="widthCm">宽度（厘米）</param>
     /// <param name="heightCm">高度（厘米）</param>
     /// <returns>图表对象</returns>
-    public PptChart AddLineChart(Int32 slideIndex, String[] categories,
+    public Chart AddLineChart(Int32 slideIndex, String[] categories,
         Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
         => AddChart(slideIndex, "line", categories, leftCm, topCm, widthCm, heightCm);
 
@@ -382,7 +382,7 @@ public partial class PptxWriter : IDisposable
     /// <param name="widthCm">宽度（厘米）</param>
     /// <param name="heightCm">高度（厘米）</param>
     /// <returns>图表对象</returns>
-    public PptChart AddPieChart(Int32 slideIndex, String[] categories,
+    public Chart AddPieChart(Int32 slideIndex, String[] categories,
         Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
         => AddChart(slideIndex, "pie", categories, leftCm, topCm, widthCm, heightCm);
 
@@ -394,7 +394,7 @@ public partial class PptxWriter : IDisposable
     /// <param name="widthCm">宽度（厘米）</param>
     /// <param name="heightCm">高度（厘米）</param>
     /// <returns>图表对象</returns>
-    public PptChart AddScatterChart(Int32 slideIndex, String[] categories,
+    public Chart AddScatterChart(Int32 slideIndex, String[] categories,
         Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
         => AddChart(slideIndex, "scatter", categories, leftCm, topCm, widthCm, heightCm);
 
@@ -406,7 +406,7 @@ public partial class PptxWriter : IDisposable
     /// <param name="widthCm">宽度（厘米）</param>
     /// <param name="heightCm">高度（厘米）</param>
     /// <returns>图表对象</returns>
-    public PptChart AddBubbleChart(Int32 slideIndex, String[] categories,
+    public Chart AddBubbleChart(Int32 slideIndex, String[] categories,
         Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
         => AddChart(slideIndex, "bubble", categories, leftCm, topCm, widthCm, heightCm);
 
@@ -418,26 +418,26 @@ public partial class PptxWriter : IDisposable
     /// <param name="widthCm">宽度（厘米）</param>
     /// <param name="heightCm">高度（厘米）</param>
     /// <returns>图表对象</returns>
-    public PptChart AddRadarChart(Int32 slideIndex, String[] categories,
+    public Chart AddRadarChart(Int32 slideIndex, String[] categories,
         Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
         => AddChart(slideIndex, "radar", categories, leftCm, topCm, widthCm, heightCm);
 
     /// <summary>向幻灯片添加股价图（K线/OHLC）</summary>
-    public PptChart AddStockChart(Int32 slideIndex, String[] categories,
+    public Chart AddStockChart(Int32 slideIndex, String[] categories,
         Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
         => AddChart(slideIndex, "stock", categories, leftCm, topCm, widthCm, heightCm);
 
     /// <summary>向幻灯片添加曲面图</summary>
-    public PptChart AddSurfaceChart(Int32 slideIndex, String[] categories,
+    public Chart AddSurfaceChart(Int32 slideIndex, String[] categories,
         Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
         => AddChart(slideIndex, "surface", categories, leftCm, topCm, widthCm, heightCm);
 
-    private PptChart AddChart(Int32 slideIndex, String chartType, String[] categories,
+    private Chart AddChart(Int32 slideIndex, String chartType, String[] categories,
         Double leftCm, Double topCm, Double widthCm, Double heightCm)
     {
         var slide = EnsureSlide(slideIndex);
         var chartNum = _chartGlobal++;
-        var chart = new PptChart
+        var chart = new Chart
         {
             ChartType = chartType,
             Categories = categories,
@@ -527,7 +527,7 @@ public partial class PptxWriter : IDisposable
     /// <summary>向幻灯片添加形状组（S07-02）</summary>
     /// <remarks>
     /// 组内的形状和文本框将以 <c>&lt;p:grpSp&gt;</c> 元素组合，
-    /// 可作为一个整体移动/缩放。返回 PptGroup 对象，向其 Shapes/TextBoxes 属性添加元素即可。
+    /// 可作为一个整体移动/缩放。返回 GroupShape 对象，向其 Shapes/TextBoxes 属性添加元素即可。
     /// </remarks>
     /// <param name="slideIndex">幻灯片索引（0起始）</param>
     /// <param name="leftCm">组左边距（厘米）</param>
@@ -535,11 +535,11 @@ public partial class PptxWriter : IDisposable
     /// <param name="widthCm">组宽度（厘米）</param>
     /// <param name="heightCm">组高度（厘米）</param>
     /// <returns>形状组对象</returns>
-    public PptGroup GroupShapes(Int32 slideIndex, Double leftCm, Double topCm,
+    public GroupShape GroupShapes(Int32 slideIndex, Double leftCm, Double topCm,
         Double widthCm, Double heightCm)
     {
         var slide = EnsureSlide(slideIndex);
-        var group = new PptGroup
+        var group = new GroupShape
         {
             Left = CmToEmu(leftCm),
             Top = CmToEmu(topCm),
@@ -633,7 +633,7 @@ public partial class PptxWriter : IDisposable
         var slide = Slides[slideIndex];
 
         if (footerText != null)
-            slide.TextBoxes.Add(new PptTextBox
+            slide.TextBoxes.Add(new TextBox
             {
                 Text = footerText,
                 Left = CmToEmu(1.3),
@@ -645,7 +645,7 @@ public partial class PptxWriter : IDisposable
             });
 
         if (showSlideNumber)
-            slide.TextBoxes.Add(new PptTextBox
+            slide.TextBoxes.Add(new TextBox
             {
                 Text = (slideIndex + 1).ToString(),
                 Left = SlideWidth - CmToEmu(2),
@@ -722,7 +722,7 @@ public partial class PptxWriter : IDisposable
     /// <param name="chartNumber">图表编号（ppt/charts/chart{N}.xml 的 N，从 1 开始）</param>
     /// <param name="series">新系列数据</param>
     /// <param name="outputPath">输出路径，null 时覆盖源文件</param>
-    public static void UpdateChartData(String sourcePath, Int32 chartNumber, IEnumerable<PptChartSeries> series, String? outputPath = null)
+    public static void UpdateChartData(String sourcePath, Int32 chartNumber, IEnumerable<ChartSeries> series, String? outputPath = null)
     {
         var data = File.ReadAllBytes(sourcePath.GetFullPath());
         var result = UpdateChartData(data, chartNumber, series);
@@ -735,7 +735,7 @@ public partial class PptxWriter : IDisposable
     /// <param name="chartNumber">图表编号（1 起始）</param>
     /// <param name="series">新系列数据</param>
     /// <returns>更新后的 pptx 字节数据</returns>
-    public static Byte[] UpdateChartData(Byte[] pptxData, Int32 chartNumber, IEnumerable<PptChartSeries> series)
+    public static Byte[] UpdateChartData(Byte[] pptxData, Int32 chartNumber, IEnumerable<ChartSeries> series)
     {
         var serList = series.ToList();
         var chartPath = $"ppt/charts/chart{chartNumber}.xml";
@@ -769,7 +769,7 @@ public partial class PptxWriter : IDisposable
     /// <param name="xml">原始图表 XML 字符串</param>
     /// <param name="series">新系列数据列表</param>
     /// <returns>更新后的 XML 字符串</returns>
-    private static String PatchChartXml(String xml, List<PptChartSeries> series)
+    private static String PatchChartXml(String xml, List<ChartSeries> series)
     {
         var doc = new System.Xml.XmlDocument();
         doc.LoadXml(xml);
@@ -1014,7 +1014,7 @@ public partial class PptxWriter : IDisposable
 
         foreach (var entry in masterEntries)
         {
-            var content = new PptPartContent();
+            var content = new PartContent();
             using (var sr = new StreamReader(entry.Open(), Encoding.UTF8))
                 content.Xml = sr.ReadToEnd();
             var relsEntry = zip.GetEntry(GetRelsEntryPath(entry.FullName));
@@ -1040,7 +1040,7 @@ public partial class PptxWriter : IDisposable
 
         foreach (var entry in layoutEntries)
         {
-            var content = new PptPartContent();
+            var content = new PartContent();
             using (var sr = new StreamReader(entry.Open(), Encoding.UTF8))
                 content.Xml = sr.ReadToEnd();
             var relsEntry = zip.GetEntry(GetRelsEntryPath(entry.FullName));
@@ -1190,14 +1190,14 @@ public partial class PptxWriter : IDisposable
 
     /// <summary>编程式创建一个新母版（Phase 5：无需外部模板文件）</summary>
     /// <remarks>
-    /// 创建后可向母版添加形状（如公司 Logo），并通过 <see cref="PptMaster.AddLayout"/> 添加自定义版式。
+    /// 创建后可向母版添加形状（如公司 Logo），并通过 <see cref="SlideMaster.AddLayout"/> 添加自定义版式。
     /// 保存时自动生成符合 OOXML 规范的母版和版式 XML。
     /// <para>注意：调用此方法会与 <see cref="LoadMaster(String)"/> 互斥——后者通过模板文件加载，前者纯编程构建。</para>
     /// </remarks>
     /// <returns>新创建的母版对象</returns>
-    public PptMaster CreateMaster()
+    public SlideMaster CreateMaster()
     {
-        var master = new PptMaster();
+        var master = new SlideMaster();
         _progMasters.Add(master);
         return master;
     }

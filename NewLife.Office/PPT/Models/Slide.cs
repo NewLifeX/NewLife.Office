@@ -1,29 +1,29 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 幻灯片</summary>
-public class PptSlide
+public class Slide
 {
     #region 属性
     /// <summary>文本框集合</summary>
-    public List<PptTextBox> TextBoxes { get; } = [];
+    public List<TextBox> TextBoxes { get; } = [];
 
     /// <summary>图片集合</summary>
-    public List<PptImage> Images { get; } = [];
+    public List<Picture> Images { get; } = [];
 
     /// <summary>表格集合</summary>
-    public List<PptTable> Tables { get; } = [];
+    public List<Table> Tables { get; } = [];
 
     /// <summary>基本图形集合</summary>
-    public List<PptShape> Shapes { get; } = [];
+    public List<Shape> Shapes { get; } = [];
 
     /// <summary>图表集合</summary>
-    public List<PptChart> Charts { get; } = [];
+    public List<Chart> Charts { get; } = [];
 
     /// <summary>背景色（16进制 RGB），null 表示白色或使用背景图</summary>
     public String? BackgroundColor { get; set; }
 
     /// <summary>背景图片，null 表示纯色背景</summary>
-    public PptImage? BackgroundImage { get; set; }
+    public Picture? BackgroundImage { get; set; }
 
     /// <summary>背景渐变类型（S15-04），"linear" 或 "radial"，null 表示不使用渐变</summary>
     public String? BackgroundGradientType { get; set; }
@@ -38,16 +38,16 @@ public class PptSlide
     public String? Notes { get; set; }
 
     /// <summary>幻灯片切换动画，null 表示不设置</summary>
-    public PptTransition? Transition { get; set; }
+    public Transition? Transition { get; set; }
 
     /// <summary>图片关系计数器</summary>
     internal Int32 ImageCounter { get; set; } = 1;
 
     /// <summary>视频/音频媒体集合</summary>
-    public List<PptVideo> Videos { get; } = [];
+    public List<Video> Videos { get; } = [];
 
     /// <summary>形状组集合（S07-02 组合形状）</summary>
-    public List<PptGroup> Groups { get; } = [];
+    public List<GroupShape> Groups { get; } = [];
 
     /// <summary>使用的版式索引（0起始，对应 PptxWriter 加载的版式列表；无模板时只有索引 0）</summary>
     public Int32 LayoutIndex { get; set; }
@@ -57,13 +57,13 @@ public class PptSlide
     public String? Layout { get; set; }
 
     /// <summary>连接线/连接器集合（流程图简头等）</summary>
-    public List<PptConnector> Connectors { get; } = [];
+    public List<ConnectionShape> Connectors { get; } = [];
 
     /// <summary>元素动画列表（进入/强调/退出动画）</summary>
-    public List<PptAnimation> Animations { get; } = [];
+    public List<Animation> Animations { get; } = [];
 
     /// <summary>幻灯片批注列表（审阅注释）</summary>
-    public List<PptComment> Comments { get; } = [];
+    public List<Comment> Comments { get; } = [];
 
     /// <summary>是否隐藏幻灯片（S12-04），对应 <c>p:sld show="0"</c></summary>
     public Boolean Hidden { get; set; }

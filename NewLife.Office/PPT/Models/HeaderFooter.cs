@@ -1,13 +1,13 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 页眉页脚设置</summary>
 /// <remarks>
 /// 对应 OOXML pptx 中 <c>presentation.xml</c> 的 <c>p:hf</c> 元素，
 /// 统一管理所有幻灯片的页脚文本、页码和日期显示。
-/// 通过 <see cref="PptDocument.HeaderFooter"/> 属性关联到演示文稿。
+/// 通过 <see cref="Presentation.HeaderFooter"/> 属性关联到演示文稿。
 /// <example>
 /// <code>
-/// doc.HeaderFooter = new PptHeaderFooter
+/// doc.HeaderFooter = new HeaderFooter
 /// {
 ///     ShowFooter = true,
 ///     FooterText = "NewLife 内部资料",
@@ -19,7 +19,7 @@ namespace NewLife.Office;
 /// </code>
 /// </example>
 /// </remarks>
-public class PptHeaderFooter
+public class HeaderFooter
 {
     #region 属性
     /// <summary>是否在幻灯片上显示页眉（PPT 标准中页眉仅显示在讲义/备注页）</summary>

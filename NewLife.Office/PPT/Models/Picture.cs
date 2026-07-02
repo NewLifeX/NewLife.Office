@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 幻灯片图片元素</summary>
-public class PptImage
+public class Picture
 {
     #region 属性
     /// <summary>图片字节数据</summary>

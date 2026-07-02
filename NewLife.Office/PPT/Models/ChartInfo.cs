@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 图表信息（S06-04）</summary>
-public class PptChartInfo
+public class ChartInfo
 {
     #region 属性
     /// <summary>图表编号（在 ppt/charts/chart{N}.xml 中的序号）</summary>
@@ -14,6 +14,6 @@ public class PptChartInfo
     public String[] Categories { get; set; } = [];
 
     /// <summary>系列数据集合</summary>
-    public List<PptChartSeriesData> Series { get; } = [];
+    public List<ChartSeriesData> Series { get; } = [];
     #endregion
 }

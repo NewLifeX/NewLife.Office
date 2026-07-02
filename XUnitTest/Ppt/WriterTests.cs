@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Text;
 using NewLife.Office;
+using NewLife.Office.Ppt;
 using Xunit;
 
 namespace XUnitTest.Ppt;
@@ -548,7 +549,7 @@ public class PptxWriterTests
     {
         var writer = new PptxWriter();
         var master = writer.CreateMaster();
-        master.Shapes.Add(new PptShape
+        master.Shapes.Add(new Shape
         {
             ShapeType = "rect",
             Left = PptxWriter.CmToEmu(0),
@@ -575,7 +576,7 @@ public class PptxWriterTests
         var writer = new PptxWriter();
         var master = writer.CreateMaster();
         var layout = master.AddLayout("标题页", "title");
-        layout.TextBoxes.Add(new PptTextBox
+        layout.TextBoxes.Add(new TextBox
         {
             Text = "单击此处添加标题",
             Left = PptxWriter.CmToEmu(2),
@@ -713,7 +714,7 @@ public class PptxWriterTests
         var writer = new PptxWriter();
         var master = writer.CreateMaster();
         var layout = master.AddLayout("混合版式", "blank");
-        layout.Shapes.Add(new PptShape
+        layout.Shapes.Add(new Shape
         {
             ShapeType = "rect",
             Left = PptxWriter.CmToEmu(1),
@@ -722,7 +723,7 @@ public class PptxWriterTests
             Height = PptxWriter.CmToEmu(2),
             FillColor = "FF0000",
         });
-        layout.TextBoxes.Add(new PptTextBox
+        layout.TextBoxes.Add(new TextBox
         {
             Text = "混合内容",
             Left = PptxWriter.CmToEmu(7),
@@ -930,7 +931,7 @@ public class PptxWriterTests
     [Fact, System.ComponentModel.DisplayName("形状克隆—模型级Clone含新ID和偏移")]
     public void ShapeClone_ModelLevel_WithOffset()
     {
-        var src = new PptShape
+        var src = new Shape
         {
             Id = 1,
             Text = "原始文本",
@@ -1012,8 +1013,8 @@ public class PptxWriterTests
         var writer = new PptxWriter();
         writer.AddSlide(0);
         var group = writer.GroupShapes(0, 1, 1, 10, 10);
-        group.Shapes.Add(new PptShape { ShapeType = "rect", Left = 100, Top = 200, Width = 500, Height = 300 });
-        group.TextBoxes.Add(new PptTextBox { Text = "组内文字", Left = 300, Top = 400, Width = 200, Height = 100 });
+        group.Shapes.Add(new Shape { ShapeType = "rect", Left = 100, Top = 200, Width = 500, Height = 300 });
+        group.TextBoxes.Add(new TextBox { Text = "组内文字", Left = 300, Top = 400, Width = 200, Height = 100 });
 
         var slide = writer.Slides[0];
         Assert.Single(slide.Groups);
@@ -1050,7 +1051,7 @@ public class PptxWriterTests
         var writer = new PptxWriter();
         writer.AddSlide(0);
         var chart = writer.AddStockChart(0, ["周一", "周二", "周三"], 2, 2, 16, 12);
-        chart.Series.Add(new PptChartSeries { Name = "AAPL", Values = [150, 152, 148] });
+        chart.Series.Add(new ChartSeries { Name = "AAPL", Values = [150, 152, 148] });
 
         using var ms = new MemoryStream();
         writer.Save(ms);
@@ -1069,7 +1070,7 @@ public class PptxWriterTests
         var writer = new PptxWriter();
         writer.AddSlide(0);
         var chart = writer.AddRadarChart(0, ["速度", "力量", "智力"], 2, 2, 16, 12);
-        chart.Series.Add(new PptChartSeries { Name = "英雄A", Values = [80, 60, 90] });
+        chart.Series.Add(new ChartSeries { Name = "英雄A", Values = [80, 60, 90] });
 
         using var ms = new MemoryStream();
         writer.Save(ms);
@@ -1164,7 +1165,7 @@ public class PptxWriterTests
         using var writer = new PptxWriter();
         var chart = writer.AddScatterChart(0, ["A", "B", "C"], 1, 1, 8, 6);
         chart.Title = "Scatter Test";
-        chart.Series.Add(new PptChartSeries
+        chart.Series.Add(new ChartSeries
         {
             Name = "Series1",
             XValues = [1.0, 2.0, 3.0],

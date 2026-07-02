@@ -1,7 +1,7 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 幻灯片嵌入视频/音频媒体</summary>
-public class PptVideo
+public class Video
 {
     #region 属性
     /// <summary>媒体字节数据</summary>

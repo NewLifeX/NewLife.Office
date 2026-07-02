@@ -1,8 +1,9 @@
 using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
+using NewLife.Office.Word;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 模板填充器</summary>
 /// <remarks>

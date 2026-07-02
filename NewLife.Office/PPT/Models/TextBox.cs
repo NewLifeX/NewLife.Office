@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 幻灯片文本框</summary>
-public class PptTextBox
+public class TextBox
 {
     #region 属性
     /// <summary>左边距（EMU）</summary>
@@ -69,10 +69,10 @@ public class PptTextBox
     public Int32 SpaceBeforePt { get; set; }
 
     /// <summary>富文本片段集合（向后兼容：优先使用 Paragraphs）</summary>
-    public List<PptTextRun> Runs { get; } = [];
+    public List<Run> Runs { get; } = [];
 
     /// <summary>段落集合（多段文本时使用，每个段落含独立 Run 列表和段落级格式）。非空时 Writer 优先使用此属性逐段写入</summary>
-    public List<PptParagraph> Paragraphs { get; } = [];
+    public List<Paragraph> Paragraphs { get; } = [];
 
     /// <summary>文本框左内边距（EMU，bodyPr lIns），0 表示使用默认值</summary>
     public Int32 LeftInset { get; set; }
@@ -98,5 +98,23 @@ public class PptTextBox
 
     /// <summary>文本方向（vert 属性值：horz=水平/vert=垂直/vert270=旋转270°/eaVert=东亚竖排），null 表示默认水平</summary>
     public String? TextDirection { get; set; }
+
+    /// <summary>文本自动适应（"norm"=自动缩小/"noAuto"=不自动适应），null=默认</summary>
+    public String? TextAutoFit { get; set; }
+
+    /// <summary>文本左边距（EMU），null=默认（25400=0.1英寸）</summary>
+    public Int32? TextMarginLeft { get; set; }
+
+    /// <summary>文本右边距（EMU），null=默认</summary>
+    public Int32? TextMarginRight { get; set; }
+
+    /// <summary>文本上边距（EMU），null=默认</summary>
+    public Int32? TextMarginTop { get; set; }
+
+    /// <summary>文本下边距（EMU），null=默认</summary>
+    public Int32? TextMarginBottom { get; set; }
+
+    /// <summary>文本是否自动换行（wrap），null=默认（true）</summary>
+    public Boolean? WordWrap { get; set; }
     #endregion
 }

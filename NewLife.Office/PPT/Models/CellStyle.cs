@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 表格单元格样式（S10-02）</summary>
-public class PptCellStyle
+public class CellStyle
 {
     #region 属性
     /// <summary>单元格背景色（16进制 RGB），null 表示表格默认色</summary>

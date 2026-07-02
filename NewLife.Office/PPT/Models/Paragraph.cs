@@ -1,11 +1,11 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 文本段落（多段文本的最小单元，每段含独立格式和 Run 列表）</summary>
-public class PptParagraph
+public class Paragraph
 {
     #region 属性
     /// <summary>富文本片段集合</summary>
-    public List<PptTextRun> Runs { get; } = [];
+    public List<Run> Runs { get; } = [];
 
     /// <summary>段落对齐（l/ctr/r），默认 l</summary>
     public String Alignment { get; set; } = "l";

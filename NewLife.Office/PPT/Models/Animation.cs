@@ -1,7 +1,7 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 元素动画类别</summary>
-public enum PptAnimationCategory
+public enum AnimationCategory
 {
     /// <summary>进入动画</summary>
     Entrance,
@@ -17,7 +17,7 @@ public enum PptAnimationCategory
 }
 
 /// <summary>PPT 动画触发方式</summary>
-public enum PptAnimationTrigger
+public enum AnimationTrigger
 {
     /// <summary>单击时触发</summary>
     OnClick,
@@ -32,23 +32,23 @@ public enum PptAnimationTrigger
 /// <summary>PPT 元素动画（进入/强调/退出/路径）</summary>
 /// <remarks>
 /// 描述幻灯片上某个元素的动画效果，包括效果名称、触发方式和时间参数。
-/// 通过 <see cref="PptSlide.Animations"/> 集合关联到幻灯片。
+/// 通过 <see cref="Slide.Animations"/> 集合关联到幻灯片。
 /// <example>
 /// <code>
-/// var anim = new PptAnimation
+/// var anim = new Animation
 /// {
-///     Category = PptAnimationCategory.Entrance,
+///     Category = AnimationCategory.Entrance,
 ///     Effect = "appear",
 ///     TargetType = "textBox",
 ///     TargetIndex = 0,
-///     Trigger = PptAnimationTrigger.OnClick,
+///     Trigger = AnimationTrigger.OnClick,
 ///     DurationMs = 500,
 /// };
 /// slide.Animations.Add(anim);
 /// </code>
 /// </example>
 /// </remarks>
-public class PptAnimation
+public class Animation
 {
     #region 属性
     /// <summary>目标元素类型：textBox/shape/image/chart/table/group/connector</summary>
@@ -58,7 +58,7 @@ public class PptAnimation
     public Int32 TargetIndex { get; set; }
 
     /// <summary>动画类别（进入/强调/退出/路径）</summary>
-    public PptAnimationCategory Category { get; set; } = PptAnimationCategory.Entrance;
+    public AnimationCategory Category { get; set; } = AnimationCategory.Entrance;
 
     /// <summary>
     /// 动画效果名称（对应 OOXML animRg/animScale 等 preset 名称），常用值：
@@ -69,7 +69,7 @@ public class PptAnimation
     public String Effect { get; set; } = "appear";
 
     /// <summary>动画触发方式</summary>
-    public PptAnimationTrigger Trigger { get; set; } = PptAnimationTrigger.OnClick;
+    public AnimationTrigger Trigger { get; set; } = AnimationTrigger.OnClick;
 
     /// <summary>触发延迟（毫秒），0 表示无延迟</summary>
     public Int32 DelayMs { get; set; }
@@ -78,15 +78,15 @@ public class PptAnimation
     public Int32 DurationMs { get; set; } = 500;
 
     /// <summary>动画在幻灯片内的顺序（从 0 开始）</summary>
+    public Int32 Sequence { get; set; }
+
+    /// <summary>动画排序顺序（同 Sequence，供 OrderBy 使用）</summary>
     public Int32 Order { get; set; }
 
-    /// <summary>是否自动回放（播放完后反向播放）</summary>
+    /// <summary>重复次数，"indefinite" 表示无限循环，null 表示 1 次</summary>
+    public String? Repeat { get; set; }
+
+    /// <summary>自动反转（播放后自动倒放），默认 false</summary>
     public Boolean AutoReverse { get; set; }
-
-    /// <summary>重复次数（0 = 无限循环，1 = 播放一次）</summary>
-    public Int32 RepeatCount { get; set; } = 1;
-
-    /// <summary>动画方向（部分效果支持）：left/right/up/down/leftUp/rightUp 等</summary>
-    public String? Direction { get; set; }
     #endregion
 }

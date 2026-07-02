@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 幻灯片版式信息（S04-02）</summary>
-public class PptLayoutInfo
+public class SlideLayoutInfo
 {
     #region 属性
     /// <summary>版式索引（0起始）</summary>

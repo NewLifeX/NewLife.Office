@@ -2,14 +2,15 @@
 using System.Text;
 using NewLife.Log;
 using NewLife.Office;
+using NewLife.Office.Ppt;
 using Xunit;
 
 namespace XUnitTest.Ppt;
 
 /// <summary>PPTX 全功能往返集成测试</summary>
 /// <remarks>
-/// 读取真实的 .pptx 文件，将所有内容解析为内存对象（PptSlide/PptTextBox/PptShape/PptImage/
-/// PptTable/PptChart/PptGroup/PptTransition 等），
+/// 读取真实的 .pptx 文件，将所有内容解析为内存对象（Slide/TextBox/Shape/Picture/
+/// Table/Chart/GroupShape/Transition 等），
 /// 再用 PptxWriter 从这些对象重建新文件，最后多层验证新旧文件内容一致。
 /// 不使用 ZIP 级原始 XML 拷贝——每一页幻灯片都必须经过对象模型的完整读取与重建。
 /// </remarks>
@@ -59,7 +60,7 @@ public class PptxRoundTripTests
     private static Boolean Eq(String a, String b) => String.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>验证幻灯片级属性（版式/背景/备注/切换/尺寸）</summary>
-    private static void AssertSlideProperties(PptSlide src, PptSlide dst, Int32 slideIndex)
+    private static void AssertSlideProperties(Slide src, Slide dst, Int32 slideIndex)
     {
         var tag = $"幻灯片{slideIndex}";
         Assert.Equal(src.LayoutIndex, dst.LayoutIndex);
@@ -75,7 +76,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证幻灯片各元素数量</summary>
-    private static void AssertSlideCounts(PptSlide src, PptSlide dst, Int32 slideIndex)
+    private static void AssertSlideCounts(Slide src, Slide dst, Int32 slideIndex)
     {
         var tag = $"幻灯片{slideIndex}";
         Assert.Equal(src.TextBoxes.Count, dst.TextBoxes.Count);
@@ -88,7 +89,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证文本框位置和尺寸</summary>
-    private static void AssertTextBoxPosition(PptTextBox src, PptTextBox dst, String tag)
+    private static void AssertTextBoxPosition(TextBox src, TextBox dst, String tag)
     {
         Assert.True(EmuClose(src.Left, dst.Left), $"{tag}.Left: {src.Left} vs {dst.Left}");
         Assert.True(EmuClose(src.Top, dst.Top), $"{tag}.Top: {src.Top} vs {dst.Top}");
@@ -97,13 +98,13 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证文本框文本内容</summary>
-    private static void AssertTextBoxText(PptTextBox src, PptTextBox dst, String tag)
+    private static void AssertTextBoxText(TextBox src, TextBox dst, String tag)
     {
         Assert.Equal(src.Text, dst.Text);
     }
 
     /// <summary>验证文本框字体属性（名称/大小/粗斜/颜色）</summary>
-    private static void AssertTextBoxFont(PptTextBox src, PptTextBox dst, String tag)
+    private static void AssertTextBoxFont(TextBox src, TextBox dst, String tag)
     {
         // 空文本框跳过 Run 数量验证
         var hasText = src.Text.Length > 0 || dst.Text.Length > 0;
@@ -123,7 +124,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证文本框格式属性（对齐/背景色/超链接/自适配）</summary>
-    private static void AssertTextBoxFormat(PptTextBox src, PptTextBox dst, String tag)
+    private static void AssertTextBoxFormat(TextBox src, TextBox dst, String tag)
     {
         // 空字符串（未指定）与 "l"（显式左对齐）语义等价
         var srcAlign = src.Alignment.Length == 0 ? "l" : src.Alignment;
@@ -135,7 +136,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证文本框段落属性（行距/段前距）</summary>
-    private static void AssertTextBoxParagraph(PptTextBox src, PptTextBox dst, String tag)
+    private static void AssertTextBoxParagraph(TextBox src, TextBox dst, String tag)
     {
         Assert.Equal(src.LineSpacingPct, dst.LineSpacingPct);
         Assert.Equal(src.SpaceBeforePt, dst.SpaceBeforePt);
@@ -153,7 +154,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证单个段落</summary>
-    private static void AssertParagraph(String tag, PptParagraph src, PptParagraph dst)
+    private static void AssertParagraph(String tag, Paragraph src, Paragraph dst)
     {
         Assert.Equal(src.Alignment, dst.Alignment);
         Assert.Equal(src.Level, dst.Level);
@@ -169,7 +170,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证富文本片段</summary>
-    private static void AssertTextRun(String tag, PptTextRun src, PptTextRun dst)
+    private static void AssertTextRun(String tag, Run src, Run dst)
     {
         Assert.Equal(src.Text, dst.Text);
         Assert.Equal(src.FontSize, dst.FontSize);
@@ -190,7 +191,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证基本图形</summary>
-    private static void AssertShape(PptShape src, PptShape dst, String tag)
+    private static void AssertShape(Shape src, Shape dst, String tag)
     {
         Assert.Equal(src.ShapeType, dst.ShapeType);
         Assert.True(EmuClose(src.Left, dst.Left), $"{tag}.Left");
@@ -210,7 +211,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证图片</summary>
-    private static void AssertImage(PptImage src, PptImage dst, String tag)
+    private static void AssertImage(Picture src, Picture dst, String tag)
     {
         Assert.Equal(src.Extension, dst.Extension);
         Assert.True(EmuClose(src.Left, dst.Left), $"{tag}.Left");
@@ -221,7 +222,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证表格</summary>
-    private static void AssertTable(PptTable src, PptTable dst, String tag)
+    private static void AssertTable(Table src, Table dst, String tag)
     {
         Assert.True(EmuClose(src.Left, dst.Left), $"{tag}.Left");
         Assert.True(EmuClose(src.Top, dst.Top), $"{tag}.Top");
@@ -238,7 +239,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证图表</summary>
-    private static void AssertChart(PptChart src, PptChart dst, String tag)
+    private static void AssertChart(Chart src, Chart dst, String tag)
     {
         Assert.Equal(src.ChartType, dst.ChartType);
         Assert.Equal(src.Title ?? "", dst.Title ?? "");
@@ -256,7 +257,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证形状组</summary>
-    private static void AssertGroup(PptGroup src, PptGroup dst, String tag)
+    private static void AssertGroup(GroupShape src, GroupShape dst, String tag)
     {
         Assert.True(EmuClose(src.Left, dst.Left), $"{tag}.Left");
         Assert.True(EmuClose(src.Top, dst.Top), $"{tag}.Top");
@@ -274,7 +275,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证视频</summary>
-    private static void AssertVideo(PptVideo src, PptVideo dst, String tag)
+    private static void AssertVideo(Video src, Video dst, String tag)
     {
         Assert.Equal(src.Extension, dst.Extension);
         Assert.True(EmuClose(src.Left, dst.Left), $"{tag}.Left");
@@ -288,7 +289,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>验证切换动画</summary>
-    private static void AssertTransition(PptTransition src, PptTransition dst, String tag)
+    private static void AssertTransition(Transition src, Transition dst, String tag)
     {
         if (src == null && dst == null) return;
         Assert.True(src != null && dst != null, $"{tag} 切换动画存在性不匹配");
@@ -386,7 +387,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>收集幻灯片中所有 TextBox 的 Run 级别字体引用（仅 latin + ea）</summary>
-    private static void CollectRunFonts(PptSlide slide, List<(String tag, String typeface)> result)
+    private static void CollectRunFonts(Slide slide, List<(String tag, String typeface)> result)
     {
         foreach (var tb in slide.TextBoxes)
         {
@@ -538,7 +539,7 @@ public class PptxRoundTripTests
         var outputPath = Path.Combine(outputDir, fileName);
 
         // ─── 读取阶段 ───────────────────────────────────────────────
-        var sourceSlides = new List<PptSlide>();
+        var sourceSlides = new List<Slide>();
         String masterXml, layoutXml, themeXml;
         Int32 sourceImageCount, sourceSlideCount;
         Int64 sourceImageTotalBytes;
@@ -616,7 +617,7 @@ public class PptxRoundTripTests
                         newTb.Paragraphs.Clear();
                         foreach (var pp in tb.Paragraphs)
                         {
-                            var newPp = new PptParagraph
+                            var newPp = new Paragraph
                             {
                                 Alignment = pp.Alignment,
                                 Level = pp.Level,
@@ -628,7 +629,7 @@ public class PptxRoundTripTests
                                 BulletNone = pp.BulletNone,
                             };
                             foreach (var run in pp.Runs)
-                                newPp.Runs.Add(new PptTextRun
+                                newPp.Runs.Add(new Run
                                 {
                                     Text = run.Text,
                                     FontSize = run.FontSize,
@@ -651,7 +652,7 @@ public class PptxRoundTripTests
                     {
                         newTb.Runs.Clear();
                         foreach (var run in tb.Runs)
-                            newTb.Runs.Add(new PptTextRun
+                            newTb.Runs.Add(new Run
                             {
                                 Text = run.Text,
                                 FontSize = run.FontSize,
@@ -716,7 +717,7 @@ public class PptxRoundTripTests
                     var topCm = PptxWriter.EmuToCm(chart.Top);
                     var widthCm = PptxWriter.EmuToCm(chart.Width);
                     var heightCm = PptxWriter.EmuToCm(chart.Height);
-                    PptChart newChart;
+                    Chart newChart;
                     if (chart.ChartType == "line")
                         newChart = writer.AddLineChart(slideIdx, chart.Categories, leftCm, topCm, widthCm, heightCm);
                     else if (chart.ChartType == "pie")
@@ -725,7 +726,7 @@ public class PptxRoundTripTests
                         newChart = writer.AddBarChart(slideIdx, chart.Categories, leftCm, topCm, widthCm, heightCm);
                     newChart.Title = chart.Title; newChart.ChartType = chart.ChartType;
                     newChart.Series.Clear();
-                    foreach (var ser in chart.Series) newChart.Series.Add(new PptChartSeries { Name = ser.Name, Values = ser.Values });
+                    foreach (var ser in chart.Series) newChart.Series.Add(new ChartSeries { Name = ser.Name, Values = ser.Values });
                 }
 
                 foreach (var grp in src.Groups)

@@ -1,12 +1,12 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 批注（审阅注释）</summary>
 /// <remarks>
 /// 对应 OOXML pptx 中的 <c>comments.xml</c>，记录审阅者在幻灯片上添加的注释。
-/// 通过 <see cref="PptSlide.Comments"/> 集合关联到幻灯片。
+/// 通过 <see cref="Slide.Comments"/> 集合关联到幻灯片。
 /// <example>
 /// <code>
-/// var comment = new PptComment
+/// var comment = new Comment
 /// {
 ///     Author = "李四",
 ///     Text = "建议将此图表改为饼图",
@@ -17,7 +17,7 @@ namespace NewLife.Office;
 /// </code>
 /// </example>
 /// </remarks>
-public class PptComment
+public class Comment
 {
     #region 属性
     /// <summary>批注 ID（文档内唯一，从 1 开始）</summary>

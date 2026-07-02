@@ -1,8 +1,8 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 可编程幻灯片版式（S04-Master 增强）</summary>
 /// <remarks>支持在编程式母版中自定义版式的占位符和显示名称，无需依赖外部模板文件。</remarks>
-public class PptLayout
+public class SlideLayout
 {
     #region 属性
 
@@ -13,10 +13,10 @@ public class PptLayout
     public String LayoutType { get; set; } = "blank";
 
     /// <summary>版式上的形状集合（如占位符文本框、装饰图形）</summary>
-    public List<PptShape> Shapes { get; } = [];
+    public List<Shape> Shapes { get; } = [];
 
     /// <summary>版式上的文本框集合</summary>
-    public List<PptTextBox> TextBoxes { get; } = [];
+    public List<TextBox> TextBoxes { get; } = [];
 
     #endregion
 }

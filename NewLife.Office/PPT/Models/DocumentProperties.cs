@@ -1,7 +1,7 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 文档属性</summary>
-public class PptDocumentProperties
+public class DocumentProperties
 {
     #region 属性
     /// <summary>文档标题</summary>

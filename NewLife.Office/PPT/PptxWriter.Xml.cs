@@ -1,7 +1,7 @@
 ﻿using System.IO.Compression;
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 partial class PptxWriter
 {
@@ -14,19 +14,19 @@ partial class PptxWriter
         Save(fs);
     }
 
-    /// <summary>从 PptDocument 模型保存到文件</summary>
+    /// <summary>从 Presentation 模型保存到文件</summary>
     /// <param name="path">输出路径</param>
     /// <param name="document">演示文稿数据模型</param>
-    public void Save(String path, PptDocument document)
+    public void Save(String path, Presentation document)
     {
         using var fs = new FileStream(path.GetFullPath(), FileMode.Create, FileAccess.Write, FileShare.None);
         Save(fs, document);
     }
 
-    /// <summary>从 PptDocument 模型保存到流</summary>
+    /// <summary>从 Presentation 模型保存到流</summary>
     /// <param name="stream">目标流</param>
     /// <param name="document">演示文稿数据模型</param>
-    public void Save(Stream stream, PptDocument document)
+    public void Save(Stream stream, Presentation document)
     {
         // 将文档模型属性应用到 writer
         SlideWidth  = document.SlideWidth;
@@ -95,11 +95,11 @@ partial class PptxWriter
     #endregion
 
     #region 私有方法
-    private PptSlide EnsureSlide(Int32 idx)
+    private Slide EnsureSlide(Int32 idx)
     {
         while (Slides.Count <= idx)
         {
-            Slides.Add(new PptSlide());
+            Slides.Add(new Slide());
         }
         return Slides[idx];
     }
@@ -315,7 +315,7 @@ partial class PptxWriter
         WriteEntry(za, "ppt/_rels/presentation.xml.rels", sb.ToString());
     }
 
-    private void WriteSlide(ZipArchive za, Int32 idx, PptSlide slide)
+    private void WriteSlide(ZipArchive za, Int32 idx, Slide slide)
     {
         const String P = "http://schemas.openxmlformats.org/presentationml/2006/main";
         const String A = "http://schemas.openxmlformats.org/drawingml/2006/main";
@@ -595,7 +595,7 @@ partial class PptxWriter
         // tables
         foreach (var tbl in slide.Tables)
         {
-            BuildPptTableXml(sb, tbl, ref shapeId);
+            BuildTableXml(sb, tbl, ref shapeId);
         }
 
         // charts
@@ -715,41 +715,41 @@ partial class PptxWriter
             {
                 var nodeName = anim.Category switch
                 {
-                    PptAnimationCategory.Entrance => "animEffect",
-                    PptAnimationCategory.Emphasis => "animEmph",
-                    PptAnimationCategory.Exit => "animEffect",
-                    PptAnimationCategory.MotionPath => "animMotion",
+                    AnimationCategory.Entrance => "animEffect",
+                    AnimationCategory.Emphasis => "animEmph",
+                    AnimationCategory.Exit => "animEffect",
+                    AnimationCategory.MotionPath => "animMotion",
                     _ => "animEffect",
                 };
                 var animType = anim.Category switch
                 {
-                    PptAnimationCategory.Entrance => "entr",
-                    PptAnimationCategory.Emphasis => "emph",
-                    PptAnimationCategory.Exit => "exit",
+                    AnimationCategory.Entrance => "entr",
+                    AnimationCategory.Emphasis => "emph",
+                    AnimationCategory.Exit => "exit",
                     _ => "entr",
                 };
                 var trigger = anim.Trigger switch
                 {
-                    PptAnimationTrigger.WithPrevious => "withPrev",
-                    PptAnimationTrigger.AfterPrevious => "afterPrev",
+                    AnimationTrigger.WithPrevious => "withPrev",
+                    AnimationTrigger.AfterPrevious => "afterPrev",
                     _ => "onClick",
                 };
                 sb.Append($"<p:par><p:cTn nodeType=\"{trigger}\" fill=\"hold\">");
                 sb.Append("<p:stCondLst>");
                 sb.Append(anim.Trigger switch
                 {
-                    PptAnimationTrigger.OnClick => "<p:cond delay=\"indefinite\"/>",
-                    PptAnimationTrigger.WithPrevious => "<p:cond delay=\"0\"/>",
-                    PptAnimationTrigger.AfterPrevious => "<p:cond delay=\"0\"/>",
+                    AnimationTrigger.OnClick => "<p:cond delay=\"indefinite\"/>",
+                    AnimationTrigger.WithPrevious => "<p:cond delay=\"0\"/>",
+                    AnimationTrigger.AfterPrevious => "<p:cond delay=\"0\"/>",
                     _ => "<p:cond delay=\"indefinite\"/>",
                 });
                 sb.Append("</p:stCondLst></p:cTn><p:childTnLst>");
-                sb.Append($"<p:{nodeName} filter=\"{EscXml(anim.Effect)}\"{(anim.Category == PptAnimationCategory.Exit ? " exit=\"1\"" : "")}>");
+                sb.Append($"<p:{nodeName} filter=\"{EscXml(anim.Effect)}\"{(anim.Category == AnimationCategory.Exit ? " exit=\"1\"" : "")}>");
                 sb.Append("<p:cBhvr><p:cTn");
                 if (anim.DurationMs > 0)
                     sb.Append($" dur=\"{anim.DurationMs}\"");
                 if (anim.DelayMs > 0)
-                    sb.Append($" st=\"{(anim.Trigger == PptAnimationTrigger.AfterPrevious ? anim.DelayMs : 0)}\"");
+                    sb.Append($" st=\"{(anim.Trigger == AnimationTrigger.AfterPrevious ? anim.DelayMs : 0)}\"");
                 sb.Append($">");
                 if (anim.DelayMs > 0)
                     sb.Append($"<p:stCondLst><p:cond delay=\"{anim.DelayMs}\"/></p:stCondLst>");
@@ -891,7 +891,7 @@ partial class PptxWriter
     {
         // 收集所有幻灯片的批注，确保每个幻灯片内 Index 从 1 开始
         var allCommentSlides = new List<Int32>();
-        var allCommentItems = new List<PptComment>();
+        var allCommentItems = new List<Comment>();
         var uniqueAuthors = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < Slides.Count; i++)
         {
@@ -930,7 +930,7 @@ partial class PptxWriter
         WriteZipEntryText(za, "ppt/comments/commentAuthors.xml", authSb.ToString());
 
         // 为每个有批注的幻灯片生成 comments{N}.xml — 按 slideIdx 分组
-        var slideMap = new Dictionary<Int32, List<PptComment>>();
+        var slideMap = new Dictionary<Int32, List<Comment>>();
         for (var i = 0; i < allCommentSlides.Count; i++)
         {
             var idx = allCommentSlides[i];
@@ -961,7 +961,7 @@ partial class PptxWriter
         }
     }
 
-    private void WriteChartXml(ZipArchive za, PptChart chart)
+    private void WriteChartXml(ZipArchive za, Chart chart)
     {
         const String C = "http://schemas.openxmlformats.org/drawingml/2006/chart";
         const String A = "http://schemas.openxmlformats.org/drawingml/2006/main";
@@ -1066,7 +1066,7 @@ partial class PptxWriter
     }
 
     /// <summary>写入单个富文本 Run（供 Paragraphs 和 Runs 模式共用）</summary>
-    private void WriteTextRun(StringBuilder sb, PptTextRun run, PptTextBox tb, ref Int32 hlinkGlobal, Dictionary<String, String> hlinkMap)
+    private void WriteTextRun(StringBuilder sb, Run run, TextBox tb, ref Int32 hlinkGlobal, Dictionary<String, String> hlinkMap)
     {
         String? runHlRelId = null;
         if (run.HyperlinkUrl != null)
@@ -1109,7 +1109,7 @@ partial class PptxWriter
     }
 
     /// <summary>写入单行非 Run 模式文本（向后兼容）</summary>
-    private void WriteSingleLineTextRun(StringBuilder sb, PptTextBox tb, String? hlRelId)
+    private void WriteSingleLineTextRun(StringBuilder sb, TextBox tb, String? hlRelId)
     {
         sb.Append("<a:r>");
         sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{tb.FontSize * 100}\"{(tb.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
@@ -1139,7 +1139,7 @@ partial class PptxWriter
         sb.Append("</a:r>");
     }
 
-    private static void BuildPptTableXml(StringBuilder sb, PptTable tbl, ref Int32 shapeId)
+    private static void BuildTableXml(StringBuilder sb, Table tbl, ref Int32 shapeId)
     {
         const String A = "http://schemas.openxmlformats.org/drawingml/2006/main";
         sb.Append($"<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id=\"{shapeId++}\" name=\"Table\"/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp=\"1\"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>");
@@ -1496,7 +1496,7 @@ partial class PptxWriter
     }
 
     /// <summary>生成 p:sp 形状 XML 片段（复用于母版、版式、幻灯片）</summary>
-    private static void WriteShapeXml(StringBuilder sb, PptShape sp, ref Int32 shapeId, String aNs)
+    private static void WriteShapeXml(StringBuilder sb, Shape sp, ref Int32 shapeId, String aNs)
     {
         sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"Shape\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>");
         sb.Append("<p:spPr>");
@@ -1524,7 +1524,7 @@ partial class PptxWriter
     }
 
     /// <summary>生成 p:sp 文本框 XML 片段（复用于版式、幻灯片）</summary>
-    private static void WriteTextBoxXml(StringBuilder sb, PptTextBox tb, ref Int32 shapeId, String aNs)
+    private static void WriteTextBoxXml(StringBuilder sb, TextBox tb, ref Int32 shapeId, String aNs)
     {
         sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"TextBox\"/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr>");
         sb.Append("<p:spPr>");

@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 幻灯片文本形状</summary>
-public class PptShape
+public class Shape
 {
     #region 属性
     /// <summary>形状ID</summary>
@@ -98,33 +98,48 @@ public class PptShape
     public String? TextAutoFit { get; set; }
 
     /// <summary>文本左边距（EMU），null=默认（25400=0.1英寸）</summary>
-    public Int64? LeftInset { get; set; }
+    public Int32? TextMarginLeft { get; set; }
 
     /// <summary>文本右边距（EMU），null=默认</summary>
-    public Int64? RightInset { get; set; }
+    public Int32? TextMarginRight { get; set; }
 
-    /// <summary>文本上边距（EMU），null=默认（12700=0.05英寸）</summary>
-    public Int64? TopInset { get; set; }
+    /// <summary>文本上边距（EMU），null=默认</summary>
+    public Int32? TextMarginTop { get; set; }
 
     /// <summary>文本下边距（EMU），null=默认</summary>
-    public Int64? BottomInset { get; set; }
+    public Int32? TextMarginBottom { get; set; }
 
-    /// <summary>线条虚线样式（"dash"/"dot"/"dashDot"/"lgDash" 等），null=实线</summary>
+    /// <summary>文本是否自动换行（wrap），null=默认（true）</summary>
+    public Boolean? WordWrap { get; set; }
+
+    /// <summary>线条虚线样式（如 "dash"/"dot"/"dashDot"），null 表示实线</summary>
     public String? DashStyle { get; set; }
 
-    /// <summary>文本垂直锚定（"t"=顶部/"ctr"=居中/"b"=底部），null=默认顶部，对应 bodyPr anchor</summary>
+    /// <summary>文本垂直锚定方式（bodyPr anchor 属性：t/ctr/b），null 表示默认</summary>
     public String? Anchor { get; set; }
+
+    /// <summary>文本左内边距（EMU，bodyPr lIns），null 表示默认</summary>
+    public Int32? LeftInset { get; set; }
+
+    /// <summary>文本右内边距（EMU，bodyPr rIns），null 表示默认</summary>
+    public Int32? RightInset { get; set; }
+
+    /// <summary>文本上内边距（EMU，bodyPr tIns），null 表示默认</summary>
+    public Int32? TopInset { get; set; }
+
+    /// <summary>文本下内边距（EMU，bodyPr bIns），null 表示默认</summary>
+    public Int32? BottomInset { get; set; }
     #endregion
 
     #region 方法
-    /// <summary>深拷贝形状（含新 ID）</summary>
+    /// <summary>克隆形状，可指定新 ID 和偏移</summary>
     /// <param name="newId">新形状 ID</param>
-    /// <param name="offsetX">X 偏移量（EMU，添加到现有位置）</param>
-    /// <param name="offsetY">Y 偏移量（EMU）</param>
-    /// <returns>新形状实例</returns>
-    public PptShape Clone(Int32 newId, Int64 offsetX = 0, Int64 offsetY = 0)
+    /// <param name="offsetX">X 偏移（EMU）</param>
+    /// <param name="offsetY">Y 偏移（EMU）</param>
+    /// <returns>克隆的形状</returns>
+    public Shape Clone(Int32 newId, Int64 offsetX = 0, Int64 offsetY = 0)
     {
-        var clone = new PptShape
+        return new Shape
         {
             Id = newId,
             Text = Text,
@@ -134,8 +149,12 @@ public class PptShape
             Width = Width,
             Height = Height,
             FillColor = FillColor,
-            FillImage = FillImage != null ? (Byte[])FillImage.Clone() : null,
+            FillImage = FillImage,
             FillImageExt = FillImageExt,
+            GradientType = GradientType,
+            GradientColor1 = GradientColor1,
+            GradientColor2 = GradientColor2,
+            GradientAngle = GradientAngle,
             LineColor = LineColor,
             LineWidth = LineWidth,
             FontSize = FontSize,
@@ -152,18 +171,18 @@ public class PptShape
             FlipVertical = FlipVertical,
             TextDirection = TextDirection,
             TextAutoFit = TextAutoFit,
+            TextMarginLeft = TextMarginLeft,
+            TextMarginRight = TextMarginRight,
+            TextMarginTop = TextMarginTop,
+            TextMarginBottom = TextMarginBottom,
+            WordWrap = WordWrap,
+            DashStyle = DashStyle,
+            Anchor = Anchor,
             LeftInset = LeftInset,
             RightInset = RightInset,
             TopInset = TopInset,
             BottomInset = BottomInset,
-            DashStyle = DashStyle,
-            Anchor = Anchor,
-            GradientType = GradientType,
-            GradientColor1 = GradientColor1,
-            GradientColor2 = GradientColor2,
-            GradientAngle = GradientAngle,
         };
-        return clone;
     }
     #endregion
 }

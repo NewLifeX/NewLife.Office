@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>幻灯片切换动画</summary>
-public class PptTransition
+public class Transition
 {
     #region 属性
     /// <summary>切换类型（fade/push/wipe/zoom/split/cut/morph）</summary>

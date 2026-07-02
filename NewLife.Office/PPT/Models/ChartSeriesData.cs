@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 图表系列数据（S06-04）</summary>
-public class PptChartSeriesData
+public class ChartSeriesData
 {
     #region 属性
     /// <summary>系列名称</summary>

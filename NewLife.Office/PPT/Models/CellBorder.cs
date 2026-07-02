@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+﻿namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 表格单元格边框样式</summary>
 /// <remarks>
@@ -9,7 +9,7 @@ namespace NewLife.Office;
 /// </code>
 /// </example>
 /// </remarks>
-public class PptCellBorder
+public class CellBorder
 {
     #region 属性
     /// <summary>左边框颜色（16进制 RGB，无 # 前缀），null 表示无边框</summary>

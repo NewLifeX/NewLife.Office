@@ -456,7 +456,7 @@
 ### 近期（补齐 Writer 侧高保真差距）✅ 全部完成
 
 1. ✅ **docProps 写入**：实现 `core.xml` 和 `app.xml` 写入
-2. ✅ **连接器 XML 写入**：`PptConnector` → `<p:cxnSp>`
+2. ✅ **连接器 XML 写入**：`ConnectionShape` → `<p:cxnSp>`
 3. ✅ **批注 XML 写入**：`PptSlide.Comments` → `comments.xml`
 4. ✅ **表格单元格合并**：`gridSpan`/`rowSpan` XML
 5. ✅ **表格边框样式**：`<a:lnL>/<a:lnR>/<a:lnT>/<a:lnB>`
@@ -475,7 +475,7 @@
 12. ✅ **SVG 图片**：读写 `image/svg+xml` (S15-03)
 13. ✅ **背景渐变填充**：`<p:bgPr><a:gradFill>` (S16-03)
 14. 🔄 **pptx → PNG/JPEG**：需外部渲染库 SkiaSharp/Docnet，当前 NotSupportedException
-15. ✅ **Section 管理**：`PptDocument.Sections` 读写 (S13-04)
+15. ✅ **Section 管理**：`Presentation.Sections` 读写 (S13-04)
 
 ---
 

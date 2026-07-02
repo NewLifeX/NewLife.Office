@@ -1,8 +1,8 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 文档片段原始内容（母版/版式等）</summary>
 /// <remarks>以原始 XML 形式存储，避免完整模型化 OOXML schema 带来的维护负担。</remarks>
-internal sealed class PptPartContent
+internal sealed class PartContent
 {
     #region 属性
     /// <summary>部件 XML 内容</summary>

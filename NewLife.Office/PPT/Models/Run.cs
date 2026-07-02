@@ -1,11 +1,11 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 富文本片段（S10-01）</summary>
 /// <remarks>
 /// 支持每个片段独立设置字体、粗体、斜体、颜色、超链接。
-/// 将多个 <see cref="PptTextRun"/> 添加到 <see cref="PptTextBox.Runs"/> 即可实现富文本效果。
+/// 将多个 <see cref="Run"/> 添加到 <see cref="TextBox.Runs"/> 即可实现富文本效果。
 /// </remarks>
-public class PptTextRun
+public class Run
 {
     #region 属性
     /// <summary>文本内容</summary>

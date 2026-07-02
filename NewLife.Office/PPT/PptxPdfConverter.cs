@@ -1,4 +1,6 @@
-namespace NewLife.Office;
+using NewLife.Office.Pdf;
+
+namespace NewLife.Office.Ppt;
 
 /// <summary>PowerPoint pptx 转 PDF 转换器</summary>
 /// <remarks>
@@ -81,9 +83,9 @@ public class PptxPdfConverter
     #region 私有方法
 
     /// <summary>创建并初始化 PDF 文档（横向 A4）</summary>
-    private PdfFluentDocument CreateDocument()
+    private PdfDocumentBuilder CreateDocument()
     {
-        var doc = new PdfFluentDocument();
+        var doc = new PdfDocumentBuilder();
         doc.SetLandscape();   // 842 × 595
         doc.SetMargins(40f, 40f, 40f, 40f);
         if (DocumentTitle != null) doc.Title = DocumentTitle;
@@ -95,7 +97,7 @@ public class PptxPdfConverter
     /// <summary>将所有幻灯片渲染到文档</summary>
     /// <param name="reader">pptx 读取器</param>
     /// <param name="doc">PDF 文档</param>
-    private void RenderSlides(PptxReader reader, PdfFluentDocument doc)
+    private void RenderSlides(PptxReader reader, PdfDocumentBuilder doc)
     {
         var slides = reader.ReadSlides().ToList();
         if (slides.Count == 0) return;
@@ -112,7 +114,7 @@ public class PptxPdfConverter
     /// <param name="doc">PDF 文档</param>
     /// <param name="slide">幻灯片摘要</param>
     /// <param name="slideNumber">幻灯片编号（1起始）</param>
-    private void RenderSlide(PptxReader reader, PdfFluentDocument doc, PptSlideSummary slide, Int32 slideNumber)
+    private void RenderSlide(PptxReader reader, PdfDocumentBuilder doc, SlideSummary slide, Int32 slideNumber)
     {
         // 按形状 Y 坐标排序，找标题（最靠上的非空文本）
         var shapes = slide.Shapes
@@ -161,7 +163,7 @@ public class PptxPdfConverter
     /// <param name="doc">PDF 文档</param>
     /// <param name="slideNumber">幻灯片编号（1起始）</param>
     /// <param name="title">标题文本</param>
-    private static void DrawTitleBar(PdfFluentDocument doc, Int32 slideNumber, String? title)
+    private static void DrawTitleBar(PdfDocumentBuilder doc, Int32 slideNumber, String? title)
     {
         // 绘制深蓝色标题矩形（PDF 坐标 y=595-40-50=505，高50pt）
         var pageH = doc.PageHeight;

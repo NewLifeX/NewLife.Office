@@ -1,7 +1,7 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 节（Section），用于按节组织幻灯片</summary>
-public class PptSection
+public class Section
 {
     #region 属性
     /// <summary>节名称</summary>

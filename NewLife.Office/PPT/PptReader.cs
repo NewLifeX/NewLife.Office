@@ -1,8 +1,9 @@
 using System.Text;
 using NewLife.Buffers;
 using NewLife.Office;
+using NewLife.Office.Ole2;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PowerPoint 97-2003 二进制（.ppt）演示文稿读取器</summary>
 /// <remarks>

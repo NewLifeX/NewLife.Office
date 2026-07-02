@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+namespace NewLife.Office.Ppt;
 
 /// <summary>PPT 幻灯片表格</summary>
-public class PptTable
+public class Table
 {
     #region 属性
     /// <summary>左边距（EMU）</summary>
@@ -26,13 +26,13 @@ public class PptTable
     public Int64[] ColWidths { get; set; } = [];
 
     /// <summary>单元格样式字典，键为 (行索引, 列索引)，优先级高于行级默认样式</summary>
-    public Dictionary<(Int32 Row, Int32 Col), PptCellStyle> CellStyles { get; } = [];
+    public Dictionary<(Int32 Row, Int32 Col), CellStyle> CellStyles { get; } = [];
 
     /// <summary>单元格合并字典（S11-01），键为 (起始行, 起始列)，值为 (跨列数, 跨行数)</summary>
     public Dictionary<(Int32 Row, Int32 Col), (Int32 ColSpan, Int32 RowSpan)> MergedCells { get; } = [];
 
     /// <summary>单元格边框样式（S11-02），键为 (行索引, 列索引)</summary>
-    public Dictionary<(Int32 Row, Int32 Col), PptCellBorder> CellBorders { get; } = [];
+    public Dictionary<(Int32 Row, Int32 Col), CellBorder> CellBorders { get; } = [];
 
     /// <summary>表格样式主题引用 GUID（S11-04），如 "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"（默认中等样式2）</summary>
     public String? TableStyleGuid { get; set; }
