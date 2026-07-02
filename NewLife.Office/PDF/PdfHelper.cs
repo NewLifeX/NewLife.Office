@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 文档工具类，提供合并、拆分、水印等文档级操作</summary>
 /// <remarks>

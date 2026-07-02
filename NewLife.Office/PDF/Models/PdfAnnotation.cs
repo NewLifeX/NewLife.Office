@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 注释类型</summary>
 public enum PdfAnnotationType
@@ -53,18 +53,18 @@ public enum PdfAnnotationType
 /// <example>
 /// <code>
 /// // 创建超链接注释
-/// var link = new PdfAnnotation
+/// var link = new Annotation
 /// {
-///     Type = PdfAnnotationType.Link,
+///     Type = AnnotationType.Link,
 ///     PageIndex = 0,
 ///     X = 72, Y = 720, Width = 144, Height = 18,
 ///     Url = "https://newlifex.com",
 /// };
 ///
 /// // 创建便签注释
-/// var note = new PdfAnnotation
+/// var note = new Annotation
 /// {
-///     Type = PdfAnnotationType.Text,
+///     Type = AnnotationType.Text,
 ///     PageIndex = 2,
 ///     X = 400, Y = 600,
 ///     Contents = "此处数据需要核实",
@@ -112,7 +112,7 @@ public class PdfAnnotation
     public String? Subject { get; set; }
 
     /// <summary>注释颜色（高亮/边框颜色），null 表示使用默认</summary>
-    public OfficeColor? Color { get; set; }
+    public Color? Color { get; set; }
 
     /// <summary>便签是否默认展开显示（Type=Text 时有效）</summary>
     public Boolean Open { get; set; }

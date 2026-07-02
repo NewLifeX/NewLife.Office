@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 字体信息</summary>
 public class PdfFontInfo

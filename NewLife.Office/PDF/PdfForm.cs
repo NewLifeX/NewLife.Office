@@ -1,15 +1,15 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF AcroForm 表单</summary>
 /// <remarks>
 /// 描述交互式表单结构，支持文本框、复选框、单选按钮、选择框和签名字段。
 /// 通过 PdfWriter 写入表单字典和字段树，通过 PdfReader 读取表单字段和当前值。
 /// </remarks>
-public class PdfForm
+public class PdfAcroForm
 {
     #region 属性
     /// <summary>表单字段列表</summary>
-    public List<PdfFormField> Fields { get; set; } = [];
+    public List<FormField> Fields { get; set; } = [];
 
     /// <summary>是否需要外观流（/NeedAppearances），默认 true</summary>
     public Boolean NeedAppearances { get; set; } = true;
@@ -17,7 +17,7 @@ public class PdfForm
 }
 
 /// <summary>PDF 表单字段类型</summary>
-public enum PdfFormFieldType
+public enum FormFieldType
 {
     /// <summary>按钮（含复选框、单选按钮）</summary>
     Btn,
@@ -34,7 +34,7 @@ public enum PdfFormFieldType
 
 /// <summary>PDF 表单字段标志（位掩码）</summary>
 [Flags]
-public enum PdfFormFieldFlags
+public enum FormFieldFlags
 {
     /// <summary>无标志</summary>
     None = 0,
@@ -89,14 +89,14 @@ public enum PdfFormFieldFlags
 }
 
 /// <summary>PDF 表单字段</summary>
-public class PdfFormField
+public class FormField
 {
     #region 属性
     /// <summary>字段完全限定名（如 "form1[0].#subform[0].txtName[0]"）</summary>
     public String FullName { get; set; } = String.Empty;
 
     /// <summary>字段类型</summary>
-    public PdfFormFieldType FieldType { get; set; } = PdfFormFieldType.Tx;
+    public FormFieldType FieldType { get; set; } = FormFieldType.Tx;
 
     /// <summary>字段值</summary>
     public String? Value { get; set; }
@@ -105,7 +105,7 @@ public class PdfFormField
     public String? DefaultValue { get; set; }
 
     /// <summary>字段标志</summary>
-    public PdfFormFieldFlags Flags { get; set; }
+    public FormFieldFlags Flags { get; set; }
 
     /// <summary>页面索引（0起始）</summary>
     public Int32 PageIndex { get; set; }
@@ -138,6 +138,6 @@ public class PdfFormField
     public List<String> Options { get; set; } = [];
 
     /// <summary>子字段（如单选按钮组内的各个选项）</summary>
-    public List<PdfFormField> Kids { get; set; } = [];
+    public List<FormField> Kids { get; set; } = [];
     #endregion
 }

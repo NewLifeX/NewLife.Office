@@ -1,9 +1,9 @@
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 内容流操作符</summary>
-public class PdfOperator
+public class Operator
 {
     /// <summary>操作符名称（如 Tj、TJ、BT、ET、q、Q、m、l、S、f 等）</summary>
     public String Name { get; set; } = String.Empty;
@@ -23,7 +23,7 @@ public class PdfContentStream
 {
     #region 属性
     /// <summary>操作符列表</summary>
-    public List<PdfOperator> Operators { get; } = [];
+    public List<Operator> Operators { get; } = [];
     #endregion
 
     #region 构造

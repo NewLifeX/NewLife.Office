@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 数字签名器，实现 PKCS#7 分离签名（adbe.pkcs7.detached）</summary>
 /// <remarks>
@@ -11,7 +11,7 @@ namespace NewLife.Office;
 /// 
 /// 使用流程：
 /// 1. 用 PdfWriter.AddSignatureField() 创建签名字段预留区
-/// 2. 调用 PdfSigner.Sign() 计算签名并填入 /Contents
+/// 2. 调用 Signer.Sign() 计算签名并填入 /Contents
 /// </remarks>
 public static class PdfSigner
 {

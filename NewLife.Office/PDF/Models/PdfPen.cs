@@ -1,12 +1,12 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 描边笔（线条/边框样式）</summary>
 /// <remarks>
 /// 描述 PDF 绘图操作中的线条样式，包括颜色、粗细、端点和虚线图案。
 /// <example>
 /// <code>
-/// var pen = new PdfPen { Color = OfficeColor.Red, Width = 2f };
-/// var dashedPen = new PdfPen { Width = 1f, DashPattern = [4f, 2f] };  // 4pt实线+2pt空白
+/// var pen = new Pen { Color = Color.Red, Width = 2f };
+/// var dashedPen = new Pen { Width = 1f, DashPattern = [4f, 2f] };  // 4pt实线+2pt空白
 /// </code>
 /// </example>
 /// </remarks>
@@ -14,7 +14,7 @@ public class PdfPen
 {
     #region 属性
     /// <summary>线条颜色，null 表示使用黑色</summary>
-    public OfficeColor? Color { get; set; }
+    public Color? Color { get; set; }
 
     /// <summary>线条粗细（磅），默认 1pt</summary>
     public Single Width { get; set; } = 1f;

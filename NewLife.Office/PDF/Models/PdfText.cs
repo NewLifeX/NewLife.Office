@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 文本项，包含文本内容和近似坐标</summary>
 /// <remarks>

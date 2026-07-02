@@ -1,6 +1,6 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Pdf;
 
-/// <summary>PDF 文档数据模型，对标 WordDocument / PptDocument / ExcelDocument</summary>
+/// <summary>PDF 文档数据模型，对标 Document / Presentation / ExcelDocument</summary>
 /// <remarks>
 /// 纯数据容器（POCO），不含读写逻辑。
 /// 通过 <see cref="PdfReader.ReadDocument"/> 读取，通过 <see cref="PdfWriter.Save(String,PdfDocument)"/> 写入。
@@ -13,10 +13,10 @@ public class PdfDocument
     public List<PdfPage> Pages { get; set; } = [];
 
     /// <summary>文档元数据（标题、作者、主题等）</summary>
-    public PdfMetadata Metadata { get; set; } = new();
+    public PdfDocumentInfo Metadata { get; set; } = new();
 
     /// <summary>书签/大纲列表</summary>
-    public List<PdfBookmark> Bookmarks { get; set; } = [];
+    public List<PdfOutline> Bookmarks { get; set; } = [];
 
     /// <summary>页眉文本（null 表示不显示）</summary>
     public String? HeaderText { get; set; }

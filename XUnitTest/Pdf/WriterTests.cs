@@ -2,6 +2,19 @@ using System.ComponentModel;
 using System.IO;
 using System.Text;
 using NewLife.Office;
+using NewLife.Office.Calendar;
+using NewLife.Office.Epub;
+using NewLife.Office.Excel;
+using NewLife.Office.Mail;
+using NewLife.Office.Markdown;
+using NewLife.Office.Ods;
+using NewLife.Office.Ole2;
+using NewLife.Office.Pdf;
+using NewLife.Office.Ppt;
+using NewLife.Office.Rtf;
+using NewLife.Office.VCard;
+using NewLife.Office.Word;
+using NewLife.Office.Xps;
 using Xunit;
 
 namespace XUnitTest.Pdf;
@@ -570,7 +583,7 @@ public class PdfWriterTests
     public void FluentApi_DrawingPrimitives_Chainable()
     {
         using var ms = new MemoryStream();
-        using (var doc = new PdfFluentDocument())
+        using (var doc = new PdfDocumentBuilder())
         {
             doc.DrawEllipse(100, 200, 50, 30, true, "FF0000", "0000FF", 1)
                .DrawRoundedRect(200, 200, 80, 40, 8, false, null, "00FF00", 0.5f)

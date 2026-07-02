@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 交叉引用表（xref），按对象号精确定位每个间接对象</summary>
 /// <remarks>

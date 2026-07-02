@@ -2,7 +2,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 写入器</summary>
 /// <remarks>
@@ -75,13 +75,13 @@ public class PdfWriter : IDisposable
     public Int32 Permissions { get; set; } = -1;
 
     /// <summary>加密修订版本（默认 RC4-128bit，可选 AES-128/AES-256）</summary>
-    public PdfCipherRevision CipherRevision { get; set; } = PdfCipherRevision.Rc4_128;
+    public CipherRevision CipherRevision { get; set; } = CipherRevision.Rc4_128;
 
     /// <summary>PDF/A 合规级别，null 表示不启用 PDF/A</summary>
     public PdfACompliance? PdfACompliance { get; set; }
 
     /// <summary>书签列表</summary>
-    public List<PdfBookmark> Bookmarks { get; } = [];
+    public List<PdfOutline> Bookmarks { get; } = [];
 
     /// <summary>注释列表（所有类型的页面注释）</summary>
     public List<PdfAnnotation> Annotations { get; } = [];
@@ -896,9 +896,9 @@ public class PdfWriter : IDisposable
     /// <summary>添加书签，指向当前（最后一）页</summary>
     /// <param name="title">书签标题</param>
     /// <returns>书签对象</returns>
-    public PdfBookmark AddBookmark(String title)
+    public PdfOutline AddBookmark(String title)
     {
-        var bm = new PdfBookmark { Title = title, PageIndex = Pages.Count };
+        var bm = new PdfOutline { Title = title, PageIndex = Pages.Count };
         Bookmarks.Add(bm);
         return bm;
     }
@@ -946,7 +946,7 @@ public class PdfWriter : IDisposable
 
     #region 表单 (AcroForm)
     /// <summary>当前文档的表单对象（在首次调用 AddFormField 时自动创建）</summary>
-    public PdfForm? Form { get; private set; }
+    public PdfAcroForm? Form { get; private set; }
 
     /// <summary>添加文本框表单字段</summary>
     /// <param name="name">字段名</param>
@@ -957,13 +957,13 @@ public class PdfWriter : IDisposable
     /// <param name="value">初始值</param>
     /// <param name="fontSize">字号</param>
     /// <returns>表单字段对象</returns>
-    public PdfFormField AddTextField(String name, Single x, Single y, Single width, Single height, String? value = null, Single fontSize = 12f)
+    public FormField AddTextField(String name, Single x, Single y, Single width, Single height, String? value = null, Single fontSize = 12f)
     {
         EnsureForm();
-        var field = new PdfFormField
+        var field = new FormField
         {
             FullName = name,
-            FieldType = PdfFormFieldType.Tx,
+            FieldType = FormFieldType.Tx,
             Value = value,
             PageIndex = Pages.Count,
             X = x, Y = y, Width = width, Height = height,
@@ -980,13 +980,13 @@ public class PdfWriter : IDisposable
     /// <param name="size">复选框大小（默认 12pt）</param>
     /// <param name="checked">初始选中状态</param>
     /// <returns>表单字段对象</returns>
-    public PdfFormField AddCheckBox(String name, Single x, Single y, Single size = 12f, Boolean @checked = false)
+    public FormField AddCheckBox(String name, Single x, Single y, Single size = 12f, Boolean @checked = false)
     {
         EnsureForm();
-        var field = new PdfFormField
+        var field = new FormField
         {
             FullName = name,
-            FieldType = PdfFormFieldType.Btn,
+            FieldType = FormFieldType.Btn,
             Value = @checked ? "/Yes" : "/Off",
             PageIndex = Pages.Count,
             X = x, Y = y, Width = size, Height = size,
@@ -1004,13 +1004,13 @@ public class PdfWriter : IDisposable
     /// <param name="options">选项列表</param>
     /// <param name="selectedIndex">默认选中索引（-1 表示无）</param>
     /// <returns>表单字段对象</returns>
-    public PdfFormField AddComboBox(String name, Single x, Single y, Single width, Single height, List<String> options, Int32 selectedIndex = -1)
+    public FormField AddComboBox(String name, Single x, Single y, Single width, Single height, List<String> options, Int32 selectedIndex = -1)
     {
         EnsureForm();
-        var field = new PdfFormField
+        var field = new FormField
         {
             FullName = name,
-            FieldType = PdfFormFieldType.Ch,
+            FieldType = FormFieldType.Ch,
             Value = selectedIndex >= 0 && selectedIndex < options.Count ? options[selectedIndex] : null,
             PageIndex = Pages.Count,
             X = x, Y = y, Width = width, Height = height,
@@ -1027,13 +1027,13 @@ public class PdfWriter : IDisposable
     /// <param name="width">宽度</param>
     /// <param name="height">高度</param>
     /// <returns>表单字段对象</returns>
-    public PdfFormField AddSignatureField(String name, Single x, Single y, Single width, Single height)
+    public FormField AddSignatureField(String name, Single x, Single y, Single width, Single height)
     {
         EnsureForm();
-        var field = new PdfFormField
+        var field = new FormField
         {
             FullName = name,
-            FieldType = PdfFormFieldType.Sig,
+            FieldType = FormFieldType.Sig,
             PageIndex = Pages.Count,
             X = x, Y = y, Width = width, Height = height,
         };
@@ -1043,7 +1043,7 @@ public class PdfWriter : IDisposable
 
     private void EnsureForm()
     {
-        Form ??= new PdfForm();
+        Form ??= new PdfAcroForm();
     }
 
     /// <summary>设置表单字段值（用于填充已有表单）</summary>
@@ -1276,7 +1276,7 @@ public class PdfWriter : IDisposable
         }
 
         // 表单字段递归写入（局部函数，可访问 WriteObj）
-        void WriteFormFieldObjs(List<PdfFormField> fields, List<Int32> fIds, Int32 startIdx)
+        void WriteFormFieldObjs(List<FormField> fields, List<Int32> fIds, Int32 startIdx)
         {
             var idx = startIdx;
             foreach (var field in fields)
@@ -1316,7 +1316,7 @@ public class PdfWriter : IDisposable
                     sb.Append($"/TU ({EscapePdfText(field.Tooltip!)})\n");
 
                 // 签名字段：预留 /Contents 和签名属性
-                if (field.FieldType == PdfFormFieldType.Sig)
+                if (field.FieldType == FormFieldType.Sig)
                 {
                     // 预留 8KB 签名空间（十六进制编码）
                     var sigPlaceholder = new String('0', 8192 * 2);
@@ -1335,7 +1335,7 @@ public class PdfWriter : IDisposable
             }
         }
 
-        void CollectFormPageAnnotsInline(List<PdfFormField> fields, List<Int32> fIds, ref Int32 fidx, Dictionary<Int32, List<Int32>> map)
+        void CollectFormPageAnnotsInline(List<FormField> fields, List<Int32> fIds, ref Int32 fidx, Dictionary<Int32, List<Int32>> map)
         {
             foreach (var field in fields)
             {
@@ -1557,11 +1557,11 @@ public class PdfWriter : IDisposable
         if (xmpMetadataObjId > 0)
         {
             // PDF/A part: 1=1B, 2=2B, 3=3B
-            var compliance = (Int32)(PdfACompliance ?? NewLife.Office.PdfACompliance.PDF_A_1B);
+            var compliance = (Int32)(PdfACompliance ?? Pdf.PdfACompliance.PDF_A_1B);
             var part = compliance switch
             {
-                (Int32)NewLife.Office.PdfACompliance.PDF_A_2B => 2,
-                (Int32)NewLife.Office.PdfACompliance.PDF_A_3B => 3,
+                (Int32)Pdf.PdfACompliance.PDF_A_2B => 2,
+                (Int32)Pdf.PdfACompliance.PDF_A_3B => 3,
                 _ => 1,
             };
             var xmpData = PdfAConstants.GenerateXmpMetadata(part);
@@ -2324,7 +2324,7 @@ public class PdfWriter : IDisposable
 
     #region 表单辅助
     /// <summary>为表单字段树分配对象 ID</summary>
-    private static List<Int32> AllocateFormFieldIds(List<PdfFormField> fields, Func<Int32> nextId)
+    private static List<Int32> AllocateFormFieldIds(List<FormField> fields, Func<Int32> nextId)
     {
         var ids = new List<Int32>();
         foreach (var field in fields)

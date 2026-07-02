@@ -1,4 +1,4 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Pdf;
 
 /// <summary>声明式 Fluent PDF 文档生成器（P07）</summary>
 /// <remarks>
@@ -8,7 +8,7 @@
 /// </remarks>
 /// <example>
 /// <code>
-/// using var doc = new PdfFluentDocument();
+/// using var doc = new FluentDocument();
 /// doc.Title = "报表标题";
 /// doc.Header = "公司名称";
 /// doc.ShowPageNumbers = true;
@@ -22,7 +22,7 @@
 /// doc.Save("output.pdf");
 /// </code>
 /// </example>
-public class PdfFluentDocument : IDisposable
+public class PdfDocumentBuilder : IDisposable
 {
     #region 属性
     private readonly PdfWriter _writer;
@@ -73,7 +73,7 @@ public class PdfFluentDocument : IDisposable
 
     #region 构造
     /// <summary>实例化 Fluent PDF 文档（默认 A4，自动打开第一页）</summary>
-    public PdfFluentDocument()
+    public PdfDocumentBuilder()
     {
         _writer = new PdfWriter();
         EnsurePage();
@@ -106,7 +106,7 @@ public class PdfFluentDocument : IDisposable
     /// <param name="font">字体，null 使用默认</param>
     /// <param name="indentX">水平缩进（点）</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument AddText(String text, Single fontSize = 12f, PdfFont? font = null, Single indentX = 0f)
+    public PdfDocumentBuilder AddText(String text, Single fontSize = 12f, PdfFont? font = null, Single indentX = 0f)
     {
         EnsurePage();
         _writer.AppendLine(text, fontSize, font, indentX);
@@ -116,7 +116,7 @@ public class PdfFluentDocument : IDisposable
     /// <summary>追加空行</summary>
     /// <param name="height">行高（点）</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument AddEmptyLine(Single height = 14f)
+    public PdfDocumentBuilder AddEmptyLine(Single height = 14f)
     {
         EnsurePage();
         _writer.AppendEmptyLine(height);
@@ -130,7 +130,7 @@ public class PdfFluentDocument : IDisposable
     /// <param name="fontSize">字号</param>
     /// <param name="font">字体，null 使用默认</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument DrawText(String text, Single x, Single y, Single fontSize = 12f, PdfFont? font = null)
+    public PdfDocumentBuilder DrawText(String text, Single x, Single y, Single fontSize = 12f, PdfFont? font = null)
     {
         EnsurePage();
         _writer.DrawText(text, x, y, fontSize, font);
@@ -144,7 +144,7 @@ public class PdfFluentDocument : IDisposable
     /// <param name="firstRowHeader">首行是否为表头</param>
     /// <param name="columnWidths">列宽数组（占比），null 表示均分</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument AddTable(IEnumerable<String[]> rows, Boolean firstRowHeader = true, Single[]? columnWidths = null)
+    public PdfDocumentBuilder AddTable(IEnumerable<String[]> rows, Boolean firstRowHeader = true, Single[]? columnWidths = null)
     {
         EnsurePage();
         _writer.DrawTable(rows, firstRowHeader, columnWidths);
@@ -156,7 +156,7 @@ public class PdfFluentDocument : IDisposable
     /// <param name="data">数据集合</param>
     /// <param name="firstRowHeader">是否输出表头行</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument AddTable<T>(IEnumerable<T> data, Boolean firstRowHeader = true) where T : class
+    public PdfDocumentBuilder AddTable<T>(IEnumerable<T> data, Boolean firstRowHeader = true) where T : class
     {
         EnsurePage();
         _writer.WriteObjects(data, firstRowHeader);
@@ -170,7 +170,7 @@ public class PdfFluentDocument : IDisposable
     /// <param name="width">宽度（点）</param>
     /// <param name="height">高度（点）</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument AddImage(Byte[] imageData, Single width, Single height)
+    public PdfDocumentBuilder AddImage(Byte[] imageData, Single width, Single height)
     {
         EnsurePage();
         _writer.AppendImage(imageData, width, height);
@@ -184,7 +184,7 @@ public class PdfFluentDocument : IDisposable
     /// <param name="width">宽度（点）</param>
     /// <param name="height">高度（点）</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument DrawImage(Byte[] imageData, Single x, Single y, Single width, Single height)
+    public PdfDocumentBuilder DrawImage(Byte[] imageData, Single x, Single y, Single width, Single height)
     {
         EnsurePage();
         _writer.DrawImage(imageData, x, y, width, height);
@@ -201,7 +201,7 @@ public class PdfFluentDocument : IDisposable
     /// <param name="lineWidth">线宽（点）</param>
     /// <param name="colorHex">颜色（16进制 RGB），null 表示黑色</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument DrawLine(Single x1, Single y1, Single x2, Single y2, Single lineWidth = 0.5f, String? colorHex = null)
+    public PdfDocumentBuilder DrawLine(Single x1, Single y1, Single x2, Single y2, Single lineWidth = 0.5f, String? colorHex = null)
     {
         EnsurePage();
         _writer.DrawLine(x1, y1, x2, y2, lineWidth, colorHex);
@@ -218,7 +218,7 @@ public class PdfFluentDocument : IDisposable
     /// <param name="borderColor">边框色（16进制 RGB）</param>
     /// <param name="borderWidth">边框线宽</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument DrawRect(Single x, Single y, Single w, Single h,
+    public PdfDocumentBuilder DrawRect(Single x, Single y, Single w, Single h,
         Boolean fill = false, String? fillColor = null, String? borderColor = null, Single borderWidth = 0.5f)
     {
         EnsurePage();
@@ -230,7 +230,7 @@ public class PdfFluentDocument : IDisposable
     /// <param name="lineWidth">线宽</param>
     /// <param name="colorHex">颜色</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument AddRule(Single lineWidth = 0.5f, String? colorHex = null)
+    public PdfDocumentBuilder AddRule(Single lineWidth = 0.5f, String? colorHex = null)
     {
         EnsurePage();
         // CurrentY 是从页顶向下；DrawLine 需要从页底向上的 PDF 坐标
@@ -241,7 +241,7 @@ public class PdfFluentDocument : IDisposable
     }
 
     /// <summary>绘制椭圆/圆（P07-04）</summary>
-    public PdfFluentDocument DrawEllipse(Single x, Single y, Single w, Single h, Boolean fill = false, String? fillColor = null, String? borderColor = null, Single borderWidth = 0.5f)
+    public PdfDocumentBuilder DrawEllipse(Single x, Single y, Single w, Single h, Boolean fill = false, String? fillColor = null, String? borderColor = null, Single borderWidth = 0.5f)
     {
         EnsurePage();
         _writer.DrawEllipse(x, y, w, h, fill, fillColor, borderColor, borderWidth);
@@ -249,7 +249,7 @@ public class PdfFluentDocument : IDisposable
     }
 
     /// <summary>绘制圆角矩形（P07-04）</summary>
-    public PdfFluentDocument DrawRoundedRect(Single x, Single y, Single w, Single h, Single radius, Boolean fill = false, String? fillColor = null, String? borderColor = null, Single borderWidth = 0.5f)
+    public PdfDocumentBuilder DrawRoundedRect(Single x, Single y, Single w, Single h, Single radius, Boolean fill = false, String? fillColor = null, String? borderColor = null, Single borderWidth = 0.5f)
     {
         EnsurePage();
         _writer.DrawRoundedRect(x, y, w, h, radius, fill, fillColor, borderColor, borderWidth);
@@ -257,7 +257,7 @@ public class PdfFluentDocument : IDisposable
     }
 
     /// <summary>绘制圆弧（P07-04）</summary>
-    public PdfFluentDocument DrawArc(Single cx, Single cy, Single r, Single startAngle, Single endAngle, String? colorHex = null, Single lineWidth = 0.5f)
+    public PdfDocumentBuilder DrawArc(Single cx, Single cy, Single r, Single startAngle, Single endAngle, String? colorHex = null, Single lineWidth = 0.5f)
     {
         EnsurePage();
         _writer.DrawArc(cx, cy, r, startAngle, endAngle, colorHex, lineWidth);
@@ -265,7 +265,7 @@ public class PdfFluentDocument : IDisposable
     }
 
     /// <summary>绘制贝塞尔曲线（P07-04）</summary>
-    public PdfFluentDocument DrawBezier(Single x1, Single y1, Single x2, Single y2, Single x3, Single y3, Single x4, Single y4, String? colorHex = null, Single lineWidth = 0.5f)
+    public PdfDocumentBuilder DrawBezier(Single x1, Single y1, Single x2, Single y2, Single x3, Single y3, Single x4, Single y4, String? colorHex = null, Single lineWidth = 0.5f)
     {
         EnsurePage();
         _writer.DrawBezier(x1, y1, x2, y2, x3, y3, x4, y4, colorHex, lineWidth);
@@ -273,7 +273,7 @@ public class PdfFluentDocument : IDisposable
     }
 
     /// <summary>绘制多边形（P07-04）</summary>
-    public PdfFluentDocument DrawPolygon(IEnumerable<(Single X, Single Y)> points, Boolean fill = false, String? fillColor = null, String? borderColor = null, Single borderWidth = 0.5f)
+    public PdfDocumentBuilder DrawPolygon(IEnumerable<(Single X, Single Y)> points, Boolean fill = false, String? fillColor = null, String? borderColor = null, Single borderWidth = 0.5f)
     {
         EnsurePage();
         _writer.DrawPolygon(points, fill, fillColor, borderColor, borderWidth);
@@ -284,7 +284,7 @@ public class PdfFluentDocument : IDisposable
     #region 导航方法
     /// <summary>插入分页符（P07-02 手动分页）</summary>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument PageBreak()
+    public PdfDocumentBuilder PageBreak()
     {
         if (_pageOpen) { _writer.EndPage(); _pageOpen = false; }
         EnsurePage();
@@ -298,7 +298,7 @@ public class PdfFluentDocument : IDisposable
     /// <param name="h">高度</param>
     /// <param name="url">链接 URL</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument AddHyperlink(Single x, Single y, Single w, Single h, String url)
+    public PdfDocumentBuilder AddHyperlink(Single x, Single y, Single w, Single h, String url)
     {
         EnsurePage();
         _writer.AddHyperlink(x, y, w, h, url);
@@ -309,7 +309,7 @@ public class PdfFluentDocument : IDisposable
     /// <param name="url">链接 URL</param>
     /// <param name="lineHeight">行高（点）</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument AddHyperlinkForLastLine(String url, Single lineHeight = 14f)
+    public PdfDocumentBuilder AddHyperlinkForLastLine(String url, Single lineHeight = 14f)
     {
         EnsurePage();
         _writer.AddHyperlinkForLastLine(url, lineHeight);
@@ -319,7 +319,7 @@ public class PdfFluentDocument : IDisposable
     /// <summary>添加书签（大纲导航）</summary>
     /// <param name="title">书签标题</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument AddBookmark(String title)
+    public PdfDocumentBuilder AddBookmark(String title)
     {
         EnsurePage();
         _writer.AddBookmark(title);
@@ -332,7 +332,7 @@ public class PdfFluentDocument : IDisposable
     /// <remarks>通过传入委托可在多页或多文档间复用布局片段，实现组件化排版。</remarks>
     /// <param name="component">组件委托，接收当前文档实例</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument UseComponent(Action<PdfFluentDocument> component)
+    public PdfDocumentBuilder UseComponent(Action<PdfDocumentBuilder> component)
     {
         component(this);
         return this;
@@ -344,7 +344,7 @@ public class PdfFluentDocument : IDisposable
     /// <param name="bottom">下边距</param>
     /// <param name="left">左边距</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument SetMargins(Single top, Single right, Single bottom, Single left)
+    public PdfDocumentBuilder SetMargins(Single top, Single right, Single bottom, Single left)
     {
         _writer.MarginTop = top;
         _writer.MarginRight = right;
@@ -355,7 +355,7 @@ public class PdfFluentDocument : IDisposable
 
     /// <summary>设置页面大小为 A4 横向</summary>
     /// <returns>自身，支持链式调用</returns>
-    public PdfFluentDocument SetLandscape()
+    public PdfDocumentBuilder SetLandscape()
     {
         _writer.PageWidth = 842f;
         _writer.PageHeight = 595f;

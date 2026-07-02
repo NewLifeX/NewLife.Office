@@ -2,10 +2,10 @@
 using System.Text;
 using NewLife.Buffers;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 加密修订版本</summary>
-public enum PdfCipherRevision
+public enum CipherRevision
 {
     /// <summary>RC4 40-bit（PDF 1.1-1.3，已废弃）</summary>
     Rc4_40 = 2,
@@ -43,7 +43,7 @@ internal sealed class PdfEncryptor
     public Int32 EncPermissions { get; }
 
     /// <summary>加密修订版本</summary>
-    public PdfCipherRevision Revision { get; }
+    public CipherRevision Revision { get; }
 
     /// <summary>OE 条目（AES-256 所有者验证密钥，/R 6 专用）</summary>
     public Byte[]? OEEntry { get; }
@@ -62,7 +62,7 @@ internal sealed class PdfEncryptor
     /// <param name="permissions">权限标志位</param>
     /// <param name="fileId">文件标识符（16 字节 MD5）</param>
     /// <param name="revision">加密修订版本</param>
-    public PdfEncryptor(String? userPwd, String? ownerPwd, Int32 permissions, Byte[] fileId, PdfCipherRevision revision = PdfCipherRevision.Rc4_128)
+    public PdfEncryptor(String? userPwd, String? ownerPwd, Int32 permissions, Byte[] fileId, CipherRevision revision = CipherRevision.Rc4_128)
     {
         EncPermissions = permissions;
         Revision = revision;
@@ -70,10 +70,10 @@ internal sealed class PdfEncryptor
 
         switch (revision)
         {
-            case PdfCipherRevision.Aes_256:
+            case CipherRevision.Aes_256:
                 (_key, OEntry, UEntry, OEEntry, UEEntry, PermsEntry) = ComputeAes256(userPwd, ownerPwd, permissions, fid);
                 break;
-            case PdfCipherRevision.Aes_128:
+            case CipherRevision.Aes_128:
                 (_key, OEntry, UEntry) = ComputeAes128(userPwd, ownerPwd, permissions, fid);
                 break;
             default:
@@ -93,8 +93,8 @@ internal sealed class PdfEncryptor
     {
         return Revision switch
         {
-            PdfCipherRevision.Aes_128 => EncryptAes128(data, objNum, genNum),
-            PdfCipherRevision.Aes_256 => EncryptAes256(data, objNum, genNum),
+            CipherRevision.Aes_128 => EncryptAes128(data, objNum, genNum),
+            CipherRevision.Aes_256 => EncryptAes256(data, objNum, genNum),
             _ => ComputeRc4(ObjKey(objNum, genNum), data),
         };
     }
@@ -304,7 +304,7 @@ internal sealed class PdfEncryptor
         var hash = ComputeMd5(buf);
         var keyLen = Math.Min(hash.Length, _key.Length + 5);
         // AES-256 时密钥长度固定为 32
-        if (Revision >= PdfCipherRevision.Aes_256) keyLen = 32;
+        if (Revision >= CipherRevision.Aes_256) keyLen = 32;
         var result = new Byte[keyLen];
         Array.Copy(hash, result, keyLen);
         return result;

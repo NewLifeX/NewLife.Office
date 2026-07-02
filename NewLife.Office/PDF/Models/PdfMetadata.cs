@@ -1,9 +1,9 @@
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 元数据</summary>
-public class PdfMetadata
+public class PdfDocumentInfo
 {
     #region 属性
     /// <summary>标题</summary>

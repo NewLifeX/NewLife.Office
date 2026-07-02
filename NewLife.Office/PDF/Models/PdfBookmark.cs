@@ -1,9 +1,9 @@
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 文档书签</summary>
-public class PdfBookmark
+public class PdfOutline
 {
     #region 属性
     /// <summary>书签标题</summary>
@@ -13,7 +13,7 @@ public class PdfBookmark
     public Int32 PageIndex { get; set; }
 
     /// <summary>子书签</summary>
-    public List<PdfBookmark> Children { get; } = [];
+    public List<PdfOutline> Children { get; } = [];
 
     /// <summary>是否粗体</summary>
     public Boolean Bold { get; set; }

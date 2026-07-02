@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 对象解析器，将原始 PDF 语法解析为强类型中间表示</summary>
 /// <remarks>
@@ -179,7 +179,7 @@ public static class PdfObjectParser
                 if (val != null) dict[key] = val;
             }
             endPos = pos;
-            return new PdfDictObj(dict);
+            return new DictObj(dict);
         }
 
         // 十六进制字符串 <hex>
@@ -188,7 +188,7 @@ public static class PdfObjectParser
             pos++;
             var hex = ReadHexString(text, ref pos);
             endPos = pos;
-            return new PdfHexString(hex);
+            return new HexString(hex);
         }
 
         // 数组 [ ... ]
@@ -259,7 +259,7 @@ public static class PdfObjectParser
                 {
                     pos++; // skip R
                     if (genNum is PdfNumber gn)
-                        return new PdfRef((Int32)numObj.Value, (Int32)gn.Value);
+                        return new Ref((Int32)numObj.Value, (Int32)gn.Value);
                 }
             }
             pos = savedPos; // 回退，作为普通数字
@@ -293,14 +293,14 @@ public static class PdfObjectParser
                 var val = ParseDictValue(text, ref pos);
                 if (val != null) dict[key] = val;
             }
-            return new PdfDictObj(dict);
+            return new DictObj(dict);
         }
 
         // 十六进制字符串
         if (c == '<' && (pos + 1 >= text.Length || text[pos + 1] != '<'))
         {
             pos++;
-            return new PdfHexString(ReadHexString(text, ref pos));
+            return new HexString(ReadHexString(text, ref pos));
         }
 
         // 数组
@@ -371,7 +371,7 @@ public static class PdfObjectParser
                         // 这里简单返回解析结果
                         return resolved;
                     }
-                    return new PdfRef((Int32)numObj.Value, genNum is PdfNumber gn2 ? (Int32)gn2.Value : 0);
+                    return new Ref((Int32)numObj.Value, genNum is PdfNumber gn2 ? (Int32)gn2.Value : 0);
                 }
             }
             pos = savedPos;
@@ -646,12 +646,12 @@ public class PdfString : PdfObject
 }
 
 /// <summary>PDF 十六进制字符串对象</summary>
-public class PdfHexString : PdfObject
+public class HexString : PdfObject
 {
     /// <summary>十六进制字符串值</summary>
     public String Value { get; }
     /// <summary>实例化十六进制字符串对象</summary>
-    public PdfHexString(String value) => Value = value;
+    public HexString(String value) => Value = value;
     /// <inheritdoc/>
     public override String ToString() => $"<{Value}>";
 }
@@ -675,12 +675,12 @@ public class PdfNull : PdfObject
 }
 
 /// <summary>PDF 字典对象（包装 PdfDict）</summary>
-public class PdfDictObj : PdfObject
+public class DictObj : PdfObject
 {
     /// <summary>字典值</summary>
     public PdfDict Value { get; }
     /// <summary>实例化字典对象</summary>
-    public PdfDictObj(PdfDict value) => Value = value;
+    public DictObj(PdfDict value) => Value = value;
     /// <inheritdoc/>
     public override String ToString() => Value.ToString() ?? "<<>>";
 }
@@ -695,14 +695,14 @@ public class PdfArray : PdfObject
 }
 
 /// <summary>PDF 间接引用对象（N G R）</summary>
-public class PdfRef : PdfObject
+public class Ref : PdfObject
 {
     /// <summary>引用的对象号</summary>
     public Int32 ObjNum { get; }
     /// <summary>代数号</summary>
     public Int32 GenNum { get; }
     /// <summary>实例化间接引用</summary>
-    public PdfRef(Int32 objNum, Int32 genNum) { ObjNum = objNum; GenNum = genNum; }
+    public Ref(Int32 objNum, Int32 genNum) { ObjNum = objNum; GenNum = genNum; }
     /// <inheritdoc/>
     public override String ToString() => $"{ObjNum} {GenNum} R";
 }

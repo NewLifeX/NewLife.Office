@@ -1,10 +1,23 @@
 using NewLife.Office;
+using NewLife.Office.Calendar;
+using NewLife.Office.Epub;
+using NewLife.Office.Excel;
+using NewLife.Office.Mail;
+using NewLife.Office.Markdown;
+using NewLife.Office.Ods;
+using NewLife.Office.Ole2;
+using NewLife.Office.Pdf;
+using NewLife.Office.Ppt;
+using NewLife.Office.Rtf;
+using NewLife.Office.VCard;
+using NewLife.Office.Word;
+using NewLife.Office.Xps;
 using Xunit;
 
 namespace XUnitTest.Pdf;
 
-/// <summary>PdfSigner 单元测试 — PDF 数字签名</summary>
-public class PdfSignerTests
+/// <summary>Signer 单元测试 — PDF 数字签名</summary>
+public class SignerTests
 {
     [Fact(DisplayName = "PDF签名—签名后可正常打开")]
     public void Sign_PdfWithSignatureField()

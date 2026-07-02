@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 页面对象（记录每页内容）</summary>
 public class PdfPage

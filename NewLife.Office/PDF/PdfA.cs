@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF/A 合规级别</summary>
 public enum PdfACompliance

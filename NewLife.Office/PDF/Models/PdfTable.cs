@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 表格单元格</summary>
 public class PdfTableCell
@@ -11,7 +11,7 @@ public class PdfTableCell
     public OfficeFont? Font { get; set; }
 
     /// <summary>单元格背景色（null 表示继承行/表格背景）</summary>
-    public OfficeColor? BackColor { get; set; }
+    public Color? BackColor { get; set; }
 
     /// <summary>文本水平对齐：left/center/right</summary>
     public String Alignment { get; set; } = "left";
@@ -35,7 +35,7 @@ public class PdfTableRow
     public Single? Height { get; set; }
 
     /// <summary>行背景色（null 表示继承表格背景或斑马纹色）</summary>
-    public OfficeColor? BackColor { get; set; }
+    public Color? BackColor { get; set; }
 
     /// <summary>是否为标题行（影响字体粗体和背景色）</summary>
     public Boolean IsHeader { get; set; }
@@ -52,7 +52,7 @@ public class PdfTableRow
 ///     X = 56, Y = 700,
 ///     Width = 483,                            // A4 可用宽度
 ///     ColumnWidths = [150f, 150f, 183f],
-///     HeaderBackColor = OfficeColor.FromHex("4472C4"),
+///     HeaderBackColor = Color.FromHex("4472C4"),
 /// };
 /// var header = new PdfTableRow { IsHeader = true };
 /// header.Cells.AddRange(["姓名", "部门", "邮箱"].Select(t => new PdfTableCell { Text = t }));
@@ -85,16 +85,16 @@ public class PdfTable
     public Boolean ShowBorders { get; set; } = true;
 
     /// <summary>边框颜色，null 表示黑色</summary>
-    public OfficeColor? BorderColor { get; set; }
+    public Color? BorderColor { get; set; }
 
     /// <summary>表头行背景色，null 表示不着色</summary>
-    public OfficeColor? HeaderBackColor { get; set; }
+    public Color? HeaderBackColor { get; set; }
 
     /// <summary>表头文字颜色，null 表示继承默认</summary>
-    public OfficeColor? HeaderForeColor { get; set; }
+    public Color? HeaderForeColor { get; set; }
 
     /// <summary>斑马纹交替行背景色，null 表示不着色</summary>
-    public OfficeColor? StripeColor { get; set; }
+    public Color? StripeColor { get; set; }
 
     /// <summary>表格默认字体，null 表示继承 PdfWriter 当前字体</summary>
     public OfficeFont? DefaultFont { get; set; }

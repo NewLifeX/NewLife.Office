@@ -1,6 +1,6 @@
 ﻿using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 字体定义</summary>
 public class PdfFont

@@ -1,7 +1,7 @@
 using System.Text;
 using NewLife.Buffers;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>纯 C# QR 码生成器（零外部依赖），支持版本 1-6（21x21 至 41x41），字节模式 + ECC M 级</summary>
 public static class PdfQRCode

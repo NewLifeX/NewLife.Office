@@ -1,7 +1,7 @@
 ﻿using System.Globalization;
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 读取器</summary>
 /// <remarks>
@@ -227,17 +227,17 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         foreach (var pageObjNum in pageObjNums)
         {
             var pageObj = PdfObjectParser.ReadObject(_data, XRefTable!, pageObjNum);
-            if (pageObj is not PdfDictObj pageDictObj) continue;
+            if (pageObj is not DictObj pageDictObj) continue;
 
             var pageDict = pageDictObj.Value;
             if (!pageDict.TryGetValue("Contents", out var contentsVal)) continue;
 
             // 处理单个内容流或内容流数组
-            var contentRefs = new List<PdfRef>();
-            if (contentsVal is PdfRef r)
+            var contentRefs = new List<Ref>();
+            if (contentsVal is Ref r)
                 contentRefs.Add(r);
             else if (contentsVal is PdfArray arr)
-                contentRefs.AddRange(arr.Items.OfType<PdfRef>());
+                contentRefs.AddRange(arr.Items.OfType<Ref>());
 
             foreach (var cref in contentRefs)
             {
@@ -260,17 +260,17 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         if (XRefTable == null) return pageObjNums;
 
         // 从 Catalog → Pages → Kids 获取页面引用
-        if (!XRefTable.Trailer.TryGetValue("Root", out var rootVal) || rootVal is not PdfRef rootRef)
+        if (!XRefTable.Trailer.TryGetValue("Root", out var rootVal) || rootVal is not Ref rootRef)
             return pageObjNums;
 
         var catalogObj = PdfObjectParser.ReadObject(_data, XRefTable, rootRef.ObjNum);
-        if (catalogObj is not PdfDictObj catalogDictObj) return pageObjNums;
+        if (catalogObj is not DictObj catalogDictObj) return pageObjNums;
 
-        if (!catalogDictObj.Value.TryGetValue("Pages", out var pagesVal) || pagesVal is not PdfRef pagesRef)
+        if (!catalogDictObj.Value.TryGetValue("Pages", out var pagesVal) || pagesVal is not Ref pagesRef)
             return pageObjNums;
 
         var pagesObj = PdfObjectParser.ReadObject(_data, XRefTable, pagesRef.ObjNum);
-        if (pagesObj is not PdfDictObj pagesDictObj) return pageObjNums;
+        if (pagesObj is not DictObj pagesDictObj) return pageObjNums;
 
         var pagesDict = pagesDictObj.Value;
         if (!pagesDict.TryGetValue("Kids", out var kidsVal) || kidsVal is not PdfArray kidsArr)
@@ -278,7 +278,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
         foreach (var kid in kidsArr.Items)
         {
-            if (kid is PdfRef kidRef)
+            if (kid is Ref kidRef)
                 pageObjNums.Add(kidRef.ObjNum);
         }
 
@@ -287,9 +287,9 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
     /// <summary>读取文档元数据</summary>
     /// <returns>元数据对象</returns>
-    public PdfMetadata ReadMetadata()
+    public PdfDocumentInfo ReadMetadata()
     {
-        var meta = new PdfMetadata { PageCount = GetPageCount() };
+        var meta = new PdfDocumentInfo { PageCount = GetPageCount() };
         var pdf = _latin1.GetString(_data);
 
         // 读取 %PDF-x.x 版本
@@ -297,10 +297,10 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
             meta.PdfVersion = pdf.Substring(5, Math.Min(3, pdf.Length - 5)).Trim();
 
         // 优先从 xref trailer 读取
-        if (XRefTable != null && XRefTable.Trailer.TryGetValue("Info", out var infoVal) && infoVal is PdfRef infoRef)
+        if (XRefTable != null && XRefTable.Trailer.TryGetValue("Info", out var infoVal) && infoVal is Ref infoRef)
         {
             var infoObj = PdfObjectParser.ReadObject(_data, XRefTable, infoRef.ObjNum);
-            if (infoObj is PdfDictObj infoDict)
+            if (infoObj is DictObj infoDict)
             {
                 meta.Title = GetDictString(infoDict.Value, "Title");
                 meta.Author = GetDictString(infoDict.Value, "Author");
@@ -331,7 +331,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return val switch
         {
             PdfString s => s.Value,
-            PdfHexString h => DecodeHexFromString(h.Value),
+            HexString h => DecodeHexFromString(h.Value),
             _ => val.ToString(),
         };
     }
@@ -342,7 +342,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
     public IEnumerable<PdfText> ExtractTextWithPositions()
     {
         var results = new List<PdfText>();
-        if (XRefTable == null || !XRefTable.Trailer.TryGetValue("Root", out var rv) || rv is not PdfRef)
+        if (XRefTable == null || !XRefTable.Trailer.TryGetValue("Root", out var rv) || rv is not Ref)
         {
             // 回退到字符串扫描
             var pdf = _latin1.GetString(_data);
@@ -367,14 +367,14 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         foreach (var pageObjNum in pageObjNums)
         {
             var pageObj = PdfObjectParser.ReadObject(_data, XRefTable, pageObjNum);
-            if (pageObj is not PdfDictObj pageDictObj) continue;
+            if (pageObj is not DictObj pageDictObj) continue;
 
             var pageDict = pageDictObj.Value;
             if (!pageDict.TryGetValue("Contents", out var contentsVal)) continue;
 
-            var contentRefs = new List<PdfRef>();
-            if (contentsVal is PdfRef r) contentRefs.Add(r);
-            else if (contentsVal is PdfArray arr) contentRefs.AddRange(arr.Items.OfType<PdfRef>());
+            var contentRefs = new List<Ref>();
+            if (contentsVal is Ref r) contentRefs.Add(r);
+            else if (contentsVal is PdfArray arr) contentRefs.AddRange(arr.Items.OfType<Ref>());
 
             foreach (var cref in contentRefs)
             {
@@ -445,23 +445,23 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
     /// <summary>读取 AcroForm 表单字段及当前值</summary>
     /// <returns>表单对象（含字段列表和值），null 表示无表单</returns>
-    public PdfForm? ReadFormFields()
+    public PdfAcroForm? ReadFormFields()
     {
-        if (XRefTable == null || !XRefTable.Trailer.TryGetValue("Root", out var rv) || rv is not PdfRef rootRef)
+        if (XRefTable == null || !XRefTable.Trailer.TryGetValue("Root", out var rv) || rv is not Ref rootRef)
             return null;
 
         var rootObj = PdfObjectParser.ReadObject(_data, XRefTable, rootRef.ObjNum);
-        if (rootObj is not PdfDictObj rootDictObj) return null;
+        if (rootObj is not DictObj rootDictObj) return null;
         if (!rootDictObj.Value.TryGetValue("AcroForm", out var acroVal)) return null;
 
-        PdfRef acroRef;
-        if (acroVal is PdfRef ar) acroRef = ar;
+        Ref acroRef;
+        if (acroVal is Ref ar) acroRef = ar;
         else return null;
 
         var acroObj = PdfObjectParser.ReadObject(_data, XRefTable, acroRef.ObjNum);
-        if (acroObj is not PdfDictObj acroDictObj) return null;
+        if (acroObj is not DictObj acroDictObj) return null;
 
-        var form = new PdfForm();
+        var form = new PdfAcroForm();
         var dict = acroDictObj.Value;
 
         if (dict.TryGetValue("NeedAppearances", out var naVal) && naVal is PdfBoolean na)
@@ -469,9 +469,9 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
         if (dict.TryGetValue("Fields", out var fieldsVal))
         {
-            var fieldRefs = new List<PdfRef>();
-            if (fieldsVal is PdfRef fr) fieldRefs.Add(fr);
-            else if (fieldsVal is PdfArray fa) fieldRefs.AddRange(fa.Items.OfType<PdfRef>());
+            var fieldRefs = new List<Ref>();
+            if (fieldsVal is Ref fr) fieldRefs.Add(fr);
+            else if (fieldsVal is PdfArray fa) fieldRefs.AddRange(fa.Items.OfType<Ref>());
 
             foreach (var fref in fieldRefs)
             {
@@ -483,19 +483,19 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return form;
     }
 
-    private PdfFormField? ReadFormField(PdfRef fref)
+    private FormField? ReadFormField(Ref fref)
     {
         var fobj = PdfObjectParser.ReadObject(_data, XRefTable!, fref.ObjNum);
-        if (fobj is not PdfDictObj fdictObj) return null;
+        if (fobj is not DictObj fdictObj) return null;
         var dict = fdictObj.Value;
 
-        var field = new PdfFormField();
+        var field = new FormField();
 
         if (dict.TryGetValue("T", out var tVal) && tVal is PdfString ts)
             field.FullName = ts.Value;
 
         if (dict.TryGetValue("FT", out var ftVal) && ftVal is PdfName ftn)
-            field.FieldType = ftn.Value switch { "Tx" => PdfFormFieldType.Tx, "Btn" => PdfFormFieldType.Btn, "Ch" => PdfFormFieldType.Ch, "Sig" => PdfFormFieldType.Sig, _ => PdfFormFieldType.Tx };
+            field.FieldType = ftn.Value switch { "Tx" => FormFieldType.Tx, "Btn" => FormFieldType.Btn, "Ch" => FormFieldType.Ch, "Sig" => FormFieldType.Sig, _ => FormFieldType.Tx };
 
         if (dict.TryGetValue("V", out var vVal))
             field.Value = vVal switch { PdfString vs => vs.Value, PdfName vn => vn.Value, _ => vVal.ToString() };
@@ -515,9 +515,9 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         // Kids（子字段，递归读取）
         if (dict.TryGetValue("Kids", out var kidsVal))
         {
-            var kidRefs = new List<PdfRef>();
-            if (kidsVal is PdfRef kr) kidRefs.Add(kr);
-            else if (kidsVal is PdfArray ka) kidRefs.AddRange(ka.Items.OfType<PdfRef>());
+            var kidRefs = new List<Ref>();
+            if (kidsVal is Ref kr) kidRefs.Add(kr);
+            else if (kidsVal is PdfArray ka) kidRefs.AddRange(ka.Items.OfType<Ref>());
 
             foreach (var kref in kidRefs)
             {
@@ -557,19 +557,19 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
         var pageObjNum = pageObjNums[pageIndex];
         var pageObj = PdfObjectParser.ReadObject(_data, XRefTable, pageObjNum);
-        if (pageObj is not PdfDictObj pageDictObj) return result;
+        if (pageObj is not DictObj pageDictObj) return result;
 
         if (!pageDictObj.Value.TryGetValue("Annots", out var annotsVal)) return result;
 
         // 收集注释引用
-        var annotRefs = new List<PdfRef>();
-        if (annotsVal is PdfRef ar) annotRefs.Add(ar);
-        else if (annotsVal is PdfArray aa) annotRefs.AddRange(aa.Items.OfType<PdfRef>());
+        var annotRefs = new List<Ref>();
+        if (annotsVal is Ref ar) annotRefs.Add(ar);
+        else if (annotsVal is PdfArray aa) annotRefs.AddRange(aa.Items.OfType<Ref>());
 
         foreach (var aref in annotRefs)
         {
             var aobj = PdfObjectParser.ReadObject(_data, XRefTable, aref.ObjNum);
-            if (aobj is not PdfDictObj adictObj) continue;
+            if (aobj is not DictObj adictObj) continue;
             var dict = adictObj.Value;
 
             var annot = new PdfAnnotation { PageIndex = pageIndex };
@@ -610,7 +610,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
             if (dict.TryGetValue("Contents", out var contVal))
             {
                 if (contVal is PdfString cs) annot.Contents = cs.Value;
-                else if (contVal is PdfHexString chs) annot.Contents = DecodeHexFromString(chs.Value);
+                else if (contVal is HexString chs) annot.Contents = DecodeHexFromString(chs.Value);
             }
 
             // Author（便签注释）
@@ -623,7 +623,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
                 var r = ca.Items[0] is PdfNumber cr ? (Byte)(cr.Value * 255) : (Byte)0;
                 var g = ca.Items[1] is PdfNumber cg ? (Byte)(cg.Value * 255) : (Byte)0;
                 var b = ca.Items[2] is PdfNumber cb ? (Byte)(cb.Value * 255) : (Byte)0;
-                annot.Color = new OfficeColor(r, g, b);
+                annot.Color = new Color(r, g, b);
             }
 
             // 顶点（多边形/折线）
@@ -638,7 +638,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
             }
 
             // Link 类型：URL
-            if (annot.Type == PdfAnnotationType.Link && dict.TryGetValue("A", out var aVal) && aVal is PdfDictObj aDict)
+            if (annot.Type == PdfAnnotationType.Link && dict.TryGetValue("A", out var aVal) && aVal is DictObj aDict)
             {
                 if (aDict.Value.TryGetValue("URI", out var uriVal) && uriVal is PdfString us)
                     annot.Url = us.Value;
@@ -743,7 +743,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         foreach (var pageObjNum in pageObjNums)
         {
             var pageObj = PdfObjectParser.ReadObject(_data, XRefTable!, pageObjNum);
-            if (pageObj is not PdfDictObj pageDictObj) continue;
+            if (pageObj is not DictObj pageDictObj) continue;
 
             var pageDict = pageDictObj.Value;
             var page = new PdfPage();
@@ -763,16 +763,16 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         }
 
         // 读取书签大纲（/Outlines）
-        if (XRefTable!.Trailer.TryGetValue("Root", out var rootVal2) && rootVal2 is PdfRef rootRef2)
+        if (XRefTable!.Trailer.TryGetValue("Root", out var rootVal2) && rootVal2 is Ref rootRef2)
         {
             var catalogObj2 = PdfObjectParser.ReadObject(_data, XRefTable, rootRef2.ObjNum);
-            if (catalogObj2 is PdfDictObj catDict2 &&
-                catDict2.Value.TryGetValue("Outlines", out var outVal) && outVal is PdfRef outRef)
+            if (catalogObj2 is DictObj catDict2 &&
+                catDict2.Value.TryGetValue("Outlines", out var outVal) && outVal is Ref outRef)
             {
                 var outlinesObj = PdfObjectParser.ReadObject(_data, XRefTable, outRef.ObjNum);
-                if (outlinesObj is PdfDictObj outDict)
+                if (outlinesObj is DictObj outDict)
                 {
-                    if (outDict.Value.TryGetValue("First", out var firstVal) && firstVal is PdfRef firstRef)
+                    if (outDict.Value.TryGetValue("First", out var firstVal) && firstVal is Ref firstRef)
                         ReadBookmarkTree(firstRef.ObjNum, doc.Bookmarks);
                 }
             }
@@ -782,24 +782,24 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>递归读取书签树</summary>
-    private void ReadBookmarkTree(Int32 objNum, List<PdfBookmark> bookmarks)
+    private void ReadBookmarkTree(Int32 objNum, List<PdfOutline> bookmarks)
     {
         var obj = PdfObjectParser.ReadObject(_data, XRefTable!, objNum);
-        if (obj is not PdfDictObj dictObj) return;
+        if (obj is not DictObj dictObj) return;
 
         var dict = dictObj.Value;
-        var bm = new PdfBookmark();
+        var bm = new PdfOutline();
 
         if (dict.TryGetValue("Title", out var titleVal))
         {
             if (titleVal is PdfString ts) bm.Title = ts.Value;
-            else if (titleVal is PdfHexString ths) bm.Title = DecodeHexFromString(ths.Value);
+            else if (titleVal is HexString ths) bm.Title = DecodeHexFromString(ths.Value);
         }
 
         // 解析 /Dest 获取目标页索引
         if (dict.TryGetValue("Dest", out var destVal) && destVal is PdfArray destArr && destArr.Items.Count >= 1)
         {
-            if (destArr.Items[0] is PdfRef pageRef)
+            if (destArr.Items[0] is Ref pageRef)
             {
                 var pageObjNums = GetPageObjectNumbers();
                 bm.PageIndex = pageObjNums.IndexOf(pageRef.ObjNum);
@@ -810,11 +810,11 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         bookmarks.Add(bm);
 
         // 递归读取子书签（/First）
-        if (dict.TryGetValue("First", out var childVal) && childVal is PdfRef childRef)
+        if (dict.TryGetValue("First", out var childVal) && childVal is Ref childRef)
             ReadBookmarkTree(childRef.ObjNum, bm.Children);
 
         // 读取下一个兄弟书签（/Next）
-        if (dict.TryGetValue("Next", out var nextVal) && nextVal is PdfRef nextRef)
+        if (dict.TryGetValue("Next", out var nextVal) && nextVal is Ref nextRef)
             ReadBookmarkTree(nextRef.ObjNum, bookmarks);
     }
     #endregion
@@ -1686,29 +1686,29 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         if (XRefTable == null) return result;
 
         // 查找 Catalog
-        if (!XRefTable.Trailer.TryGetValue("Root", out var rootVal) || rootVal is not PdfRef rootRef)
+        if (!XRefTable.Trailer.TryGetValue("Root", out var rootVal) || rootVal is not Ref rootRef)
             return result;
 
         var catalogObj = PdfObjectParser.ReadObject(_data, XRefTable, rootRef.ObjNum);
-        if (catalogObj is not PdfDictObj catalogDict) return result;
+        if (catalogObj is not DictObj catalogDict) return result;
 
         // 读取 /Names → /EmbeddedFiles
-        if (!catalogDict.Value.TryGetValue("Names", out var namesVal) || namesVal is not PdfDictObj namesDict)
+        if (!catalogDict.Value.TryGetValue("Names", out var namesVal) || namesVal is not DictObj namesDict)
             return result;
 
         if (!namesDict.Value.TryGetValue("EmbeddedFiles", out var efVal))
             return result;
 
         // EmbeddedFiles 可能是内联字典（leaf node）或引用（Ref to name tree node）
-        PdfDictObj? efLeaf = null;
-        if (efVal is PdfDictObj efDictObj)
+        DictObj? efLeaf = null;
+        if (efVal is DictObj efDictObj)
         {
             efLeaf = efDictObj;
         }
-        else if (efVal is PdfRef efRef)
+        else if (efVal is Ref efRef)
         {
             var efObj = PdfObjectParser.ReadObject(_data, XRefTable, efRef.ObjNum);
-            efLeaf = efObj as PdfDictObj;
+            efLeaf = efObj as DictObj;
         }
         if (efLeaf == null) return result;
 
@@ -1720,20 +1720,20 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         for (var i = 0; i + 1 < items.Count; i += 2)
         {
             var fileName = items[i] is PdfString ps ? ps.Value : items[i].ToString()?.Trim('(', ')') ?? $"file{i / 2}";
-            if (items[i + 1] is not PdfRef fsRef) continue;
+            if (items[i + 1] is not Ref fsRef) continue;
 
             var fsObj = PdfObjectParser.ReadObject(_data, XRefTable, fsRef.ObjNum);
-            if (fsObj is not PdfDictObj fsDict) continue;
+            if (fsObj is not DictObj fsDict) continue;
 
             // 读取 /EF → /F → 流对象引用
-            if (!fsDict.Value.TryGetValue("EF", out var efVal2) || efVal2 is not PdfDictObj efDict2)
+            if (!fsDict.Value.TryGetValue("EF", out var efVal2) || efVal2 is not DictObj efDict2)
                 continue;
 
-            if (!efDict2.Value.TryGetValue("F", out var fVal) || fVal is not PdfRef fRef)
+            if (!efDict2.Value.TryGetValue("F", out var fVal) || fVal is not Ref fRef)
                 continue;
 
             var streamObj = PdfObjectParser.ReadObject(_data, XRefTable, fRef.ObjNum);
-            if (streamObj is not PdfDictObj streamDict) continue;
+            if (streamObj is not DictObj streamDict) continue;
 
             // 手动提取流数据（ReadObject 不处理 stream/endstream）
             var streamOffset = XRefTable!.GetOffset(fRef.ObjNum);
