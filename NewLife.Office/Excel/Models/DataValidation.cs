@@ -1,7 +1,7 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 /// <summary>数据验证信息</summary>
-public class ExcelValidation
+public class DataValidation
 {
     #region 属性
     /// <summary>验证范围（如 "A2:A100"）</summary>

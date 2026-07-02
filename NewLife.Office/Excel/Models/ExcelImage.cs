@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 /// <summary>Excel 工作表图片元素</summary>
 public class ExcelImage

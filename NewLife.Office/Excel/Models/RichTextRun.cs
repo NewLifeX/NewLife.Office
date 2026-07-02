@@ -1,12 +1,12 @@
-namespace NewLife.Office;
+﻿namespace NewLife.Office.Excel;
 
 /// <summary>单元格富文本中的一段文字（对应 OOXML &lt;r&gt; 元素）</summary>
 /// <remarks>
 /// 多个 RichTextRun 组合成一个单元格的富文本内容，每段可有不同的字体/颜色/大小/粗斜体。
-/// 通过 <see cref="ExcelCellStyle.RichTextRuns"/> 设置，Writer 生成 inline string &lt;is&gt;&lt;r&gt; 结构。
+/// 通过 <see cref="CellFormat.RichTextRuns"/> 设置，Writer 生成 inline string &lt;is&gt;&lt;r&gt; 结构。
 /// <example>
 /// <code>
-/// var style = new ExcelCellStyle
+/// var style = new CellFormat
 /// {
 ///     RichTextRuns = new List&lt;RichTextRun&gt;
 ///     {

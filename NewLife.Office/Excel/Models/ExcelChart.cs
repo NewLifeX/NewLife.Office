@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 /// <summary>Excel 图表定义</summary>
 /// <remarks>

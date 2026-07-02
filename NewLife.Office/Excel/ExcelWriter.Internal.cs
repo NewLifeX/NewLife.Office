@@ -2,7 +2,7 @@
 using System.Security;
 using NewLife.Collections;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 partial class ExcelWriter
 {
@@ -26,7 +26,7 @@ partial class ExcelWriter
             _sheetRowIndex[sheet] = targetRowIndex1Based - 1;
     }
 
-    private void AddRow(String sheet, Object?[]? values, Office.ExcelCellStyle? rowStyle = null)
+    private void AddRow(String sheet, Object?[]? values, CellFormat? rowStyle = null)
     {
         EnsureSheet(sheet);
 
@@ -40,11 +40,11 @@ partial class ExcelWriter
         {
             var val = values[i];
 
-            // 空值但可能被 SetCellStyle 覆盖了样式——需要先查出样式再决定是否跳过
-            Office.ExcelCellStyle? overrideStyle = null;
+            // 空值但可能被 SetCellFormat 覆盖了样式——需要先查出样式再决定是否跳过
+            CellFormat? overrideStyle = null;
             if (val == null)
             {
-                if (_cellStyleOverrides.TryGetValue(sheet, out var ovDict) &&
+                if (_cellFormatOverrides.TryGetValue(sheet, out var ovDict) &&
                     ovDict.TryGetValue((rowIndex - 1, i), out var ovStyle))
                 {
                     overrideStyle = ovStyle;
@@ -55,7 +55,7 @@ partial class ExcelWriter
             var cellRef = GetColumnName(i) + rowIndex; // A1 / B2 ...
 
             // 公式快捷路径
-            if (val is ExcelFormula fval)
+            if (val is CellFormula fval)
             {
                 var fxml = SecurityElement.Escape(fval.Formula) ?? fval.Formula;
                 sb.Append("<c r=\"").Append(cellRef).Append('"');
@@ -81,15 +81,15 @@ partial class ExcelWriter
                 if (fType != null) sb.Append(" t=\"").Append(fType).Append('"');
 
                 // 检查公式单元格的样式覆盖
-                Office.ExcelCellStyle? fCellStyle = null;
-                if (_cellStyleOverrides.TryGetValue(sheet, out var fOverrides) &&
+                CellFormat? fCellStyle = null;
+                if (_cellFormatOverrides.TryGetValue(sheet, out var fOverrides) &&
                     fOverrides.TryGetValue((rowIndex - 1, i), out var fcs))
                 {
                     fCellStyle = fcs;
                 }
                 if (fCellStyle != null)
                 {
-                    var fNumFmtId = (Int32)ExcelCellStyle.General;
+                    var fNumFmtId = (Int32)NumFmtStyle.General;
                     if (!fCellStyle.NumberFormat.IsNullOrEmpty())
                         fNumFmtId = GetOrCreateNumFmt(fCellStyle.NumberFormat!);
                     var fSIndex = GetOrCreateXf(fCellStyle, fNumFmtId);
@@ -101,7 +101,7 @@ partial class ExcelWriter
             }
 
             // 识别类型
-            var autoStyle = ExcelCellStyle.General;
+            var autoStyle = NumFmtStyle.General;
             String? tAttr = null; // t="s" / "b"
             String? inner = null; // <v>值</v>
             var displayLen = 0;   // 估算显示长度用于列宽
@@ -109,7 +109,7 @@ partial class ExcelWriter
             // 空值但有样式覆盖：直接写入自闭合带样式空单元格，跳过值处理
             if (val == null && overrideStyle != null)
             {
-                var nullSIndex = GetOrCreateXf(overrideStyle, (Int32)ExcelCellStyle.General);
+                var nullSIndex = GetOrCreateXf(overrideStyle, (Int32)NumFmtStyle.General);
                 sb.Append("<c r=\"").Append(cellRef).Append('"');
                 if (nullSIndex >= 0) sb.Append(" s=\"").Append(nullSIndex).Append('"');
                 sb.Append("/>");
@@ -123,7 +123,7 @@ partial class ExcelWriter
                         // 百分比：形如 "12.3%" / "45%"
                         if (str.Length > 0 && str.EndsWith("%") && TryParsePercent(str, out var pct))
                         {
-                            autoStyle = ExcelCellStyle.Percent;
+                            autoStyle = NumFmtStyle.Percent;
                             inner = (pct / 100).ToString("0.##########", CultureInfo.InvariantCulture);
                             //displayLen = inner.Length + 1;
                             break;
@@ -156,7 +156,7 @@ partial class ExcelWriter
                         // Excel 序列值：1=1900/1/1（含闰年Bug），读取时减2，这里写入需补2
                         var serial = (dt - baseDate).TotalDays + 2; // 包含时间小数
                         var hasTime = dt.TimeOfDay.Ticks != 0;
-                        autoStyle = hasTime ? ExcelCellStyle.DateTime : ExcelCellStyle.Date;
+                        autoStyle = hasTime ? NumFmtStyle.DateTime : NumFmtStyle.Date;
                         inner = serial.ToString("0.###############", CultureInfo.InvariantCulture);
                         // 为避免 WPS 显示 ########，这里按常见完整格式长度估算：yyyy-MM-dd 或 yyyy-MM-dd HH:mm:ss
                         //displayLen = hasTime ? 16 - 1 : 10 - 1;
@@ -164,7 +164,7 @@ partial class ExcelWriter
                         break;
                     }
                 case TimeSpan ts:
-                    autoStyle = ExcelCellStyle.Time;
+                    autoStyle = NumFmtStyle.Time;
                     inner = ts.TotalDays.ToString("0.###############", CultureInfo.InvariantCulture);
                     //displayLen = inner.Length;
                     break;
@@ -179,7 +179,7 @@ partial class ExcelWriter
                         }
                         else
                         {
-                            autoStyle = ExcelCellStyle.Integer;
+                            autoStyle = NumFmtStyle.Integer;
                             inner = numStr; // 使用 General，避免两位截断
                         }
                         displayLen = numStr.Length < 8 ? 0 : numStr.Length;
@@ -244,8 +244,8 @@ partial class ExcelWriter
             var sIndex = -1;
 
             // 检查每单元格样式覆盖（0基行列）
-            Office.ExcelCellStyle? cellStyle = null;
-            if (_cellStyleOverrides.TryGetValue(sheet, out var overrides) &&
+            CellFormat? cellStyle = null;
+            if (_cellFormatOverrides.TryGetValue(sheet, out var overrides) &&
                 overrides.TryGetValue((rowIndex - 1, i), out var css))
             {
                 cellStyle = css;
@@ -264,7 +264,7 @@ partial class ExcelWriter
             else if (tAttr == null)
             {
                 // 无用户样式、非字符串/布尔：使用内置样式
-                sIndex = Array.IndexOf(_cellStyles, autoStyle);
+                sIndex = Array.IndexOf(_cellFormats, autoStyle);
             }
 
             // 富文本覆盖：写 inline string <is> 结构

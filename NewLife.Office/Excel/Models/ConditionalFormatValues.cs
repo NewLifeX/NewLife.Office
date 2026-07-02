@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Excel;
 
 /// <summary>条件格式类型</summary>
-public enum ExcelConditionalFormatType
+public enum ConditionalFormatValues
 {
     /// <summary>大于</summary>
     GreaterThan = 0,

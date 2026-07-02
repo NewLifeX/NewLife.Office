@@ -3,8 +3,9 @@ using System.Data;
 using System.Reflection;
 using System.Text;
 using NewLife.Buffers;
+using NewLife.Office.Ole2;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 /// <summary>xls（BIFF8）格式写入器</summary>
 /// <remarks>
@@ -79,7 +80,7 @@ public sealed class BiffWriter : IDisposable
     #region 私有字段
 
     private readonly List<String> _sheetNames = [];
-    private readonly Dictionary<String, List<(List<Object?> Values, ExcelCellStyle? Style)>> _sheetData = new(StringComparer.Ordinal);
+    private readonly Dictionary<String, List<(List<Object?> Values, CellFormat? Style)>> _sheetData = new(StringComparer.Ordinal);
 
     // 共享字符串表
     private readonly List<String> _sst = [];
@@ -160,7 +161,7 @@ public sealed class BiffWriter : IDisposable
     /// <summary>写入一行数据（带样式）</summary>
     /// <param name="values">单元格值序列</param>
     /// <param name="style">行级单元格样式（字体/填充/边框），null 使用默认样式</param>
-    public void WriteRow(IEnumerable<Object?> values, ExcelCellStyle? style)
+    public void WriteRow(IEnumerable<Object?> values, CellFormat? style)
     {
         var sheet = GetCurrentSheet();
         sheet.Add((values.ToList(), style));
@@ -380,8 +381,8 @@ public sealed class BiffWriter : IDisposable
     private Byte[] BuildWorkbookStream()
     {
         // 收集所有不重复的行样式，分配字体/XF 索引
-        var styleMap = new Dictionary<ExcelCellStyle, Int32>(); // style → xfIndex (1基，0=默认)
-        var styleFonts = new List<ExcelCellStyle>();
+        var styleMap = new Dictionary<CellFormat, Int32>(); // style → xfIndex (1基，0=默认)
+        var styleFonts = new List<CellFormat>();
         var nextXfIndex = 21; // 0-20 为内置默认
         var nextFontIndex = 6;  // 0-5 为默认字体
 
@@ -477,7 +478,7 @@ public sealed class BiffWriter : IDisposable
         return ms.ToArray();
     }
 
-    private void WriteSheetStream(Stream stream, String sheetName, Dictionary<ExcelCellStyle, Int32> styleMap,
+    private void WriteSheetStream(Stream stream, String sheetName, Dictionary<CellFormat, Int32> styleMap,
         Dictionary<String, Int32> formatMap, Dictionary<Int32, Int32> formatXfIndex)
     {
         var rows = _sheetData.TryGetValue(sheetName, out var r) ? r : [];
@@ -897,7 +898,7 @@ public sealed class BiffWriter : IDisposable
         return buf;
     }
 
-    private static Byte[] BuildFontRecord(ExcelCellStyle? style = null)
+    private static Byte[] BuildFontRecord(CellFormat? style = null)
     {
         var name = style?.FontName.IsNullOrEmpty() != false ? "Arial" : style.FontName!;
         var nameBytes = Encoding.Unicode.GetBytes(name);
@@ -960,7 +961,7 @@ public sealed class BiffWriter : IDisposable
         return buf;
     }
 
-    private static void WriteXfRecords(Stream stream, Dictionary<ExcelCellStyle, Int32> styleMap, Int32 startFontIndex, Dictionary<Int32, Int32> formatXfIndex)
+    private static void WriteXfRecords(Stream stream, Dictionary<CellFormat, Int32> styleMap, Int32 startFontIndex, Dictionary<Int32, Int32> formatXfIndex)
     {
         // 21 内置 XF：索引 0-14 = 普通, 15 = 默认, 16-20 = 标题
         for (var i = 0; i < 21; i++)
@@ -974,7 +975,7 @@ public sealed class BiffWriter : IDisposable
             var style = kv.Key;
             var fontIdx = startFontIndex + styleMap.Keys.ToList().IndexOf(style);
             var bgColor = style.BackgroundColor.IsNullOrEmpty() ? 0x40u : 0u;
-            var xfData = BuildStyledXfRecord((UInt16)fontIdx, bgColor, style.Border != ExcelCellBorderStyle.None);
+            var xfData = BuildStyledXfRecord((UInt16)fontIdx, bgColor, style.Border != BorderStyle.None);
             WriteRecord(stream, RecXf, xfData);
         }
         // 自定义格式 XF（每个格式一个简约 XF 记录，仅设置格式索引）
@@ -1071,7 +1072,7 @@ public sealed class BiffWriter : IDisposable
 
     #region 辅助
 
-    private List<(List<Object?> Values, ExcelCellStyle? Style)> GetCurrentSheet()
+    private List<(List<Object?> Values, CellFormat? Style)> GetCurrentSheet()
     {
         if (!_sheetData.TryGetValue(_currentSheet, out var rows))
         {

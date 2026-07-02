@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Excel;
 
 /// <summary>数据透视表汇总函数</summary>
-public enum ExcelPivotSummaryFunction
+public enum PivotSummaryFunction
 {
     /// <summary>求和</summary>
     Sum,

@@ -1,7 +1,7 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.Excel;
 
 /// <summary>垂直对齐方式</summary>
-public enum ExcelVerticalAlignment
+public enum VerticalAlignment
 {
     /// <summary>顶部</summary>
     Top = 0,

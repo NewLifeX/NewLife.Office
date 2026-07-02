@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 /// <summary>Excel 工作簿完整数据快照，用于读写往返</summary>
 /// <remarks>
@@ -9,7 +9,7 @@ public class ExcelDocument
 {
     #region 属性
     /// <summary>工作表集合</summary>
-    public List<ExcelSheet> Sheets { get; set; } = [];
+    public List<Worksheet> Worksheets { get; set; } = [];
 
     /// <summary>
     /// 原样透传的其他 ZIP 部件（主题/文档属性/外部链接/VBA 等）。
@@ -28,12 +28,12 @@ public class ExcelDocument
     /// 默认字体（对应 styles.xml 中 fonts[0]，用于行/列标题渲染）。
     /// 由 Reader 从源文件中读取，Writer 用于生成 font[0]，确保标题字体与原文件一致。
     /// </summary>
-    public ExcelDefaultFont? DefaultFont { get; set; }
+    public DefaultFont? DefaultFont { get; set; }
     #endregion
 }
 
 /// <summary>默认字体信息（对应 styles.xml fonts[0]）</summary>
-public class ExcelDefaultFont
+public class DefaultFont
 {
     /// <summary>字体名称（如 "宋体"、"Calibri"）</summary>
     public String? Name { get; set; }

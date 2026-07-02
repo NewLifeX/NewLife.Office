@@ -2,13 +2,13 @@
 using System.IO.Compression;
 using System.Security;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 partial class ExcelWriter
 {
     #region 样式管理
     /// <summary>根据用户样式和数字格式，查找或创建 XF 条目并返回索引</summary>
-    private Int32 GetOrCreateXf(Office.ExcelCellStyle cs, Int32 numFmtId)
+    private Int32 GetOrCreateXf(CellFormat cs, Int32 numFmtId)
     {
         // 找或创建字体
         var font = new FontEntry(cs.FontName, cs.FontSize, cs.Bold, cs.Italic, cs.Underline, cs.FontColor, cs.Strike, cs.VerticalAlign);
@@ -35,19 +35,19 @@ partial class ExcelWriter
 
         // 找或创建边框：单边属性优先，回退到全局 Border
         var borderId = 0;
-        var leftStyle   = cs.LeftBorder   != ExcelCellBorderStyle.None ? cs.LeftBorder   : cs.Border;
-        var rightStyle  = cs.RightBorder  != ExcelCellBorderStyle.None ? cs.RightBorder  : cs.Border;
-        var topStyle    = cs.TopBorder    != ExcelCellBorderStyle.None ? cs.TopBorder    : cs.Border;
-        var bottomStyle = cs.BottomBorder != ExcelCellBorderStyle.None ? cs.BottomBorder : cs.Border;
+        var leftStyle   = cs.LeftBorder   != BorderStyle.None ? cs.LeftBorder   : cs.Border;
+        var rightStyle  = cs.RightBorder  != BorderStyle.None ? cs.RightBorder  : cs.Border;
+        var topStyle    = cs.TopBorder    != BorderStyle.None ? cs.TopBorder    : cs.Border;
+        var bottomStyle = cs.BottomBorder != BorderStyle.None ? cs.BottomBorder : cs.Border;
         var leftColor   = cs.LeftBorderColor   ?? cs.BorderColor;
         var rightColor  = cs.RightBorderColor  ?? cs.BorderColor;
         var topColor    = cs.TopBorderColor    ?? cs.BorderColor;
         var bottomColor = cs.BottomBorderColor ?? cs.BorderColor;
         var diagonalStyle = cs.DiagonalBorder;
         var diagonalColor = cs.DiagonalBorderColor;
-        if (leftStyle != ExcelCellBorderStyle.None || rightStyle != ExcelCellBorderStyle.None ||
-            topStyle  != ExcelCellBorderStyle.None || bottomStyle != ExcelCellBorderStyle.None ||
-            diagonalStyle != ExcelCellBorderStyle.None)
+        if (leftStyle != BorderStyle.None || rightStyle != BorderStyle.None ||
+            topStyle  != BorderStyle.None || bottomStyle != BorderStyle.None ||
+            diagonalStyle != BorderStyle.None)
         {
             var border = new BorderEntry(leftStyle, leftColor, rightStyle, rightColor, topStyle, topColor, bottomStyle, bottomColor, diagonalStyle, diagonalColor);
             borderId = FindOrAdd(_borders, border);
@@ -113,7 +113,7 @@ partial class ExcelWriter
     private static String MakeCellRef(Int32 row, Int32 col) => GetColumnName(col) + (row + 1);
 
     /// <summary>生成结构化表格 XML（xl/tables/tableN.xml）</summary>
-    private void WriteTableXml(StreamWriter sw, ExcelTableInfo tbl, Int32 tableId)
+    private void WriteTableXml(StreamWriter sw, Table tbl, Int32 tableId)
     {
         sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
         sw.Write("<table xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"");
@@ -230,9 +230,9 @@ partial class ExcelWriter
     }
 
     /// <summary>写出单边边框 XML（style 为 None 时输出自关闭空元素）</summary>
-    private static void WriteBorderSide(StreamWriter sw, String tag, ExcelCellBorderStyle style, String? color)
+    private static void WriteBorderSide(StreamWriter sw, String tag, BorderStyle style, String? color)
     {
-        if (style == ExcelCellBorderStyle.None)
+        if (style == BorderStyle.None)
         {
             sw.Write($"<{tag}/>");
         }
@@ -246,14 +246,14 @@ partial class ExcelWriter
     }
 
     /// <summary>获取边框 OOXML 样式名</summary>
-    private static String GetBorderStyleName(ExcelCellBorderStyle style) => style switch
+    private static String GetBorderStyleName(BorderStyle style) => style switch
     {
-        ExcelCellBorderStyle.Thin => "thin",
-        ExcelCellBorderStyle.Medium => "medium",
-        ExcelCellBorderStyle.Thick => "thick",
-        ExcelCellBorderStyle.Dashed => "dashed",
-        ExcelCellBorderStyle.Dotted => "dotted",
-        ExcelCellBorderStyle.DoubleLine => "double",
+        BorderStyle.Thin => "thin",
+        BorderStyle.Medium => "medium",
+        BorderStyle.Thick => "thick",
+        BorderStyle.Dashed => "dashed",
+        BorderStyle.Dotted => "dotted",
+        BorderStyle.DoubleLine => "double",
         _ => "thin",
     };
 
@@ -324,7 +324,7 @@ partial class ExcelWriter
         }
 
         // 判断哪些 sheet 有表格
-        var sheetsWithTables = new Dictionary<Int32, List<ExcelTableInfo>>();
+        var sheetsWithTables = new Dictionary<Int32, List<Table>>();
         var globalTableIndex = 0; // 全局表格编号（1基）
         for (var i = 0; i < _sheetNames.Count; i++)
         {
@@ -658,31 +658,31 @@ partial class ExcelWriter
                     sw.Write($"<conditionalFormatting sqref=\"{cf.Range}\">");
                     switch (cf.Type)
                     {
-                        case ExcelConditionalFormatType.GreaterThan:
+                        case ConditionalFormatValues.GreaterThan:
                             sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"greaterThan\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
                             break;
-                        case ExcelConditionalFormatType.LessThan:
+                        case ConditionalFormatValues.LessThan:
                             sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"lessThan\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
                             break;
-                        case ExcelConditionalFormatType.Equal:
+                        case ConditionalFormatValues.Equal:
                             sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"equal\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
                             break;
-                        case ExcelConditionalFormatType.Between:
+                        case ConditionalFormatValues.Between:
                             sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"between\"><formula>{SecurityElement.Escape(cf.Value)}</formula><formula>{SecurityElement.Escape(cf.Value2)}</formula></cfRule>");
                             break;
-                        case ExcelConditionalFormatType.NotEqual:
+                        case ConditionalFormatValues.NotEqual:
                             sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"notEqual\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
                             break;
-                        case ExcelConditionalFormatType.NotBetween:
+                        case ConditionalFormatValues.NotBetween:
                             sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"notBetween\"><formula>{SecurityElement.Escape(cf.Value)}</formula><formula>{SecurityElement.Escape(cf.Value2)}</formula></cfRule>");
                             break;
-                        case ExcelConditionalFormatType.DataBar:
+                        case ConditionalFormatValues.DataBar:
                             sw.Write($"<cfRule type=\"dataBar\" priority=\"{priority++}\"><dataBar><cfvo type=\"min\"/><cfvo type=\"max\"/><color rgb=\"FF{cf.Color ?? "4472C4"}\"/></dataBar></cfRule>");
                             break;
-                        case ExcelConditionalFormatType.ColorScale:
+                        case ConditionalFormatValues.ColorScale:
                             sw.Write($"<cfRule type=\"colorScale\" priority=\"{priority++}\"><colorScale><cfvo type=\"min\"/><cfvo type=\"max\"/><color rgb=\"FFFFFFFF\"/><color rgb=\"FF{cf.Color ?? "4472C4"}\"/></colorScale></cfRule>");
                             break;
-                        case ExcelConditionalFormatType.IconSet:
+                        case ConditionalFormatValues.IconSet:
                             {
                                 var its = cf.IconSetType ?? "3Arrows";
                                 var count = its[0] - '0'; // 取前缀数字
@@ -696,7 +696,7 @@ partial class ExcelWriter
                                 sw.Write("</iconSet></cfRule>");
                                 break;
                             }
-                        case ExcelConditionalFormatType.Expression:
+                        case ConditionalFormatValues.Expression:
                             {
                                 var esc = SecurityElement.Escape(cf.Formula) ?? cf.Formula ?? String.Empty;
                                 if (cf.Color.IsNullOrEmpty())
@@ -752,9 +752,9 @@ partial class ExcelWriter
             if (_sheetPageSetups.TryGetValue(sheet, out var pageSetup))
             {
                 sw.Write($"<pageMargins left=\"{pageSetup.MarginLeft:0.##}\" right=\"{pageSetup.MarginRight:0.##}\" top=\"{pageSetup.MarginTop:0.##}\" bottom=\"{pageSetup.MarginBottom:0.##}\" header=\"0.3\" footer=\"0.3\"/>");
-                var orient = pageSetup.Orientation == ExcelPageOrientation.Landscape ? "landscape" : "portrait";
+                var orient = pageSetup.Orientation == PageOrientation.Landscape ? "landscape" : "portrait";
                 sw.Write($"<pageSetup orientation=\"{orient}\"");
-                if (pageSetup.PaperSize != ExcelPaperSize.Default) sw.Write($" paperSize=\"{(Int32)pageSetup.PaperSize}\"");
+                if (pageSetup.PaperSize != PaperSize.Default) sw.Write($" paperSize=\"{(Int32)pageSetup.PaperSize}\"");
                 sw.Write("/>");
                 if (!pageSetup.HeaderText.IsNullOrEmpty() || !pageSetup.FooterText.IsNullOrEmpty())
                 {
@@ -1171,9 +1171,9 @@ partial class ExcelWriter
         sw.Write($"<borders count=\"{_borders.Count}\">");
         foreach (var b in _borders)
         {
-            var hasAny = b.Left != ExcelCellBorderStyle.None || b.Right != ExcelCellBorderStyle.None ||
-                         b.Top  != ExcelCellBorderStyle.None || b.Bottom != ExcelCellBorderStyle.None ||
-                         b.Diagonal != ExcelCellBorderStyle.None;
+            var hasAny = b.Left != BorderStyle.None || b.Right != BorderStyle.None ||
+                         b.Top  != BorderStyle.None || b.Bottom != BorderStyle.None ||
+                         b.Diagonal != BorderStyle.None;
             if (!hasAny)
             {
                 sw.Write("<border><left/><right/><top/><bottom/><diagonal/></border>");
@@ -1185,16 +1185,16 @@ partial class ExcelWriter
                 WriteBorderSide(sw, "right",  b.Right,  b.RightColor);
                 WriteBorderSide(sw, "top",    b.Top,    b.TopColor);
                 WriteBorderSide(sw, "bottom", b.Bottom, b.BottomColor);
-                if (b.Diagonal != ExcelCellBorderStyle.None)
+                if (b.Diagonal != BorderStyle.None)
                 {
                     var diagStyle = b.Diagonal switch
                     {
-                        ExcelCellBorderStyle.Thin => "thin",
-                        ExcelCellBorderStyle.Medium => "medium",
-                        ExcelCellBorderStyle.Thick => "thick",
-                        ExcelCellBorderStyle.Dashed => "dashed",
-                        ExcelCellBorderStyle.Dotted => "dotted",
-                        ExcelCellBorderStyle.DoubleLine => "double",
+                        BorderStyle.Thin => "thin",
+                        BorderStyle.Medium => "medium",
+                        BorderStyle.Thick => "thick",
+                        BorderStyle.Dashed => "dashed",
+                        BorderStyle.Dotted => "dotted",
+                        BorderStyle.DoubleLine => "double",
                         _ => "thin"
                     };
                     sw.Write($"<diagonal style=\"{diagStyle}\">");
@@ -1217,13 +1217,13 @@ partial class ExcelWriter
             if (xf.FillId > 0) sw.Write(" applyFill=\"1\"");
             if (xf.BorderId > 0) sw.Write(" applyBorder=\"1\"");
             if (xf.NumFmtId > 0) sw.Write(" applyNumberFormat=\"1\"");
-            var needAlignment = xf.HAlign != ExcelHorizontalAlignment.General || xf.VAlign != ExcelVerticalAlignment.Top ||
+            var needAlignment = xf.HAlign != HorizontalAlignment.General || xf.VAlign != VerticalAlignment.Top ||
                                xf.WrapText || xf.TextRotation != 0 || xf.Indent > 0 || xf.ShrinkToFit;
             if (needAlignment)
             {
                 sw.Write(" applyAlignment=\"1\"><alignment");
-                if (xf.HAlign != ExcelHorizontalAlignment.General) sw.Write($" horizontal=\"{xf.HAlign.ToString().ToLower()}\"");
-                if (xf.VAlign != ExcelVerticalAlignment.Top) sw.Write($" vertical=\"{xf.VAlign.ToString().ToLower()}\"");
+                if (xf.HAlign != HorizontalAlignment.General) sw.Write($" horizontal=\"{xf.HAlign.ToString().ToLower()}\"");
+                if (xf.VAlign != VerticalAlignment.Top) sw.Write($" vertical=\"{xf.VAlign.ToString().ToLower()}\"");
                 if (xf.WrapText) sw.Write(" wrapText=\"1\"");
                 if (xf.TextRotation != 0) sw.Write($" textRotation=\"{xf.TextRotation}\"");
                 if (xf.Indent > 0) sw.Write($" indent=\"{xf.Indent}\"");
@@ -1243,8 +1243,8 @@ partial class ExcelWriter
         {
             foreach (var cf in kv.Value)
             {
-                if (cf.Type < ExcelConditionalFormatType.DataBar ||
-                    (cf.Type == ExcelConditionalFormatType.Expression && !cf.Color.IsNullOrEmpty())) totalDxf++;
+                if (cf.Type < ConditionalFormatValues.DataBar ||
+                    (cf.Type == ConditionalFormatValues.Expression && !cf.Color.IsNullOrEmpty())) totalDxf++;
             }
         }
         if (totalDxf > 0)
@@ -1254,8 +1254,8 @@ partial class ExcelWriter
             {
                 foreach (var cf in kv.Value)
                 {
-                    if (cf.Type >= ExcelConditionalFormatType.DataBar &&
-                        !(cf.Type == ExcelConditionalFormatType.Expression && !cf.Color.IsNullOrEmpty())) continue;
+                    if (cf.Type >= ConditionalFormatValues.DataBar &&
+                        !(cf.Type == ConditionalFormatValues.Expression && !cf.Color.IsNullOrEmpty())) continue;
                     sw.Write("<dxf>");
                     if (!cf.Color.IsNullOrEmpty())
                         sw.Write($"<fill><patternFill><bgColor rgb=\"FF{cf.Color}\"/></patternFill></fill>");

@@ -1,13 +1,26 @@
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Text;
 using NewLife.Office;
+using NewLife.Office.Calendar;
+using NewLife.Office.Epub;
+using NewLife.Office.Excel;
+using NewLife.Office.Mail;
+using NewLife.Office.Markdown;
+using NewLife.Office.Ods;
+using NewLife.Office.Ole2;
+using NewLife.Office.Pdf;
+using NewLife.Office.Ppt;
+using NewLife.Office.Rtf;
+using NewLife.Office.VCard;
+using NewLife.Office.Word;
+using NewLife.Office.Xps;
 using Xunit;
 
 namespace XUnitTest.Excel;
 
 /// <summary>Excel xlsx 全功能往返集成测试</summary>
 /// <remarks>
-/// 读取 Bin 目录下所有 .xlsx 文件，将所有内容解析为内存对象（ExcelData/SheetData/CellStyle 等），
+/// 读取 Bin 目录下所有 .xlsx 文件，将所有内容解析为内存对象（ExcelDocument/Worksheet/CellFormat 等），
 /// 再用 ExcelWriter 从这些对象重建新文件，最后多层验证新旧文件内容一致。
 /// 输出文件写入 Bin/Output/ 子目录，方便人工打开新旧文件并列对比。
 /// </remarks>
@@ -80,12 +93,12 @@ public class ExcelRoundTripTests
         var prefix = label != null ? $"[{label}] " : String.Empty;
 
         // 工作表数量
-        Assert.Equal(expected.Sheets.Count, actual.Sheets.Count);
+        Assert.Equal(expected.Worksheets.Count, actual.Worksheets.Count);
 
-        for (var si = 0; si < expected.Sheets.Count; si++)
+        for (var si = 0; si < expected.Worksheets.Count; si++)
         {
-            var src = expected.Sheets[si];
-            var dst = actual.Sheets[si];
+            var src = expected.Worksheets[si];
+            var dst = actual.Worksheets[si];
             var sp = $"{prefix}Sheet[{si}] '{src.Name}'";
 
             // 名称
@@ -140,7 +153,7 @@ public class ExcelRoundTripTests
 
             // 单元格样式——语义比较：只比较有实际值的单元格样式
             // Writer可能不为空值单元格写入s="N"属性，导致样式计数不同
-            foreach (var kv in src.CellStyles)
+            foreach (var kv in src.CellFormats)
             {
                 var (r, c) = kv.Key;
                 // 仅当源和目标在该单元格都有非null值时比较样式
@@ -148,7 +161,7 @@ public class ExcelRoundTripTests
                 var hasDstValue = r < dst.Rows.Count && c < dst.Rows[r].Length && dst.Rows[r][c] != null;
                 if (!hasSrcValue && !hasDstValue) continue;
 
-                if (!dst.CellStyles.TryGetValue(kv.Key, out var dstStyle))
+                if (!dst.CellFormats.TryGetValue(kv.Key, out var dstStyle))
                 {
                     // 源有样式但目标没有：仅当有实际值时才报错
                     if (hasSrcValue)
@@ -281,13 +294,13 @@ public class ExcelRoundTripTests
                     sourceData = reader.ReadExcel();
                 }
 
-                Assert.True(sourceData.Sheets.Count > 0, $"{fileName}: 应至少包含 1 个工作表");
+                Assert.True(sourceData.Worksheets.Count > 0, $"{fileName}: 应至少包含 1 个工作表");
                 Assert.True(sourceData.OtherParts.Count > 0, $"{fileName}: OtherParts空 ({sourceData.OtherParts.Count})");
 
-                Console.WriteLine($"  工作表数: {sourceData.Sheets.Count}, OtherParts: {sourceData.OtherParts.Count} 部件");
-                foreach (var sd in sourceData.Sheets)
+                Console.WriteLine($"  工作表数: {sourceData.Worksheets.Count}, OtherParts: {sourceData.OtherParts.Count} 部件");
+                foreach (var sd in sourceData.Worksheets)
                 {
-                    Console.WriteLine($"    {sd.Name}: {sd.Rows.Count}行, {sd.CellStyles.Count}个样式, " +
+                    Console.WriteLine($"    {sd.Name}: {sd.Rows.Count}行, {sd.CellFormats.Count}个样式, " +
                         $"{sd.Merges.Count}合并, {sd.Images.Count}图片, " +
                         $"{sd.Hyperlinks.Count}超链接, {sd.Comments.Count}批注, " +
                         $"{sd.ConditionalFormats.Count}条件格式, {sd.Validations.Count}验证");
@@ -337,19 +350,19 @@ public class ExcelRoundTripTests
             // ① 程序化构造全功能 xlsx（用临时文件）
             using (var w = new ExcelWriter(tempFile))
             {
-            var headerStyle = new ExcelCellStyle
+            var headerStyle = new NewLife.Office.Excel.CellFormat
             {
                 Bold = true,
                 FontSize = 12,
                 BackgroundColor = "4472C4",
                 FontColor = "FFFFFF",
-                HAlign = ExcelHorizontalAlignment.Center,
-                Border = ExcelCellBorderStyle.Thin,
+                HAlign = HorizontalAlignment.Center,
+                Border = NewLife.Office.Excel.BorderStyle.Thin,
             };
 
             // Sheet1: 包含各种数据类型
             w.WriteHeader("Data", new[] { "编号", "名称", "日期", "金额", "比率", "状态" }, headerStyle);
-            var dataStyle = new ExcelCellStyle { Border = ExcelCellBorderStyle.Thin };
+            var dataStyle = new NewLife.Office.Excel.CellFormat { Border = NewLife.Office.Excel.BorderStyle.Thin };
             w.WriteRow("Data", new Object?[] { 1, "测试项目A", new DateTime(2025, 6, 15), 15000.50m, 0.85, true }, dataStyle);
             w.WriteRow("Data", new Object?[] { 2, "测试项目B", new DateTime(2025, 7, 1), 23000m, 0.92, false }, dataStyle);
             w.WriteRow("Data", new Object?[] { 3, "测试项目C", new DateTime(2025, 8, 20), 8750.25m, 0.73, true }, dataStyle);
@@ -371,13 +384,13 @@ public class ExcelRoundTripTests
             w.AddDropdownValidation("Data", "F2:F100", new[] { "TRUE", "FALSE" });
 
             // 页面设置
-            w.SetPageSetup("Data", ExcelPageOrientation.Landscape, ExcelPaperSize.A4);
+            w.SetPageSetup("Data", PageOrientation.Landscape, PaperSize.A4);
             w.SetPageMargins("Data", 1.0, 1.0, 0.75, 0.75);
             w.SetHeaderFooter("Data", "测试报表", "第&P页/共&N页");
             w.SetPrintTitleRows("Data", 1, 1);
 
             // 条件格式
-            w.AddConditionalFormat("Data", "D2:D4", ExcelConditionalFormatType.GreaterThan, "10000", "92D050");
+            w.AddConditionalFormat("Data", "D2:D4", ConditionalFormatValues.GreaterThan, "10000", "92D050");
 
             // 批注
             w.AddComment("Data", 2, 1, "这是项目A的批注", "测试员");
@@ -401,18 +414,18 @@ public class ExcelRoundTripTests
         }
 
         // ③ 验证基本结构
-        Assert.Equal(2, readData.Sheets.Count);
-        Assert.Equal("Data", readData.Sheets[0].Name);
-        Assert.Equal("Sheet2", readData.Sheets[1].Name);
+        Assert.Equal(2, readData.Worksheets.Count);
+        Assert.Equal("Data", readData.Worksheets[0].Name);
+        Assert.Equal("Sheet2", readData.Worksheets[1].Name);
 
-        var dataSheet = readData.Sheets[0];
+        var dataSheet = readData.Worksheets[0];
         Assert.True(dataSheet.Rows.Count >= 4, $"Data sheet 至少4行，实际{dataSheet.Rows.Count}");
         Assert.Equal("测试项目A", dataSheet.Rows[1][1]);
 
         // 验证元数据
-        Console.WriteLine($"CellStyles: {dataSheet.CellStyles.Count}, Merges: {dataSheet.Merges.Count}, Images: {dataSheet.Images.Count}");
+        Console.WriteLine($"CellFormats: {dataSheet.CellFormats.Count}, Merges: {dataSheet.Merges.Count}, Images: {dataSheet.Images.Count}");
         Console.WriteLine($"Hyperlinks: {dataSheet.Hyperlinks.Count}, Comments: {dataSheet.Comments.Count}, CondFormats: {dataSheet.ConditionalFormats.Count}");
-        Assert.True(dataSheet.CellStyles.Count > 0, "应有单元格样式");
+        Assert.True(dataSheet.CellFormats.Count > 0, "应有单元格样式");
         Assert.True(dataSheet.Merges.Count > 0, "应有合并区域");
         Assert.True(dataSheet.FreezePane.HasValue, "应有冻结");
         Assert.NotNull(dataSheet.AutoFilter);
@@ -422,7 +435,7 @@ public class ExcelRoundTripTests
         Assert.True(dataSheet.Comments.Count > 0, "应有批注");
         Assert.True(dataSheet.ConditionalFormats.Count > 0, "应有条件格式");
         Assert.True(dataSheet.Validations.Count > 0, "应有数据验证");
-        Assert.Equal(ExcelPageOrientation.Landscape, dataSheet.Orientation);
+        Assert.Equal(PageOrientation.Landscape, dataSheet.Orientation);
         Assert.Equal("测试报表", dataSheet.HeaderText);
 
         // ④ 重新写入再读回比较

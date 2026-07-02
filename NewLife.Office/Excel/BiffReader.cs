@@ -1,7 +1,8 @@
 ﻿using System.Text;
 using NewLife.Buffers;
+using NewLife.Office.Ole2;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 /// <summary>xls（BIFF8）格式读取器</summary>
 /// <remarks>

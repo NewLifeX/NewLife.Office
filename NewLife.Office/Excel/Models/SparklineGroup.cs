@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 /// <summary>迷你图组（对应 OOXML x14:sparklineGroup 元素）</summary>
 /// <remarks>
@@ -6,7 +6,7 @@ namespace NewLife.Office;
 /// 一个 SparklineGroup 包含相同类型的一组迷你图，共享数据范围和样式。
 /// 通过 <see cref="ExcelWriter.AddSparklineGroup"/> 写入，<see cref="ExcelReader.ReadSparklines"/> 读取。
 /// </remarks>
-public class ExcelSparklineGroup
+public class SparklineGroup
 {
     #region 属性
     /// <summary>类型：line（折线图）、column（柱状图）、stacked（盈亏图）</summary>

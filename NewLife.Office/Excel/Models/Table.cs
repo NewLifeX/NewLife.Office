@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 /// <summary>Excel 结构化表格（OOXML table 元素）</summary>
 /// <remarks>
@@ -13,7 +13,7 @@ namespace NewLife.Office;
 /// </code>
 /// </example>
 /// </remarks>
-public class ExcelTableInfo
+public class Table
 {
     #region 属性
     /// <summary>表格范围（Excel 记法，如 "A1:E10"）</summary>

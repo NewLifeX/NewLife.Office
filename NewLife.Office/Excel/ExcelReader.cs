@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Xml.Linq;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 /// <summary>轻量级Excel读取器，支持读写往返</summary>
 /// <remarks>
@@ -67,19 +67,19 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
 
     private class BorderInfo
     {
-        public ExcelCellBorderStyle LeftStyle;
+        public BorderStyle LeftStyle;
         public String? LeftColor;
-        public ExcelCellBorderStyle RightStyle;
+        public BorderStyle RightStyle;
         public String? RightColor;
-        public ExcelCellBorderStyle TopStyle;
+        public BorderStyle TopStyle;
         public String? TopColor;
-        public ExcelCellBorderStyle BottomStyle;
+        public BorderStyle BottomStyle;
         public String? BottomColor;
-        public ExcelCellBorderStyle DiagonalStyle;
+        public BorderStyle DiagonalStyle;
         public String? DiagonalColor;
 
         // 向后兼容快捷访问
-        public ExcelCellBorderStyle Style => LeftStyle != ExcelCellBorderStyle.None ? LeftStyle : BottomStyle;
+        public BorderStyle Style => LeftStyle != BorderStyle.None ? LeftStyle : BottomStyle;
         public String? Color => LeftColor ?? BottomColor;
     }
 
@@ -89,8 +89,8 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         public Int32 FontId;
         public Int32 FillId;
         public Int32 BorderId;
-        public ExcelHorizontalAlignment HAlign;
-        public ExcelVerticalAlignment VAlign;
+        public HorizontalAlignment HAlign;
+        public VerticalAlignment VAlign;
         public Boolean WrapText;
         public Int32 TextRotation;
         public Int32 Indent;
@@ -723,15 +723,15 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         }
     }
 
-    private static ExcelCellBorderStyle ParseBorderStyle(String? style) => style switch
+    private static BorderStyle ParseBorderStyle(String? style) => style switch
     {
-        "thin" => ExcelCellBorderStyle.Thin,
-        "medium" => ExcelCellBorderStyle.Medium,
-        "thick" => ExcelCellBorderStyle.Thick,
-        "dashed" => ExcelCellBorderStyle.Dashed,
-        "dotted" => ExcelCellBorderStyle.Dotted,
-        "double" => ExcelCellBorderStyle.DoubleLine,
-        _ => ExcelCellBorderStyle.None,
+        "thin" => BorderStyle.Thin,
+        "medium" => BorderStyle.Medium,
+        "thick" => BorderStyle.Thick,
+        "dashed" => BorderStyle.Dashed,
+        "dotted" => BorderStyle.Dotted,
+        "double" => BorderStyle.DoubleLine,
+        _ => BorderStyle.None,
     };
 
     /// <summary>规范化 OOXML RGB 颜色值：仅去除前导 FF alpha 前缀，保留实际 RGB</summary>
@@ -754,21 +754,21 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         return null;
     }
 
-    private static ExcelHorizontalAlignment ParseHAlign(String? h) => h switch
+    private static HorizontalAlignment ParseHAlign(String? h) => h switch
     {
-        "left" => ExcelHorizontalAlignment.Left,
-        "center" => ExcelHorizontalAlignment.Center,
-        "right" => ExcelHorizontalAlignment.Right,
-        "fill" => ExcelHorizontalAlignment.Fill,
-        "justify" => ExcelHorizontalAlignment.Justify,
-        _ => ExcelHorizontalAlignment.General,
+        "left" => HorizontalAlignment.Left,
+        "center" => HorizontalAlignment.Center,
+        "right" => HorizontalAlignment.Right,
+        "fill" => HorizontalAlignment.Fill,
+        "justify" => HorizontalAlignment.Justify,
+        _ => HorizontalAlignment.General,
     };
 
-    private static ExcelVerticalAlignment ParseVAlign(String? v) => v switch
+    private static VerticalAlignment ParseVAlign(String? v) => v switch
     {
-        "center" => ExcelVerticalAlignment.Center,
-        "bottom" => ExcelVerticalAlignment.Bottom,
-        _ => ExcelVerticalAlignment.Top,
+        "center" => VerticalAlignment.Center,
+        "bottom" => VerticalAlignment.Bottom,
+        _ => VerticalAlignment.Top,
     };
 
     private IDictionary<String, ZipArchiveEntry> ReadSheets(ZipArchive zip)
@@ -1132,7 +1132,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         if (_fontInfos != null && _fontInfos.Count > 0)
         {
             var f0 = _fontInfos[0];
-            data.DefaultFont = new ExcelDefaultFont
+            data.DefaultFont = new DefaultFont
             {
                 Name = f0.Name,
                 Size = f0.Size,
@@ -1143,7 +1143,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
 
         foreach (var sheet in Sheets)
         {
-            data.Sheets.Add(ReadSheet(sheet));
+            data.Worksheets.Add(ReadWorksheet(sheet));
         }
 
         // 收集所有未解析的 ZIP 部件，确保往返不丢内容
@@ -1158,9 +1158,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
     /// <summary>读取单个工作表的完整快照</summary>
     /// <param name="sheet">工作表名称</param>
     /// <returns>SheetData 快照</returns>
-    public ExcelSheet ReadSheet(String sheet)
+    public Worksheet ReadWorksheet(String sheet)
     {
-        var sd = new ExcelSheet { Name = sheet };
+        var sd = new Worksheet { Name = sheet };
 
         // 行数据（带实际行号，用于还原跳行结构）
         var rowNumbers = new List<Int32>();
@@ -1180,7 +1180,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         if (hasGaps) sd.ActualRowNumbers = rowNumbers;
 
         // 单元格样式
-        sd.CellStyles = ReadCellStyles(sheet);
+        sd.CellFormats = ReadCellFormats(sheet);
 
         // 合并区域
         var merges = GetMergeRanges(sheet);
@@ -1241,10 +1241,10 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
 
     /// <summary>读取指定工作表每单元格的完整样式</summary>
     /// <param name="sheet">工作表名称</param>
-    /// <returns>(行, 列) → CellStyle 字典，行列均为0基</returns>
-    public Dictionary<(Int32 Row, Int32 Col), ExcelCellStyle> ReadCellStyles(String sheet)
+    /// <returns>(行, 列) → CellFormat 字典，行列均为0基</returns>
+    public Dictionary<(Int32 Row, Int32 Col), CellFormat> ReadCellFormats(String sheet)
     {
-        var result = new Dictionary<(Int32, Int32), ExcelCellStyle>();
+        var result = new Dictionary<(Int32, Int32), CellFormat>();
         if (_xfInfos == null) return result;
 
         var doc = OpenSheetXml(sheet);
@@ -1271,7 +1271,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                 if (sIdx < 0 || sIdx >= _xfInfos.Count) continue;
 
                 var xf = _xfInfos[sIdx];
-                var cs = new ExcelCellStyle();
+                var cs = new CellFormat();
 
                 // 字体
                 if (_fontInfos != null && xf.FontId >= 0 && xf.FontId < _fontInfos.Count)
@@ -1604,7 +1604,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
     /// <summary>读取页面设置信息并填入 SheetData</summary>
     /// <param name="sheet">工作表名称</param>
     /// <param name="sd">目标 SheetData</param>
-    public void ReadPageSetup(String sheet, ExcelSheet sd)
+    public void ReadPageSetup(String sheet, Worksheet sd)
     {
         var doc = OpenSheetXml(sheet);
         if (doc.Root == null) return;
@@ -1624,9 +1624,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         if (ps != null)
         {
             var orient = ps.Attribute("orientation")?.Value;
-            sd.Orientation = orient == "landscape" ? ExcelPageOrientation.Landscape : ExcelPageOrientation.Portrait;
+            sd.Orientation = orient == "landscape" ? PageOrientation.Landscape : PageOrientation.Portrait;
             var psVal = ps.Attribute("paperSize")?.Value.ToInt() ?? 0;
-            sd.PaperSize = psVal > 0 ? (ExcelPaperSize)psVal : ExcelPaperSize.Default;
+            sd.PaperSize = psVal > 0 ? (PaperSize)psVal : PaperSize.Default;
         }
 
         // headerFooter
@@ -1804,7 +1804,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
     /// <summary>读取条件格式</summary>
     /// <param name="sheet">工作表名称</param>
     /// <returns>条件格式列表</returns>
-    public IEnumerable<ExcelConditionalFormat> ReadConditionalFormats(String sheet)
+    public IEnumerable<ConditionalFormatting> ReadConditionalFormats(String sheet)
     {
         var doc = OpenSheetXml(sheet);
         if (doc.Root == null) yield break;
@@ -1819,20 +1819,20 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                 var type = rule.Attribute("type")?.Value;
                 if (type.IsNullOrEmpty()) continue;
 
-                var info = new ExcelConditionalFormat { Range = range! };
+                var info = new ConditionalFormatting { Range = range! };
 
                 if (type == "cellIs")
                 {
                     var op = rule.Attribute("operator")?.Value;
                     info.Type = op switch
                     {
-                        "greaterThan" => ExcelConditionalFormatType.GreaterThan,
-                        "lessThan" => ExcelConditionalFormatType.LessThan,
-                        "equal" => ExcelConditionalFormatType.Equal,
-                        "between" => ExcelConditionalFormatType.Between,
-                        "notEqual" => ExcelConditionalFormatType.NotEqual,
-                        "notBetween" => ExcelConditionalFormatType.NotBetween,
-                        _ => ExcelConditionalFormatType.GreaterThan,
+                        "greaterThan" => ConditionalFormatValues.GreaterThan,
+                        "lessThan" => ConditionalFormatValues.LessThan,
+                        "equal" => ConditionalFormatValues.Equal,
+                        "between" => ConditionalFormatValues.Between,
+                        "notEqual" => ConditionalFormatValues.NotEqual,
+                        "notBetween" => ConditionalFormatValues.NotBetween,
+                        _ => ConditionalFormatValues.GreaterThan,
                     };
                     var formulas = rule.Elements().Where(e => e.Name.LocalName == "formula").ToList();
                     if (formulas.Count > 0) info.Value = formulas[0].Value;
@@ -1847,24 +1847,24 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
                 }
                 else if (type == "dataBar")
                 {
-                    info.Type = ExcelConditionalFormatType.DataBar;
+                    info.Type = ConditionalFormatValues.DataBar;
                     var dataBar = rule.Element(rule.Name.Namespace + "dataBar");
                     var color = dataBar?.Element(rule.Name.Namespace + "color");
                     info.Color = NormalizeRgb(color?.Attribute("rgb")?.Value);
                 }
                 else if (type == "colorScale")
                 {
-                    info.Type = ExcelConditionalFormatType.ColorScale;
+                    info.Type = ConditionalFormatValues.ColorScale;
                 }
                 else if (type == "iconSet")
                 {
-                    info.Type = ExcelConditionalFormatType.IconSet;
+                    info.Type = ConditionalFormatValues.IconSet;
                     var iconSet = rule.Element(rule.Name.Namespace + "iconSet");
                     info.IconSetType = iconSet?.Attribute("iconSet")?.Value;
                 }
                 else if (type == "expression")
                 {
-                    info.Type = ExcelConditionalFormatType.Expression;
+                    info.Type = ConditionalFormatValues.Expression;
                     var formulas = rule.Elements().Where(e => e.Name.LocalName == "formula").ToList();
                     if (formulas.Count > 0) info.Formula = formulas[0].Value;
                 }
@@ -1939,7 +1939,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
     /// <summary>读取数据验证</summary>
     /// <param name="sheet">工作表名称</param>
     /// <returns>数据验证列表</returns>
-    public IEnumerable<ExcelValidation> ReadDataValidations(String sheet)
+    public IEnumerable<DataValidation> ReadDataValidations(String sheet)
     {
         var doc = OpenSheetXml(sheet);
         if (doc.Root == null) yield break;
@@ -1949,7 +1949,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
 
         foreach (var dv in dvs.Elements())
         {
-            var info = new ExcelValidation
+            var info = new DataValidation
             {
                 CellRange = dv.Attribute("sqref")?.Value ?? String.Empty,
                 ValidationType = dv.Attribute("type")?.Value,
@@ -2000,9 +2000,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
     /// <summary>读取指定工作表中的结构化表格（OOXML table 元素）</summary>
     /// <param name="sheet">工作表名称</param>
     /// <returns>表格信息列表</returns>
-    public List<ExcelTableInfo> ReadTables(String sheet)
+    public List<Table> ReadTables(String sheet)
     {
-        var result = new List<ExcelTableInfo>();
+        var result = new List<Table>();
         if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry)) return result;
 
         var doc = OpenSheetXml(sheet);
@@ -2053,7 +2053,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
             var tblDoc = XDocument.Load(ts);
             if (tblDoc.Root == null) continue;
 
-            var tblInfo = new ExcelTableInfo
+            var tblInfo = new Table
             {
                 Name = tblDoc.Root.Attribute("name")?.Value ?? String.Empty,
                 Range = tblDoc.Root.Attribute("ref")?.Value ?? String.Empty,
@@ -2215,9 +2215,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
     /// 解析工作表 XML 中的 x14:sparklineGroups 元素。
     /// Excel 2010+ 才引入迷你图，因此老版本 xlsx 文件中不存在此节点。
     /// </remarks>
-    public List<ExcelSparklineGroup> ReadSparklines(String sheet)
+    public List<SparklineGroup> ReadSparklines(String sheet)
     {
-        var result = new List<ExcelSparklineGroup>();
+        var result = new List<SparklineGroup>();
 
         if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry))
             return result;
@@ -2234,7 +2234,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         foreach (var sgEl in sglEl.Elements()
             .Where(e => e.Name.LocalName.EqualIgnoreCase("sparklineGroup")))
         {
-            var group = new ExcelSparklineGroup();
+            var group = new SparklineGroup();
 
             // 读取 sqref（数据范围）
             var sqrefEl = sgEl.Elements()
@@ -2453,9 +2453,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
             "xl/sharedStrings.xml",
         };
         // 工作表 XML 由 Writer 根据 SheetData 重建
-        foreach (var sheet in data.Sheets)
+        foreach (var sheet in data.Worksheets)
         {
-            var idx = data.Sheets.IndexOf(sheet) + 1;
+            var idx = data.Worksheets.IndexOf(sheet) + 1;
             handled.Add($"xl/worksheets/sheet{idx}.xml");
         }
 

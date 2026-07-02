@@ -1,14 +1,14 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 /// <summary>条件格式信息</summary>
-public class ExcelConditionalFormat
+public class ConditionalFormatting
 {
     #region 属性
     /// <summary>应用范围（如 "A1:A100"）</summary>
     public String Range { get; set; } = String.Empty;
 
     /// <summary>条件类型</summary>
-    public ExcelConditionalFormatType Type { get; set; }
+    public ConditionalFormatValues Type { get; set; }
 
     /// <summary>条件值（如 "10000"）</summary>
     public String? Value { get; set; }

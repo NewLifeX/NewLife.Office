@@ -1,11 +1,11 @@
-namespace NewLife.Office;
+﻿namespace NewLife.Office.Excel;
 
 /// <summary>Excel 单个工作表完整数据快照</summary>
 /// <remarks>
 /// 包含工作表的行数据、单元格样式和全部元数据。
 /// 所有行列索引均为 0 基。
 /// </remarks>
-public class ExcelSheet
+public class Worksheet
 {
     #region 属性
     /// <summary>工作表名称</summary>
@@ -23,7 +23,7 @@ public class ExcelSheet
     public List<Int32>? ActualRowNumbers { get; set; }
 
     /// <summary>单元格样式映射（行, 列）→ 样式</summary>
-    public Dictionary<(Int32 Row, Int32 Col), ExcelCellStyle> CellStyles { get; set; } = [];
+    public Dictionary<(Int32 Row, Int32 Col), CellFormat> CellFormats { get; set; } = [];
 
     /// <summary>合并单元格区域（起始行, 起始列, 结束行, 结束列），均为0基</summary>
     public List<(Int32 StartRow, Int32 StartCol, Int32 EndRow, Int32 EndCol)> Merges { get; set; } = [];
@@ -47,10 +47,10 @@ public class ExcelSheet
     public List<ExcelImage> Images { get; set; } = [];
 
     /// <summary>页面方向</summary>
-    public ExcelPageOrientation Orientation { get; set; } = ExcelPageOrientation.Portrait;
+    public PageOrientation Orientation { get; set; } = PageOrientation.Portrait;
 
     /// <summary>纸张大小</summary>
-    public ExcelPaperSize PaperSize { get; set; } = ExcelPaperSize.Default;
+    public PaperSize PaperSize { get; set; } = PaperSize.Default;
 
     /// <summary>上边距（英寸）</summary>
     public Double MarginTop { get; set; } = 0.75;
@@ -80,13 +80,13 @@ public class ExcelSheet
     public String? ProtectionPassword { get; set; }
 
     /// <summary>条件格式集合</summary>
-    public List<ExcelConditionalFormat> ConditionalFormats { get; set; } = [];
+    public List<ConditionalFormatting> ConditionalFormats { get; set; } = [];
 
     /// <summary>批注（0基行, 0基列）→ (文本, 作者)</summary>
     public Dictionary<(Int32 Row, Int32 Col), (String Text, String Author)> Comments { get; set; } = [];
 
     /// <summary>数据验证集合</summary>
-    public List<ExcelValidation> Validations { get; set; } = [];
+    public List<DataValidation> Validations { get; set; } = [];
 
     /// <summary>公式（0基行, 0基列）→ 公式文本（不含等号）</summary>
     public Dictionary<(Int32 Row, Int32 Col), String> Formulas { get; set; } = [];
@@ -95,9 +95,9 @@ public class ExcelSheet
     public List<ExcelChart> Charts { get; set; } = [];
 
     /// <summary>结构化表格集合（由 ExcelWriter.AddTable 写入）</summary>
-    public List<ExcelTableInfo> Tables { get; set; } = [];
+    public List<Table> Tables { get; set; } = [];
 
     /// <summary>迷你图组集合（由 ExcelWriter.AddSparklineGroup 写入）</summary>
-    public List<ExcelSparklineGroup> SparklineGroups { get; set; } = [];
+    public List<SparklineGroup> SparklineGroups { get; set; } = [];
     #endregion
 }

@@ -3,7 +3,7 @@ using System.IO.Compression;
 using System.Security;
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 /// <summary>轻量级 Excel 数据透视表生成器</summary>
 /// <remarks>
@@ -11,7 +11,7 @@ namespace NewLife.Office;
 /// 在指定目标工作表生成含 PivotCache + PivotTable 的 xlsx 文件。
 /// 当前支持行字段、数据字段、简单汇总，适用于无需动态刷新的静态报表场景。
 /// </remarks>
-public class ExcelPivotBuilder
+public class PivotBuilder
 {
     #region 属性
     /// <summary>透视表名称</summary>
@@ -27,7 +27,7 @@ public class ExcelPivotBuilder
     public String TargetCell { get; set; } = "A1";
 
     /// <summary>字段配置列表</summary>
-    public List<ExcelPivotField> Fields { get; } = [];
+    public List<PivotField> Fields { get; } = [];
 
     /// <summary>文本编码</summary>
     public Encoding Encoding { get; set; } = Encoding.UTF8;
@@ -40,7 +40,7 @@ public class ExcelPivotBuilder
 
     #region 构造
     /// <summary>实例化透视表生成器</summary>
-    public ExcelPivotBuilder() { }
+    public PivotBuilder() { }
     #endregion
 
     #region 方法
@@ -55,17 +55,17 @@ public class ExcelPivotBuilder
 
     /// <summary>添加行字段</summary>
     /// <param name="fieldName">字段名称</param>
-    public ExcelPivotBuilder AddRowField(String fieldName)
+    public PivotBuilder AddRowField(String fieldName)
     {
-        Fields.Add(new ExcelPivotField { Name = fieldName, IsRowField = true });
+        Fields.Add(new PivotField { Name = fieldName, IsRowField = true });
         return this;
     }
 
     /// <summary>添加列字段</summary>
     /// <param name="fieldName">字段名称</param>
-    public ExcelPivotBuilder AddColumnField(String fieldName)
+    public PivotBuilder AddColumnField(String fieldName)
     {
-        Fields.Add(new ExcelPivotField { Name = fieldName, IsColumnField = true });
+        Fields.Add(new PivotField { Name = fieldName, IsColumnField = true });
         return this;
     }
 
@@ -73,17 +73,17 @@ public class ExcelPivotBuilder
     /// <param name="fieldName">字段名称</param>
     /// <param name="func">汇总函数</param>
     /// <param name="caption">显示标题（可空，空时自动生成）</param>
-    public ExcelPivotBuilder AddDataField(String fieldName, ExcelPivotSummaryFunction func = ExcelPivotSummaryFunction.Sum, String? caption = null)
+    public PivotBuilder AddDataField(String fieldName, PivotSummaryFunction func = PivotSummaryFunction.Sum, String? caption = null)
     {
-        Fields.Add(new ExcelPivotField { Name = fieldName, IsDataField = true, SummaryFunction = func, Caption = caption });
+        Fields.Add(new PivotField { Name = fieldName, IsDataField = true, SummaryFunction = func, Caption = caption });
         return this;
     }
 
     /// <summary>添加筛选字段（报表筛选区）</summary>
     /// <param name="fieldName">字段名称</param>
-    public ExcelPivotBuilder AddFilterField(String fieldName)
+    public PivotBuilder AddFilterField(String fieldName)
     {
-        Fields.Add(new ExcelPivotField { Name = fieldName, IsFilterField = true });
+        Fields.Add(new PivotField { Name = fieldName, IsFilterField = true });
         return this;
     }
 
@@ -422,12 +422,12 @@ public class ExcelPivotBuilder
         return sb.ToString();
     }
 
-    private static String FuncName(ExcelPivotSummaryFunction f) => f switch
+    private static String FuncName(PivotSummaryFunction f) => f switch
     {
-        ExcelPivotSummaryFunction.Count => "Count",
-        ExcelPivotSummaryFunction.Average => "Average",
-        ExcelPivotSummaryFunction.Max => "Max",
-        ExcelPivotSummaryFunction.Min => "Min",
+        PivotSummaryFunction.Count => "Count",
+        PivotSummaryFunction.Average => "Average",
+        PivotSummaryFunction.Max => "Max",
+        PivotSummaryFunction.Min => "Min",
         _ => "Sum",
     };
     #endregion

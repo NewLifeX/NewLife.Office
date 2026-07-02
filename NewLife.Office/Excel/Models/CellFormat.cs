@@ -1,11 +1,11 @@
-namespace NewLife.Office;
+﻿namespace NewLife.Office.Excel;
 
 /// <summary>单元格样式</summary>
 /// <remarks>
 /// 用于控制单元格的字体、填充、边框、对齐、数字格式等外观属性。
 /// 在写入时通过 WriteHeader/WriteRow 等方法传入。
 /// </remarks>
-public class ExcelCellStyle
+public class CellFormat
 {
     #region 属性
     /// <summary>字体名称</summary>
@@ -30,46 +30,46 @@ public class ExcelCellStyle
     public String? BackgroundColor { get; set; }
 
     /// <summary>水平对齐</summary>
-    public ExcelHorizontalAlignment HAlign { get; set; }
+    public HorizontalAlignment HAlign { get; set; }
 
     /// <summary>垂直对齐</summary>
-    public ExcelVerticalAlignment VAlign { get; set; }
+    public VerticalAlignment VAlign { get; set; }
 
     /// <summary>是否自动换行</summary>
     public Boolean WrapText { get; set; }
 
     /// <summary>边框样式（快捷方式：同时设置四边，单边属性优先级更高）</summary>
-    public ExcelCellBorderStyle Border { get; set; }
+    public BorderStyle Border { get; set; }
 
     /// <summary>边框颜色（快捷方式：同时设置四边颜色，单边颜色属性优先级更高）</summary>
     public String? BorderColor { get; set; }
 
     /// <summary>左边框样式（优先级高于 Border）</summary>
-    public ExcelCellBorderStyle LeftBorder { get; set; }
+    public BorderStyle LeftBorder { get; set; }
 
     /// <summary>左边框颜色（RGB十六进制，优先级高于 BorderColor）</summary>
     public String? LeftBorderColor { get; set; }
 
     /// <summary>右边框样式（优先级高于 Border）</summary>
-    public ExcelCellBorderStyle RightBorder { get; set; }
+    public BorderStyle RightBorder { get; set; }
 
     /// <summary>右边框颜色（RGB十六进制，优先级高于 BorderColor）</summary>
     public String? RightBorderColor { get; set; }
 
     /// <summary>上边框样式（优先级高于 Border）</summary>
-    public ExcelCellBorderStyle TopBorder { get; set; }
+    public BorderStyle TopBorder { get; set; }
 
     /// <summary>上边框颜色（RGB十六进制，优先级高于 BorderColor）</summary>
     public String? TopBorderColor { get; set; }
 
     /// <summary>下边框样式（优先级高于 Border）</summary>
-    public ExcelCellBorderStyle BottomBorder { get; set; }
+    public BorderStyle BottomBorder { get; set; }
 
     /// <summary>下边框颜色（RGB十六进制，优先级高于 BorderColor）</summary>
     public String? BottomBorderColor { get; set; }
 
     /// <summary>对角线边框样式（自左上到右下或自左下到右上）</summary>
-    public ExcelCellBorderStyle DiagonalBorder { get; set; }
+    public BorderStyle DiagonalBorder { get; set; }
 
     /// <summary>对角线边框颜色（RGB十六进制）</summary>
     public String? DiagonalBorderColor { get; set; }
@@ -113,9 +113,9 @@ public class ExcelCellStyle
 
     #region 静态
     /// <summary>默认表头样式（粗体）</summary>
-    public static ExcelCellStyle Header => new() { Bold = true };
+    public static CellFormat Header => new() { Bold = true };
 
     /// <summary>标题样式（粗体、大字、居中）</summary>
-    public static ExcelCellStyle Title => new() { Bold = true, FontSize = 14, HAlign = ExcelHorizontalAlignment.Center };
+    public static CellFormat Title => new() { Bold = true, FontSize = 14, HAlign = HorizontalAlignment.Center };
     #endregion
 }

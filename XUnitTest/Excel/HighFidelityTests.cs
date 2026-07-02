@@ -1,4 +1,17 @@
 ﻿using NewLife.Office;
+using NewLife.Office.Calendar;
+using NewLife.Office.Epub;
+using NewLife.Office.Excel;
+using NewLife.Office.Mail;
+using NewLife.Office.Markdown;
+using NewLife.Office.Ods;
+using NewLife.Office.Ole2;
+using NewLife.Office.Pdf;
+using NewLife.Office.Ppt;
+using NewLife.Office.Rtf;
+using NewLife.Office.VCard;
+using NewLife.Office.Word;
+using NewLife.Office.Xps;
 using Xunit;
 
 namespace XUnitTest.Excel;
@@ -25,12 +38,12 @@ public class ExcelReaderHighFidelityTests
     {
         var path = SaveAndOpen(writer =>
         {
-            var cs = new ExcelCellStyle { TextRotation = 45 };
+            var cs = new NewLife.Office.Excel.CellFormat { TextRotation = 45 };
             writer.WriteRow(null, new Object?[] { "旋转文字" }, cs);
         });
 
         using var reader = new ExcelReader(path);
-        var styles = reader.ReadCellStyles("Sheet1");
+        var styles = reader.ReadCellFormats("Sheet1");
         var (_, style) = styles.First();
         Assert.Equal(45, style.TextRotation);
     }
@@ -40,12 +53,12 @@ public class ExcelReaderHighFidelityTests
     {
         var path = SaveAndOpen(writer =>
         {
-            var cs = new ExcelCellStyle { Indent = 3 };
+            var cs = new NewLife.Office.Excel.CellFormat { Indent = 3 };
             writer.WriteRow(null, new Object?[] { "缩进文字" }, cs);
         });
 
         using var reader = new ExcelReader(path);
-        var styles = reader.ReadCellStyles("Sheet1");
+        var styles = reader.ReadCellFormats("Sheet1");
         var (_, style) = styles.First();
         Assert.Equal(3, style.Indent);
     }
@@ -55,12 +68,12 @@ public class ExcelReaderHighFidelityTests
     {
         var path = SaveAndOpen(writer =>
         {
-            var cs = new ExcelCellStyle { ShrinkToFit = true };
+            var cs = new NewLife.Office.Excel.CellFormat { ShrinkToFit = true };
             writer.WriteRow(null, new Object?[] { "很长很长很长很长的文字内容" }, cs);
         });
 
         using var reader = new ExcelReader(path);
-        var styles = reader.ReadCellStyles("Sheet1");
+        var styles = reader.ReadCellFormats("Sheet1");
         var (_, style) = styles.First();
         Assert.True(style.ShrinkToFit);
     }
@@ -171,7 +184,7 @@ public class ExcelReaderHighFidelityTests
         using var reader = new ExcelReader(path);
         var formats = reader.ReadConditionalFormats("Sheet1").ToList();
         Assert.NotEmpty(formats);
-        var iconSet = formats.FirstOrDefault(f => f.Type == ExcelConditionalFormatType.IconSet);
+        var iconSet = formats.FirstOrDefault(f => f.Type == ConditionalFormatValues.IconSet);
         Assert.NotNull(iconSet);
         Assert.Equal("3Arrows", iconSet.IconSetType);
     }
@@ -188,7 +201,7 @@ public class ExcelReaderHighFidelityTests
         using var reader = new ExcelReader(path);
         var formats = reader.ReadConditionalFormats("Sheet1").ToList();
         Assert.NotEmpty(formats);
-        var expr = formats.FirstOrDefault(f => f.Type == ExcelConditionalFormatType.Expression);
+        var expr = formats.FirstOrDefault(f => f.Type == ConditionalFormatValues.Expression);
         Assert.NotNull(expr);
         Assert.Contains("B1>30", expr.Formula);
     }
@@ -200,14 +213,14 @@ public class ExcelReaderHighFidelityTests
     {
         var path = SaveAndOpen(writer =>
         {
-            var cs = new ExcelCellStyle { DiagonalBorder = ExcelCellBorderStyle.Thin, DiagonalBorderColor = "FF0000" };
+            var cs = new NewLife.Office.Excel.CellFormat { DiagonalBorder = NewLife.Office.Excel.BorderStyle.Thin, DiagonalBorderColor = "FF0000" };
             writer.WriteRow(null, new Object?[] { "对角线" }, cs);
         });
 
         using var reader = new ExcelReader(path);
-        var styles = reader.ReadCellStyles("Sheet1");
+        var styles = reader.ReadCellFormats("Sheet1");
         var (_, style) = styles.First();
-        Assert.Equal(ExcelCellBorderStyle.Thin, style.DiagonalBorder);
+        Assert.Equal(NewLife.Office.Excel.BorderStyle.Thin, style.DiagonalBorder);
         Assert.Equal("FF0000", style.DiagonalBorderColor);
     }
 
@@ -216,21 +229,21 @@ public class ExcelReaderHighFidelityTests
     {
         var path = SaveAndOpen(writer =>
         {
-            var cs = new ExcelCellStyle
+            var cs = new NewLife.Office.Excel.CellFormat
             {
-                Border = ExcelCellBorderStyle.Thin,
+                Border = NewLife.Office.Excel.BorderStyle.Thin,
                 BorderColor = "000000",
-                DiagonalBorder = ExcelCellBorderStyle.Dashed,
+                DiagonalBorder = NewLife.Office.Excel.BorderStyle.Dashed,
                 DiagonalBorderColor = "0000FF"
             };
             writer.WriteRow(null, new Object?[] { "混合边框" }, cs);
         });
 
         using var reader = new ExcelReader(path);
-        var styles = reader.ReadCellStyles("Sheet1");
+        var styles = reader.ReadCellFormats("Sheet1");
         var (_, style) = styles.First();
-        Assert.Equal(ExcelCellBorderStyle.Thin, style.Border);
-        Assert.Equal(ExcelCellBorderStyle.Dashed, style.DiagonalBorder);
+        Assert.Equal(NewLife.Office.Excel.BorderStyle.Thin, style.Border);
+        Assert.Equal(NewLife.Office.Excel.BorderStyle.Dashed, style.DiagonalBorder);
     }
     #endregion
 }

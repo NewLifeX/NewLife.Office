@@ -3,7 +3,7 @@ using System.Security;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Excel;
 
 /// <summary>Excel模板填充器</summary>
 /// <remarks>

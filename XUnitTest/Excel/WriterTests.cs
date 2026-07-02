@@ -4,6 +4,19 @@ using System.IO;
 using System.IO.Compression;
 using System.Text;
 using NewLife.Office;
+using NewLife.Office.Calendar;
+using NewLife.Office.Epub;
+using NewLife.Office.Excel;
+using NewLife.Office.Mail;
+using NewLife.Office.Markdown;
+using NewLife.Office.Ods;
+using NewLife.Office.Ole2;
+using NewLife.Office.Pdf;
+using NewLife.Office.Ppt;
+using NewLife.Office.Rtf;
+using NewLife.Office.VCard;
+using NewLife.Office.Word;
+using NewLife.Office.Xps;
 using Xunit;
 
 namespace XUnitTest.Excel;
@@ -252,7 +265,7 @@ public class ExcelWriterTests
     {
         using var ms = new MemoryStream();
         var w = new ExcelWriter(ms);
-        var style = new ExcelCellStyle { Bold = true, FontSize = 12, FontName = "Arial" };
+        var style = new NewLife.Office.Excel.CellFormat { Bold = true, FontSize = 12, FontName = "Arial" };
         w.WriteHeader(null!, new[] { "A", "B" }, style);
         w.Save();
 
@@ -272,7 +285,7 @@ public class ExcelWriterTests
     {
         using var ms = new MemoryStream();
         var w = new ExcelWriter(ms);
-        var style = new ExcelCellStyle { BackgroundColor = "FF0000" };
+        var style = new NewLife.Office.Excel.CellFormat { BackgroundColor = "FF0000" };
         w.WriteRow(null, new Object?[] { "Red" }, style);
         w.Save();
 
@@ -289,7 +302,7 @@ public class ExcelWriterTests
     {
         using var ms = new MemoryStream();
         var w = new ExcelWriter(ms);
-        var style = new ExcelCellStyle { Border = ExcelCellBorderStyle.Thin, BorderColor = "000000" };
+        var style = new NewLife.Office.Excel.CellFormat { Border = NewLife.Office.Excel.BorderStyle.Thin, BorderColor = "000000" };
         w.WriteRow(null, new Object?[] { "Bordered" }, style);
         w.Save();
 
@@ -305,7 +318,7 @@ public class ExcelWriterTests
     {
         using var ms = new MemoryStream();
         var w = new ExcelWriter(ms);
-        var style = new ExcelCellStyle { NumberFormat = "#,##0.00" };
+        var style = new NewLife.Office.Excel.CellFormat { NumberFormat = "#,##0.00" };
         w.WriteRow(null, new Object?[] { 12345.678 }, style);
         w.Save();
 
@@ -322,7 +335,7 @@ public class ExcelWriterTests
     {
         using var ms = new MemoryStream();
         var w = new ExcelWriter(ms);
-        var style = new ExcelCellStyle { HAlign = ExcelHorizontalAlignment.Center, VAlign = ExcelVerticalAlignment.Center, WrapText = true };
+        var style = new NewLife.Office.Excel.CellFormat { HAlign = HorizontalAlignment.Center, VAlign = VerticalAlignment.Center, WrapText = true };
         w.WriteRow(null, new Object?[] { "Centered" }, style);
         w.Save();
 
@@ -537,7 +550,7 @@ public class ExcelWriterTests
         using var ms = new MemoryStream();
         var w = new ExcelWriter(ms);
         w.WriteHeader(null!, new[] { "A" });
-        w.SetPageSetup(null, ExcelPageOrientation.Landscape, ExcelPaperSize.A4);
+        w.SetPageSetup(null, PageOrientation.Landscape, PaperSize.A4);
         w.SetPageMargins(null, 1.0, 1.0, 0.5, 0.5);
         w.SetHeaderFooter(null, "Header Text", "Footer Text");
         w.Save();
@@ -617,7 +630,7 @@ public class ExcelWriterTests
         w.WriteHeader(null!, new[] { "Score" });
         w.WriteRow(null, new Object?[] { 90 });
         w.WriteRow(null, new Object?[] { 50 });
-        w.AddConditionalFormat(null, "A2:A3", ExcelConditionalFormatType.GreaterThan, "80", "00FF00");
+        w.AddConditionalFormat(null, "A2:A3", ConditionalFormatValues.GreaterThan, "80", "00FF00");
         w.Save();
 
         ms.Position = 0;
@@ -636,7 +649,7 @@ public class ExcelWriterTests
         var w = new ExcelWriter(ms);
         w.WriteHeader(null!, new[] { "Value" });
         w.WriteRow(null, new Object?[] { 10 });
-        w.AddConditionalFormat(null, "A2:A2", ExcelConditionalFormatType.DataBar, null, "4472C4");
+        w.AddConditionalFormat(null, "A2:A2", ConditionalFormatValues.DataBar, null, "4472C4");
         w.Save();
 
         ms.Position = 0;
@@ -653,7 +666,7 @@ public class ExcelWriterTests
         var w = new ExcelWriter(ms);
         w.WriteHeader(null!, new[] { "Value" });
         w.WriteRow(null, new Object?[] { 10 });
-        w.AddConditionalFormat(null, "A2:A2", ExcelConditionalFormatType.ColorScale, null, "FF6347");
+        w.AddConditionalFormat(null, "A2:A2", ConditionalFormatValues.ColorScale, null, "FF6347");
         w.Save();
 
         ms.Position = 0;
@@ -670,7 +683,7 @@ public class ExcelWriterTests
         var w = new ExcelWriter(ms);
         w.WriteHeader(null!, new[] { "Score" });
         w.WriteRow(null, new Object?[] { 75 });
-        w.AddConditionalFormat(null, "A2:A2", ExcelConditionalFormatType.Between, "60", "FFFF00", "90");
+        w.AddConditionalFormat(null, "A2:A2", ConditionalFormatValues.Between, "60", "FFFF00", "90");
         w.Save();
 
         ms.Position = 0;
@@ -692,7 +705,7 @@ public class ExcelWriterTests
             new TestUser { Id = 1, Name = "Alice", Age = 30 },
             new TestUser { Id = 2, Name = "Bob", Age = 25 },
         };
-        w.WriteObjects(null, users, ExcelCellStyle.Header);
+        w.WriteObjects(null, users, NewLife.Office.Excel.CellFormat.Header);
         w.Save();
 
         ms.Position = 0;
@@ -723,7 +736,7 @@ public class ExcelWriterTests
         dt.Rows.Add("Apple", 3.5m, 100);
         dt.Rows.Add("Banana", 2.0m, 200);
 
-        w.WriteDataTable(null, dt, ExcelCellStyle.Header);
+        w.WriteDataTable(null, dt, NewLife.Office.Excel.CellFormat.Header);
         w.Save();
 
         ms.Position = 0;
@@ -948,7 +961,7 @@ public class ExcelWriterTests
     public void PivotTable_AddFilterField_WritesPageFields()
     {
         using var ms = new MemoryStream();
-        var builder = new ExcelPivotBuilder();
+        var builder = new PivotBuilder();
         builder.SetSourceData(
             new[] { "Region", "Product", "Sales" },
             new List<Object?[]>
@@ -958,7 +971,7 @@ public class ExcelWriterTests
             });
         builder.AddFilterField("Region");
         builder.AddRowField("Product");
-        builder.AddDataField("Sales", ExcelPivotSummaryFunction.Sum);
+        builder.AddDataField("Sales", PivotSummaryFunction.Sum);
         builder.Save(ms);
 
         ms.Position = 0;
@@ -1018,7 +1031,7 @@ public class ExcelWriterTests
             writer.WriteRow(null, new Object?[] { "数值" });
             writer.WriteRow(null, new Object?[] { 100 });
             writer.WriteRow(null, new Object?[] { 0 });
-            writer.AddConditionalFormat(null, "A2:A3", ExcelConditionalFormatType.NotEqual, "0", "FF0000");
+            writer.AddConditionalFormat(null, "A2:A3", ConditionalFormatValues.NotEqual, "0", "FF0000");
             writer.Save();
 
             Assert.True(File.Exists(tempFile));
@@ -1134,7 +1147,7 @@ public class ExcelWriterTests
             writer.WriteRow(null, new Object?[] { "分数" });
             writer.WriteRow(null, new Object?[] { 45 });
             writer.WriteRow(null, new Object?[] { 85 });
-            writer.AddConditionalFormat(null, "A2:A3", ExcelConditionalFormatType.NotBetween, "60,80", "FF0000");
+            writer.AddConditionalFormat(null, "A2:A3", ConditionalFormatValues.NotBetween, "60,80", "FF0000");
             writer.Save();
 
             Assert.True(File.Exists(tempFile));
