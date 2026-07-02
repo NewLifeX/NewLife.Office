@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.VCard;
 
 /// <summary>vCard 联系人文件写入器（RFC 6350）</summary>
 /// <remarks>
@@ -21,7 +21,7 @@ public class VCardWriter
     /// <summary>将联系人写入文件</summary>
     /// <param name="contact">联系人</param>
     /// <param name="path">输出文件路径（.vcf）</param>
-    public void Write(VCardContact contact, String path)
+    public void Write(Contact contact, String path)
     {
         var content = Build(contact);
         File.WriteAllText(path, content, new UTF8Encoding(false));
@@ -30,7 +30,7 @@ public class VCardWriter
     /// <summary>将多个联系人写入文件</summary>
     /// <param name="contacts">联系人列表</param>
     /// <param name="path">输出文件路径（.vcf）</param>
-    public void WriteAll(IEnumerable<VCardContact> contacts, String path)
+    public void WriteAll(IEnumerable<Contact> contacts, String path)
     {
         var sb = new StringBuilder();
         foreach (var c in contacts)
@@ -43,7 +43,7 @@ public class VCardWriter
     /// <summary>将联系人写入流</summary>
     /// <param name="contact">联系人</param>
     /// <param name="stream">可写输出流</param>
-    public void Write(VCardContact contact, Stream stream)
+    public void Write(Contact contact, Stream stream)
     {
         var content = Build(contact);
         var bytes = new UTF8Encoding(false).GetBytes(content);
@@ -53,7 +53,7 @@ public class VCardWriter
     /// <summary>将联系人序列化为 vCard 字符串</summary>
     /// <param name="contact">联系人</param>
     /// <returns>vCard 格式字符串</returns>
-    public String Build(VCardContact contact)
+    public String Build(Contact contact)
     {
         var sb = new StringBuilder();
         AppendLine(sb, "BEGIN:VCARD");

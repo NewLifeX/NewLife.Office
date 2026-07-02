@@ -1,7 +1,7 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ole2;
 
 /// <summary>CFB 目录红黑树颜色标志</summary>
-public enum CfbColorFlag : Byte
+public enum ColorFlag : Byte
 {
     /// <summary>红色节点</summary>
     Red = 0,

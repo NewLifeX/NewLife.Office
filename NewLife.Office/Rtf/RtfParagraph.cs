@@ -14,7 +14,7 @@ public sealed class RtfParagraph
     public List<RtfRun> Runs { get; } = [];
 
     /// <summary>段落对齐方式</summary>
-    public RtfAlignment Alignment { get; set; } = RtfAlignment.Left;
+    public Alignment Alignment { get; set; } = Alignment.Left;
 
     /// <summary>左缩进（twips，1440 twips = 1 英寸）</summary>
     public Int32 LeftIndent { get; set; }

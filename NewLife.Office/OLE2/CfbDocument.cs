@@ -1,6 +1,6 @@
 using NewLife.Log;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Ole2;
 
 /// <summary>CFB（Compound File Binary / OLE2）文档</summary>
 /// <remarks>

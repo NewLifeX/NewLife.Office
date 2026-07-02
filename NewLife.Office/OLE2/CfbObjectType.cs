@@ -1,7 +1,7 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ole2;
 
 /// <summary>CFB 目录项对象类型</summary>
-public enum CfbObjectType : Byte
+public enum ObjectType : Byte
 {
     /// <summary>空闲槽</summary>
     Empty = 0,

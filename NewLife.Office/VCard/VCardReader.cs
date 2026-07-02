@@ -2,7 +2,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace NewLife.Office;
+namespace NewLife.Office.VCard;
 
 /// <summary>vCard 联系人文件读取器（RFC 6350）</summary>
 /// <remarks>
@@ -16,7 +16,7 @@ public class VCardReader
     /// <summary>从文件读取所有联系人</summary>
     /// <param name="path">vCard 文件路径（.vcf）</param>
     /// <returns>联系人列表</returns>
-    public List<VCardContact> ReadAll(String path)
+    public List<Contact> ReadAll(String path)
     {
         var text = File.ReadAllText(path, Encoding.UTF8);
         return ParseAll(text);
@@ -25,7 +25,7 @@ public class VCardReader
     /// <summary>从文件读取第一个联系人</summary>
     /// <param name="path">vCard 文件路径</param>
     /// <returns>联系人，若文件为空则返回 null</returns>
-    public VCardContact? Read(String path)
+    public Contact? Read(String path)
     {
         var all = ReadAll(path);
         return all.Count > 0 ? all[0] : null;
@@ -34,7 +34,7 @@ public class VCardReader
     /// <summary>从流读取所有联系人</summary>
     /// <param name="stream">可读流</param>
     /// <returns>联系人列表</returns>
-    public List<VCardContact> ReadAll(Stream stream)
+    public List<Contact> ReadAll(Stream stream)
     {
         using var sr = new StreamReader(stream, Encoding.UTF8);
         return ParseAll(sr.ReadToEnd());
@@ -43,11 +43,11 @@ public class VCardReader
     /// <summary>从字符串解析所有联系人</summary>
     /// <param name="text">vCard 文本</param>
     /// <returns>联系人列表</returns>
-    public List<VCardContact> ParseAll(String text)
+    public List<Contact> ParseAll(String text)
     {
-        var contacts = new List<VCardContact>();
+        var contacts = new List<Contact>();
         var lines = UnfoldLines(text);
-        VCardContact? current = null;
+        Contact? current = null;
 
         foreach (var line in lines)
         {
@@ -66,7 +66,7 @@ public class VCardReader
             {
                 case "BEGIN":
                     if (value.Equals("VCARD", StringComparison.OrdinalIgnoreCase))
-                        current = new VCardContact();
+                        current = new Contact();
                     break;
                 case "END":
                     if (value.Equals("VCARD", StringComparison.OrdinalIgnoreCase) && current != null)
@@ -109,7 +109,7 @@ public class VCardReader
         return lines;
     }
 
-    private static void ApplyProp(VCardContact c, String name, String param, String value)
+    private static void ApplyProp(Contact c, String name, String param, String value)
     {
         var typeVal = ExtractParam(param, "TYPE");
         switch (name)
@@ -145,10 +145,10 @@ public class VCardReader
                 c.Photo = value;
                 break;
             case "TEL":
-                c.Phones.Add(new VCardPhone { Number = value.Trim(), Type = typeVal });
+                c.Phones.Add(new Phone { Number = value.Trim(), Type = typeVal });
                 break;
             case "EMAIL":
-                c.Emails.Add(new VCardEmail { Address = value.Trim(), Type = typeVal });
+                c.Emails.Add(new Email { Address = value.Trim(), Type = typeVal });
                 break;
             case "ADR":
                 c.Addresses.Add(ParseAddress(UnescapeText(value), typeVal));
@@ -179,10 +179,10 @@ public class VCardReader
         };
     }
 
-    private static VCardAddress ParseAddress(String value, String? type)
+    private static Address ParseAddress(String value, String? type)
     {
         var parts = value.Split(';');
-        return new VCardAddress
+        return new Address
         {
             PoBox = parts.Length > 0 ? parts[0] : null,
             Extended = parts.Length > 1 ? parts[1] : null,

@@ -1,6 +1,6 @@
 ﻿using NewLife.Buffers;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Ole2;
 
 /// <summary>CFB（Compound File Binary）格式读取器</summary>
 /// <remarks>
@@ -147,20 +147,20 @@ internal sealed class CfbReader
         if (sid == CfbSectorMarker.NoEntry || sid < 0 || sid >= _dirs.Length) return;
 
         var entry = _dirs[sid];
-        if (entry.ObjectType == CfbObjectType.Empty) return;
+        if (entry.ObjectType == ObjectType.Empty) return;
 
         // 先处理左兄弟（红黑树中序遍历）
         if (entry.LeftSibSid != CfbSectorMarker.NoEntry)
             BuildTree(parent, entry.LeftSibSid);
 
         // 处理当前节点
-        if (entry.ObjectType == CfbObjectType.Stream)
+        if (entry.ObjectType == ObjectType.Stream)
         {
             var data = ReadStreamData(entry);
             var cfbStream = new CfbStream { Name = entry.Name, Data = data, Parent = parent };
             parent.Children.Add(cfbStream);
         }
-        else if (entry.ObjectType == CfbObjectType.Storage)
+        else if (entry.ObjectType == ObjectType.Storage)
         {
             var storage = new CfbStorage { Name = entry.Name, Parent = parent };
             parent.Children.Add(storage);

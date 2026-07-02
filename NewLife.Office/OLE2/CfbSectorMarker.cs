@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ole2;
 
 /// <summary>CFB 扇区 ID 特殊标记值</summary>
 public static class CfbSectorMarker

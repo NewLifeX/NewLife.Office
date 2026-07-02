@@ -268,9 +268,9 @@ public sealed class RtfWriter
         // Alignment
         switch (para.Alignment)
         {
-            case RtfAlignment.Center: sb.Append("\\qc"); break;
-            case RtfAlignment.Right: sb.Append("\\qr"); break;
-            case RtfAlignment.Justify: sb.Append("\\qj"); break;
+            case Alignment.Center: sb.Append("\\qc"); break;
+            case Alignment.Right: sb.Append("\\qr"); break;
+            case Alignment.Justify: sb.Append("\\qj"); break;
         }
         // Indentation / spacing
         if (para.LeftIndent != 0) sb.Append($"\\li{para.LeftIndent}");

@@ -3,6 +3,10 @@ using System.Net;
 using System.Runtime.InteropServices;
 using NewLife;
 using NewLife.Office;
+using NewLife.Office.Excel;
+using NewLife.Office.Pdf;
+using NewLife.Office.Ppt;
+using NewLife.Office.Word;
 using NewLife.Log;
 using NewLife.Reflection;
 

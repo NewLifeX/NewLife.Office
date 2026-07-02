@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Xps;
 
 /// <summary>XPS 文档包装，封装页面列表并提供文本/Markdown 提取能力</summary>
 public class XpsDocument : ITextExtractable, IMarkdownExtractable

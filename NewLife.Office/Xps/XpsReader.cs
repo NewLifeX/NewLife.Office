@@ -2,7 +2,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Xml;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Xps;
 
 /// <summary>XPS 文档页面信息</summary>
 public class XpsPage

@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ole2;
 
 /// <summary>CFB 存储节点（相当于目录/文件夹）</summary>
 /// <remarks>

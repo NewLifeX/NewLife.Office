@@ -1,6 +1,6 @@
 ﻿using NewLife.Buffers;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Ole2;
 
 /// <summary>CFB 文件头（512 字节）</summary>
 /// <remarks>

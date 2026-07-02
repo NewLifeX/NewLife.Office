@@ -1,7 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Xps;
 
 /// <summary>XPS（XML Paper Specification）文档写入器</summary>
 /// <remarks>

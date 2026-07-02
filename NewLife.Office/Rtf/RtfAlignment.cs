@@ -1,7 +1,7 @@
 namespace NewLife.Office.Rtf;
 
 /// <summary>RTF 段落对齐方式</summary>
-public enum RtfAlignment
+public enum Alignment
 {
     /// <summary>左对齐（默认）</summary>
     Left,

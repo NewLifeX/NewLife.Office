@@ -1,7 +1,7 @@
 ﻿using System.Text;
 using NewLife.Buffers;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Ole2;
 
 /// <summary>CFB 目录项（128 字节）</summary>
 /// <remarks>
@@ -18,10 +18,10 @@ internal sealed class CfbDirectoryEntry
     public String Name { get; set; } = String.Empty;
 
     /// <summary>对象类型</summary>
-    public CfbObjectType ObjectType { get; set; }
+    public ObjectType ObjectType { get; set; }
 
     /// <summary>红黑树颜色</summary>
-    public CfbColorFlag ColorFlag { get; set; }
+    public ColorFlag ColorFlag { get; set; }
 
     /// <summary>左兄弟 SID</summary>
     public Int32 LeftSibSid { get; set; }
@@ -66,8 +66,8 @@ internal sealed class CfbDirectoryEntry
                 entry.Name = Encoding.Unicode.GetString(nameRaw, 0, nameLen - 2);
         }
 
-        entry.ObjectType = (CfbObjectType)reader.ReadByte();
-        entry.ColorFlag = (CfbColorFlag)reader.ReadByte();
+        entry.ObjectType = (ObjectType)reader.ReadByte();
+        entry.ColorFlag = (ColorFlag)reader.ReadByte();
         entry.LeftSibSid = reader.ReadInt32();
         entry.RightSibSid = reader.ReadInt32();
         entry.ChildSid = reader.ReadInt32();

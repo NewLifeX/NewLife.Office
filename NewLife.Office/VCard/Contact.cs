@@ -1,11 +1,11 @@
-﻿namespace NewLife.Office;
+﻿namespace NewLife.Office.VCard;
 
 /// <summary>vCard 联系人（RFC 6350，vCard 4.0）</summary>
 /// <remarks>
 /// 支持 vCard 2.1、3.0、4.0 格式的读写。
 /// 核心属性：FN/N/TEL/EMAIL/ADR/PHOTO/URL/NOTE/BDAY/ORG/TITLE。
 /// </remarks>
-public class VCardContact
+public class Contact
 {
     #region 属性
 
@@ -40,13 +40,13 @@ public class VCardContact
     public DateTimeOffset? Revision { get; set; }
 
     /// <summary>电话号码列表（TEL）</summary>
-    public List<VCardPhone> Phones { get; } = [];
+    public List<Phone> Phones { get; } = [];
 
     /// <summary>电子邮件列表（EMAIL）</summary>
-    public List<VCardEmail> Emails { get; } = [];
+    public List<Email> Emails { get; } = [];
 
     /// <summary>地址列表（ADR）</summary>
-    public List<VCardAddress> Addresses { get; } = [];
+    public List<Address> Addresses { get; } = [];
 
     /// <summary>扩展属性（X-* 和未知属性）</summary>
     public Dictionary<String, String> ExtraProps { get; } = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
@@ -74,7 +74,7 @@ public class VCardName
 }
 
 /// <summary>vCard 电话（TEL）</summary>
-public class VCardPhone
+public class Phone
 {
     /// <summary>电话号码</summary>
     public String? Number { get; set; }
@@ -84,7 +84,7 @@ public class VCardPhone
 }
 
 /// <summary>vCard 邮件（EMAIL）</summary>
-public class VCardEmail
+public class Email
 {
     /// <summary>邮箱地址</summary>
     public String? Address { get; set; }
@@ -94,7 +94,7 @@ public class VCardEmail
 }
 
 /// <summary>vCard 地址（ADR）：PO Box;;Street;City;Region;PostalCode;Country</summary>
-public class VCardAddress
+public class Address
 {
     /// <summary>邮政信箱</summary>
     public String? PoBox { get; set; }

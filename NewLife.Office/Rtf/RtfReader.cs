@@ -63,7 +63,7 @@ internal sealed class RtfReader
         public Boolean Strikethrough { get; set; }
         public Int32 ForeColorIndex { get; set; }       // 颜色表索引（0=auto）
         public Int32 BackColorIndex { get; set; }
-        public RtfAlignment Alignment { get; set; }
+        public Alignment Alignment { get; set; }
         public Int32 LeftIndent { get; set; }
         public Int32 RightIndent { get; set; }
         public Int32 FirstLineIndent { get; set; }
@@ -139,7 +139,7 @@ internal sealed class RtfReader
                     currentCell.Paragraphs.Add(currentPara);
                 currentPara = new RtfParagraph { InTable = true };
             }
-            else if (currentPara.Runs.Count > 0 || currentPara.Alignment != RtfAlignment.Left)
+            else if (currentPara.Runs.Count > 0 || currentPara.Alignment != Alignment.Left)
             {
                 doc.Blocks.Add(currentPara);
                 currentPara = new RtfParagraph();
@@ -364,14 +364,14 @@ internal sealed class RtfReader
 
             // ── 段落格式 ──
             case "\\pard":
-                state.Alignment = RtfAlignment.Left;
+                state.Alignment = Alignment.Left;
                 state.LeftIndent = 0; state.RightIndent = 0; state.FirstLineIndent = 0;
                 state.SpaceBefore = 0; state.SpaceAfter = 0; state.LineSpacing = 0;
                 break;
-            case "\\ql": state.Alignment = RtfAlignment.Left; break;
-            case "\\qc": state.Alignment = RtfAlignment.Center; break;
-            case "\\qr": state.Alignment = RtfAlignment.Right; break;
-            case "\\qj": state.Alignment = RtfAlignment.Justify; break;
+            case "\\ql": state.Alignment = Alignment.Left; break;
+            case "\\qc": state.Alignment = Alignment.Center; break;
+            case "\\qr": state.Alignment = Alignment.Right; break;
+            case "\\qj": state.Alignment = Alignment.Justify; break;
             case "\\li": if (hasParam) state.LeftIndent = param; break;
             case "\\ri": if (hasParam) state.RightIndent = param; break;
             case "\\fi": if (hasParam) state.FirstLineIndent = param; break;

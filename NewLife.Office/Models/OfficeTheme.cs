@@ -7,12 +7,12 @@ namespace NewLife.Office;
 /// <example>
 /// <code>
 /// // 获取内置色板
-/// var colors = OfficeTheme.Get("blue");         // ["2563EB", "1D4ED8", ...]
-/// var primary = OfficeTheme.GetPrimary("blue"); // "2563EB"
-/// var light   = OfficeTheme.GetLight("blue");   // "DBEAFE"
+/// var colors = Theme.Get("blue");         // ["2563EB", "1D4ED8", ...]
+/// var primary = Theme.GetPrimary("blue"); // "2563EB"
+/// var light   = Theme.GetLight("blue");   // "DBEAFE"
 ///
 /// // 注入外部色板（如从数据库读取）
-/// var colors = OfficeTheme.Get("my-theme", name =>
+/// var colors = Theme.Get("my-theme", name =>
 /// {
 ///     var palette = CardStyleService.GetColors(name);
 ///     return palette != null ? [palette.Primary, palette.Secondary, ...] : null;
@@ -20,7 +20,7 @@ namespace NewLife.Office;
 /// </code>
 /// </example>
 /// </remarks>
-public static class OfficeTheme
+public static class Theme
 {
     #region 公共方法
     /// <summary>获取主题强调色数组（Accent1~6，16进制 RGB 无 # 前缀）</summary>

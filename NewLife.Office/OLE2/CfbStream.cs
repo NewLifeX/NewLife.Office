@@ -1,4 +1,4 @@
-namespace NewLife.Office;
+namespace NewLife.Office.Ole2;
 
 /// <summary>CFB 流节点（相当于文件）</summary>
 /// <remarks>

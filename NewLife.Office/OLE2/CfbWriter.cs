@@ -1,6 +1,6 @@
 using NewLife.Buffers;
 
-namespace NewLife.Office;
+namespace NewLife.Office.Ole2;
 
 /// <summary>CFB（Compound File Binary）格式写入器</summary>
 /// <remarks>
@@ -25,7 +25,7 @@ internal sealed class CfbWriter
     {
         // 1. 收集所有流和存储，分配目录条目 SID
         var allEntries = new List<EntryInfo>();
-        var rootInfo = new EntryInfo("Root Entry", CfbObjectType.RootStorage, null);
+        var rootInfo = new EntryInfo("Root Entry", ObjectType.RootStorage, null);
         allEntries.Add(rootInfo);
         CollectEntries(root, rootInfo, allEntries);
 
@@ -35,7 +35,7 @@ internal sealed class CfbWriter
 
         foreach (var e in allEntries)
         {
-            if (e.Type != CfbObjectType.Stream || e.Data == null) continue;
+            if (e.Type != ObjectType.Stream || e.Data == null) continue;
             if (e.Data.Length < MiniStreamCutoff)
                 miniData.Add(e.Data);
             else
@@ -66,7 +66,7 @@ internal sealed class CfbWriter
     private sealed class EntryInfo
     {
         public String Name { get; }
-        public CfbObjectType Type { get; }
+        public ObjectType Type { get; }
         public Byte[]? Data { get; }
         public EntryInfo? Parent { get; }
         public List<EntryInfo> Children { get; } = [];
@@ -78,9 +78,9 @@ internal sealed class CfbWriter
         public Int32 RightSibSid { get; set; } = CfbSectorMarker.NoEntry;
         public Int32 ChildRootSid { get; set; } = CfbSectorMarker.NoEntry;
 
-        public CfbColorFlag ColorFlag { get; set; } = CfbColorFlag.Black;
+        public ColorFlag ColorFlag { get; set; } = ColorFlag.Black;
 
-        public EntryInfo(String name, CfbObjectType type, EntryInfo? parent, Byte[]? data = null)
+        public EntryInfo(String name, ObjectType type, EntryInfo? parent, Byte[]? data = null)
         {
             Name = name; Type = type; Parent = parent; Data = data;
         }
@@ -110,14 +110,14 @@ internal sealed class CfbWriter
             EntryInfo info;
             if (child is CfbStorage childStorage)
             {
-                info = new EntryInfo(childStorage.Name, CfbObjectType.Storage, parent);
+                info = new EntryInfo(childStorage.Name, ObjectType.Storage, parent);
                 allEntries.Add(info);
                 parent.Children.Add(info);
                 CollectEntries(childStorage, info, allEntries);
             }
             else if (child is CfbStream childStream)
             {
-                info = new EntryInfo(childStream.Name, CfbObjectType.Stream, parent, childStream.Data);
+                info = new EntryInfo(childStream.Name, ObjectType.Stream, parent, childStream.Data);
                 allEntries.Add(info);
                 parent.Children.Add(info);
             }
@@ -138,7 +138,7 @@ internal sealed class CfbWriter
 
         foreach (var e in allEntries)
         {
-            if (e.Type != CfbObjectType.Stream || e.Data == null || e.Data.Length >= MiniStreamCutoff) continue;
+            if (e.Type != ObjectType.Stream || e.Data == null || e.Data.Length >= MiniStreamCutoff) continue;
 
             e.MiniStartSector = miniSid;
             var paddedSize = CeilDiv(e.Data.Length, MiniSectorSize) * MiniSectorSize;
@@ -165,7 +165,7 @@ internal sealed class CfbWriter
         // Assign sectors to big streams
         foreach (var e in allEntries)
         {
-            if (e.Type != CfbObjectType.Stream || e.Data == null || e.Data.Length < MiniStreamCutoff) continue;
+            if (e.Type != ObjectType.Stream || e.Data == null || e.Data.Length < MiniStreamCutoff) continue;
             e.StartSector = nextSector;
             var count = CeilDiv(e.Data.Length, SectorSize);
             nextSector += count;
@@ -225,7 +225,7 @@ internal sealed class CfbWriter
         // Big streams
         foreach (var e in allEntries)
         {
-            if (e.Type != CfbObjectType.Stream || e.Data == null || e.Data.Length < MiniStreamCutoff) continue;
+            if (e.Type != ObjectType.Stream || e.Data == null || e.Data.Length < MiniStreamCutoff) continue;
             var count = CeilDiv(e.Data.Length, SectorSize);
             for (var i = 0; i < count - 1; i++)
             {
@@ -282,7 +282,7 @@ internal sealed class CfbWriter
 
             foreach (var e in allEntries)
             {
-                if (e.Type != CfbObjectType.Stream || e.Data == null || e.Data.Length >= MiniStreamCutoff || e.Data.Length == 0) continue;
+                if (e.Type != ObjectType.Stream || e.Data == null || e.Data.Length >= MiniStreamCutoff || e.Data.Length == 0) continue;
                 var count = CeilDiv(e.Data.Length, MiniSectorSize);
                 for (var i = 0; i < count - 1; i++)
                 {
@@ -303,7 +303,7 @@ internal sealed class CfbWriter
         // First pass: build sibling trees for all storages
         foreach (var e in allEntries)
         {
-            if (e.Type is CfbObjectType.Storage or CfbObjectType.RootStorage && e.Children.Count > 0)
+            if (e.Type is ObjectType.Storage or ObjectType.RootStorage && e.Children.Count > 0)
                 e.ChildRootSid = BuildSiblingTree(e.Children, 0, e.Children.Count - 1);
         }
 
@@ -316,14 +316,14 @@ internal sealed class CfbWriter
                 Sid = e.Sid,
                 Name = e.Name,
                 ObjectType = e.Type,
-                ColorFlag = CfbColorFlag.Black,
+                ColorFlag = ColorFlag.Black,
                 LeftSibSid = e.LeftSibSid,
                 RightSibSid = e.RightSibSid,
                 ChildSid = e.ChildRootSid,
             };
 
             // Set stream data location
-            if (e.Type == CfbObjectType.Stream && e.Data != null)
+            if (e.Type == ObjectType.Stream && e.Data != null)
             {
                 dirEntry.StreamSize = e.Data.Length;
                 if (e.Data.Length >= MiniStreamCutoff)
@@ -333,7 +333,7 @@ internal sealed class CfbWriter
             }
 
             // Root gets mini stream location and size
-            if (e.Type == CfbObjectType.RootStorage)
+            if (e.Type == ObjectType.RootStorage)
             {
                 dirEntry.StartingSectorId = layout.MiniStreamStartSector;
                 dirEntry.StreamSize = miniStreamSize;
@@ -347,8 +347,8 @@ internal sealed class CfbWriter
         {
             var empty = new CfbDirectoryEntry
             {
-                Sid = i, Name = String.Empty, ObjectType = CfbObjectType.Empty,
-                ColorFlag = CfbColorFlag.Red,
+                Sid = i, Name = String.Empty, ObjectType = ObjectType.Empty,
+                ColorFlag = ColorFlag.Red,
                 LeftSibSid = CfbSectorMarker.NoEntry,
                 RightSibSid = CfbSectorMarker.NoEntry,
                 ChildSid = CfbSectorMarker.NoEntry,
@@ -366,7 +366,7 @@ internal sealed class CfbWriter
         if (lo > hi) return CfbSectorMarker.NoEntry;
         var mid = (lo + hi) / 2;
         var entry = children[mid];
-        entry.ColorFlag = CfbColorFlag.Black;
+        entry.ColorFlag = ColorFlag.Black;
         entry.LeftSibSid = BuildSiblingTree(children, lo, mid - 1);
         entry.RightSibSid = BuildSiblingTree(children, mid + 1, hi);
         return entry.Sid;
@@ -415,7 +415,7 @@ internal sealed class CfbWriter
         // Big stream sectors
         foreach (var e in allEntries)
         {
-            if (e.Type != CfbObjectType.Stream || e.Data == null || e.Data.Length < MiniStreamCutoff) continue;
+            if (e.Type != ObjectType.Stream || e.Data == null || e.Data.Length < MiniStreamCutoff) continue;
             var count = CeilDiv(e.Data.Length, SectorSize);
             for (var i = 0; i < count; i++)
             {
