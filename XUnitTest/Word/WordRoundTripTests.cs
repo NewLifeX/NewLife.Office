@@ -55,7 +55,7 @@ public class WordRoundTripTests : IntegrationTestBase
         // 读取验证
         using var reader = new WordReader(path);
         var paragraphs = reader.ReadParagraphs().ToList();
-        Assert.True(paragraphs.Count >= 5);
+        Assert.True(paragraphs.Count >= 10);
         Assert.Contains("第一章 概述", paragraphs);
         Assert.Contains("文档结束。", paragraphs);
 
@@ -66,7 +66,7 @@ public class WordRoundTripTests : IntegrationTestBase
 
         // 读取表格
         var tables = reader.ReadTables().ToList();
-        Assert.True(tables.Count >= 1);
+        Assert.Equal(1, tables.Count);
         Assert.Equal("产品", tables[0][0][0]);
         Assert.Equal("笔记本", tables[0][1][0]);
 
@@ -100,7 +100,7 @@ public class WordRoundTripTests : IntegrationTestBase
         using var pdfReader = new PdfReader(pdfPath);
         var text = pdfReader.ExtractText();
         Assert.Contains("Word", text);
-        Assert.True(pdfReader.GetPageCount() >= 1);
+        Assert.Equal(1, pdfReader.GetPageCount());
     }
 
     [Fact, DisplayName("Docx_从Bin读取所有文件并往返验证")]
@@ -422,6 +422,10 @@ public class WordRoundTripTests : IntegrationTestBase
                 $"[{context}] 图片[{key}] 扩展名不匹配: 源={ext}, 输出={bImg.Extension}");
             Assert.True(data.Length == bImg.Data.Length,
                 $"[{context}] 图片[{key}] 数据长度不匹配: 源={data.Length}, 输出={bImg.Data.Length}");
+            // 逐字节比较图片数据
+            for (var i = 0; i < data.Length; i++)
+                Assert.True(data[i] == bImg.Data[i],
+                    $"[{context}] 图片[{key}] 数据[{i}]: {data[i]:X2} vs {bImg.Data[i]:X2}");
         }
 
         // 页面设置
@@ -680,11 +684,17 @@ public class WordRoundTripTests : IntegrationTestBase
         if (ai == null || bi == null) return;
 
         Assert.True(ai.Extension == bi.Extension,
-            $"[{context}] 图片[{idx}] 扩展名不匹配");
-        Assert.True(ai.WidthEmu > 0 && bi.WidthEmu > 0,
-            $"[{context}] 图片[{idx}] 宽度无效");
-        Assert.True(ai.HeightEmu > 0 && bi.HeightEmu > 0,
-            $"[{context}] 图片[{idx}] 高度无效");
+            $"[{context}] 图片[{idx}] 扩展名不匹配: 源={ai.Extension}, 输出={bi.Extension}");
+        Assert.Equal(ai.WidthEmu, bi.WidthEmu);
+        Assert.Equal(ai.HeightEmu, bi.HeightEmu);
+        // 图片数据逐字节比较
+        if (ai.ImageData.Length > 0 && bi.ImageData.Length > 0)
+        {
+            Assert.Equal(ai.ImageData.Length, bi.ImageData.Length);
+            for (var i = 0; i < ai.ImageData.Length; i++)
+                Assert.True(ai.ImageData[i] == bi.ImageData[i],
+                    $"[{context}] 图片[{idx}] 数据[{i}]: {ai.ImageData[i]:X2} vs {bi.ImageData[i]:X2}");
+        }
     }
     #endregion
 
@@ -718,7 +728,7 @@ public class WordRoundTripTests : IntegrationTestBase
         }
 
         Assert.Equal("NewLife.Office 页眉", sourceDoc.HeaderText);
-        Assert.Contains("测试页脚", sourceDoc.FooterText ?? "");
+        Assert.True(sourceDoc.FooterText?.Contains("测试页脚") == true, $"页脚应包含'测试页脚'，实际='{sourceDoc.FooterText}'");
 
         // 往返：写入再读回
         var outputPath = Path.Combine(OutputDir, "roundtrip_hdr_ftr_out.docx");
@@ -737,7 +747,7 @@ public class WordRoundTripTests : IntegrationTestBase
         Assert.Equal(sourceDoc.HeaderText, outputDoc.HeaderText);
         Assert.Equal(sourceDoc.FooterText, outputDoc.FooterText);
 
-        // 验证正文内容保持
-        Assert.Equal(sourceDoc.Elements.Count, outputDoc.Elements.Count);
+        // 完整内容对比
+        AssertDocumentsEqual(sourceDoc, outputDoc, "hdr_ftr");
     }
 }

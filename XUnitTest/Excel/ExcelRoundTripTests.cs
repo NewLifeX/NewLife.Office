@@ -168,7 +168,7 @@ public class ExcelRoundTripTests
                         Assert.Fail($"{sp}: 缺失样式 ({r},{c})，该单元格有值 [{src.Rows[r][c]}]");
                     continue;
                 }
-                if (dstStyle == null) continue;
+                Assert.NotNull(dstStyle);
 
                 var s = kv.Value;
                 var d = dstStyle!;
@@ -182,6 +182,15 @@ public class ExcelRoundTripTests
                 Assert.True(s.VAlign == d.VAlign, $"{sp}: VAlign ({r},{c}) src={s.VAlign} dst={d.VAlign}");
                 Assert.True(s.WrapText == d.WrapText, $"{sp}: WrapText ({r},{c})");
                 Assert.True(s.Border == d.Border, $"{sp}: Border ({r},{c}) src={s.Border} dst={d.Border}");
+                // 扩展样式属性
+                Assert.True((s.FontName ?? "") == (d.FontName ?? ""), $"{sp}: FontName ({r},{c}) src={s.FontName} dst={d.FontName}");
+                Assert.True((s.FontColor ?? "") == (d.FontColor ?? ""), $"{sp}: FontColor ({r},{c}) src={s.FontColor} dst={d.FontColor}");
+                Assert.True((s.BackgroundColor ?? "") == (d.BackgroundColor ?? ""), $"{sp}: BackgroundColor ({r},{c})");
+                Assert.True((s.BorderColor ?? "") == (d.BorderColor ?? ""), $"{sp}: BorderColor ({r},{c})");
+                // 仅当源样式明确指定了 NumberFormat 时才比较（Reader 可能为数字自动赋予默认格式）
+                if (s.NumberFormat != null)
+                    Assert.True((s.NumberFormat ?? "") == (d.NumberFormat ?? ""), $"{sp}: NumberFormat ({r},{c}) src={s.NumberFormat} dst={d.NumberFormat}");
+                Assert.True(s.Strike == d.Strike, $"{sp}: Strike ({r},{c})");
             }
 
             // 合并区域
@@ -221,7 +230,7 @@ public class ExcelRoundTripTests
                 Assert.Equal(kv.Value.Url, dh.Url);
             }
 
-            // 图片数量和数据
+            // 图片数量和数据（精确相等）
             Assert.Equal(src.Images.Count, dst.Images.Count);
             for (var ii = 0; ii < src.Images.Count; ii++)
             {
@@ -243,12 +252,19 @@ public class ExcelRoundTripTests
             // 保护
             Assert.Equal(src.ProtectionPassword, dst.ProtectionPassword);
 
-            // 条件格式
+            // 条件格式（逐项比较详细属性）
             Assert.Equal(src.ConditionalFormats.Count, dst.ConditionalFormats.Count);
             for (var ci = 0; ci < src.ConditionalFormats.Count; ci++)
             {
-                Assert.Equal(src.ConditionalFormats[ci].Type, dst.ConditionalFormats[ci].Type);
-                Assert.Equal(src.ConditionalFormats[ci].Range, dst.ConditionalFormats[ci].Range);
+                var scf = src.ConditionalFormats[ci];
+                var dcf = dst.ConditionalFormats[ci];
+                Assert.Equal(scf.Type, dcf.Type);
+                Assert.Equal(scf.Range, dcf.Range);
+                Assert.Equal(scf.Value ?? "", dcf.Value ?? "");
+                Assert.Equal(scf.Value2 ?? "", dcf.Value2 ?? "");
+                Assert.Equal(scf.Color ?? "", dcf.Color ?? "");
+                Assert.Equal(scf.IconSetType ?? "", dcf.IconSetType ?? "");
+                Assert.Equal(scf.Formula ?? "", dcf.Formula ?? "");
             }
 
             // 批注
@@ -259,10 +275,20 @@ public class ExcelRoundTripTests
                 Assert.Equal(kv.Value.Text, dc.Text);
             }
 
-            // 数据验证
+            // 数据验证（逐项比较详细属性）
             Assert.Equal(src.Validations.Count, dst.Validations.Count);
+            for (var vi = 0; vi < src.Validations.Count; vi++)
+            {
+                var sv = src.Validations[vi];
+                var dv = dst.Validations[vi];
+                Assert.Equal(sv.CellRange ?? "", dv.CellRange ?? "");
+                Assert.Equal(sv.ValidationType, dv.ValidationType);
+                Assert.Equal(sv.Operator, dv.Operator);
+                Assert.Equal(sv.Formula1 ?? "", dv.Formula1 ?? "");
+                Assert.Equal(sv.Formula2 ?? "", dv.Formula2 ?? "");
+            }
 
-            // 图表（数量+类型+标题+系列数据）
+            // 图表（数量+类型+标题+系列数据+位置）
             Assert.Equal(src.Charts.Count, dst.Charts.Count);
             for (var ci = 0; ci < src.Charts.Count; ci++)
             {
@@ -279,6 +305,11 @@ public class ExcelRoundTripTests
                     Assert.Equal(sc.Series[si2].Name, dc.Series[si2].Name);
                     Assert.Equal(sc.Series[si2].Data?.Length ?? 0, dc.Series[si2].Data?.Length ?? 0);
                 }
+                // 图表位置
+                Assert.Equal(sc.AnchorRow, dc.AnchorRow);
+                Assert.Equal(sc.AnchorCol, dc.AnchorCol);
+                Assert.Equal(sc.WidthPx, dc.WidthPx);
+                Assert.Equal(sc.HeightPx, dc.HeightPx);
             }
         }
     }
@@ -448,12 +479,13 @@ public class ExcelRoundTripTests
         Assert.True(dataSheet.Merges.Count > 0, "应有合并区域");
         Assert.True(dataSheet.FreezePane.HasValue, "应有冻结");
         Assert.NotNull(dataSheet.AutoFilter);
-        Assert.True(dataSheet.Hyperlinks.Count > 0, "应有超链接");
-        // TODO: 图片读取待修复
-        Assert.True(dataSheet.Images.Count >= 0, $"图片数={dataSheet.Images.Count}（暂时放宽）");
-        Assert.True(dataSheet.Comments.Count > 0, "应有批注");
-        Assert.True(dataSheet.ConditionalFormats.Count > 0, "应有条件格式");
-        Assert.True(dataSheet.Validations.Count > 0, "应有数据验证");
+        Assert.True(dataSheet.Hyperlinks.Count == 1, $"超链接数={dataSheet.Hyperlinks.Count}");
+        // TODO: 图片读取待修复（Reader 暂不支持回读内嵌图片）
+        if (dataSheet.Images.Count > 0)
+            Assert.True(dataSheet.Images.Count == 1, $"图片数={dataSheet.Images.Count}");
+        Assert.True(dataSheet.Comments.Count == 1, $"批注数={dataSheet.Comments.Count}");
+        Assert.True(dataSheet.ConditionalFormats.Count == 1, $"条件格式数={dataSheet.ConditionalFormats.Count}");
+        Assert.True(dataSheet.Validations.Count == 1, $"数据验证数={dataSheet.Validations.Count}");
         Assert.Equal(PageOrientation.Landscape, dataSheet.Orientation);
         Assert.Equal("测试报表", dataSheet.HeaderText);
 
@@ -552,7 +584,7 @@ public class ExcelRoundTripTests
             }
 
             var dataSheet = readData.Worksheets[0];
-            Assert.True(dataSheet.Charts.Count >= 1, $"应至少包含1个图表，实际={dataSheet.Charts.Count}");
+            Assert.Equal(1, dataSheet.Charts.Count);
 
             var readChart = dataSheet.Charts[0];
             Assert.Equal("bar", readChart.Type);
@@ -579,7 +611,7 @@ public class ExcelRoundTripTests
                 }
 
                 var rtSheet = roundTripData.Worksheets[0];
-                Assert.True(rtSheet.Charts.Count >= 1, "往返后图表数应>=1");
+                Assert.Equal(1, rtSheet.Charts.Count);
                 Assert.Equal("月度销售数据", rtSheet.Charts[0].Title);
                 Assert.Equal(2, rtSheet.Charts[0].Series.Count);
             }

@@ -4,6 +4,7 @@ using NewLife.Log;
 using NewLife.Office;
 using NewLife.Office.Ppt;
 using Xunit;
+using XUnitTest.Common;
 
 namespace XUnitTest.Ppt;
 
@@ -14,9 +15,8 @@ namespace XUnitTest.Ppt;
 /// 再用 PptxWriter 从这些对象重建新文件，最后多层验证新旧文件内容一致。
 /// 不使用 ZIP 级原始 XML 拷贝——每一页幻灯片都必须经过对象模型的完整读取与重建。
 /// </remarks>
-public class PptxRoundTripTests
+public class PptxRoundTripTests : IntegrationTestBase
 {
-    static PptxRoundTripTests() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 
     #region 辅助方法
 
@@ -50,7 +50,7 @@ public class PptxRoundTripTests
     }
 
     /// <summary>输出目录</summary>
-    private static String OutputDir => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Output"));
+    private static new String OutputDir => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "Output"));
 
     #endregion
 
@@ -68,9 +68,14 @@ public class PptxRoundTripTests
         if (src.Notes != dst.Notes)
             Assert.Equal(src.Notes, dst.Notes);
         AssertTransition(src.Transition, dst.Transition, tag);
-        // 背景图
+        // 背景图（逐字节比较）
         if (src.BackgroundImage != null && dst.BackgroundImage != null)
+        {
             Assert.Equal(src.BackgroundImage.Data.Length, dst.BackgroundImage.Data.Length);
+            for (var i = 0; i < src.BackgroundImage.Data.Length; i++)
+                Assert.True(src.BackgroundImage.Data[i] == dst.BackgroundImage.Data[i],
+                    $"{tag} 背景图 Data[{i}]: {src.BackgroundImage.Data[i]:X2} vs {dst.BackgroundImage.Data[i]:X2}");
+        }
         else
             Assert.True((src.BackgroundImage == null) == (dst.BackgroundImage == null), $"{tag} 背景图存在性不匹配");
     }
@@ -793,13 +798,13 @@ public class PptxRoundTripTests
             if (layoutXml != null) { var l = outReader.GetSlideLayoutXml(0); Assert.Equal(layoutXml, l); }
             if (themeXml != null) { var t = outReader.GetThemeXml(); Assert.Equal(themeXml, t); }
 
-            // ④ 图片数据量（仅当源有图片时检查，部分文件图片在版式/母版中不由 ExtractImages 返回）
+            // ④ 图片数据量（精确相等；部分文件图片在版式/母版中不由 ExtractImages 返回时允许微小差异）
             var outImages = outReader.ExtractImages().ToList();
             var outImageTotalBytes = outImages.Sum(img => (Int64)img.Data.Length);
             if (sourceImageTotalBytes > 0)
             {
                 var imageRatio = (Double)outImageTotalBytes / sourceImageTotalBytes;
-                Assert.True(imageRatio >= 0.5, $"输出图片总字节({outImageTotalBytes})不应显著少于源({sourceImageTotalBytes})");
+                Assert.True(imageRatio >= 0.99, $"输出图片总字节({outImageTotalBytes})不应显著少于源({sourceImageTotalBytes})");
             }
 
             // ⑤ 图表数据

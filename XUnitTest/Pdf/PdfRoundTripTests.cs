@@ -272,18 +272,15 @@ public class PdfRoundTripTests : IntegrationTestBase
             Assert.True(Math.Abs(sp.Height - dp.Height) <= 1f, $"{pt} Height: {sp.Height} vs {dp.Height}");
             Assert.Equal(sp.Rotation, dp.Rotation);
 
-            // TextBlocks 级对比（若双方都有数据）
-            if (sp.TextBlocks.Count > 0 && dp.TextBlocks.Count > 0)
+            // TextBlocks 级对比（双方 TextBlocks 数必须一致，有数据时逐项比较）
+            Assert.Equal(sp.TextBlocks.Count, dp.TextBlocks.Count);
+            for (var ti = 0; ti < sp.TextBlocks.Count; ti++)
             {
-                Assert.Equal(sp.TextBlocks.Count, dp.TextBlocks.Count);
-                for (var ti = 0; ti < sp.TextBlocks.Count; ti++)
-                {
-                    var st = sp.TextBlocks[ti];
-                    var dt = dp.TextBlocks[ti];
-                    Assert.Equal(st.Text, dt.Text);
-                    Assert.True(Math.Abs(st.FontSize - dt.FontSize) <= 0.5f,
-                        $"{pt}.TB[{ti}] FontSize: {st.FontSize} vs {dt.FontSize}");
-                }
+                var st = sp.TextBlocks[ti];
+                var dt = dp.TextBlocks[ti];
+                Assert.Equal(st.Text, dt.Text);
+                Assert.True(Math.Abs(st.FontSize - dt.FontSize) <= 0.5f,
+                    $"{pt}.TB[{ti}] FontSize: {st.FontSize} vs {dt.FontSize}");
             }
         }
 
@@ -308,8 +305,22 @@ public class PdfRoundTripTests : IntegrationTestBase
             Assert.Equal(src.Bookmarks[i].PageIndex, dst.Bookmarks[i].PageIndex);
         }
 
-        // ⑥ 注释数量
+        // ⑥ 注释（数量 + 逐项属性）
         Assert.Equal(src.Annotations.Count, dst.Annotations.Count);
+        for (var ai = 0; ai < src.Annotations.Count; ai++)
+        {
+            var sa = src.Annotations[ai];
+            var da = dst.Annotations[ai];
+            var at = $"{tag} Annotation[{ai}]";
+            Assert.Equal(sa.Type, da.Type);
+            Assert.Equal(sa.PageIndex, da.PageIndex);
+            Assert.True(Math.Abs(sa.X - da.X) <= 1f, $"{at} X: {sa.X} vs {da.X}");
+            Assert.True(Math.Abs(sa.Y - da.Y) <= 1f, $"{at} Y: {sa.Y} vs {da.Y}");
+            Assert.True(Math.Abs(sa.Width - da.Width) <= 1f, $"{at} Width: {sa.Width} vs {da.Width}");
+            Assert.True(Math.Abs(sa.Height - da.Height) <= 1f, $"{at} Height: {sa.Height} vs {da.Height}");
+            Assert.Equal(sa.Url ?? "", da.Url ?? "");
+            Assert.Equal(sa.Contents ?? "", da.Contents ?? "");
+        }
     }
 
     /// <summary>对单个 pdf 文件执行完整往返验证</summary>

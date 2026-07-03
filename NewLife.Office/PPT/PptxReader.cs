@@ -1666,7 +1666,8 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     private static String? ParseFillColor(XmlElement? parent)
     {
         if (parent == null) return null;
-        var clr = parent.SelectSingleNode(".//*[local-name()='solidFill']/*[local-name()='srgbClr']") as XmlElement;
+        // 仅匹配 spPr 的直接子元素 solidFill，避免误匹配 ln 等嵌套元素内的颜色
+        var clr = parent.SelectSingleNode("*[local-name()='solidFill']/*[local-name()='srgbClr']") as XmlElement;
         return clr?.GetAttribute("val");
     }
 
