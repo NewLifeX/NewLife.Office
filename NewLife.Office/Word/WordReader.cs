@@ -1261,25 +1261,43 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
     /// <returns>纯文本字符串</returns>
     public String? ExtractText() => ReadFullText();
 
-    /// <summary>提取 Markdown 格式（段落+表格）</summary>
+    /// <summary>提取 Markdown 格式（段落格式+表格+图片），优先使用文档模型保留格式，失败时回退纯文本</summary>
     /// <returns>Markdown 字符串</returns>
     public String? ExtractMarkdown()
     {
+        try
+        {
+            var doc = ReadDocument();
+            if (doc.Elements.Count == 0) return FallbackExtractMarkdown();
+
+            var sb = new StringBuilder();
+            var imageIdx = 0;
+            foreach (var el in doc.Elements)
+            {
+                ElementToMarkdown(sb, el, doc, ref imageIdx);
+            }
+            return sb.ToString();
+        }
+        catch
+        {
+            return FallbackExtractMarkdown();
+        }
+    }
+
+    private String FallbackExtractMarkdown()
+    {
         var sb = new StringBuilder();
 
-        // 输出段落
         foreach (var para in ReadParagraphs())
         {
             sb.AppendLine(para);
             sb.AppendLine();
         }
 
-        // 输出表格
         foreach (var table in ReadTables())
         {
             if (table.Length == 0) continue;
 
-            // 第一行作为表头
             var header = table[0];
             sb.Append('|');
             foreach (var cell in header)
@@ -1310,6 +1328,257 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable
         }
 
         return sb.ToString();
+    }
+
+    private void ElementToMarkdown(StringBuilder sb, Element el, Document doc, ref Int32 imageIdx)
+    {
+        switch (el.Type)
+        {
+            case ElementType.Paragraph:
+                if (el.Paragraph != null)
+                    ParagraphToMarkdown(sb, el.Paragraph, doc);
+                break;
+            case ElementType.Table:
+                TableToMarkdown(sb, el);
+                break;
+            case ElementType.Image:
+                if (el.Image != null)
+                    ImageToMarkdown(sb, el.Image, ref imageIdx);
+                break;
+            case ElementType.Sdt:
+                if (el.Sdt != null)
+                    SdtToMarkdown(sb, el.Sdt);
+                break;
+        }
+    }
+
+    private void ParagraphToMarkdown(StringBuilder sb, Paragraph para, Document doc)
+    {
+        var text = BuildRunText(para.Runs, doc);
+        if (String.IsNullOrEmpty(text) && !para.IsPageBreak) return;
+
+        // 标题
+        if (para.Style >= ParagraphStyle.Heading1 && para.Style <= ParagraphStyle.Heading6)
+        {
+            var level = (Int32)para.Style - (Int32)ParagraphStyle.Heading1 + 1;
+            sb.Append(new String('#', level)).Append(' ').AppendLine(text);
+            sb.AppendLine();
+            return;
+        }
+
+        // 分页符
+        if (para.IsPageBreak)
+        {
+            sb.AppendLine("---");
+            sb.AppendLine();
+            return;
+        }
+
+        // 无序列表
+        if (para.IsBullet)
+        {
+            var indent = new String(' ', para.ListLevel * 2);
+            sb.Append(indent).Append("- ").AppendLine(text);
+            return;
+        }
+
+        // 有序列表
+        if (para.IsOrderedList)
+        {
+            var indent = new String(' ', para.ListLevel * 2);
+            var num = para.ListStartOverride ?? 1;
+            sb.Append(indent).Append(num).Append(". ").AppendLine(text);
+            return;
+        }
+
+        // 普通段落
+        sb.AppendLine(text);
+        sb.AppendLine();
+    }
+
+    private String BuildRunText(List<Run> runs, Document doc)
+    {
+        if (runs.Count == 0) return String.Empty;
+
+        var sb = new StringBuilder();
+        foreach (var run in runs)
+        {
+            var text = run.Text;
+            if (String.IsNullOrEmpty(text)) continue;
+
+            var props = run.Properties;
+
+            // 超链接
+            if (!run.HyperlinkRelId.IsNullOrEmpty() && doc.Hyperlinks.Count > 0)
+            {
+                var url = doc.Hyperlinks.FirstOrDefault(h => h.RelId == run.HyperlinkRelId).Url;
+                if (!url.IsNullOrEmpty())
+                {
+                    sb.Append('[');
+                    AppendFormattedText(sb, text, props);
+                    sb.Append("](").Append(url).Append(')');
+                    continue;
+                }
+            }
+
+            AppendFormattedText(sb, text, props);
+        }
+        return sb.ToString();
+    }
+
+    private static void AppendFormattedText(StringBuilder sb, String text, RunProperties? props)
+    {
+        if (props == null)
+        {
+            sb.Append(text);
+            return;
+        }
+
+        // 应用行内格式标记（按 Markdown 约定）
+        if (props.Bold) sb.Append("**");
+        if (props.Italic) sb.Append("*");
+        if (props.Strikethrough) sb.Append("~~");
+
+        sb.Append(text);
+
+        if (props.Strikethrough) sb.Append("~~");
+        if (props.Italic) sb.Append("*");
+        if (props.Bold) sb.Append("**");
+    }
+
+    private static void TableToMarkdown(StringBuilder sb, Element el)
+    {
+        // 优先使用 Table 模型
+        if (el.Table != null && el.Table.Rows.Count > 0)
+        {
+            var table = el.Table;
+            var colCount = table.Rows.Max(r => r.Cells.Count);
+            if (colCount == 0) return;
+
+            var startRow = 0;
+
+            // 表头行
+            if (table.FirstRowHeader && table.Rows.Count > 0)
+            {
+                var headerRow = table.Rows[0];
+                sb.Append('|');
+                for (var i = 0; i < colCount; i++)
+                {
+                    var cellText = i < headerRow.Cells.Count ? GetCellText(headerRow.Cells[i]) : "";
+                    sb.Append(' ').Append(MdEscape(cellText)).Append(" |");
+                }
+                sb.AppendLine();
+
+                sb.Append('|');
+                for (var i = 0; i < colCount; i++)
+                {
+                    sb.Append(" --- |");
+                }
+                sb.AppendLine();
+
+                startRow = 1;
+            }
+
+            // 数据行
+            for (var ri = startRow; ri < table.Rows.Count; ri++)
+            {
+                var row = table.Rows[ri];
+                sb.Append('|');
+                for (var i = 0; i < colCount; i++)
+                {
+                    var cellText = i < row.Cells.Count ? GetCellText(row.Cells[i]) : "";
+                    sb.Append(' ').Append(MdEscape(cellText)).Append(" |");
+                }
+                sb.AppendLine();
+            }
+            sb.AppendLine();
+            return;
+        }
+
+        // 回退到 TableRows（嵌套列表）
+        if (el.TableRows != null && el.TableRows.Count > 0)
+        {
+            var rows = el.TableRows;
+            var colCount = rows.Max(r => r.Count);
+            if (colCount == 0) return;
+
+            var startRow = el.TableFirstRowHeader ? 1 : 0;
+
+            // 表头
+            if (el.TableFirstRowHeader && rows.Count > 0)
+            {
+                var headerRow = rows[0];
+                sb.Append('|');
+                for (var i = 0; i < colCount; i++)
+                {
+                    var cellText = i < headerRow.Count ? GetCellText(headerRow[i]) : "";
+                    sb.Append(' ').Append(MdEscape(cellText)).Append(" |");
+                }
+                sb.AppendLine();
+
+                sb.Append('|');
+                for (var i = 0; i < colCount; i++)
+                {
+                    sb.Append(" --- |");
+                }
+                sb.AppendLine();
+            }
+
+            for (var ri = startRow; ri < rows.Count; ri++)
+            {
+                var row = rows[ri];
+                sb.Append('|');
+                for (var i = 0; i < colCount; i++)
+                {
+                    var cellText = i < row.Count ? GetCellText(row[i]) : "";
+                    sb.Append(' ').Append(MdEscape(cellText)).Append(" |");
+                }
+                sb.AppendLine();
+            }
+            sb.AppendLine();
+        }
+    }
+
+    private static String GetCellText(Cell cell)
+    {
+        if (cell.Paragraphs.Count == 0) return String.Empty;
+        var sb = new StringBuilder();
+        for (var i = 0; i < cell.Paragraphs.Count; i++)
+        {
+            var para = cell.Paragraphs[i];
+            foreach (var run in para.Runs)
+            {
+                sb.Append(run.Text);
+            }
+            if (i < cell.Paragraphs.Count - 1)
+                sb.Append(' ');
+        }
+        return sb.ToString();
+    }
+
+    private static void ImageToMarkdown(StringBuilder sb, Image image, ref Int32 imageIdx)
+    {
+        imageIdx++;
+        var ext = image.Extension ?? "png";
+        if (ext.IsNullOrEmpty()) ext = "png";
+
+        var mime = ext.EqualIgnoreCase("jpg", "jpeg") ? "image/jpeg" :
+                   ext.EqualIgnoreCase("gif") ? "image/gif" :
+                   ext.EqualIgnoreCase("svg") ? "image/svg+xml" : "image/png";
+
+        var base64 = Convert.ToBase64String(image.ImageData ?? []);
+        sb.Append("![Image ").Append(imageIdx).Append("](data:").Append(mime)
+          .Append(";base64,").Append(base64).AppendLine(")");
+        sb.AppendLine();
+    }
+
+    private static void SdtToMarkdown(StringBuilder sb, SdtElement sdt)
+    {
+        if (!sdt.Content.IsNullOrEmpty())
+        {
+            sb.AppendLine(sdt.Content);
+            sb.AppendLine();
+        }
     }
 
     private static String MdEscape(String? value)
