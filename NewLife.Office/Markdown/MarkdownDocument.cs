@@ -29,6 +29,9 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
 
     /// <summary>缩写映射表（MD05-08），键为缩写文本，值为全称</summary>
     public Dictionary<String, String> Abbreviations { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>是否启用往返渲染模式（MD06-03），解析→修改→序列化时保留未修改块的原始格式</summary>
+    public Boolean Roundtrip { get; set; }
     #endregion
 
     #region 解析

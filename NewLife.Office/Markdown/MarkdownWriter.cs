@@ -26,9 +26,18 @@ internal sealed class MarkdownWriter
     public String ToMarkdown(MarkdownDocument doc)
     {
         var sb = new StringBuilder();
+        var roundtrip = doc.Roundtrip;
         for (var i = 0; i < doc.Blocks.Count; i++)
         {
-            WriteBlock(sb, doc.Blocks[i], 0);
+            var block = doc.Blocks[i];
+            // 往返模式：若块有原始文本且未修改，直接原样输出
+            if (roundtrip && block.SourceText != null)
+            {
+                sb.Append(block.SourceText);
+                if (i < doc.Blocks.Count - 1) sb.AppendLine();
+                continue;
+            }
+            WriteBlock(sb, block, 0);
             if (i < doc.Blocks.Count - 1) sb.AppendLine();
         }
         return sb.ToString().TrimEnd() + "\n";

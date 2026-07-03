@@ -24,6 +24,9 @@ public sealed class MarkdownInline
 
     /// <summary>子行内元素（Strong/Emphasis/Link 可嵌套）</summary>
     public List<MarkdownInline> Children { get; } = [];
+
+    /// <summary>源码列号（0 基准，MD06-04），支持编辑器场景定位</summary>
+    public Int32 SourceColumn { get; set; }
     #endregion
 
     #region 工厂方法

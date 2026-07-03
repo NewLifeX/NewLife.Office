@@ -24,6 +24,15 @@ public abstract class MarkdownBlock
 
     /// <summary>自定义属性（MD05-06），如 "class1 class2" 或 "id1" 或 "key=value"</summary>
     public String? Attributes { get; set; }
+
+    /// <summary>源码起始行号（0 基准，MD06-04），支持编辑器场景定位</summary>
+    public Int32 SourceLine { get; set; }
+
+    /// <summary>源码起始列号（0 基准，MD06-04），支持编辑器场景定位</summary>
+    public Int32 SourceColumn { get; set; }
+
+    /// <summary>原始源码文本（MD06-03 往返渲染），非 null 时表示该块未修改可原样输出</summary>
+    public String? SourceText { get; set; }
     #endregion
 
     #region 工厂方法（向后兼容）

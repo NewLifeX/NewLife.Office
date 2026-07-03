@@ -37,7 +37,29 @@ internal sealed class MarkdownParser
 
         while (_pos < _lines.Length)
         {
+            var blockStart = _pos;
+            var blockCount = doc.Blocks.Count;
             ParseBlock(doc.Blocks);
+
+            // 设置新生成块的源码位置（MD06-04）并捕获原始文本（MD06-03）
+            for (var bi = blockCount; bi < doc.Blocks.Count; bi++)
+            {
+                var block = doc.Blocks[bi];
+                block.SourceLine = blockStart;
+                block.SourceColumn = 0;
+
+                // 捕获原始源码文本用于往返渲染（跳过前导空白行）
+                var srcStart = blockStart;
+                while (srcStart < _pos && String.IsNullOrWhiteSpace(_lines[srcStart]))
+                    srcStart++;
+                if (_pos > srcStart)
+                {
+                    var lineCount = _pos - srcStart;
+                    var rawLines = new String[lineCount];
+                    Array.Copy(_lines, srcStart, rawLines, 0, lineCount);
+                    block.SourceText = String.Join("\n", rawLines);
+                }
+            }
         }
 
         _doc = null;
