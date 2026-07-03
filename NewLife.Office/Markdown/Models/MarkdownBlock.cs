@@ -21,6 +21,9 @@ public abstract class MarkdownBlock
 
     /// <summary>行内元素列表（叶子块使用：段落/标题/列表项文本/单元格）</summary>
     public List<MarkdownInline> Inlines { get; } = [];
+
+    /// <summary>自定义属性（MD05-06），如 "class1 class2" 或 "id1" 或 "key=value"</summary>
+    public String? Attributes { get; set; }
     #endregion
 
     #region 工厂方法（向后兼容）

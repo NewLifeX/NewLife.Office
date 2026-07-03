@@ -43,6 +43,27 @@ internal sealed class MarkdownParser
     #endregion
 
     #region 块级解析
+    /// <summary>添加块到容器，并检查后续行是否有自定义属性 {.class #id} (MD05-06)</summary>
+    private void AddBlock(List<MarkdownBlock> container, MarkdownBlock block)
+    {
+        container.Add(block);
+
+        // 检查下一行是否是自定义属性
+        if (_pos < _lines.Length)
+        {
+            var nextLine = _lines[_pos].TrimStart();
+            if (nextLine.StartsWith("{") && nextLine.EndsWith("}") && nextLine.Length > 2)
+            {
+                var inner = nextLine[1..^1].Trim();
+                if (inner.StartsWith(".") || inner.StartsWith("#") || inner.Contains("="))
+                {
+                    block.Attributes = inner;
+                    _pos++;
+                }
+            }
+        }
+    }
+
     private void ParseBlock(List<MarkdownBlock> container)
     {
         if (_pos >= _lines.Length) return;
@@ -56,12 +77,12 @@ internal sealed class MarkdownParser
 
         // ATX 标题  # text
         var atx = TryParseAtxHeading(trimmed);
-        if (atx != null) { container.Add(atx); _pos++; return; }
+        if (atx != null) { AddBlock(container, atx); _pos++; return; }
 
         // 围栏代码块 ``` or ~~~
         if (trimmed.StartsWith("```") || trimmed.StartsWith("~~~"))
         {
-            container.Add(ParseFencedCode(trimmed));
+            AddBlock(container, ParseFencedCode(trimmed));
             return;
         }
 
@@ -69,37 +90,37 @@ internal sealed class MarkdownParser
         if (trimmed.StartsWith("<"))
         {
             var html = TryParseHtmlBlock(trimmed);
-            if (html != null) { container.Add(html); return; }
+            if (html != null) { AddBlock(container, html); return; }
         }
 
         // 分隔线  --- / *** / ___
-        if (IsThematicBreak(trimmed)) { container.Add(MarkdownBlock.CreateThematicBreak()); _pos++; return; }
+        if (IsThematicBreak(trimmed)) { AddBlock(container, MarkdownBlock.CreateThematicBreak()); _pos++; return; }
 
         // 引用块 >
         if (trimmed.StartsWith(">"))
         {
-            container.Add(ParseBlockQuote());
+            AddBlock(container, ParseBlockQuote());
             return;
         }
 
         // 无序列表
         if (IsBulletListMarker(trimmed, out var _))
         {
-            container.Add(ParseList(false));
+            AddBlock(container, ParseList(false));
             return;
         }
 
         // 有序列表
         if (IsOrderedListMarker(trimmed, out var startNum, out var _))
         {
-            container.Add(ParseList(true, startNum));
+            AddBlock(container, ParseList(true, startNum));
             return;
         }
 
         // 脚注定义 [^id]: text (MD05-03)
         if (TryParseFootnoteDefinition(trimmed, out var fnDef))
         {
-            container.Add(fnDef!);
+            AddBlock(container, fnDef!);
             _pos++;
             return;
         }
@@ -107,7 +128,7 @@ internal sealed class MarkdownParser
         // 数学公式块 $$...$$ (MD05-04)
         if (trimmed == "$$" || trimmed.StartsWith("$$"))
         {
-            container.Add(ParseMathBlock(trimmed));
+            AddBlock(container, ParseMathBlock(trimmed));
             return;
         }
 
@@ -121,7 +142,7 @@ internal sealed class MarkdownParser
 
         // Setext 标题（只在段落内检查）
         // 段落（可能包含 Setext 标题）
-        container.Add(ParseParagraphOrSetext(indent));
+        AddBlock(container, ParseParagraphOrSetext(indent));
     }
 
     private static MarkdownBlock? TryParseAtxHeading(String trimmed)

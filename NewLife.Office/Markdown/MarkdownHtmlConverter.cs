@@ -43,7 +43,7 @@ internal sealed class MarkdownHtmlConverter
                 RenderHeading(sb, block);
                 break;
             case MarkdownBlockType.Paragraph:
-                sb.Append("<p>");
+                sb.Append("<p").Append(BlockAttributes(block)).Append('>');
                 RenderInlines(sb, block.Inlines);
                 sb.AppendLine("</p>");
                 break;
@@ -51,7 +51,7 @@ internal sealed class MarkdownHtmlConverter
                 RenderCodeBlock(sb, block);
                 break;
             case MarkdownBlockType.BlockQuote:
-                sb.AppendLine("<blockquote>");
+                sb.Append("<blockquote").Append(BlockAttributes(block)).AppendLine(">");
                 foreach (var child in block.Children)
                 {
                     RenderBlock(sb, child);
@@ -123,7 +123,7 @@ internal sealed class MarkdownHtmlConverter
             .Replace("(", "")
             .Replace(")", "")
             .Replace("/", "");
-        sb.Append("<" + tag + " id=\"" + HtmlEncode(id) + "\">");
+        sb.Append("<" + tag + " id=\"" + HtmlEncode(id) + "\"" + BlockAttributes(block) + ">");
         RenderInlines(sb, block.Inlines);
         sb.AppendLine("</" + tag + ">");
     }
@@ -382,6 +382,45 @@ internal sealed class MarkdownHtmlConverter
         if (String.IsNullOrEmpty(url)) return false;
         return url.StartsWith("http://") || url.StartsWith("https://") || url.StartsWith("//");
     }
+    /// <summary>生成块级元素的属性字符串 (MD05-06)</summary>
+    private static String BlockAttributes(MarkdownBlock block)
+    {
+        if (String.IsNullOrEmpty(block.Attributes)) return String.Empty;
+
+        var attr = block.Attributes;
+        var sb = new StringBuilder();
+        var parts = attr.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var classes = new List<String>();
+        var id = String.Empty;
+
+        foreach (var part in parts)
+        {
+            if (part.StartsWith("."))
+            {
+                var cls = part[1..];
+                if (cls.Length > 0) classes.Add(cls);
+            }
+            else if (part.StartsWith("#"))
+            {
+                id = part[1..];
+            }
+            else if (part.Contains('='))
+            {
+                var eqIdx = part.IndexOf('=');
+                var key = part[..eqIdx];
+                var value = part[(eqIdx + 1)..].Trim('"', '\'');
+                sb.Append(' ').Append(key).Append("=\"").Append(HtmlEncode(value)).Append('"');
+            }
+        }
+
+        if (classes.Count > 0)
+            sb.Append(" class=\"").Append(HtmlEncode(String.Join(" ", classes))).Append('"');
+        if (id.Length > 0)
+            sb.Append(" id=\"").Append(HtmlEncode(id)).Append('"');
+
+        return sb.ToString();
+    }
+
     /// <summary>渲染文本，对已知缩写自动添加 &lt;abbr&gt; 标签 (MD05-08)</summary>
     private void RenderTextWithAbbr(StringBuilder sb, String text)
     {
