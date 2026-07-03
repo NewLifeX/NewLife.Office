@@ -102,6 +102,25 @@ internal sealed class MarkdownHtmlConverter
                 RenderInlines(sb, fd.Definition);
                 sb.AppendLine("</div>");
                 break;
+            case MarkdownBlockType.DefinitionList:
+                sb.AppendLine("<dl>");
+                foreach (var child in block.Children)
+                {
+                    if (child is DefinitionTermBlock dt)
+                    {
+                        sb.Append("<dt>");
+                        RenderInlines(sb, dt.Inlines);
+                        sb.AppendLine("</dt>");
+                    }
+                    else if (child is DefinitionDescriptionBlock dd)
+                    {
+                        sb.Append("<dd>");
+                        RenderInlines(sb, dd.Inlines);
+                        sb.AppendLine("</dd>");
+                    }
+                }
+                sb.AppendLine("</dl>");
+                break;
             default:
                 break;
         }

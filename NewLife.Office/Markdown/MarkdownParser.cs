@@ -140,6 +140,13 @@ internal sealed class MarkdownParser
             return;
         }
 
+        // 定义列表 : description (MD05-07)
+        if (trimmed.StartsWith(": ") || trimmed == ":")
+        {
+            var dl = TryParseDefinitionList();
+            if (dl != null) { AddBlock(container, dl); return; }
+        }
+
         // Setext 标题（只在段落内检查）
         // 段落（可能包含 Setext 标题）
         AddBlock(container, ParseParagraphOrSetext(indent));
@@ -556,6 +563,50 @@ internal sealed class MarkdownParser
         {
             _doc.Abbreviations[abbr] = full;
         }
+    }
+
+    /// <summary>解析定义列表 (MD05-07)</summary>
+    /// <remarks>回溯上一行作为术语，当前行 `: description` 作为描述</remarks>
+    private MarkdownBlock? TryParseDefinitionList()
+    {
+        // 当前行是 `: description`，上一行应该是术语
+        if (_pos < 1) return null;
+
+        var prevLine = _lines[_pos - 1].Trim();
+        if (String.IsNullOrWhiteSpace(prevLine)) return null;
+
+        // 术语不能是特殊行
+        if (prevLine.StartsWith("#") || prevLine.StartsWith(">") || prevLine.StartsWith("-")
+            || prevLine.StartsWith("*") || prevLine.StartsWith("```") || prevLine.StartsWith("|"))
+            return null;
+
+        var dl = new DefinitionListBlock();
+
+        // 解析术语（从上一行）
+        var termInlines = ParseInline(prevLine);
+        var term = new DefinitionTermBlock(termInlines);
+        dl.Children.Add(term);
+
+        // 解析当前描述
+        var descLine = _lines[_pos].TrimStart();
+        var descText = descLine.StartsWith(": ") ? descLine[2..] : descLine[1..];
+        var descInlines = ParseInline(descText.Trim());
+        var desc = new DefinitionDescriptionBlock(descInlines);
+        dl.Children.Add(desc);
+        _pos++;
+
+        // 继续解析后续 `: ` 行（同一术语的多段描述）
+        while (_pos < _lines.Length)
+        {
+            var nextLine = _lines[_pos].TrimStart();
+            if (!nextLine.StartsWith(": ")) break;
+            var moreText = nextLine[2..];
+            var moreInlines = ParseInline(moreText.Trim());
+            dl.Children.Add(new DefinitionDescriptionBlock(moreInlines));
+            _pos++;
+        }
+
+        return dl;
     }
 
     private MarkdownBlock ParseMathBlock(String firstLine)

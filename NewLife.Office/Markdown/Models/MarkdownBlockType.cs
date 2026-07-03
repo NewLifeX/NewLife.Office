@@ -31,4 +31,10 @@ public enum MarkdownBlockType
     MathBlock,
     /// <summary>脚注定义块（[^id]: definition）</summary>
     FootnoteDefinition,
+    /// <summary>定义列表</summary>
+    DefinitionList,
+    /// <summary>定义术语</summary>
+    DefinitionTerm,
+    /// <summary>定义描述</summary>
+    DefinitionDescription,
 }

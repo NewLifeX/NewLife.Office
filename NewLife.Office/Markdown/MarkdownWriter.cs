@@ -131,6 +131,25 @@ internal sealed class MarkdownWriter
                 sb.AppendLine();
                 sb.AppendLine();
                 break;
+
+            case MarkdownBlockType.DefinitionList:
+                foreach (var child in block.Children)
+                {
+                    if (child is DefinitionTermBlock dt)
+                    {
+                        sb.Append(pad);
+                        WriteInlines(sb, dt.Inlines);
+                        sb.AppendLine();
+                    }
+                    else if (child is DefinitionDescriptionBlock dd)
+                    {
+                        sb.Append(pad).Append(": ");
+                        WriteInlines(sb, dd.Inlines);
+                        sb.AppendLine();
+                    }
+                }
+                sb.AppendLine();
+                break;
         }
     }
 
