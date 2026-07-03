@@ -456,12 +456,63 @@ public class WordRoundTripTests : IntegrationTestBase
         Assert.Equal(a.HeaderText ?? "", b.HeaderText ?? "");
         Assert.Equal(a.FooterText ?? "", b.FooterText ?? "");
 
+        // W11: 页眉页脚富文本/内容控件/自定义XML/只读保护/超链接/文档变量（双方都有数据时比较）
+        if (a.Headers.Count > 0 && b.Headers.Count > 0)
+            Assert.Equal(a.Headers.Count, b.Headers.Count);
+        if (a.Footers.Count > 0 && b.Footers.Count > 0)
+            Assert.Equal(a.Footers.Count, b.Footers.Count);
+        if (a.SdtElements.Count > 0 && b.SdtElements.Count > 0)
+            Assert.Equal(a.SdtElements.Count, b.SdtElements.Count);
+        if (a.ProtectionReadOnly || b.ProtectionReadOnly)
+            Assert.Equal(a.ProtectionReadOnly, b.ProtectionReadOnly);
+
         // 批注数量
         Assert.Equal(a.Comments.Count, b.Comments.Count);
         for (var ci = 0; ci < a.Comments.Count; ci++)
         {
             Assert.Equal(a.Comments[ci].Text, b.Comments[ci].Text);
             Assert.Equal(a.Comments[ci].Author, b.Comments[ci].Author);
+            // W10: 批注扩展属性
+            if (a.Comments[ci].Id > 0 && b.Comments[ci].Id > 0)
+                Assert.Equal(a.Comments[ci].Id, b.Comments[ci].Id);
+            if (a.Comments[ci].Date != null && b.Comments[ci].Date != null)
+                Assert.Equal(a.Comments[ci].Date.Value, b.Comments[ci].Date.Value, TimeSpan.FromSeconds(1));
+            if (a.Comments[ci].Initials != null && b.Comments[ci].Initials != null)
+                Assert.Equal(a.Comments[ci].Initials, b.Comments[ci].Initials);
+        }
+
+        // W11: 超链接（双方都有数据时比较完整列表）
+        if (a.Hyperlinks.Count > 0 && b.Hyperlinks.Count > 0)
+        {
+            Assert.Equal(a.Hyperlinks.Count, b.Hyperlinks.Count);
+            for (var hi = 0; hi < a.Hyperlinks.Count; hi++)
+            {
+                Assert.Equal(a.Hyperlinks[hi].Item1, b.Hyperlinks[hi].Item1);
+                Assert.Equal(a.Hyperlinks[hi].Item2, b.Hyperlinks[hi].Item2);
+            }
+        }
+        // W11: 自定义XML部件
+        if (a.CustomXmlParts.Count > 0 && b.CustomXmlParts.Count > 0)
+        {
+            Assert.Equal(a.CustomXmlParts.Count, b.CustomXmlParts.Count);
+            foreach (var kv in a.CustomXmlParts)
+            {
+                Assert.True(b.CustomXmlParts.TryGetValue(kv.Key, out var bv),
+                    $"[{context}] 缺失 CustomXmlPart: {kv.Key}");
+                Assert.True(kv.Value.SequenceEqual(bv),
+                    $"[{context}] CustomXmlPart[{kv.Key}] 字节不一致");
+            }
+        }
+        // W06-15: 文档变量
+        if (a.DocumentVariables.Count > 0 && b.DocumentVariables.Count > 0)
+        {
+            Assert.Equal(a.DocumentVariables.Count, b.DocumentVariables.Count);
+            foreach (var kv in a.DocumentVariables)
+            {
+                Assert.True(b.DocumentVariables.TryGetValue(kv.Key, out var bv),
+                    $"[{context}] 缺失 DocumentVariable: {kv.Key}");
+                Assert.Equal(kv.Value, bv);
+            }
         }
 
         // ★ 最严格的断言：document.xml 原文完全一致——保证任何视觉效果都不丢失
@@ -526,6 +577,24 @@ public class WordRoundTripTests : IntegrationTestBase
         Assert.Equal(a.IsPageBreak, b.IsPageBreak);
         Assert.True(a.BookmarkName == b.BookmarkName,
             $"[{context}] 段落[{idx}] 书签不匹配");
+
+        // W08: 有序列表/分页控制（双方都有非默认值时才比较）
+        if (a.IsOrderedList || b.IsOrderedList)
+            Assert.Equal(a.IsOrderedList, b.IsOrderedList);
+        if (a.ListLevel > 0 || b.ListLevel > 0)
+            Assert.Equal(a.ListLevel, b.ListLevel);
+        if (a.ListStartOverride != null && b.ListStartOverride != null)
+            Assert.Equal(a.ListStartOverride, b.ListStartOverride);
+        if (a.KeepNext || b.KeepNext)
+            Assert.Equal(a.KeepNext, b.KeepNext);
+        if (a.KeepLines || b.KeepLines)
+            Assert.Equal(a.KeepLines, b.KeepLines);
+        if (!a.WidowControl || !b.WidowControl)
+            Assert.Equal(a.WidowControl, b.WidowControl);
+        if (a.DropCapLines != null && b.DropCapLines != null)
+            Assert.Equal(a.DropCapLines, b.DropCapLines);
+        if (a.DropCapChars != null && b.DropCapChars != null)
+            Assert.Equal(a.DropCapChars, b.DropCapChars);
 
         // W09: 制表位比较
         if (a.TabStops != null || b.TabStops != null)
@@ -615,6 +684,19 @@ public class WordRoundTripTests : IntegrationTestBase
             // W09: 字符缩放
             Assert.True(arp.CharacterScaling == brp.CharacterScaling,
                 $"[{context}] 段落[{idx}] Run[{ri}] 字符缩放不匹配: 源={arp.CharacterScaling}, 输出={brp.CharacterScaling}");
+            // W07: 发光/阴影（双方都有值时才比较）
+            if (arp.GlowColor != null && brp.GlowColor != null)
+                Assert.True(arp.GlowColor == brp.GlowColor,
+                    $"[{context}] 段落[{idx}] Run[{ri}] 发光颜色不匹配");
+            if (arp.GlowSize != null && brp.GlowSize != null)
+                Assert.Equal(arp.GlowSize, brp.GlowSize);
+            if (arp.ShadowColor != null && brp.ShadowColor != null)
+                Assert.True(arp.ShadowColor == brp.ShadowColor,
+                    $"[{context}] 段落[{idx}] Run[{ri}] 阴影颜色不匹配");
+            if (arp.ShadowOffsetX != null && brp.ShadowOffsetX != null)
+                Assert.Equal(arp.ShadowOffsetX, brp.ShadowOffsetX);
+            if (arp.ShadowOffsetY != null && brp.ShadowOffsetY != null)
+                Assert.Equal(arp.ShadowOffsetY, brp.ShadowOffsetY);
         }
     }
 
@@ -664,6 +746,13 @@ public class WordRoundTripTests : IntegrationTestBase
 
                 Assert.True(aCell.BackgroundColor == bCell.BackgroundColor,
                     $"[{context}] 表格[{idx}] 单元格[{ri},{ci}] 背景色不匹配");
+                // W09: 单元格合并/垂直对齐（双方都有非默认值时才比较）
+                if (aCell.ColSpan > 1 || bCell.ColSpan > 1)
+                    Assert.Equal(aCell.ColSpan, bCell.ColSpan);
+                if (aCell.RowSpan > 1 || bCell.RowSpan > 1)
+                    Assert.Equal(aCell.RowSpan, bCell.RowSpan);
+                if (aCell.VerticalAlignment != null && bCell.VerticalAlignment != null)
+                    Assert.Equal(aCell.VerticalAlignment, bCell.VerticalAlignment);
             }
         }
 
@@ -687,6 +776,10 @@ public class WordRoundTripTests : IntegrationTestBase
             $"[{context}] 图片[{idx}] 扩展名不匹配: 源={ai.Extension}, 输出={bi.Extension}");
         Assert.Equal(ai.WidthEmu, bi.WidthEmu);
         Assert.Equal(ai.HeightEmu, bi.HeightEmu);
+        // W12: 图片关系 ID（双方都有值时比较）
+        if (ai.RelId != null && bi.RelId != null)
+            Assert.True(ai.RelId == bi.RelId,
+                $"[{context}] 图片[{idx}] RelId 不匹配: 源={ai.RelId}, 输出={bi.RelId}");
         // 图片数据逐字节比较
         if (ai.ImageData.Length > 0 && bi.ImageData.Length > 0)
         {
