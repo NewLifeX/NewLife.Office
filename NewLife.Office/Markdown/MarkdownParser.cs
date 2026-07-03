@@ -12,6 +12,7 @@ internal sealed class MarkdownParser
     #region 字段
     private String[] _lines = [];
     private Int32 _pos;
+    private MarkdownDocument? _doc;
     #endregion
 
     #region 入口
@@ -26,6 +27,7 @@ internal sealed class MarkdownParser
         _pos = 0;
 
         var doc = new MarkdownDocument();
+        _doc = doc;
 
         // YAML Front Matter (MD05-02)
         ParseFrontMatter(doc);
@@ -34,6 +36,8 @@ internal sealed class MarkdownParser
         {
             ParseBlock(doc.Blocks);
         }
+
+        _doc = null;
         return doc;
     }
     #endregion
@@ -104,6 +108,14 @@ internal sealed class MarkdownParser
         if (trimmed == "$$" || trimmed.StartsWith("$$"))
         {
             container.Add(ParseMathBlock(trimmed));
+            return;
+        }
+
+        // 缩写定义 *[ABBR]: (MD05-08)
+        if (trimmed.StartsWith("*[") && trimmed.Contains("]:"))
+        {
+            ParseAbbreviation(trimmed);
+            _pos++;
             return;
         }
 
@@ -508,6 +520,21 @@ internal sealed class MarkdownParser
         var inlines = ParseInline(defText);
         block = new FootnoteDefinitionBlock(id, inlines);
         return true;
+    }
+
+    /// <summary>解析缩写定义 *[ABBR]: 全称 (MD05-08)</summary>
+    private void ParseAbbreviation(String trimmed)
+    {
+        // 格式: *[ABBR]: Full Definition
+        var match = Regex.Match(trimmed, @"^\*\[([^\]]+)\]:\s*(.*)$");
+        if (!match.Success) return;
+
+        var abbr = match.Groups[1].Value.Trim();
+        var full = match.Groups[2].Value.Trim();
+        if (abbr.Length > 0 && full.Length > 0 && _doc != null)
+        {
+            _doc.Abbreviations[abbr] = full;
+        }
     }
 
     private MarkdownBlock ParseMathBlock(String firstLine)

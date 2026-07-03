@@ -26,6 +26,9 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
 
     /// <summary>YAML Front Matter 元数据（解析自文档开头的 --- 块），键值对集合</summary>
     public Dictionary<String, String> FrontMatter { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>缩写映射表（MD05-08），键为缩写文本，值为全称</summary>
+    public Dictionary<String, String> Abbreviations { get; } = new(StringComparer.Ordinal);
     #endregion
 
     #region 解析
@@ -95,7 +98,11 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
     /// <returns>HTML 片段（不含 &lt;html&gt;/&lt;body&gt; 包裹）</returns>
     public String ToHtml(MarkdownHtmlOptions? options = null)
     {
-        var converter = new MarkdownHtmlConverter(options ?? new MarkdownHtmlOptions());
+        options ??= new MarkdownHtmlOptions();
+        // 自动传入文档中的缩写映射
+        if (options.Abbreviations == null && Abbreviations.Count > 0)
+            options.Abbreviations = Abbreviations;
+        var converter = new MarkdownHtmlConverter(options);
         return converter.Convert(this);
     }
 

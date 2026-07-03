@@ -11,4 +11,7 @@ public sealed class MarkdownHtmlOptions
 
     /// <summary>是否对链接添加 rel="noopener noreferrer"（默认 false）</summary>
     public Boolean SafeLinks { get; set; }
+
+    /// <summary>缩写映射表（键为缩写文本，值为全称），用于渲染 &lt;abbr&gt; 标签（可选）</summary>
+    public Dictionary<String, String>? Abbreviations { get; set; }
 }

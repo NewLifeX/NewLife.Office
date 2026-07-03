@@ -241,7 +241,7 @@ internal sealed class MarkdownHtmlConverter
         switch (inline.Type)
         {
             case MarkdownInlineType.Text:
-                sb.Append(HtmlEncode(inline.Text ?? ""));
+                RenderTextWithAbbr(sb, inline.Text ?? "");
                 break;
             case MarkdownInlineType.Strong:
                 sb.Append("<strong>");
@@ -297,7 +297,7 @@ internal sealed class MarkdownHtmlConverter
                   .Append(HtmlEncode(inline.Text ?? "")).Append("]</a></sup>");
                 break;
             default:
-                sb.Append(HtmlEncode(inline.Text ?? ""));
+                RenderTextWithAbbr(sb, inline.Text ?? "");
                 break;
         }
     }
@@ -381,6 +381,53 @@ internal sealed class MarkdownHtmlConverter
     {
         if (String.IsNullOrEmpty(url)) return false;
         return url.StartsWith("http://") || url.StartsWith("https://") || url.StartsWith("//");
+    }
+    /// <summary>渲染文本，对已知缩写自动添加 &lt;abbr&gt; 标签 (MD05-08)</summary>
+    private void RenderTextWithAbbr(StringBuilder sb, String text)
+    {
+        if (String.IsNullOrEmpty(text))
+        {
+            sb.Append(HtmlEncode(text));
+            return;
+        }
+
+        var abbrs = _options.Abbreviations;
+        if (abbrs == null || abbrs.Count == 0)
+        {
+            sb.Append(HtmlEncode(text));
+            return;
+        }
+
+        // 简单替换：按缩写文本长度降序排列，避免短缩写误匹配
+        var sorted = abbrs.OrderByDescending(kv => kv.Key.Length).ToList();
+        var i = 0;
+        while (i < text.Length)
+        {
+            var matched = false;
+            foreach (var kv in sorted)
+            {
+                if (i + kv.Key.Length <= text.Length &&
+                    String.Compare(text, i, kv.Key, 0, kv.Key.Length, StringComparison.Ordinal) == 0)
+                {
+                    // 确保是单词边界
+                    var beforeOk = i == 0 || !Char.IsLetterOrDigit(text[i - 1]);
+                    var afterOk = i + kv.Key.Length >= text.Length || !Char.IsLetterOrDigit(text[i + kv.Key.Length]);
+                    if (beforeOk && afterOk)
+                    {
+                        sb.Append("<abbr title=\"").Append(HtmlEncode(kv.Value)).Append("\">")
+                          .Append(HtmlEncode(kv.Key)).Append("</abbr>");
+                        i += kv.Key.Length;
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+            if (!matched)
+            {
+                sb.Append(HtmlEncode(text[i].ToString()));
+                i++;
+            }
+        }
     }
     #endregion
 }
