@@ -448,6 +448,18 @@ public class WordRoundTripTests : IntegrationTestBase
         Assert.Equal(a.DocumentProperties.Title, b.DocumentProperties.Title);
         Assert.Equal(a.DocumentProperties.Author, b.DocumentProperties.Author);
 
+        // 页眉页脚文本
+        Assert.Equal(a.HeaderText ?? "", b.HeaderText ?? "");
+        Assert.Equal(a.FooterText ?? "", b.FooterText ?? "");
+
+        // 批注数量
+        Assert.Equal(a.Comments.Count, b.Comments.Count);
+        for (var ci = 0; ci < a.Comments.Count; ci++)
+        {
+            Assert.Equal(a.Comments[ci].Text, b.Comments[ci].Text);
+            Assert.Equal(a.Comments[ci].Author, b.Comments[ci].Author);
+        }
+
         // ★ 最严格的断言：document.xml 原文完全一致——保证任何视觉效果都不丢失
         if (a.DocumentXml != null && b.DocumentXml != null)
         {
@@ -675,4 +687,57 @@ public class WordRoundTripTests : IntegrationTestBase
             $"[{context}] 图片[{idx}] 高度无效");
     }
     #endregion
+
+    /// <summary>验证页眉页脚和批注在往返中保持</summary>
+    [Fact]
+    [DisplayName("Docx_往返读写_页眉页脚与批注保真")]
+    public void Docx_RoundTrip_HeaderFooterAndComments()
+    {
+        var path = Path.Combine(OutputDir, "roundtrip_hdr_ftr.docx");
+
+        // 构造含页眉页脚和批注的文档
+        using (var w = new WordWriter())
+        {
+            w.PageSettings.HeaderText = "NewLife.Office 页眉";
+            w.PageSettings.FooterText = "第1页 — 测试页脚";
+
+            w.AppendHeading("页眉页脚测试", 1);
+            w.AppendParagraph("此文档包含页眉和页脚。");
+            w.AppendParagraph("第二段：验证页眉页脚在往返中保持。");
+
+            w.Save(path);
+        }
+
+        Assert.True(File.Exists(path));
+
+        // 读取验证
+        Document sourceDoc;
+        using (var reader = new WordReader(path))
+        {
+            sourceDoc = reader.ReadDocument();
+        }
+
+        Assert.Equal("NewLife.Office 页眉", sourceDoc.HeaderText);
+        Assert.Contains("测试页脚", sourceDoc.FooterText ?? "");
+
+        // 往返：写入再读回
+        var outputPath = Path.Combine(OutputDir, "roundtrip_hdr_ftr_out.docx");
+        using (var writer = new WordWriter())
+        {
+            writer.Save(outputPath, sourceDoc);
+        }
+
+        Document outputDoc;
+        using (var reader = new WordReader(outputPath))
+        {
+            outputDoc = reader.ReadDocument();
+        }
+
+        // 验证页眉页脚保持
+        Assert.Equal(sourceDoc.HeaderText, outputDoc.HeaderText);
+        Assert.Equal(sourceDoc.FooterText, outputDoc.FooterText);
+
+        // 验证正文内容保持
+        Assert.Equal(sourceDoc.Elements.Count, outputDoc.Elements.Count);
+    }
 }

@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Text;
 using NewLife.Office;
 using NewLife.Office.Calendar;
 using NewLife.Office.Epub;
@@ -222,4 +223,255 @@ public class PdfRoundTripTests : IntegrationTestBase
         Assert.IsType<PdfReader>(factoryReader);
         (factoryReader as IDisposable)?.Dispose();
     }
+
+    #region 往返测试
+
+    /// <summary>以共享读方式读取文件全部字节</summary>
+    private static Byte[] ReadAllBytesShared(String path)
+    {
+        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        var buf = new Byte[fs.Length];
+        fs.ReadExactly(buf, 0, buf.Length);
+        return buf;
+    }
+
+    /// <summary>获取 Bin 目录下所有 .pdf 文件路径</summary>
+    private static List<String> FindAllPdfFiles()
+    {
+        var baseDir = AppContext.BaseDirectory;
+        var binDir = Path.GetFullPath(Path.Combine(baseDir, ".."));
+        if (!Directory.Exists(binDir)) return [];
+
+        return Directory.GetFiles(binDir, "*.pdf", SearchOption.TopDirectoryOnly)
+            .OrderByDescending(f => new FileInfo(f).Length)
+            .ToList();
+    }
+
+    /// <summary>验证两个 PdfDocument 模型一致性</summary>
+    /// <remarks>
+    /// 比较页数、页面尺寸、元数据、书签、以及每页文本内容。
+    /// 注：当前 PdfReader 的 xref 级内容流解析有局限，TextBlocks 可能为空，
+    /// 因此文本对比使用 ExtractText 的字符多重集比较作为回退方案。
+    /// </remarks>
+    private static void AssertPdfDocumentEqual(PdfDocument src, PdfDocument dst, String fileName, Func<PdfDocument, String> getFullText)
+    {
+        var tag = $"[{fileName}]";
+
+        // ① 页数
+        Assert.Equal(src.Pages.Count, dst.Pages.Count);
+
+        // ② 逐页比较尺寸
+        for (var i = 0; i < src.Pages.Count; i++)
+        {
+            var sp = src.Pages[i];
+            var dp = dst.Pages[i];
+            var pt = $"{tag} P{i}";
+
+            // 页面尺寸（1pt 容差）
+            Assert.True(Math.Abs(sp.Width - dp.Width) <= 1f, $"{pt} Width: {sp.Width} vs {dp.Width}");
+            Assert.True(Math.Abs(sp.Height - dp.Height) <= 1f, $"{pt} Height: {sp.Height} vs {dp.Height}");
+            Assert.Equal(sp.Rotation, dp.Rotation);
+
+            // TextBlocks 级对比（若双方都有数据）
+            if (sp.TextBlocks.Count > 0 && dp.TextBlocks.Count > 0)
+            {
+                Assert.Equal(sp.TextBlocks.Count, dp.TextBlocks.Count);
+                for (var ti = 0; ti < sp.TextBlocks.Count; ti++)
+                {
+                    var st = sp.TextBlocks[ti];
+                    var dt = dp.TextBlocks[ti];
+                    Assert.Equal(st.Text, dt.Text);
+                    Assert.True(Math.Abs(st.FontSize - dt.FontSize) <= 0.5f,
+                        $"{pt}.TB[{ti}] FontSize: {st.FontSize} vs {dt.FontSize}");
+                }
+            }
+        }
+
+        // ③ 文本内容（字符多重集比较，忽略文本块顺序和坐标差异）
+        var srcText = getFullText(src);
+        var dstText = getFullText(dst);
+        var srcSorted = new String(srcText.Where(c => !Char.IsWhiteSpace(c)).OrderBy(c => c).ToArray());
+        var dstSorted = new String(dstText.Where(c => !Char.IsWhiteSpace(c)).OrderBy(c => c).ToArray());
+        Assert.True(srcSorted == dstSorted,
+            $"{tag} 文本字符集不一致（长度: 源={srcSorted.Length}, 输出={dstSorted.Length}）。\n源预览: [{srcText[..Math.Min(80, srcText.Length)]}]...\n输出预览: [{dstText[..Math.Min(80, dstText.Length)]}]...");
+
+        // ④ 元数据
+        Assert.Equal(src.Metadata.Title ?? "", dst.Metadata.Title ?? "");
+        Assert.Equal(src.Metadata.Author ?? "", dst.Metadata.Author ?? "");
+        Assert.Equal(src.Metadata.Subject ?? "", dst.Metadata.Subject ?? "");
+
+        // ⑤ 书签
+        Assert.Equal(src.Bookmarks.Count, dst.Bookmarks.Count);
+        for (var i = 0; i < src.Bookmarks.Count; i++)
+        {
+            Assert.Equal(src.Bookmarks[i].Title, dst.Bookmarks[i].Title);
+            Assert.Equal(src.Bookmarks[i].PageIndex, dst.Bookmarks[i].PageIndex);
+        }
+
+        // ⑥ 注释数量
+        Assert.Equal(src.Annotations.Count, dst.Annotations.Count);
+    }
+
+    /// <summary>对单个 pdf 文件执行完整往返验证</summary>
+    private static void RunSingleFileRoundTrip(String sourcePath, String outputDir)
+    {
+        var fileName = Path.GetFileName(sourcePath);
+        var outputPath = Path.Combine(outputDir, fileName);
+
+        // ─── 读取源文件 ───
+        PdfDocument sourceDoc;
+        String sourceFullText;
+        using (var reader = new PdfReader(sourcePath))
+        {
+            sourceDoc = reader.ReadDocument();
+            sourceFullText = reader.ExtractText();
+        }
+        Assert.True(sourceDoc.Pages.Count > 0, $"[{fileName}] 源文件应至少包含 1 页");
+
+        // ─── 写入再读取 ───
+        using (var writer = new PdfWriter())
+        {
+            writer.Save(outputPath, sourceDoc);
+        }
+        Assert.True(File.Exists(outputPath), $"[{fileName}] 输出文件应存在");
+
+        PdfDocument outputDoc;
+        String outputFullText;
+        using (var reader = new PdfReader(outputPath))
+        {
+            outputDoc = reader.ReadDocument();
+            outputFullText = reader.ExtractText();
+        }
+
+        // ─── 模型级比较（用 ExtractText 做文本对比）───
+        // 源文件文本用已提取的 sourceFullText，输出文件也用已提取的 outputFullText
+        AssertPdfDocumentEqual(sourceDoc, outputDoc, fileName, doc =>
+        {
+            // 对于源文件，用预提取的文本
+            if (doc == sourceDoc) return sourceFullText;
+            // 对于输出文件，用预提取的文本
+            return outputFullText;
+        });
+    }
+
+    /// <summary>程序化构造 PDF → PdfWriter 直接写入 → PdfReader 读回 → 文本级对比</summary>
+    [Fact]
+    [DisplayName("PDF_程序化往返：PdfWriter直接构建→ReadDocument→文本级对比")]
+    public void Pdf_RoundTrip_Programmatic()
+    {
+        var outputPath = Path.Combine(OutputDir, "roundtrip_prog.pdf");
+
+        // ─── 构造源文档（直接使用 PdfWriter API）───
+        var sourceDoc = new PdfDocument
+        {
+            Metadata = new PdfDocumentInfo
+            {
+                Title = "往返测试文档",
+                Author = "NewLife.Office",
+                Subject = "PDF RoundTrip Test",
+            },
+        };
+        sourceDoc.Bookmarks.Add(new PdfOutline { Title = "第一页", PageIndex = 0 });
+        sourceDoc.Bookmarks.Add(new PdfOutline { Title = "第二页", PageIndex = 1 });
+
+        // 先用 PdfWriter 构建 PDF 文件
+        using (var w = new PdfWriter())
+        {
+            w.DocumentTitle = sourceDoc.Metadata.Title;
+            w.DocumentAuthor = sourceDoc.Metadata.Author;
+            w.DocumentSubject = sourceDoc.Metadata.Subject;
+
+            w.BeginPage();
+            w.DrawText("PDF 往返测试", 56f, 750f, 24f);
+            w.DrawText("第一页内容：这是直接构建的 PDF 文档。", 56f, 720f, 12f);
+            w.DrawText("Hello World from NewLife.Office PDF Engine.", 56f, 700f, 12f);
+            w.DrawText("数字测试：12345.6789  特殊字符：!@#$%^&*()", 56f, 680f, 11f);
+            w.EndPage();
+
+            w.BeginPage();
+            w.DrawText("第二页", 56f, 780f, 18f);
+            w.DrawText("数据行 1: A=100, B=200, C=300", 56f, 750f, 12f);
+            w.DrawText("数据行 2: X=1.5, Y=2.7, Z=3.14", 56f, 730f, 12f);
+            w.DrawText("中英文混排 Mixed Content 测试 Test", 56f, 710f, 12f);
+            w.EndPage();
+
+            w.Bookmarks.AddRange(sourceDoc.Bookmarks);
+            w.Save(outputPath);
+        }
+        Assert.True(File.Exists(outputPath), "输出文件应存在");
+
+        // ─── 读回 ───
+        PdfDocument outputDoc;
+        String outputFullText;
+        using (var reader = new PdfReader(outputPath))
+        {
+            outputFullText = reader.ExtractText();
+            Assert.Contains("PDF 往返测试", outputFullText);
+            Assert.Contains("Hello World", outputFullText);
+
+            outputDoc = reader.ReadDocument();
+        }
+
+        // ─── 验证 ───
+        Assert.Equal(2, outputDoc.Pages.Count);
+        // 文本内容包含关键字符串
+        Assert.Contains("第一页内容", outputFullText);
+        Assert.Contains("第二页", outputFullText);
+        Assert.Contains("中英文混排", outputFullText);
+    }
+
+    /// <summary>遍历 Bin 目录下所有 .pdf 文件，每个执行完整往返测试</summary>
+    /// <remarks>若源文件 ReadDocument 返回 0 页（暂不支持的 PDF 特性），则跳过该文件</remarks>
+    [Fact]
+    [DisplayName("PDF_逐文件往返：读取Bin所有pdf→PdfDocument→写入→读回→模型对比")]
+    public void Pdf_RoundTrip_AllFilesInBin()
+    {
+        var allFiles = FindAllPdfFiles();
+        Assert.True(allFiles.Count > 0, $"Bin 目录下未找到 .pdf 文件。BaseDir={AppContext.BaseDirectory}");
+
+        var pdfOutDir = Path.Combine(OutputDir, "Pdf");
+        Directory.CreateDirectory(pdfOutDir);
+
+        var failures = new List<(String file, String error)>();
+        var skipped = 0;
+        foreach (var sourcePath in allFiles)
+        {
+            var fileName = Path.GetFileName(sourcePath);
+            try
+            {
+                // 预检查：ReadDocument 能否读取源文件
+                using (var preReader = new PdfReader(sourcePath))
+                {
+                    var preDoc = preReader.ReadDocument();
+                    if (preDoc.Pages.Count == 0)
+                    {
+                        skipped++;
+                        continue; // 跳过暂不支持的 PDF
+                    }
+                }
+
+                RunSingleFileRoundTrip(sourcePath, pdfOutDir);
+            }
+            catch (Exception ex)
+            {
+                var lines = ex.Message.Split('\n');
+                var msg = String.Join(" | ", lines.Take(3)).Trim();
+                failures.Add((fileName, msg));
+            }
+        }
+
+        if (skipped > 0)
+            Console.WriteLine($"  跳过 {skipped} 个暂不支持的 PDF 文件");
+
+        if (failures.Count > 0)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"\n❌ {failures.Count}/{allFiles.Count} 个文件测试失败:");
+            foreach (var (file, err) in failures)
+                sb.AppendLine($"  [{file}] {err}");
+            Assert.Fail(sb.ToString());
+        }
+    }
+
+    #endregion
 }

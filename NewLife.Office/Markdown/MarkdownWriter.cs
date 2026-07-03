@@ -238,7 +238,7 @@ internal sealed class MarkdownWriter
         {
             var tc = cell as TableCellBlock;
             var align = tc?.Alignment ?? "";
-            sb.Append(align == "center" ? " :---: " : align == "right" ? " ---: " : " --- ");
+            sb.Append(align == "center" ? " :---: " : align == "right" ? " ---: " : align == "left" ? " :--- " : " --- ");
             sb.Append('|');
         }
         sb.AppendLine();

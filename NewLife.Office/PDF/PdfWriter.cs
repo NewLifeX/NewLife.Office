@@ -1094,6 +1094,27 @@ public class PdfWriter : IDisposable
         Permissions      = document.Permissions;
         if (document.Bookmarks.Count > 0)
             Bookmarks.AddRange(document.Bookmarks);
+
+        // 从 PdfDocument 模型写入页面内容
+        if (document.Pages.Count > 0)
+        {
+            foreach (var page in document.Pages)
+            {
+                PageWidth = page.Width > 0 ? page.Width : PageWidth;
+                PageHeight = page.Height > 0 ? page.Height : PageHeight;
+                BeginPage();
+
+                // 写入文本块（PDF 坐标：原点在左下角，与 DrawText 一致）
+                foreach (var tb in page.TextBlocks)
+                {
+                    if (!String.IsNullOrEmpty(tb.Text))
+                        DrawText(tb.Text, tb.X, tb.Y, tb.FontSize > 0 ? tb.FontSize : 12);
+                }
+
+                EndPage();
+            }
+        }
+
         Save(stream);
     }
 

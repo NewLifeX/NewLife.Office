@@ -389,6 +389,41 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
         return results;
     }
 
+    /// <summary>获取指定页的文本块（带坐标位置）</summary>
+    /// <param name="pageIndex">页面索引（0 起）</param>
+    /// <returns>该页的所有文本块</returns>
+    public List<PdfText> GetPageTextBlocks(Int32 pageIndex)
+    {
+        var results = new List<PdfText>();
+        if (XRefTable == null) return results;
+
+        var pageObjNums = GetPageObjectNumbers();
+        if (pageIndex < 0 || pageIndex >= pageObjNums.Count) return results;
+
+        var pageObjNum = pageObjNums[pageIndex];
+        var pageObj = PdfObjectParser.ReadObject(_data, XRefTable, pageObjNum);
+        if (pageObj is not DictObj pageDictObj) return results;
+
+        var pageDict = pageDictObj.Value;
+        if (!pageDict.TryGetValue("Contents", out var contentsVal)) return results;
+
+        var contentRefs = new List<Ref>();
+        if (contentsVal is Ref r) contentRefs.Add(r);
+        else if (contentsVal is PdfArray arr) contentRefs.AddRange(arr.Items.OfType<Ref>());
+
+        foreach (var cref in contentRefs)
+        {
+            var contentObj = PdfObjectParser.ReadObject(_data, XRefTable, cref.ObjNum);
+            if (contentObj is not PdfStream contentStream) continue;
+
+            var decompressed = DecompressStreamData(contentStream.Data, contentStream.Dict);
+            var contentText = _latin1.GetString(decompressed);
+            ExtractPositionedText(contentText, results);
+        }
+
+        return results;
+    }
+
     /// <summary>启发式提取 PDF 中的表格数据（按位置聚类），返回每页的表格行数据</summary>
     /// <param name="yTolerance">Y 坐标容差（点），默认 5</param>
     /// <param name="xTolerance">X 坐标容差（点），默认 10</param>
@@ -740,8 +775,9 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
 
         // 读取页面信息
         var pageObjNums = GetPageObjectNumbers();
-        foreach (var pageObjNum in pageObjNums)
+        for (var i = 0; i < pageObjNums.Count; i++)
         {
+            var pageObjNum = pageObjNums[i];
             var pageObj = PdfObjectParser.ReadObject(_data, XRefTable!, pageObjNum);
             if (pageObj is not DictObj pageDictObj) continue;
 
@@ -758,6 +794,9 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
             // Rotate
             if (pageDict.TryGetValue("Rotate", out var rotVal) && rotVal is PdfNumber rn)
                 page.Rotation = (Int32)rn.Value;
+
+            // 提取该页文本块（带坐标）
+            page.TextBlocks = GetPageTextBlocks(i);
 
             doc.Pages.Add(page);
         }

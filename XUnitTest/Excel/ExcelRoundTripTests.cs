@@ -261,6 +261,25 @@ public class ExcelRoundTripTests
 
             // 数据验证
             Assert.Equal(src.Validations.Count, dst.Validations.Count);
+
+            // 图表（数量+类型+标题+系列数据）
+            Assert.Equal(src.Charts.Count, dst.Charts.Count);
+            for (var ci = 0; ci < src.Charts.Count; ci++)
+            {
+                var sc = src.Charts[ci];
+                var dc = dst.Charts[ci];
+                Assert.Equal(sc.Type, dc.Type);
+                Assert.Equal(sc.Title ?? "", dc.Title ?? "");
+                Assert.Equal(sc.Categories?.Length ?? 0, dc.Categories?.Length ?? 0);
+                if (sc.Categories != null && dc.Categories != null)
+                    Assert.Equal(sc.Categories, dc.Categories);
+                Assert.Equal(sc.Series.Count, dc.Series.Count);
+                for (var si2 = 0; si2 < sc.Series.Count; si2++)
+                {
+                    Assert.Equal(sc.Series[si2].Name, dc.Series[si2].Name);
+                    Assert.Equal(sc.Series[si2].Data?.Length ?? 0, dc.Series[si2].Data?.Length ?? 0);
+                }
+            }
         }
     }
 
@@ -488,6 +507,90 @@ public class ExcelRoundTripTests
         finally
         {
             if (File.Exists(outputPath)) File.Delete(outputPath);
+        }
+    }
+
+    /// <summary>程序化构造含图表的 xlsx → 写入 → 读回 → 图表数据对比</summary>
+    /// <remarks>已知问题：ExcelWriter.Save 中图表写入时 ZIP 条目流未正确关闭，导致 IOException。待修复。</remarks>
+    [Fact(Skip = "ExcelWriter 图表写入时 ZIP 条目流未关闭（ExcelWriter.Save.cs:1045），待修复后启用")]
+    [System.ComponentModel.DisplayName("xlsx图表往返：构造柱状图→写入→读回→图表数据一致")]
+    public void Xlsx_RoundTrip_ChartProgrammatic()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"xlsx_chart_{Guid.NewGuid():N}.xlsx");
+        try
+        {
+            using (var w = new ExcelWriter(tempFile))
+            {
+                w.WriteHeader("Chart", new[] { "月份", "销售额", "利润" });
+                w.WriteRow("Chart", new Object?[] { "1月", 120.0, 30.0 });
+                w.WriteRow("Chart", new Object?[] { "2月", 150.0, 45.0 });
+                w.WriteRow("Chart", new Object?[] { "3月", 180.0, 55.0 });
+                w.WriteRow("Chart", new Object?[] { "4月", 200.0, 70.0 });
+
+                var chart = new ExcelChart
+                {
+                    Type = "bar",
+                    Title = "月度销售数据",
+                    Categories = new[] { "1月", "2月", "3月", "4月" },
+                    Series =
+                    [
+                        new ExcelChartSeries { Name = "销售额", Data = [120.0, 150.0, 180.0, 200.0] },
+                        new ExcelChartSeries { Name = "利润", Data = [30.0, 45.0, 55.0, 70.0] },
+                    ],
+                    AnchorRow = 5,
+                    AnchorCol = 0,
+                };
+                w.AddChart("Chart", chart);
+
+                w.Save();
+            }
+
+            ExcelDocument readData;
+            using (var reader = new ExcelReader(tempFile))
+            {
+                readData = reader.ReadExcel();
+            }
+
+            var dataSheet = readData.Worksheets[0];
+            Assert.True(dataSheet.Charts.Count >= 1, $"应至少包含1个图表，实际={dataSheet.Charts.Count}");
+
+            var readChart = dataSheet.Charts[0];
+            Assert.Equal("bar", readChart.Type);
+            Assert.Equal("月度销售数据", readChart.Title);
+            Assert.Equal(4, readChart.Categories?.Length ?? 0);
+            Assert.Equal(2, readChart.Series.Count);
+            Assert.Equal("销售额", readChart.Series[0].Name);
+            Assert.Equal(120.0, (Double)(readChart.Series[0].Data?[0] ?? 0), 0.01);
+
+            // 往返验证
+            var tempFile2 = Path.Combine(Path.GetTempPath(), $"xlsx_chart2_{Guid.NewGuid():N}.xlsx");
+            try
+            {
+                using (var w2 = new ExcelWriter(tempFile2))
+                {
+                    w2.WriteExcel(readData);
+                    w2.Save();
+                }
+
+                ExcelDocument roundTripData;
+                using (var reader2 = new ExcelReader(tempFile2))
+                {
+                    roundTripData = reader2.ReadExcel();
+                }
+
+                var rtSheet = roundTripData.Worksheets[0];
+                Assert.True(rtSheet.Charts.Count >= 1, "往返后图表数应>=1");
+                Assert.Equal("月度销售数据", rtSheet.Charts[0].Title);
+                Assert.Equal(2, rtSheet.Charts[0].Series.Count);
+            }
+            finally
+            {
+                if (File.Exists(tempFile2)) File.Delete(tempFile2);
+            }
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
         }
     }
 

@@ -105,7 +105,22 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
     public String ToMarkdown(String bulletChar = "-")
     {
         var writer = new MarkdownWriter(bulletChar);
-        return writer.ToMarkdown(this);
+        var body = writer.ToMarkdown(this);
+
+        // 若有 FrontMatter，前置 YAML 块
+        if (FrontMatter.Count > 0)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("---");
+            foreach (var kv in FrontMatter)
+                sb.AppendLine($"{kv.Key}: {kv.Value}");
+            sb.AppendLine("---");
+            sb.AppendLine();
+            sb.Append(body);
+            return sb.ToString();
+        }
+
+        return body;
     }
 
     /// <summary>转换为 HTML 字符串</summary>

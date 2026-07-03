@@ -183,6 +183,8 @@ public class PptxRoundTripTests
         Assert.Equal(src.ComplexScriptFontName ?? "", dst.ComplexScriptFontName ?? "");
         Assert.Equal(src.SymbolFontName ?? "", dst.SymbolFontName ?? "");
         Assert.Equal(src.HyperlinkUrl ?? "", dst.HyperlinkUrl ?? "");
+        Assert.Equal(src.Superscript, dst.Superscript);
+        Assert.Equal(src.Subscript, dst.Subscript);
         var srcGrad = src.GradFillColors?.Length ?? 0;
         var dstGrad = dst.GradFillColors?.Length ?? 0;
         Assert.Equal(srcGrad, dstGrad);
@@ -219,6 +221,9 @@ public class PptxRoundTripTests
         Assert.True(EmuClose(src.Width, dst.Width), $"{tag}.Width");
         Assert.True(EmuClose(src.Height, dst.Height), $"{tag}.Height");
         Assert.Equal(src.Data.Length, dst.Data.Length);
+        // 逐字节比较图片数据（前100字节+后100字节抽样，大数据量完整比较）
+        for (var i = 0; i < src.Data.Length; i++)
+            Assert.True(src.Data[i] == dst.Data[i], $"{tag}.Data[{i}]: {src.Data[i]:X2} vs {dst.Data[i]:X2}");
     }
 
     /// <summary>验证表格</summary>
@@ -271,6 +276,9 @@ public class PptxRoundTripTests
         {
             AssertTextBoxPosition(src.TextBoxes[i], dst.TextBoxes[i], $"{tag}.TB[{i}]");
             AssertTextBoxText(src.TextBoxes[i], dst.TextBoxes[i], $"{tag}.TB[{i}]");
+            AssertTextBoxFont(src.TextBoxes[i], dst.TextBoxes[i], $"{tag}.TB[{i}]");
+            AssertTextBoxFormat(src.TextBoxes[i], dst.TextBoxes[i], $"{tag}.TB[{i}]");
+            AssertTextBoxParagraph(src.TextBoxes[i], dst.TextBoxes[i], $"{tag}.TB[{i}]");
         }
     }
 
@@ -283,9 +291,16 @@ public class PptxRoundTripTests
         Assert.True(EmuClose(src.Width, dst.Width), $"{tag}.Width");
         Assert.True(EmuClose(src.Height, dst.Height), $"{tag}.Height");
         Assert.Equal(src.Data.Length, dst.Data.Length);
+        for (var i = 0; i < src.Data.Length; i++)
+            Assert.True(src.Data[i] == dst.Data[i], $"{tag}.Data[{i}]: {src.Data[i]:X2} vs {dst.Data[i]:X2}");
         var srcThumb = src.ThumbnailData?.Length ?? 0;
         var dstThumb = dst.ThumbnailData?.Length ?? 0;
         Assert.Equal(srcThumb, dstThumb);
+        if (src.ThumbnailData != null && dst.ThumbnailData != null)
+        {
+            for (var i = 0; i < src.ThumbnailData.Length; i++)
+                Assert.True(src.ThumbnailData[i] == dst.ThumbnailData[i], $"{tag}.Thumb[{i}]: {src.ThumbnailData[i]:X2} vs {dst.ThumbnailData[i]:X2}");
+        }
     }
 
     /// <summary>验证切换动画</summary>
@@ -869,32 +884,32 @@ public class PptxRoundTripTests
         foreach (var sourcePath in allFiles)
         {
             var fileName = Path.GetFileName(sourcePath);
-            //try
+            try
             {
                 RunSingleFileRoundTrip(sourcePath, OutputDir);
             }
-            //catch (Exception ex)
-            //{
-            //    // 取异常消息的前 3 行（第一行是概要，后面是细节）
-            //    var lines = ex.Message.Split('\n');
-            //    var msg = String.Join(" | ", lines.Take(3)).Trim();
-            //    failures.Add((fileName, msg));
-            //}
+            catch (Exception ex)
+            {
+                // 取异常消息的前 3 行（第一行是概要，后面是细节）
+                var lines = ex.Message.Split('\n');
+                var msg = String.Join(" | ", lines.Take(3)).Trim();
+                failures.Add((fileName, msg));
+            }
         }
 
-        //// 汇总报告
-        //if (failures.Count > 0)
-        //{
-        //    var sb = new StringBuilder();
-        //    sb.AppendLine($"\n❌ {failures.Count}/{allFiles.Count} 个文件测试失败:");
-        //    foreach (var (file, err) in failures)
-        //        sb.AppendLine($"  [{file}] {err}");
-        //    Assert.Fail(sb.ToString());
-        //}
-        //else
-        //{
-        //    XTrace.WriteLine($"\n✅ 全部 {allFiles.Count} 个文件往返测试通过");
-        //}
+        // 汇总报告
+        if (failures.Count > 0)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine($"\n❌ {failures.Count}/{allFiles.Count} 个文件测试失败:");
+            foreach (var (file, err) in failures)
+                sb.AppendLine($"  [{file}] {err}");
+            Assert.Fail(sb.ToString());
+        }
+        else
+        {
+            XTrace.WriteLine($"\n✅ 全部 {allFiles.Count} 个文件往返测试通过");
+        }
     }
 
     #endregion
