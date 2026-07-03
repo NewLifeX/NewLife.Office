@@ -435,6 +435,28 @@ internal sealed class MarkdownParser
     #endregion
 
     #region MD05 高级解析（FrontMatter/脚注/数学公式/自动链接）
+    /// <summary>Emoji 短码映射表 (MD05-05)</summary>
+    private static readonly Dictionary<String, String> EmojiMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["smile"] = "😄", ["laughing"] = "😆", ["joy"] = "😂", ["grin"] = "😁",
+        ["wink"] = "😉", ["blush"] = "😊", ["heart_eyes"] = "😍", ["kissing_heart"] = "😘",
+        ["thinking"] = "🤔", ["neutral_face"] = "😐", ["expressionless"] = "😑",
+        ["angry"] = "😠", ["rage"] = "😡", ["tired_face"] = "😫", ["cry"] = "😢",
+        ["sob"] = "😭", ["scream"] = "😱", ["sleeping"] = "😴", ["sunglasses"] = "😎",
+        ["+1"] = "👍", ["thumbsup"] = "👍", ["-1"] = "👎", ["thumbsdown"] = "👎",
+        ["clap"] = "👏", ["wave"] = "👋", ["ok_hand"] = "👌", ["pray"] = "🙏",
+        ["muscle"] = "💪", ["fire"] = "🔥", ["star"] = "⭐", ["heart"] = "❤️",
+        ["broken_heart"] = "💔", ["zap"] = "⚡", ["boom"] = "💥", ["rocket"] = "🚀",
+        ["check"] = "✅", ["x"] = "❌", ["warning"] = "⚠️", ["question"] = "❓",
+        ["bulb"] = "💡", ["book"] = "📖", ["memo"] = "📝", ["package"] = "📦",
+        ["lock"] = "🔒", ["unlock"] = "🔓", ["key"] = "🔑", ["hammer"] = "🔨",
+        ["link"] = "🔗", ["email"] = "📧", ["phone"] = "📱", ["computer"] = "💻",
+        ["tada"] = "🎉", ["gift"] = "🎁", ["coffee"] = "☕", ["beer"] = "🍺",
+        ["pizza"] = "🍕", ["apple"] = "🍎", ["car"] = "🚗", ["airplane"] = "✈️",
+        ["sunny"] = "☀️", ["cloud"] = "☁️", ["rain"] = "🌧️", ["snow"] = "❄️",
+        ["100"] = "💯", ["heavy_check_mark"] = "✔️", ["heavy_multiplication_x"] = "✖️",
+    };
+
     private void ParseFrontMatter(MarkdownDocument doc)
     {
         if (_pos >= _lines.Length) return;
@@ -689,6 +711,24 @@ internal sealed class MarkdownParser
                         FlushText(text, textStart, i, result);
                         result.Add(new MarkdownInline { Type = MarkdownInlineType.FootnoteRef, Text = fnId });
                         i = closeBracket + 1;
+                        textStart = i;
+                        continue;
+                    }
+                }
+            }
+
+            // Emoji 短码 :smile: (MD05-05)
+            if (ch == ':' && i > textStart && i + 2 < end)
+            {
+                var colonEnd = text.IndexOf(':', i + 1);
+                if (colonEnd > i + 1 && colonEnd - i - 1 <= 30)
+                {
+                    var code = text[(i + 1)..colonEnd];
+                    if (EmojiMap.TryGetValue(code, out var emoji))
+                    {
+                        FlushText(text, textStart, i, result);
+                        result.Add(MarkdownInline.CreateText(emoji));
+                        i = colonEnd + 1;
                         textStart = i;
                         continue;
                     }
