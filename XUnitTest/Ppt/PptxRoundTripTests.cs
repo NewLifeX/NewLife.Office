@@ -93,7 +93,7 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.Equal(src.Videos.Count, dst.Videos.Count);
     }
 
-    /// <summary>验证文本框位置和尺寸</summary>
+    /// <summary>验证文本框位置、尺寸和旋转</summary>
     private static void AssertTextBoxPosition(TextBox src, TextBox dst, String tag)
     {
         Assert.True(EmuClose(src.Left, dst.Left), $"{tag}.Left: {src.Left} vs {dst.Left}");
@@ -215,6 +215,7 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.Equal(src.EastAsianFontName ?? "", dst.EastAsianFontName ?? "");
         Assert.Equal(src.ComplexScriptFontName ?? "", dst.ComplexScriptFontName ?? "");
         Assert.Equal(src.SymbolFontName ?? "", dst.SymbolFontName ?? "");
+
     }
 
     /// <summary>验证图片</summary>
