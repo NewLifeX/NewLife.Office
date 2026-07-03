@@ -41,6 +41,18 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
         return new MarkdownParser().Parse(text);
     }
 
+    /// <summary>从 Markdown 字符串解析文档（使用指定管线）</summary>
+    /// <param name="text">Markdown 文本</param>
+    /// <param name="pipeline">处理管线（控制启用/禁用的扩展）</param>
+    /// <returns>已解析的文档对象</returns>
+    public static MarkdownDocument Parse(String text, MarkdownPipeline pipeline)
+    {
+        if (String.IsNullOrEmpty(text)) return new MarkdownDocument();
+        var parser = new MarkdownParser();
+        parser.Pipeline = pipeline;
+        return parser.Parse(text);
+    }
+
     /// <summary>从流解析文档</summary>
     /// <param name="stream">输入流（UTF-8 或带 BOM）</param>
     /// <returns>已解析的文档对象</returns>

@@ -13,6 +13,9 @@ internal sealed class MarkdownParser
     private String[] _lines = [];
     private Int32 _pos;
     private MarkdownDocument? _doc;
+
+    /// <summary>处理管线（MD06），为 null 时使用默认全功能管线</summary>
+    public MarkdownPipeline? Pipeline { get; set; }
     #endregion
 
     #region 入口
