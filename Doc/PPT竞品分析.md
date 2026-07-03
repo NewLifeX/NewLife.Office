@@ -474,7 +474,7 @@
 
 12. ✅ **SVG 图片**：读写 `image/svg+xml` (S15-03)
 13. ✅ **背景渐变填充**：`<p:bgPr><a:gradFill>` (S16-03)
-14. 🔄 **pptx → PNG/JPEG**：需外部渲染库 SkiaSharp/Docnet，当前 NotSupportedException
+14. � **pptx → PNG/JPEG**：不计划（需外部渲染库，与零外部依赖定位冲突），当前 NotSupportedException
 15. ✅ **Section 管理**：`Presentation.Sections` 读写 (S13-04)
 
 ---

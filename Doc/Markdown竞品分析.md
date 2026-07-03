@@ -31,18 +31,18 @@
 | 引用块嵌套 | ⚠️ | ✅ | ✅ | ✅ |
 | 围栏代码块 | ✅ | ✅ | ✅ | ✅ |
 | HTML 块保留 | ✅ | ✅ | ✅ | ✅ |
-| YAML Front Matter | ❌ | ✅ | ❌ | ❌ |
-| 脚注 | ❌ | ✅ | ❌ | ❌ |
-| 数学公式 (LaTeX) | ❌ | ✅ | ❌ | ❌ |
+| YAML Front Matter | ✅ | ✅ | ❌ | ❌ |
+| 脚注 | ✅ | ✅ | ❌ | ❌ |
+| 数学公式 (LaTeX) | ✅ | ✅ | ❌ | ❌ |
 | 图表 (Mermaid) | ❌ | ✅ | ❌ | ❌ |
-| Emoji 短码 | ❌ | ✅ | ❌ | ❌ |
-| 自定义属性 `{.class}` | ❌ | ✅ | ❌ | ❌ |
-| 定义列表 | ❌ | ✅ | ❌ | ❌ |
-| 缩写 | ❌ | ✅ | ❌ | ❌ |
-| 自动链接 | ❌ | ✅ | ❌ | ❌ |
+| Emoji 短码 | ✅ | ✅ | ❌ | ❌ |
+| 自定义属性 `{.class}` | ✅ | ✅ | ❌ | ❌ |
+| 定义列表 | ✅ | ✅ | ❌ | ❌ |
+| 缩写 | ✅ | ✅ | ❌ | ❌ |
+| 自动链接 | ✅ | ✅ | ❌ | ❌ |
 | 媒体嵌入 | ❌ | ✅ | ❌ | ❌ |
-| 源码位置追踪 | ❌ | ✅ | ❌ | ❌ |
-| 往返渲染 (Roundtrip) | ❌ | ✅ | ❌ | ❌ |
+| 源码位置追踪 | ✅ | ✅ | ❌ | ❌ |
+| 往返渲染 (Roundtrip) | ✅ | ✅ | ❌ | ❌ |
 
 ### 2.2 输出/转换能力（核心差异化）
 
@@ -53,18 +53,18 @@
 | MD → Word (.docx) | ✅ | ❌ | ❌ | ❌ |
 | MD → PDF | ✅ | ❌ | ❌ | ❌ |
 | MD → Markdown (序列化) | ✅ | ✅ | ❌ | — |
-| **HTML → MD** | 🔄 **规划 P0** | ❌ | ❌ | ✅ |
+| **HTML → MD** | ✅ (HtmlToMarkdownConverter) | ❌ | ❌ | ✅ |
 | **Word → MD** | ✅ (IMarkdownExtractable) | ❌ | ❌ | ❌ |
-| **PDF → MD** | 🔄 规划 P2 | ❌ | ❌ | ❌ |
+| **PDF → MD** | ✅ (MD07-01, PdfReader→MD) | ❌ | ❌ | ❌ |
 | HTML 安全选项 (SafeLinks) | ✅ | ❌ | ❌ | ⚠️ |
 
 ### 2.3 API 与架构
 
 | 功能 | NewLife.Office | Markdig | CommonMark.NET | ReverseMarkdown |
 |------|:---:|:---:|:---:|:---:|
-| 管线/管道模式 | 🔄 规划 P1 | ✅ | ❌ | ❌ |
+| 管线/管道模式 | ✅ (MarkdownPipeline) | ✅ | ❌ | ❌ |
 | **强类型 AST 继承体系** | ✅ (v2.0 已实现) | ✅ | ❌ | ❌ |
-| 扩展机制 | 🔄 规划 P1 | ✅ (20+扩展) | ❌ | ⚠️ (标签别名) |
+| 扩展机制 | ✅ (IMarkdownExtension) | ✅ (20+扩展) | ❌ | ⚠️ (标签别名) |
 | 流式解析 | ✅ | ✅ | ✅ | ✅ |
 | 文件解析 | ✅ | ✅ | ❌ | ❌ |
 | NuGet 包体积 | <50KB | ~500KB | ~100KB | ~200KB |
@@ -86,20 +86,22 @@
 | **安全选项** | SafeLinks 危险链接过滤，适合服务端渲染场景 |
 | **统一办公文档生态** | 与 Excel/Word/PDF/PPT 模块同一库，API 风格一致，零对接成本 |
 
-### 3.2 差距项（建议优先补齐）
+### 3.2 差距项（已全部补齐 ✅）
 
-| 优先级 | 功能 | 竞品参考 | 理由 |
-|--------|------|---------|------|
-| **P0** | HTML→MD 反向转换 | ReverseMarkdown | 补全双向转换闭环最关键的一块拼图 |
-| **P0** | 自动链接 (AutoLinks) | Markdig | 高频使用场景，实现简单 |
-| **P1** | YAML Front Matter | Markdig | 静态博客/文档站点标配 |
-| **P1** | 管线/扩展机制 | Markdig | 支持可选扩展开关，架构升级 |
-| **P2** | 脚注 | Markdig | 技术文档常用 |
-| **P2** | 数学公式 (LaTeX) | Markdig | 技术写作刚需 |
-| **P2** | Emoji 短码 | Markdig | 提升用户友好度 |
-| **P2** | PDF→MD 文本提取 | — | NewLife.Office 独有能力，利用已有 PdfReader |
-| **P3** | 往返渲染 (Roundtrip) | Markdig | Markdown 编辑器场景 |
-| **P3** | 源码位置追踪 | Markdig | 编辑器场景需要时 |
+| 优先级 | 功能 | 竞品参考 | 状态 |
+|--------|------|---------|:---:|
+| ~~P0~~ | ~~HTML→MD 反向转换~~ | ReverseMarkdown | ✅ MD04-01 |
+| ~~P0~~ | ~~自动链接 (AutoLinks)~~ | Markdig | ✅ MD05-01 |
+| ~~P1~~ | ~~YAML Front Matter~~ | Markdig | ✅ MD05-02 |
+| ~~P1~~ | ~~管线/扩展机制~~ | Markdig | ✅ MD06-01/02 |
+| ~~P2~~ | ~~脚注~~ | Markdig | ✅ MD05-03 |
+| ~~P2~~ | ~~数学公式 (LaTeX)~~ | Markdig | ✅ MD05-04 |
+| ~~P2~~ | ~~Emoji 短码~~ | Markdig | ✅ MD05-05 |
+| ~~P2~~ | ~~PDF→MD 文本提取~~ | — | ✅ MD07-01 |
+| ~~P3~~ | ~~往返渲染 (Roundtrip)~~ | Markdig | ✅ MD06-03 |
+| ~~P3~~ | ~~源码位置追踪~~ | Markdig | ✅ MD06-04 |
+
+> **v3.0 全部差距项已于 2026-07-03 前补齐完成。** 剩余 Markdig 独有但 NewLife.Office 不计划的：Mermaid 图表渲染（需引入 JS 引擎）、媒体嵌入（非 Markdown 核心需求）。
 
 ### 3.3 双向转换矩阵（NewLife.Office 特有）
 
@@ -144,14 +146,14 @@ var html = CommonMarkConverter.Convert("# Hello\nWorld");
 |------|------|---------|:---:|
 | **v1.0** | 基础解析 + 正向转换 | CommonMark+GFM 解析，MD→HTML/Word/PDF | ✅ 完成 |
 | **v2.0** | AST 继承体系 | 12 种块类型子类（HeadingBlock/CodeBlock/ListItemBlock 等），消除属性混杂 | ✅ 完成 |
-| **v2.1** | 反向转换闭环 | HTML→MD（对标 ReverseMarkdown），实现 MD↔HTML/Word 双向全路径 | 🔄 当前 |
-| **v3.0** | 管线 + 扩展 + 补齐解析 | MarkdownPipeline 可配置管线，AutoLinks/YAML/脚注/数学/Emoji 扩展 | 📋 规划 |
-| **v4.0** | 全格式转换中枢 | PDF→MD、PPT→MD，文档格式任意方向互转 | 📋 远期 |
+| **v2.1** | 反向转换闭环 | HTML→MD（对标 ReverseMarkdown），实现 MD↔HTML/Word 双向全路径 | ✅ 完成 |
+| **v3.0** | 管线 + 扩展 + 补齐解析 | MarkdownPipeline 可配置管线，AutoLinks/YAML/脚注/数学/Emoji 扩展 | ✅ 完成 |
+| **v4.0** | 全格式转换中枢 | PDF→MD、PPT→MD，文档格式任意方向互转 | ✅ 完成 |
 
 ---
 
 ## 6. 结论
 
-NewLife.Office 在 **办公文档级 Markdown 转换**（MD→Word/PDF）方面具有独特且不可替代的优势——这是任何纯 Markdown 解析库无法做到的。AST 继承体系重构（v2.0）已完成，当前最关键的差距是 **HTML→MD 反向转换**（补全双向闭环）和**解析扩展**（追赶 Markdig 的丰富性）。
+NewLife.Office 在 **办公文档级 Markdown 转换**（MD→Word/PDF）方面具有独特且不可替代的优势——这是任何纯 Markdown 解析库无法做到的。v2.0 AST 继承体系、v2.1 反向转换闭环、v3.0 管线/扩展/解析增强、v4.0 全格式转换中枢**四大里程碑全部完成**。NewLife.Office 现已实现 **.NET 生态中最完整的办公文档 ↔ Markdown 双向全格式转换矩阵**。
 
-**战略定位**：NewLife.Office 不只是一个 Markdown 解析器，而是 **.NET 生态中唯一的办公文档 ↔ Markdown 双向转换中枢**。
+**战略定位**：NewLife.Office 不只是一个 Markdown 解析器，而是 **.NET 生态中唯一的办公文档 ↔ Markdown 双向转换中枢**（已完成）。
