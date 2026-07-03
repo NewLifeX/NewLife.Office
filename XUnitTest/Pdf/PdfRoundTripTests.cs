@@ -281,7 +281,34 @@ public class PdfRoundTripTests : IntegrationTestBase
                 Assert.Equal(st.Text, dt.Text);
                 Assert.True(Math.Abs(st.FontSize - dt.FontSize) <= 0.5f,
                     $"{pt}.TB[{ti}] FontSize: {st.FontSize} vs {dt.FontSize}");
+                // D7: 文本坐标（有数据时比较）
+                if (st.X > 0 || dt.X > 0)
+                    Assert.True(Math.Abs(st.X - dt.X) <= 2f,
+                        $"{pt}.TB[{ti}] X: {st.X} vs {dt.X}");
+                if (st.Y > 0 || dt.Y > 0)
+                    Assert.True(Math.Abs(st.Y - dt.Y) <= 2f,
+                        $"{pt}.TB[{ti}] Y: {st.Y} vs {dt.Y}");
             }
+
+            // D5: 页面扩展属性（双方都有数据时比较）
+            if (sp.ContentBytes.Length > 0 && dp.ContentBytes.Length > 0)
+                Assert.Equal(sp.ContentBytes.Length, dp.ContentBytes.Length);
+            if (sp.Images.Count > 0 && dp.Images.Count > 0)
+                Assert.Equal(sp.Images.Count, dp.Images.Count);
+            if (sp.LinkAnnotations.Count > 0 && dp.LinkAnnotations.Count > 0)
+            {
+                Assert.Equal(sp.LinkAnnotations.Count, dp.LinkAnnotations.Count);
+                for (var li = 0; li < sp.LinkAnnotations.Count; li++)
+                {
+                    Assert.True(Math.Abs(sp.LinkAnnotations[li].X - dp.LinkAnnotations[li].X) <= 1f,
+                        $"{pt}.LinkAnnot[{li}] X");
+                    Assert.True(Math.Abs(sp.LinkAnnotations[li].Y - dp.LinkAnnotations[li].Y) <= 1f,
+                        $"{pt}.LinkAnnot[{li}] Y");
+                    Assert.Equal(sp.LinkAnnotations[li].Url ?? "", dp.LinkAnnotations[li].Url ?? "");
+                }
+            }
+            if (sp.ExtGStates.Count > 0 && dp.ExtGStates.Count > 0)
+                Assert.Equal(sp.ExtGStates.Count, dp.ExtGStates.Count);
         }
 
         // ③ 文本内容（字符多重集比较，忽略文本块顺序和坐标差异）
@@ -296,6 +323,9 @@ public class PdfRoundTripTests : IntegrationTestBase
         Assert.Equal(src.Metadata.Title ?? "", dst.Metadata.Title ?? "");
         Assert.Equal(src.Metadata.Author ?? "", dst.Metadata.Author ?? "");
         Assert.Equal(src.Metadata.Subject ?? "", dst.Metadata.Subject ?? "");
+        // D8: 元数据扩展属性
+        if (src.Metadata.CreationDate != null && dst.Metadata.CreationDate != null)
+            Assert.Equal(src.Metadata.CreationDate, dst.Metadata.CreationDate);
 
         // ⑤ 书签
         Assert.Equal(src.Bookmarks.Count, dst.Bookmarks.Count);
@@ -320,6 +350,17 @@ public class PdfRoundTripTests : IntegrationTestBase
             Assert.True(Math.Abs(sa.Height - da.Height) <= 1f, $"{at} Height: {sa.Height} vs {da.Height}");
             Assert.Equal(sa.Url ?? "", da.Url ?? "");
             Assert.Equal(sa.Contents ?? "", da.Contents ?? "");
+            // D6: 注释扩展属性
+            if (sa.DestinationPage >= 0 && da.DestinationPage >= 0)
+                Assert.Equal(sa.DestinationPage, da.DestinationPage);
+            if (sa.Author != null && da.Author != null)
+                Assert.Equal(sa.Author, da.Author);
+            if (sa.Subject != null && da.Subject != null)
+                Assert.Equal(sa.Subject, da.Subject);
+            if (sa.Color != null && da.Color != null)
+                Assert.Equal(sa.Color.ToString(), da.Color.ToString());
+            if (sa.Open != da.Open)
+                Assert.Equal(sa.Open, da.Open);
         }
     }
 
