@@ -115,6 +115,22 @@ internal sealed class MarkdownWriter
                 WriteTable(sb, block);
                 sb.AppendLine();
                 break;
+
+            case MarkdownBlockType.MathBlock:
+                var mb = (MathBlock)block;
+                sb.AppendLine("$$");
+                sb.AppendLine(mb.Content);
+                sb.AppendLine("$$");
+                sb.AppendLine();
+                break;
+
+            case MarkdownBlockType.FootnoteDefinition:
+                var fd = (FootnoteDefinitionBlock)block;
+                sb.Append("[^").Append(fd.Id).Append("]: ");
+                WriteInlines(sb, fd.Definition);
+                sb.AppendLine();
+                sb.AppendLine();
+                break;
         }
     }
 
@@ -276,6 +292,15 @@ internal sealed class MarkdownWriter
                 break;
             case MarkdownInlineType.RawHtml:
                 sb.Append(inline.Text);
+                break;
+            case MarkdownInlineType.AutoLink:
+                sb.Append('<').Append(inline.Text).Append('>');
+                break;
+            case MarkdownInlineType.MathInline:
+                sb.Append('$').Append(inline.Text).Append('$');
+                break;
+            case MarkdownInlineType.FootnoteRef:
+                sb.Append("[^").Append(inline.Text).Append(']');
                 break;
         }
     }

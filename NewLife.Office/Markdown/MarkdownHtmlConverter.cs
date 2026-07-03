@@ -89,6 +89,19 @@ internal sealed class MarkdownHtmlConverter
                 var hb = (HtmlBlock)block;
                 sb.AppendLine(hb.RawText);
                 break;
+            case MarkdownBlockType.MathBlock:
+                var mb = (MathBlock)block;
+                sb.AppendLine("<div class=\"math\">$$");
+                sb.AppendLine(HtmlEncode(mb.Content));
+                sb.AppendLine("$$</div>");
+                break;
+            case MarkdownBlockType.FootnoteDefinition:
+                var fd = (FootnoteDefinitionBlock)block;
+                sb.Append("<div class=\"footnote\" id=\"fn-").Append(HtmlEncode(fd.Id)).Append("\"><sup>")
+                  .Append(HtmlEncode(fd.Id)).Append("</sup>: ");
+                RenderInlines(sb, fd.Definition);
+                sb.AppendLine("</div>");
+                break;
             default:
                 break;
         }
@@ -269,6 +282,19 @@ internal sealed class MarkdownHtmlConverter
                 break;
             case MarkdownInlineType.RawHtml:
                 sb.Append(inline.Text ?? "");
+                break;
+            case MarkdownInlineType.AutoLink:
+                var href2 = inline.Href ?? inline.Text ?? "";
+                sb.Append("<a href=\"").Append(HtmlEncode(href2)).Append("\">")
+                  .Append(HtmlEncode(inline.Text ?? "")).Append("</a>");
+                break;
+            case MarkdownInlineType.MathInline:
+                sb.Append("<span class=\"math\">$").Append(HtmlEncode(inline.Text ?? "")).Append("$</span>");
+                break;
+            case MarkdownInlineType.FootnoteRef:
+                sb.Append("<sup><a href=\"#fn-").Append(HtmlEncode(inline.Text ?? "")).Append("\" id=\"fnref-")
+                  .Append(HtmlEncode(inline.Text ?? "")).Append("\">[")
+                  .Append(HtmlEncode(inline.Text ?? "")).Append("]</a></sup>");
                 break;
             default:
                 sb.Append(HtmlEncode(inline.Text ?? ""));

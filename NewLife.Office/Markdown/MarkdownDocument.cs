@@ -23,6 +23,9 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
     #region 属性
     /// <summary>文档块列表（顶层）</summary>
     public List<MarkdownBlock> Blocks { get; } = [];
+
+    /// <summary>YAML Front Matter 元数据（解析自文档开头的 --- 块），键值对集合</summary>
+    public Dictionary<String, String> FrontMatter { get; } = new(StringComparer.OrdinalIgnoreCase);
     #endregion
 
     #region 解析

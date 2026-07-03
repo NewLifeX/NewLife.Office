@@ -26,6 +26,10 @@ internal sealed class MarkdownParser
         _pos = 0;
 
         var doc = new MarkdownDocument();
+
+        // YAML Front Matter (MD05-02)
+        ParseFrontMatter(doc);
+
         while (_pos < _lines.Length)
         {
             ParseBlock(doc.Blocks);
@@ -85,6 +89,21 @@ internal sealed class MarkdownParser
         if (IsOrderedListMarker(trimmed, out var startNum, out var _))
         {
             container.Add(ParseList(true, startNum));
+            return;
+        }
+
+        // 脚注定义 [^id]: text (MD05-03)
+        if (TryParseFootnoteDefinition(trimmed, out var fnDef))
+        {
+            container.Add(fnDef!);
+            _pos++;
+            return;
+        }
+
+        // 数学公式块 $$...$$ (MD05-04)
+        if (trimmed == "$$" || trimmed.StartsWith("$$"))
+        {
+            container.Add(ParseMathBlock(trimmed));
             return;
         }
 
@@ -415,6 +434,80 @@ internal sealed class MarkdownParser
     }
     #endregion
 
+    #region MD05 高级解析（FrontMatter/脚注/数学公式/自动链接）
+    private void ParseFrontMatter(MarkdownDocument doc)
+    {
+        if (_pos >= _lines.Length) return;
+        if (_lines[_pos].TrimEnd() != "---") return;
+
+        var start = _pos;
+        _pos++;
+
+        while (_pos < _lines.Length)
+        {
+            var line = _lines[_pos];
+            if (line.TrimEnd() == "---")
+            {
+                for (var i = start + 1; i < _pos; i++)
+                {
+                    var kvLine = _lines[i];
+                    var colonIdx = kvLine.IndexOf(':');
+                    if (colonIdx > 0 && colonIdx < kvLine.Length - 1)
+                    {
+                        var key = kvLine[..colonIdx].Trim();
+                        var value = kvLine[(colonIdx + 1)..].Trim();
+                        if (value.Length >= 2 &&
+                            ((value[0] == '"' && value[^1] == '"') ||
+                             (value[0] == '\'' && value[^1] == '\'')))
+                            value = value[1..^1];
+                        if (key.Length > 0 && value.Length > 0)
+                            doc.FrontMatter[key] = value;
+                    }
+                }
+                _pos++;
+                return;
+            }
+            _pos++;
+        }
+
+        _pos = start;
+    }
+
+    private static Boolean TryParseFootnoteDefinition(String trimmed, out MarkdownBlock? block)
+    {
+        block = null;
+
+        // [^id]: text
+        var match = Regex.Match(trimmed, @"^\[\^([^\]]+)\]:\s*(.*)$");
+        if (!match.Success) return false;
+
+        var id = match.Groups[1].Value;
+        var defText = match.Groups[2].Value;
+        var inlines = ParseInline(defText);
+        block = new FootnoteDefinitionBlock(id, inlines);
+        return true;
+    }
+
+    private MarkdownBlock ParseMathBlock(String firstLine)
+    {
+        // $$ 单独一行开头
+        var sb = new System.Text.StringBuilder();
+        if (firstLine.Length > 2 && firstLine != "$$")
+            sb.AppendLine(firstLine[2..].TrimStart());
+
+        _pos++;
+        while (_pos < _lines.Length)
+        {
+            var line = _lines[_pos];
+            _pos++;
+            if (line.TrimEnd() == "$$") break;
+            sb.AppendLine(line);
+        }
+
+        return new MathBlock(sb.ToString().Trim());
+    }
+    #endregion
+
     #region 行内解析
     /// <summary>解析行内 Markdown 内容，返回行内元素列表</summary>
     /// <param name="text">行内文本（不含换行）</param>
@@ -540,6 +633,65 @@ internal sealed class MarkdownParser
                     i = autoEnd;
                     textStart = i;
                     continue;
+                }
+            }
+
+            // 裸 URL 自动链接 (MD05-01): http:// / https:// / ftp://
+            if (ch == 'h' || ch == 'f' || ch == 'w')
+            {
+                if (TryParseBareUrl(text, i, end, out var bareInline, out var bareEnd))
+                {
+                    FlushText(text, textStart, i, result);
+                    result.Add(bareInline!);
+                    i = bareEnd;
+                    textStart = i;
+                    continue;
+                }
+            }
+
+            // Email 自动链接 (MD05-01): user@domain
+            if (Char.IsLetterOrDigit(ch) && i > textStart)
+            {
+                if (TryParseBareEmail(text, i, end, out var emailInline, out var emailEnd))
+                {
+                    FlushText(text, textStart, i, result);
+                    result.Add(emailInline!);
+                    i = emailEnd;
+                    textStart = i;
+                    continue;
+                }
+            }
+
+            // 行内数学公式 $...$ (MD05-04)
+            if (ch == '$' && i + 1 < end && text[i + 1] != '$')
+            {
+                var mathEnd = text.IndexOf('$', i + 1);
+                if (mathEnd > i + 1)
+                {
+                    FlushText(text, textStart, i, result);
+                    result.Add(new MarkdownInline { Type = MarkdownInlineType.MathInline, Text = text[(i + 1)..mathEnd] });
+                    i = mathEnd + 1;
+                    textStart = i;
+                    continue;
+                }
+            }
+
+            // 脚注引用 [^id] (MD05-03)
+            if (ch == '[' && i + 1 < end && text[i + 1] == '^')
+            {
+                var closeBracket = text.IndexOf(']', i + 2);
+                if (closeBracket > i + 2)
+                {
+                    var fnId = text[(i + 2)..closeBracket];
+                    // 确保是有效脚注ID（非空且无换行）
+                    if (fnId.Length > 0 && !fnId.Contains('\n') && !fnId.Contains('\r'))
+                    {
+                        FlushText(text, textStart, i, result);
+                        result.Add(new MarkdownInline { Type = MarkdownInlineType.FootnoteRef, Text = fnId });
+                        i = closeBracket + 1;
+                        textStart = i;
+                        continue;
+                    }
                 }
             }
 
@@ -757,6 +909,91 @@ internal sealed class MarkdownParser
             return true;
         }
         return false;
+    }
+
+    /// <summary>尝试解析裸 URL（http/https/ftp）自动链接 (MD05-01)</summary>
+    private static Boolean TryParseBareUrl(String text, Int32 start, Int32 end,
+        out MarkdownInline? result, out Int32 newPos)
+    {
+        result = null; newPos = start;
+
+        // 检查是否是 URL 前缀
+        var remaining = text[start..end];
+        var prefixes = new[] { "https://", "http://", "ftp://", "www." };
+        String? matchedPrefix = null;
+        foreach (var prefix in prefixes)
+        {
+            if (remaining.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                matchedPrefix = prefix;
+                break;
+            }
+        }
+        if (matchedPrefix == null) return false;
+
+        // 收集 URL 字符直到空白或标点
+        var urlEnd = start;
+        while (urlEnd < end)
+        {
+            var c = text[urlEnd];
+            if (Char.IsWhiteSpace(c) || c == '<' || c == '>' || c == '"' || c == '\'') break;
+            // 末尾标点不包含在 URL 中
+            if (c is '.' or ',' or ';' or ':' or '!' or '?' && urlEnd + 1 < end && (Char.IsWhiteSpace(text[urlEnd + 1]) || text[urlEnd + 1] == '<'))
+                break;
+            urlEnd++;
+        }
+
+        // 去除末尾标点
+        while (urlEnd > start && text[urlEnd - 1] is '.' or ',' or ';' or ')' or '}' or ']')
+            urlEnd--;
+
+        if (urlEnd <= start + matchedPrefix.Length) return false;
+
+        var url = text[start..urlEnd];
+        var href = matchedPrefix == "www." ? "http://" + url : url;
+        var children = new List<MarkdownInline> { MarkdownInline.CreateText(url) };
+        result = MarkdownInline.CreateLink(href, "", children);
+        newPos = urlEnd;
+        return true;
+    }
+
+    /// <summary>尝试解析裸 Email 自动链接 (MD05-01)</summary>
+    private static Boolean TryParseBareEmail(String text, Int32 start, Int32 end,
+        out MarkdownInline? result, out Int32 newPos)
+    {
+        result = null; newPos = start;
+
+        // 检查周围是否有 @ 符号
+        var atIdx = text.IndexOf('@', start);
+        if (atIdx < 0 || atIdx >= end) return false;
+
+        // 找到 email 的起始位置（回溯到单词边界）
+        var emailStart = atIdx;
+        while (emailStart > start && IsEmailChar(text[emailStart - 1]))
+            emailStart--;
+
+        // 检查 @ 前后是否都有有效字符
+        if (emailStart >= atIdx || atIdx + 1 >= end) return false;
+
+        // 找到 email 的结束位置
+        var emailEnd = atIdx + 1;
+        while (emailEnd < end && IsEmailChar(text[emailEnd]))
+            emailEnd++;
+
+        if (emailEnd <= atIdx + 1) return false;
+
+        var email = text[emailStart..emailEnd];
+        // 基本验证
+        if (!email.Contains('.') || email.StartsWith("@") || email.EndsWith("@")) return false;
+
+        result = MarkdownInline.CreateLink("mailto:" + email, "", [MarkdownInline.CreateText(email)]);
+        newPos = emailEnd;
+        return true;
+    }
+
+    private static Boolean IsEmailChar(Char c)
+    {
+        return Char.IsLetterOrDigit(c) || c == '.' || c == '-' || c == '_' || c == '+' || c == '%';
     }
     #endregion
 }

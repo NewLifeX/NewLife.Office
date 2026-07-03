@@ -27,4 +27,8 @@ public enum MarkdownBlockType
     ThematicBreak,
     /// <summary>原始 HTML 块</summary>
     HtmlBlock,
+    /// <summary>数学公式块（$$...$$）</summary>
+    MathBlock,
+    /// <summary>脚注定义块（[^id]: definition）</summary>
+    FootnoteDefinition,
 }

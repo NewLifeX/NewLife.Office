@@ -25,4 +25,10 @@ public enum MarkdownInlineType
     SoftBreak,
     /// <summary>原始 HTML 行内片段</summary>
     RawHtml,
+    /// <summary>自动链接（裸 URL/Email）</summary>
+    AutoLink,
+    /// <summary>行内数学公式（$...$）</summary>
+    MathInline,
+    /// <summary>脚注引用（[^id]）</summary>
+    FootnoteRef,
 }
