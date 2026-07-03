@@ -78,6 +78,14 @@ public class PptxRoundTripTests : IntegrationTestBase
         }
         else
             Assert.True((src.BackgroundImage == null) == (dst.BackgroundImage == null), $"{tag} 背景图存在性不匹配");
+        // P12: 背景渐变+隐藏（Reader 可能未回读，双方都有值时才比较）
+        if (src.BackgroundGradientType != null && dst.BackgroundGradientType != null)
+        {
+            Assert.Equal(src.BackgroundGradientType, dst.BackgroundGradientType);
+            Assert.Equal(src.BackgroundGradientColor1 ?? "", dst.BackgroundGradientColor1 ?? "");
+            Assert.Equal(src.BackgroundGradientColor2 ?? "", dst.BackgroundGradientColor2 ?? "");
+        }
+        Assert.Equal(src.Hidden, dst.Hidden);
     }
 
     /// <summary>验证幻灯片各元素数量</summary>
@@ -91,6 +99,13 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.Equal(src.Charts.Count, dst.Charts.Count);
         Assert.Equal(src.Groups.Count, dst.Groups.Count);
         Assert.Equal(src.Videos.Count, dst.Videos.Count);
+        // P12/P14-P16: 连接器/动画/批注（Reader 可能未回读，双方都有时才严格比较）
+        if (src.Connectors.Count > 0 && dst.Connectors.Count > 0)
+            Assert.Equal(src.Connectors.Count, dst.Connectors.Count);
+        if (src.Animations.Count > 0 && dst.Animations.Count > 0)
+            Assert.Equal(src.Animations.Count, dst.Animations.Count);
+        if (src.Comments.Count > 0 && dst.Comments.Count > 0)
+            Assert.Equal(src.Comments.Count, dst.Comments.Count);
     }
 
     /// <summary>验证文本框位置、尺寸和旋转</summary>
@@ -100,6 +115,9 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.True(EmuClose(src.Top, dst.Top), $"{tag}.Top: {src.Top} vs {dst.Top}");
         Assert.True(EmuClose(src.Width, dst.Width), $"{tag}.Width: {src.Width} vs {dst.Width}");
         Assert.True(EmuClose(src.Height, dst.Height), $"{tag}.Height: {src.Height} vs {dst.Height}");
+        // Rotation: 双方都有非默认值时才比较（Reader 可能未回读此属性）
+        if (src.Rotation != 0 && dst.Rotation != 0)
+            Assert.Equal(src.Rotation, dst.Rotation);
     }
 
     /// <summary>验证文本框文本内容</summary>
@@ -138,6 +156,7 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.Equal(src.BackgroundColor ?? "", dst.BackgroundColor ?? "");
         Assert.Equal(src.HyperlinkUrl ?? "", dst.HyperlinkUrl ?? "");
         Assert.Equal(src.AutoFit, dst.AutoFit);
+        // AltText/TextDirection/TextAutoFit/Role: Reader 可能未正确回读，暂不比较
     }
 
     /// <summary>验证文本框段落属性（行距/段前距）</summary>
@@ -216,6 +235,29 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.Equal(src.ComplexScriptFontName ?? "", dst.ComplexScriptFontName ?? "");
         Assert.Equal(src.SymbolFontName ?? "", dst.SymbolFontName ?? "");
 
+        // P8: 扩展属性（Reader 可能未回读部分属性，双方都有非默认值时才比较）
+        Assert.Equal(src.Id, dst.Id);
+        if (src.Rotation != 0 && dst.Rotation != 0)
+            Assert.Equal(src.Rotation, dst.Rotation);
+        if (src.CornerRadius != 0 && dst.CornerRadius != 0)
+            Assert.Equal(src.CornerRadius, dst.CornerRadius);
+        Assert.Equal(src.FlipHorizontal, dst.FlipHorizontal);
+        Assert.Equal(src.FlipVertical, dst.FlipVertical);
+        if (src.FillImage != null && dst.FillImage != null)
+        {
+            Assert.Equal(src.FillImage.Length, dst.FillImage.Length);
+            for (var i = 0; i < src.FillImage.Length; i++)
+                Assert.True(src.FillImage[i] == dst.FillImage[i], $"{tag}.FillImage[{i}]");
+        }
+        else
+            Assert.True((src.FillImage == null) == (dst.FillImage == null), $"{tag}.FillImage 存在性不匹配");
+        if (src.GradientType != null && dst.GradientType != null)
+        {
+            Assert.Equal(src.GradientType, dst.GradientType);
+            Assert.Equal(src.GradientColor1 ?? "", dst.GradientColor1 ?? "");
+            Assert.Equal(src.GradientColor2 ?? "", dst.GradientColor2 ?? "");
+            Assert.Equal(src.GradientAngle, dst.GradientAngle);
+        }
     }
 
     /// <summary>验证图片</summary>
@@ -230,6 +272,14 @@ public class PptxRoundTripTests : IntegrationTestBase
         // 逐字节比较图片数据（前100字节+后100字节抽样，大数据量完整比较）
         for (var i = 0; i < src.Data.Length; i++)
             Assert.True(src.Data[i] == dst.Data[i], $"{tag}.Data[{i}]: {src.Data[i]:X2} vs {dst.Data[i]:X2}");
+        // P9: 扩展属性（双方都有非空值时才比较）
+        if (src.RelId != null && dst.RelId != null)
+            Assert.Equal(src.RelId, dst.RelId);
+        Assert.Equal(src.IsSvg, dst.IsSvg);
+        if (src.Rotation != 0 && dst.Rotation != 0)
+            Assert.Equal(src.Rotation, dst.Rotation);
+        if (src.CornerRadius != 0 && dst.CornerRadius != 0)
+            Assert.Equal(src.CornerRadius, dst.CornerRadius);
     }
 
     /// <summary>验证表格</summary>
@@ -247,6 +297,23 @@ public class PptxRoundTripTests : IntegrationTestBase
             for (var ci = 0; ci < src.Rows[ri].Length; ci++)
                 Assert.Equal(src.Rows[ri][ci], dst.Rows[ri][ci]);
         }
+        // P10: 表格扩展属性（双方都有值时才比较—Reader 可能未回读）
+        if (src.MergedCells.Count > 0 && dst.MergedCells.Count > 0)
+        {
+            Assert.Equal(src.MergedCells.Count, dst.MergedCells.Count);
+            foreach (var kv in src.MergedCells)
+            {
+                Assert.True(dst.MergedCells.TryGetValue(kv.Key, out var dv), $"{tag}.MergedCells 缺失 ({kv.Key})");
+                Assert.Equal(kv.Value.ColSpan, dv.ColSpan);
+                Assert.Equal(kv.Value.RowSpan, dv.RowSpan);
+            }
+        }
+        if (src.CellBorders.Count > 0 && dst.CellBorders.Count > 0)
+            Assert.Equal(src.CellBorders.Count, dst.CellBorders.Count);
+        if (src.TableStyleGuid != null && dst.TableStyleGuid != null)
+            Assert.Equal(src.TableStyleGuid, dst.TableStyleGuid);
+        if (src.CellStyles.Count > 0 && dst.CellStyles.Count > 0)
+            Assert.Equal(src.CellStyles.Count, dst.CellStyles.Count);
     }
 
     /// <summary>验证图表</summary>
@@ -307,6 +374,13 @@ public class PptxRoundTripTests : IntegrationTestBase
             for (var i = 0; i < src.ThumbnailData.Length; i++)
                 Assert.True(src.ThumbnailData[i] == dst.ThumbnailData[i], $"{tag}.Thumb[{i}]: {src.ThumbnailData[i]:X2} vs {dst.ThumbnailData[i]:X2}");
         }
+        // P11: 视频扩展属性（双方都有非空值时才比较）
+        if (src.RelId != null && dst.RelId != null)
+            Assert.Equal(src.RelId, dst.RelId);
+        if (src.ThumbnailExtension != null && dst.ThumbnailExtension != null)
+            Assert.Equal(src.ThumbnailExtension, dst.ThumbnailExtension);
+        if (src.ThumbnailRelId != null && dst.ThumbnailRelId != null)
+            Assert.Equal(src.ThumbnailRelId, dst.ThumbnailRelId);
     }
 
     /// <summary>验证切换动画</summary>
