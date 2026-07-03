@@ -238,6 +238,18 @@ public class ExcelRoundTripTests
                 Assert.Equal(src.Images[ii].Row, dst.Images[ii].Row);
                 Assert.Equal(src.Images[ii].Col, dst.Images[ii].Col);
                 AssertBytesEqual(src.Images[ii].Data, dst.Images[ii].Data, $"{sp}: Image[{ii}]");
+                // E13: 图片扩展属性
+                Assert.True(Math.Abs(src.Images[ii].Width - dst.Images[ii].Width) < 1.0,
+                    $"{sp}: Image[{ii}] Width: {src.Images[ii].Width} vs {dst.Images[ii].Width}");
+                Assert.True(Math.Abs(src.Images[ii].Height - dst.Images[ii].Height) < 1.0,
+                    $"{sp}: Image[{ii}] Height: {src.Images[ii].Height} vs {dst.Images[ii].Height}");
+                Assert.Equal(src.Images[ii].FromColOff, dst.Images[ii].FromColOff);
+                Assert.Equal(src.Images[ii].FromRowOff, dst.Images[ii].FromRowOff);
+                Assert.Equal(src.Images[ii].ToCol, dst.Images[ii].ToCol);
+                Assert.Equal(src.Images[ii].ToRow, dst.Images[ii].ToRow);
+                Assert.Equal(src.Images[ii].ToColOff, dst.Images[ii].ToColOff);
+                Assert.Equal(src.Images[ii].ToRowOff, dst.Images[ii].ToRowOff);
+                Assert.Equal(src.Images[ii].EditAs ?? "", dst.Images[ii].EditAs ?? "");
             }
 
             // 页面设置
@@ -245,9 +257,12 @@ public class ExcelRoundTripTests
             Assert.Equal(src.PaperSize, dst.PaperSize);
             Assert.True(Math.Abs(src.MarginTop - dst.MarginTop) < 0.01, $"{sp}: MarginTop");
             Assert.True(Math.Abs(src.MarginLeft - dst.MarginLeft) < 0.01, $"{sp}: MarginLeft");
+            Assert.True(Math.Abs(src.MarginBottom - dst.MarginBottom) < 0.01, $"{sp}: MarginBottom");
+            Assert.True(Math.Abs(src.MarginRight - dst.MarginRight) < 0.01, $"{sp}: MarginRight");
             Assert.Equal(src.HeaderText, dst.HeaderText);
             Assert.Equal(src.FooterText, dst.FooterText);
             Assert.Equal(src.PrintTitleStartRow, dst.PrintTitleStartRow);
+            Assert.Equal(src.PrintTitleEndRow, dst.PrintTitleEndRow);
 
             // 保护
             Assert.Equal(src.ProtectionPassword, dst.ProtectionPassword);
@@ -273,6 +288,17 @@ public class ExcelRoundTripTests
             {
                 Assert.True(dst.Comments.TryGetValue(kv.Key, out var dc), $"{sp}: 缺失批注 ({kv.Key})");
                 Assert.Equal(kv.Value.Text, dc.Text);
+            }
+
+            // 公式（双方都有数据时比较）
+            if (src.Formulas.Count > 0 && dst.Formulas.Count > 0)
+            {
+                Assert.Equal(src.Formulas.Count, dst.Formulas.Count);
+                foreach (var kv in src.Formulas)
+                {
+                    Assert.True(dst.Formulas.TryGetValue(kv.Key, out var dv), $"{sp}: 缺失公式 ({kv.Key})");
+                    Assert.Equal(kv.Value, dv);
+                }
             }
 
             // 数据验证（逐项比较详细属性）
@@ -311,6 +337,29 @@ public class ExcelRoundTripTests
                 Assert.Equal(sc.WidthPx, dc.WidthPx);
                 Assert.Equal(sc.HeightPx, dc.HeightPx);
             }
+
+            // E14/E18: 结构化表格（双方都有数据时比较）
+            if (src.Tables.Count > 0 && dst.Tables.Count > 0)
+            {
+                Assert.Equal(src.Tables.Count, dst.Tables.Count);
+                for (var ti = 0; ti < src.Tables.Count; ti++)
+                {
+                    Assert.Equal(src.Tables[ti].Name, dst.Tables[ti].Name);
+                    Assert.Equal(src.Tables[ti].Range, dst.Tables[ti].Range);
+                }
+            }
+            // E16: 迷你图组（双方都有数据时比较）
+            if (src.SparklineGroups.Count > 0 && dst.SparklineGroups.Count > 0)
+                Assert.Equal(src.SparklineGroups.Count, dst.SparklineGroups.Count);
+        }
+
+        // E19: 默认字体（双方都有数据时比较）
+        if (expected.DefaultFont != null && actual.DefaultFont != null)
+        {
+            Assert.Equal(expected.DefaultFont.Name, actual.DefaultFont.Name);
+            Assert.True(Math.Abs(expected.DefaultFont.Size - actual.DefaultFont.Size) < 0.5,
+                $"DefaultFont Size: {expected.DefaultFont.Size} vs {actual.DefaultFont.Size}");
+            Assert.Equal(expected.DefaultFont.Bold, actual.DefaultFont.Bold);
         }
     }
 
