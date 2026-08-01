@@ -11,7 +11,7 @@
 [English](Readme_EN.MD) | 简体中文
 
 源码： https://github.com/NewLifeX/NewLife.Office  
-Nuget：NewLife.Office  
+Nuget：NewLife.Office（渲染扩展包：NewLife.Office.Rendering）  
 
 ## 项目简介
 
@@ -101,6 +101,10 @@ Nuget：NewLife.Office
 - `MarkdownWordConverter`：Markdown → Word（docx），标题/段落/列表/表格映射为 Word 样式
 - `MarkdownPdfConverter`：Markdown → PDF（通过 PdfFluentDocument 直出 PDF）
 - `MarkdownDocument.ToWord()` / `ToPdf()` 快捷方法
+- `MarkdownPipeline`：Markdown 处理管线，支持扩展挂载与阶段化处理
+- `FormatToMarkdown`：全格式转换中枢，Excel/Word/PPT/PDF 等任意支持格式一键转换为 Markdown
+- `HtmlToMarkdownConverter`：HTML → Markdown 反向转换（配置选项）
+- 高级解析扩展：AutoLinks 自动链接、YAML FrontMatter、脚注、数学公式、Emoji 短码（50+ 常用映射）、定义列表、自定义属性 `{.class #id}`、缩写 `*[ABBR]:`
 
 ### RTF
 

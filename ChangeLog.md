@@ -1,5 +1,32 @@
 # NewLife.Office 版本更新记录
 
+## v1.3.2026.0802 (2026-08-02)
+
+### 新增渲染扩展包
+- **NewLife.Office.Rendering**：全新渲染扩展包（首个版本），基于 SkiaSharp 跨平台 2D 渲染，PDF/Word/PPT/Markdown 文档页面渲染为图片，支持图片缩放/裁剪/旋转/水印/格式转换、文字→图片、二维码→图片、缩略图网格
+- **DocumentPreview**：文档预览渲染入口，统一调度各格式页面渲染
+
+### Markdown 引擎全面升级
+- **MarkdownPipeline 管线**：新增 Markdown 处理管线，支持扩展挂载与阶段化处理
+- **全格式转换中枢 FormatToMarkdown**：Excel/Word/PPT/PDF 等任意支持格式一键转换为 Markdown
+- **HTML→Markdown 反向转换**：`HtmlToMarkdownConverter` + 配置选项，31 项测试
+- **Word→Markdown 增强**：格式保留、GFM 表格、图片 data URI 内联
+- **高级解析扩展**：AutoLinks 自动链接、YAML FrontMatter、脚注 Footnotes、数学公式 Math
+- **Emoji 短码**：`:smile:`→😄，内置 50+ 常用映射
+- **自定义属性**：`{.class #id}` 解析 + HTML class/id 渲染
+- **定义列表**：DefinitionList/Term/Description 解析与 HTML 渲染
+- **缩写支持**：`*[ABBR]:` 解析 + HTML abbr 渲染
+- **AST 强类型化**：Markdown AST 升级为强类型子类体系，源码位置追踪
+
+### 模型命名空间重构
+- **各格式模型规范化**：Excel/Word/PPT/PDF/邮件/iCal/Epub 类型命名与命名空间全面统一，iCal/Epub 归类至专属子命名空间，提升 API 可发现性
+
+### 测试与质量
+- **模型属性断言补全**：PDF D5-D8、Excel E13-E19、Word W7-W14、PPT P7-P12 模型属性断言补全
+- **往返测试加固**：PPT/Word/Excel/PDF 往返测试增强，修复 ParseFillColor XPath 解析 bug
+
+---
+
 ## v1.2.2026.0702 (2026-07-02)
 
 ### Excel 增强
