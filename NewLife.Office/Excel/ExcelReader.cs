@@ -2010,6 +2010,81 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         return result;
     }
 
+    /// <summary>读取线程化批注（M27，Excel 2016+ 对话式批注）</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>线程化批注列表（含作者/时间/正文/回复关系），单元格坐标 0 基</returns>
+    public List<ThreadedComment> ReadThreadedComments(String sheet)
+    {
+        var result = new List<ThreadedComment>();
+        if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry)) return result;
+
+        var n = sheetEntry.Name.TrimEnd(".xml");
+        if (n.StartsWith("sheet")) n = n.Substring(5);
+        var sheetIdx = n.ToInt(-1);
+        if (sheetIdx < 1) return result;
+
+        // 读 person 映射（personId → 显示名/userId）
+        var persons = new Dictionary<String, (String Name, String UserId)>(StringComparer.OrdinalIgnoreCase);
+        var personEntry = _zip.GetEntry("xl/persons/person.xml");
+        if (personEntry != null)
+        {
+            using var ps = personEntry.Open();
+            var pdoc = XDocument.Load(ps);
+            if (pdoc.Root != null)
+            {
+                foreach (var p in pdoc.Root.Elements().Where(e => e.Name.LocalName == "person"))
+                {
+                    var pid = p.Attribute("id")?.Value;
+                    if (!pid.IsNullOrEmpty())
+                        persons[pid!] = (p.Attribute("displayName")?.Value ?? String.Empty, p.Attribute("userId")?.Value ?? String.Empty);
+                }
+            }
+        }
+
+        // 读 threadedComment 部件
+        var tcPath = $"xl/threadedComments/threadedComment{sheetIdx}.xml";
+        var tcEntry = _zip.GetEntry(tcPath);
+        if (tcEntry == null) return result;
+
+        using (var cs = tcEntry.Open())
+        {
+            var doc = XDocument.Load(cs);
+            if (doc.Root == null) return result;
+
+            foreach (var tc in doc.Root.Elements().Where(e => e.Name.LocalName == "threadedComment"))
+            {
+                var refAttr = tc.Attribute("ref")?.Value;
+                if (refAttr.IsNullOrEmpty()) continue;
+
+                var (row, col) = ParseCellRef(refAttr!);
+                var personId = tc.Attribute("personId")?.Value ?? String.Empty;
+                var author = persons.TryGetValue(personId, out var p) ? p.Name : String.Empty;
+                var userId = persons.TryGetValue(personId, out var p2) ? p2.UserId : String.Empty;
+
+                var textEl = tc.Elements().FirstOrDefault(e => e.Name.LocalName == "text");
+                var text = textEl?.Value ?? String.Empty;
+
+                var comment = new ThreadedComment
+                {
+                    Row = row + 1,
+                    Col = col,
+                    Text = text,
+                    Author = author,
+                    UserId = userId,
+                    PersonId = personId,
+                    Id = tc.Attribute("id")?.Value ?? String.Empty,
+                    ParentId = tc.Attribute("parentId")?.Value,
+                    Sheet = sheet,
+                };
+                if (DateTime.TryParse(tc.Attribute("dateTime")?.Value, out var dt))
+                    comment.Time = dt;
+
+                result.Add(comment);
+            }
+        }
+        return result;
+    }
+
     /// <summary>读取数据验证</summary>
     /// <param name="sheet">工作表名称</param>
     /// <returns>数据验证列表</returns>

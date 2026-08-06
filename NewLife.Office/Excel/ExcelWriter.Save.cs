@@ -323,6 +323,27 @@ partial class ExcelWriter
                 sheetsWithComments.Add(i);
         }
 
+        // 判断哪些 sheet 有线程化批注（M27）
+        var sheetsWithThreadedComments = new HashSet<Int32>();
+        for (var i = 0; i < _sheetNames.Count; i++)
+        {
+            if (_threadedComments.Any(c => c.Sheet.EqualIgnoreCase(_sheetNames[i])))
+                sheetsWithThreadedComments.Add(i);
+        }
+
+        // 统一作者 → PersonId（同一作者共享一个 person，M27）
+        var personMap = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+        foreach (var tc in _threadedComments)
+        {
+            var key = tc.Author + "\u0001" + (tc.UserId ?? "");
+            if (!personMap.TryGetValue(key, out var pid))
+            {
+                pid = tc.PersonId;
+                personMap[key] = pid;
+            }
+            tc.PersonId = pid;
+        }
+
         // 判断哪些 sheet 有表格
         var sheetsWithTables = new Dictionary<Int32, List<Table>>();
         var globalTableIndex = 0; // 全局表格编号（1基）
@@ -399,6 +420,16 @@ partial class ExcelWriter
             {
                 if (sheetsWithComments.Contains(i))
                     sw.Write($"<Override PartName=\"/xl/comments{i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.comments+xml\"/>");
+            }
+            // 线程化批注（M27）：threadedComment 部件 + person 部件
+            if (sheetsWithThreadedComments.Count > 0)
+            {
+                for (var i = 0; i < _sheetNames.Count; i++)
+                {
+                    if (sheetsWithThreadedComments.Contains(i))
+                        sw.Write($"<Override PartName=\"/xl/threadedComments/threadedComment{i + 1}.xml\" ContentType=\"application/vnd.ms-excel.threadedcomments+xml\"/>");
+                }
+                sw.Write("<Override PartName=\"/xl/persons/person.xml\" ContentType=\"application/vnd.ms-excel.person+xml\"/>");
             }
             // 结构化表格
             foreach (var kv in sheetsWithTables)
@@ -484,7 +515,10 @@ partial class ExcelWriter
             for (var i = 0; i < _sheetNames.Count; i++) sw.Write($"<Relationship Id=\"rId{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet{i + 1}.xml\"/>");
             var nextId = _sheetNames.Count + 1;
             sw.Write($"<Relationship Id=\"rId{nextId++}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>");
-            if (_shared.Count > 0) sw.Write($"<Relationship Id=\"rId{nextId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/>");
+            if (_shared.Count > 0) sw.Write($"<Relationship Id=\"rId{nextId++}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings\" Target=\"sharedStrings.xml\"/>");
+            // 线程化批注：person 部件（工作簿级，M27）
+            if (personMap.Count > 0)
+                sw.Write($"<Relationship Id=\"rId{nextId}\" Type=\"http://schemas.microsoft.com/office/2017/10/relationships/person\" Target=\"persons/person.xml\"/>");
             sw.Write("</Relationships>");
         }
 
@@ -821,12 +855,25 @@ partial class ExcelWriter
                 sw.Write("</x14:sparklineGroups>");
             }
 
+            // 线程化批注（M27）：extLst + x14:commentList 引用
+            if (sheetsWithThreadedComments.Contains(i))
+            {
+                sw.Write("<extLst><ext uri=\"{0298E913-981F-46C6-9B23-F7C1E7E6C8F1}\">");
+                sw.Write("<x14:commentList>");
+                foreach (var tc in _threadedComments.Where(c => c.Sheet.EqualIgnoreCase(sheet)))
+                {
+                    var cellRef = MakeCellRef(tc.Row - 1, tc.Col);
+                    sw.Write($"<x14:comment ref=\"{cellRef}\" authorId=\"0\" guid=\"{tc.Id}\" t=\"threaded\" w=\"0\" d=\"0\"/>");
+                }
+                sw.Write("</x14:commentList></ext></extLst>");
+            }
+
             sw.Write("</worksheet>");
             sw.Dispose();
 
             // sheet rels（超链接 + 图片 drawing + 批注 + 表格 + 图表关系）
             var needSheetRels = sheetsWithHyperlinks.Contains(i) || sheetsWithImages.Contains(i) ||
-                                sheetsWithComments.Contains(i) || sheetsWithTables.ContainsKey(i) || sheetsWithCharts.ContainsKey(i);
+                                sheetsWithComments.Contains(i) || sheetsWithTables.ContainsKey(i) || sheetsWithCharts.ContainsKey(i) || sheetsWithThreadedComments.Contains(i);
             if (needSheetRels)
             {
                 var relEntry = za.CreateEntry($"xl/worksheets/_rels/sheet{i + 1}.xml.rels");
@@ -847,6 +894,11 @@ partial class ExcelWriter
                 {
                     rsw.Write($"<Relationship Id=\"rVml1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/vmlDrawing\" Target=\"../drawings/vmlDrawing{i + 1}.vml\"/>");
                     rsw.Write($"<Relationship Id=\"rCmt1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments\" Target=\"../comments{i + 1}.xml\"/>");
+                }
+                // 线程化批注关系（M27）
+                if (sheetsWithThreadedComments.Contains(i))
+                {
+                    rsw.Write($"<Relationship Id=\"rTc1\" Type=\"http://schemas.microsoft.com/office/2017/10/relationships/threadedComment\" Target=\"../threadedComments/threadedComment{i + 1}.xml\"/>");
                 }
                 if (sheetsWithTables.TryGetValue(i, out var tblRels))
                 {
@@ -1040,6 +1092,47 @@ partial class ExcelWriter
                     vsw.Write("</x:ClientData></v:shape>");
                 }
                 vsw.Write("</xml>");
+            }
+        }
+
+        // 线程化批注部件（M27）：xl/persons/person.xml + xl/threadedComments/threadedCommentN.xml
+        if (sheetsWithThreadedComments.Count > 0)
+        {
+            // person.xml（工作簿级，同一作者共享一个 person）
+            using (var psw = new StreamWriter(za.CreateEntry("xl/persons/person.xml").Open(), Encoding))
+            {
+                psw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+                psw.Write("<persons xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">");
+                foreach (var kv in personMap)
+                {
+                    var tc = _threadedComments.FirstOrDefault(c => c.Author + "\u0001" + (c.UserId ?? "") == kv.Key);
+                    var disp = SecurityElement.Escape(tc?.Author ?? kv.Key.Split('\u0001')[0]) ?? "";
+                    var uid = tc?.UserId ?? "";
+                    psw.Write($"<person displayName=\"{disp}\" id=\"{kv.Value}\" userId=\"{SecurityElement.Escape(uid)}\" providerId=\"None\"/>");
+                }
+                psw.Write("</persons>");
+            }
+
+            // threadedCommentN.xml（每个有线程化批注的 sheet 一个）
+            for (var i = 0; i < _sheetNames.Count; i++)
+            {
+                if (!sheetsWithThreadedComments.Contains(i)) continue;
+                var sheet = _sheetNames[i];
+                var tcs = _threadedComments.Where(c => c.Sheet.EqualIgnoreCase(sheet)).ToList();
+                using var tcsw = new StreamWriter(za.CreateEntry($"xl/threadedComments/threadedComment{i + 1}.xml").Open(), Encoding);
+                tcsw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+                tcsw.Write("<ThreadedComments xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">");
+                foreach (var tc in tcs)
+                {
+                    var cellRef = MakeCellRef(tc.Row - 1, tc.Col);
+                    tcsw.Write($"<threadedComment ref=\"{cellRef}\" personId=\"{tc.PersonId}\" dateTime=\"{tc.Time.ToUniversalTime():yyyy-MM-ddTHH:mm:ssZ}\" id=\"{tc.Id}\"");
+                    if (!tc.ParentId.IsNullOrEmpty()) tcsw.Write($" parentId=\"{tc.ParentId}\"");
+                    tcsw.Write(">");
+                    tcsw.Write($"<text>{SecurityElement.Escape(tc.Text)}</text>");
+                    tcsw.Write("<mentions/>");
+                    tcsw.Write("</threadedComment>");
+                }
+                tcsw.Write("</ThreadedComments>");
             }
         }
 

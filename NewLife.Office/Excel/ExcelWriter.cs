@@ -207,6 +207,9 @@ public partial class ExcelWriter : DisposeBase
     // 批注
     private readonly Dictionary<String, List<SheetComment>> _sheetComments = new(StringComparer.OrdinalIgnoreCase);
 
+    // 线程化批注（M27，工作簿级，person 部件全局共享）
+    private readonly List<ThreadedComment> _threadedComments = [];
+
     // 分页符：sheet → 行号列表（1基，此行开始新页）
     private readonly Dictionary<String, List<Int32>> _sheetPageBreaks = new(StringComparer.OrdinalIgnoreCase);
     // 垂直分页符：sheet → 列号列表（0基，此列开始新页）
@@ -977,6 +980,51 @@ public partial class ExcelWriter : DisposeBase
             Author = author ?? String.Empty,
             Segments = list2,
         });
+    }
+
+    /// <summary>为指定单元格添加线程化批注（M27，Excel 2016+ 对话式批注）</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="row">行号（1基）</param>
+    /// <param name="col">列号（0基）</param>
+    /// <param name="text">批注文本</param>
+    /// <param name="author">作者显示名</param>
+    /// <param name="userId">作者用户标识（邮箱/账号，可空）</param>
+    /// <param name="parentId">父批注 Id（回复时传入，顶级批注为 null）</param>
+    /// <param name="time">批注时间（默认当前 UTC 时间）</param>
+    /// <returns>创建的线程化批注（含 Id/PersonId，可用于 Reply）</returns>
+    /// <exception cref="ArgumentNullException">text 或 author 为空</exception>
+    /// <exception cref="ArgumentOutOfRangeException">row 小于 1</exception>
+    public ThreadedComment AddThreadedComment(String? sheet, Int32 row, Int32 col, String text, String author, String? userId = null, String? parentId = null, DateTime? time = null)
+    {
+        if (text.IsNullOrEmpty()) throw new ArgumentNullException(nameof(text));
+        if (author.IsNullOrEmpty()) throw new ArgumentNullException(nameof(author));
+        if (row < 1) throw new ArgumentOutOfRangeException(nameof(row));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+
+        var comment = ThreadedComment.Create(sheet, row, col, text, author, userId);
+        comment.ParentId = parentId;
+        if (time != null) comment.Time = time.Value;
+        _threadedComments.Add(comment);
+        return comment;
+    }
+
+    /// <summary>为现有线程化批注添加回复（M27）</summary>
+    /// <param name="parent">父批注</param>
+    /// <param name="text">回复正文</param>
+    /// <param name="author">作者显示名</param>
+    /// <param name="userId">作者用户标识（可空）</param>
+    /// <returns>回复的线程化批注</returns>
+    /// <exception cref="ArgumentNullException">parent 或 text 为空</exception>
+    public ThreadedComment ReplyThreadedComment(ThreadedComment parent, String text, String author, String? userId = null)
+    {
+        if (parent == null) throw new ArgumentNullException(nameof(parent));
+        if (text.IsNullOrEmpty()) throw new ArgumentNullException(nameof(text));
+        if (author.IsNullOrEmpty()) throw new ArgumentNullException(nameof(author));
+
+        var comment = ThreadedComment.Reply(parent, text, author, userId);
+        _threadedComments.Add(comment);
+        return comment;
     }
 
     /// <summary>设置指定单元格的样式（覆盖行级样式）</summary>
