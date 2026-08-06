@@ -2085,6 +2085,88 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         return result;
     }
 
+    /// <summary>读取切片器列表（M28）</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>切片器列表（名称/标题/关联缓存/筛选列/表格名）</returns>
+    public List<ExcelSlicer> ReadSlicers(String sheet)
+    {
+        var result = new List<ExcelSlicer>();
+        if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry)) return result;
+
+        var n = sheetEntry.Name.TrimEnd(".xml");
+        if (n.StartsWith("sheet")) n = n.Substring(5);
+        var sheetIdx = n.ToInt(-1);
+        if (sheetIdx < 1) return result;
+
+        // sheet rels：r:id → slicer 部件路径
+        var relMap = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+        var relEntry = _zip.GetEntry($"xl/worksheets/_rels/sheet{sheetIdx}.xml.rels");
+        if (relEntry != null)
+        {
+            using var rs = relEntry.Open();
+            var rdoc = XDocument.Load(rs);
+            if (rdoc.Root != null)
+            {
+                foreach (var rel in rdoc.Root.Elements().Where(e => e.Name.LocalName == "Relationship"))
+                {
+                    var type = rel.Attribute("Type")?.Value ?? "";
+                    if (type.Contains("slicer", StringComparison.OrdinalIgnoreCase))
+                        relMap[rel.Attribute("Id")?.Value ?? ""] = rel.Attribute("Target")?.Value ?? "";
+                }
+            }
+        }
+
+        // sheet extLst 中 x14:slicerList
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return result;
+        var slicerList = doc.Root.Descendants().FirstOrDefault(e => e.Name.LocalName == "slicerList");
+        if (slicerList == null) return result;
+
+        // 预载 slicerCache 映射：cacheName → (列名, 表格名)
+        var cacheMap = new Dictionary<String, (String Column, String Table)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cacheEntry in _zip.Entries.Where(e => e.FullName.StartsWith("xl/slicerCaches/") && e.FullName.EndsWith(".xml")))
+        {
+            using var css = cacheEntry.Open();
+            var cdoc = XDocument.Load(css);
+            if (cdoc.Root == null) continue;
+            var cname = cdoc.Root.Attribute("name")?.Value ?? String.Empty;
+            var column = cdoc.Root.Descendants().FirstOrDefault(e => e.Name.LocalName == "column")?.Attribute("name")?.Value ?? String.Empty;
+            var table = cdoc.Root.Descendants().FirstOrDefault(e => e.Name.LocalName == "data")?.Attribute("cacheName")?.Value ?? String.Empty;
+            cacheMap[cname] = (column, table);
+        }
+
+        foreach (var sl in slicerList.Elements().Where(e => e.Name.LocalName == "slicer"))
+        {
+            var rid = sl.Attribute(XName.Get("id", "http://schemas.openxmlformats.org/officeDocument/2006/relationships"))?.Value;
+            if (rid.IsNullOrEmpty() || !relMap.TryGetValue(rid!, out var target)) continue;
+
+            // target 形如 "../slicers/slicer1.xml"
+            var slicerPath = "xl/slicers/" + Path.GetFileName(target);
+            var slicerEntry = _zip.GetEntry(slicerPath);
+            if (slicerEntry == null) continue;
+
+            using var ss = slicerEntry.Open();
+            var sdoc = XDocument.Load(ss);
+            if (sdoc.Root == null) continue;
+
+            var slicer = new ExcelSlicer
+            {
+                Sheet = sheet,
+                Name = sdoc.Root.Attribute("name")?.Value ?? String.Empty,
+                Caption = sdoc.Root.Attribute("caption")?.Value ?? String.Empty,
+                Style = sdoc.Root.Attribute("style")?.Value ?? String.Empty,
+                CacheName = sdoc.Root.Attribute("cache")?.Value,
+            };
+            if (!slicer.CacheName.IsNullOrEmpty() && cacheMap.TryGetValue(slicer.CacheName!, out var ci))
+            {
+                slicer.ColumnName = ci.Column;
+                slicer.TableName = ci.Table;
+            }
+            result.Add(slicer);
+        }
+        return result;
+    }
+
     /// <summary>读取数据验证</summary>
     /// <param name="sheet">工作表名称</param>
     /// <returns>数据验证列表</returns>

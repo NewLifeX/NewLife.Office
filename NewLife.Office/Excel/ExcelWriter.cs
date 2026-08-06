@@ -229,6 +229,9 @@ public partial class ExcelWriter : DisposeBase
 
     // 结构化表格：sheet → 表格列表
     private readonly Dictionary<String, List<Table>> _sheetTables = new(StringComparer.OrdinalIgnoreCase);
+
+    // 切片器（M28）：列表，Save 时按表格解析列
+    private readonly List<ExcelSlicer> _slicers = [];
     #endregion
 
     #region 构造
@@ -825,6 +828,40 @@ public partial class ExcelWriter : DisposeBase
             StyleName = style ?? "TableStyleMedium9",
             ColumnNames = columnNames,
         });
+    }
+
+    /// <summary>为结构化表格的指定列添加切片器（M28，Excel 2010+ 快速筛选）</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="tableName">关联的结构化表格名称</param>
+    /// <param name="columnName">筛选字段列名（表格中的列名）</param>
+    /// <param name="caption">切片器显示标题（默认取列名）</param>
+    /// <param name="style">切片器样式（默认 SlicerStyleLight1）</param>
+    /// <returns>切片器对象（含自动生成的名称）</returns>
+    /// <exception cref="ArgumentNullException">tableName 或 columnName 为空</exception>
+    public ExcelSlicer AddSlicer(String? sheet, String tableName, String columnName, String? caption = null, String? style = null)
+    {
+        if (tableName.IsNullOrEmpty()) throw new ArgumentNullException(nameof(tableName));
+        if (columnName.IsNullOrEmpty()) throw new ArgumentNullException(nameof(columnName));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+
+        var slicer = new ExcelSlicer
+        {
+            Sheet = sheet,
+            TableName = tableName,
+            ColumnName = columnName,
+            Caption = caption ?? columnName,
+            Style = style ?? "SlicerStyleLight1",
+            Name = $"切片器_{columnName}",
+        };
+        // 名称去重
+        var idx = 2;
+        var baseName = slicer.Name;
+        while (_slicers.Any(s => s.Name == slicer.Name))
+            slicer.Name = $"{baseName}{idx++}";
+
+        _slicers.Add(slicer);
+        return slicer;
     }
 
     /// <summary>在指定工作表中添加结构化表格（OOXML table 元素）</summary>

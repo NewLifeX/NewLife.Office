@@ -1,6 +1,7 @@
 ﻿using System.Data;
 using System.IO.Compression;
 using System.Security;
+using System.Xml.Linq;
 
 namespace NewLife.Office.Excel;
 
@@ -111,6 +112,125 @@ partial class ExcelWriter
 
     /// <summary>生成单元格引用（如 "A1"），行列均为 0 基</summary>
     private static String MakeCellRef(Int32 row, Int32 col) => GetColumnName(col) + (row + 1);
+
+    #region 切片器辅助（M28）
+    /// <summary>按工作表 + 名称查找结构化表格</summary>
+    private Table? FindTable(String sheet, String tableName)
+    {
+        if (_sheetTables.TryGetValue(sheet, out var tables))
+            return tables.FirstOrDefault(t => t.Name.EqualIgnoreCase(tableName));
+        return null;
+    }
+
+    /// <summary>解析表格范围（如 "A1:E10"）返回 0 基行列区间</summary>
+    private static (Int32 R1, Int32 C1, Int32 R2, Int32 C2) ParseTableRange(String range)
+    {
+        var parts = range.Split(':');
+        if (parts.Length != 2) return (0, 0, 0, 0);
+        var (r1, c1) = ParseCellRef(parts[0]);
+        var (r2, c2) = ParseCellRef(parts[1]);
+        return (r1, c1, r2, c2);
+    }
+
+    /// <summary>解析列名 → 列索引（0 基），优先表格 ColumnNames，其次表头行文本</summary>
+    private Int32 ResolveColumnIndex(String sheet, Table table, String columnName, Int32 r1, Int32 c1, Int32 r2, Int32 c2)
+    {
+        if (table.ColumnNames is { Length: > 0 })
+        {
+            for (var i = 0; i < table.ColumnNames.Length; i++)
+            {
+                if (table.ColumnNames[i].EqualIgnoreCase(columnName))
+                    return c1 + i;
+            }
+        }
+        // 从表头行（r1，0 基）解析列名
+        if (_sheetRows.TryGetValue(sheet, out var rows))
+        {
+            foreach (var rowXml in rows)
+            {
+                var (rowNum, cells) = ParseRowCells(rowXml);
+                if (rowNum != r1) continue;
+                foreach (var (refName, type, value) in cells)
+                {
+                    var (cr, cc) = ParseCellRef(refName);
+                    if (cc < c1 || cc > c2) continue;
+                    var text = ResolveCellText(type, value);
+                    if (text.EqualIgnoreCase(columnName))
+                        return cc;
+                }
+                break;
+            }
+        }
+        // 兜底：列名匹配失败，返回起始列（表头第一列）
+        return c1;
+    }
+
+    /// <summary>从表格数据列提取唯一值（用于 slicerCache items）</summary>
+    private List<String> ExtractColumnItems(String sheet, Int32 colIdx, Int32 r1, Int32 r2)
+    {
+        var set = new List<String>();
+        if (_sheetRows.TryGetValue(sheet, out var rows))
+        {
+            foreach (var rowXml in rows)
+            {
+                var (rowNum, cells) = ParseRowCells(rowXml);
+                if (rowNum <= r1 || rowNum > r2) continue; // 跳过表头行
+                foreach (var (refName, type, value) in cells)
+                {
+                    var (_, cc) = ParseCellRef(refName);
+                    if (cc != colIdx) continue;
+                    var text = ResolveCellText(type, value);
+                    if (!text.IsNullOrEmpty() && !set.Contains(text))
+                        set.Add(text);
+                    break;
+                }
+            }
+        }
+        return set;
+    }
+
+    /// <summary>解析行 XML，返回 (行号0基, 单元格列表(ref, type, value))</summary>
+    private static (Int32 Row, List<(String Ref, String? Type, String Value)> Cells) ParseRowCells(String rowXml)
+    {
+        var cells = new List<(String, String?, String)>();
+        var rowNum = 0;
+        try
+        {
+            var doc = XDocument.Parse(rowXml);
+            var rowEl = doc.Root;
+            if (rowEl == null) return (rowNum, cells);
+            rowNum = rowEl.Attribute("r")?.Value.ToInt(-1) ?? -1;
+            if (rowNum > 0) rowNum--;
+            foreach (var c in rowEl.Elements().Where(e => e.Name.LocalName == "c"))
+            {
+                var refName = c.Attribute("r")?.Value ?? String.Empty;
+                var type = c.Attribute("t")?.Value;
+                var v = c.Elements().FirstOrDefault(e => e.Name.LocalName == "v")?.Value ?? String.Empty;
+                cells.Add((refName, type, v));
+            }
+        }
+        catch
+        {
+            // 忽略解析失败行
+        }
+        return (rowNum, cells);
+    }
+
+    /// <summary>将单元格类型 + 原始值转换为文本（共享字符串查 _shared）</summary>
+    private String ResolveCellText(String? type, String value)
+    {
+        if (value.IsNullOrEmpty()) return String.Empty;
+        if (type == "s" && Int32.TryParse(value, out var idx))
+        {
+            foreach (var kv in _shared)
+            {
+                if (kv.Value == idx) return kv.Key;
+            }
+            return String.Empty;
+        }
+        return value;
+    }
+    #endregion
 
     /// <summary>生成结构化表格 XML（xl/tables/tableN.xml）</summary>
     private void WriteTableXml(StreamWriter sw, Table tbl, Int32 tableId)
@@ -431,6 +551,15 @@ partial class ExcelWriter
                 }
                 sw.Write("<Override PartName=\"/xl/persons/person.xml\" ContentType=\"application/vnd.ms-excel.person+xml\"/>");
             }
+            // 切片器（M28）：slicer 部件 + slicerCache 部件
+            if (_slicers.Count > 0)
+            {
+                for (var i = 0; i < _slicers.Count; i++)
+                {
+                    sw.Write($"<Override PartName=\"/xl/slicers/slicer{i + 1}.xml\" ContentType=\"application/vnd.ms-excel.slicer+xml\"/>");
+                    sw.Write($"<Override PartName=\"/xl/slicerCaches/slicerCache{i + 1}.xml\" ContentType=\"application/vnd.ms-excel.slicerCache+xml\"/>");
+                }
+            }
             // 结构化表格
             foreach (var kv in sheetsWithTables)
             {
@@ -519,6 +648,9 @@ partial class ExcelWriter
             // 线程化批注：person 部件（工作簿级，M27）
             if (personMap.Count > 0)
                 sw.Write($"<Relationship Id=\"rId{nextId}\" Type=\"http://schemas.microsoft.com/office/2017/10/relationships/person\" Target=\"persons/person.xml\"/>");
+            // 切片器缓存关系（M28）
+            for (var i = 0; i < _slicers.Count; i++)
+                sw.Write($"<Relationship Id=\"rId{++nextId}\" Type=\"http://schemas.microsoft.com/office/2007/relationships/slicerCache\" Target=\"slicerCaches/slicerCache{i + 1}.xml\"/>");
             sw.Write("</Relationships>");
         }
 
@@ -855,17 +987,32 @@ partial class ExcelWriter
                 sw.Write("</x14:sparklineGroups>");
             }
 
-            // 线程化批注（M27）：extLst + x14:commentList 引用
-            if (sheetsWithThreadedComments.Contains(i))
+            // 扩展引用（M27 线程化批注 + M28 切片器）：extLst + x14 扩展
+            var hasThreadedExt = sheetsWithThreadedComments.Contains(i);
+            var sheetSlicers = _slicers.Where(s => s.Sheet.EqualIgnoreCase(sheet)).ToList();
+            if (hasThreadedExt || sheetSlicers.Count > 0)
             {
-                sw.Write("<extLst><ext uri=\"{0298E913-981F-46C6-9B23-F7C1E7E6C8F1}\">");
-                sw.Write("<x14:commentList>");
-                foreach (var tc in _threadedComments.Where(c => c.Sheet.EqualIgnoreCase(sheet)))
+                sw.Write("<extLst>");
+                if (hasThreadedExt)
                 {
-                    var cellRef = MakeCellRef(tc.Row - 1, tc.Col);
-                    sw.Write($"<x14:comment ref=\"{cellRef}\" authorId=\"0\" guid=\"{tc.Id}\" t=\"threaded\" w=\"0\" d=\"0\"/>");
+                    sw.Write("<ext uri=\"{0298E913-981F-46C6-9B23-F7C1E7E6C8F1}\">");
+                    sw.Write("<x14:commentList>");
+                    foreach (var tc in _threadedComments.Where(c => c.Sheet.EqualIgnoreCase(sheet)))
+                    {
+                        var cellRef = MakeCellRef(tc.Row - 1, tc.Col);
+                        sw.Write($"<x14:comment ref=\"{cellRef}\" authorId=\"0\" guid=\"{tc.Id}\" t=\"threaded\" w=\"0\" d=\"0\"/>");
+                    }
+                    sw.Write("</x14:commentList></ext>");
                 }
-                sw.Write("</x14:commentList></ext></extLst>");
+                if (sheetSlicers.Count > 0)
+                {
+                    sw.Write("<ext uri=\"{A8765BA9-456A-4DAB-B4F3-ACF838C121DE}\">");
+                    sw.Write("<x14:slicerList>");
+                    for (var si = 0; si < sheetSlicers.Count; si++)
+                        sw.Write($"<x14:slicer r:id=\"rSlc{si + 1}\"/>");
+                    sw.Write("</x14:slicerList></ext>");
+                }
+                sw.Write("</extLst>");
             }
 
             sw.Write("</worksheet>");
@@ -873,7 +1020,7 @@ partial class ExcelWriter
 
             // sheet rels（超链接 + 图片 drawing + 批注 + 表格 + 图表关系）
             var needSheetRels = sheetsWithHyperlinks.Contains(i) || sheetsWithImages.Contains(i) ||
-                                sheetsWithComments.Contains(i) || sheetsWithTables.ContainsKey(i) || sheetsWithCharts.ContainsKey(i) || sheetsWithThreadedComments.Contains(i);
+                                sheetsWithComments.Contains(i) || sheetsWithTables.ContainsKey(i) || sheetsWithCharts.ContainsKey(i) || sheetsWithThreadedComments.Contains(i) || sheetSlicers.Count > 0;
             if (needSheetRels)
             {
                 var relEntry = za.CreateEntry($"xl/worksheets/_rels/sheet{i + 1}.xml.rels");
@@ -899,6 +1046,12 @@ partial class ExcelWriter
                 if (sheetsWithThreadedComments.Contains(i))
                 {
                     rsw.Write($"<Relationship Id=\"rTc1\" Type=\"http://schemas.microsoft.com/office/2017/10/relationships/threadedComment\" Target=\"../threadedComments/threadedComment{i + 1}.xml\"/>");
+                }
+                // 切片器关系（M28）
+                for (var si = 0; si < sheetSlicers.Count; si++)
+                {
+                    var sIdx = _slicers.IndexOf(sheetSlicers[si]) + 1;
+                    rsw.Write($"<Relationship Id=\"rSlc{si + 1}\" Type=\"http://schemas.microsoft.com/office/2007/relationships/slicer\" Target=\"../slicers/slicer{sIdx}.xml\"/>");
                 }
                 if (sheetsWithTables.TryGetValue(i, out var tblRels))
                 {
@@ -1133,6 +1286,72 @@ partial class ExcelWriter
                     tcsw.Write("</threadedComment>");
                 }
                 tcsw.Write("</ThreadedComments>");
+            }
+        }
+
+        // 切片器部件（M28）：slicerCacheN.xml + slicerN.xml + slicer 关系
+        if (_slicers.Count > 0)
+        {
+            for (var si = 0; si < _slicers.Count; si++)
+            {
+                var slicer = _slicers[si];
+                var cacheName = $"Slicer_{slicer.Name}";
+                slicer.CacheName = cacheName;
+
+                // 解析表格列（range + 列索引 + 唯一值）
+                var table = FindTable(slicer.Sheet, slicer.TableName);
+                var colIdx = -1;
+                var items = new List<String>();
+                if (table != null)
+                {
+                    var (r1, c1, r2, c2) = ParseTableRange(table.Range);
+                    colIdx = ResolveColumnIndex(slicer.Sheet, table, slicer.ColumnName, r1, c1, r2, c2);
+                    if (colIdx >= c1 && colIdx <= c2)
+                        items = ExtractColumnItems(slicer.Sheet, colIdx, r1, r2);
+                }
+                if (items.Count == 0)
+                {
+                    // 兜底：至少一个占位项目，避免空缓存
+                    items.Add("(空白)");
+                }
+
+                // slicerCacheN.xml
+                using (var scsw = new StreamWriter(za.CreateEntry($"xl/slicerCaches/slicerCache{si + 1}.xml").Open(), Encoding))
+                {
+                    scsw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+                    scsw.Write($"<slicerCacheDefinition xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\" name=\"{SecurityElement.Escape(cacheName)}\">");
+                    scsw.Write($"<data cacheName=\"{SecurityElement.Escape(slicer.TableName)}\" sourceName=\"{SecurityElement.Escape(table?.Range ?? slicer.TableName)}\">");
+                    scsw.Write($"<columns count=\"1\"><column dataType=\"string\" name=\"{SecurityElement.Escape(slicer.ColumnName)}\" uniqueCount=\"{items.Count}\"/></columns>");
+                    scsw.Write($"<items count=\"{items.Count}\">");
+                    for (var x = 0; x < items.Count; x++)
+                        scsw.Write($"<i x=\"{x}\" s=\"0\" d=\"0\"/>");
+                    scsw.Write("</items>");
+                    scsw.Write("</data>");
+                    scsw.Write("<sortOrder>0</sortOrder>");
+                    scsw.Write("</slicerCacheDefinition>");
+                }
+
+                // slicerN.xml
+                using (var ssw = new StreamWriter(za.CreateEntry($"xl/slicers/slicer{si + 1}.xml").Open(), Encoding))
+                {
+                    ssw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+                    ssw.Write($"<slicer xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\" name=\"{SecurityElement.Escape(slicer.Name)}\" cache=\"{SecurityElement.Escape(cacheName)}\" caption=\"{SecurityElement.Escape(slicer.Caption)}\" uiLevel=\"2\" style=\"{SecurityElement.Escape(slicer.Style)}\" rowHeight=\"138\" columnCount=\"1\" showCaption=\"1\">");
+                    ssw.Write("<columns><column w=\"72\"/></columns>");
+                    ssw.Write("<data>");
+                    for (var x = 0; x < items.Count; x++)
+                        ssw.Write($"<dataItem x=\"{x}\" s=\"0\"/>");
+                    ssw.Write("</data>");
+                    ssw.Write("</slicer>");
+                }
+
+                // slicerN.xml.rels（关联 slicerCache）
+                using (var srsw = new StreamWriter(za.CreateEntry($"xl/slicers/_rels/slicer{si + 1}.xml.rels").Open(), Encoding))
+                {
+                    srsw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+                    srsw.Write("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
+                    srsw.Write($"<Relationship Id=\"rId1\" Type=\"http://schemas.microsoft.com/office/2007/relationships/slicerCache\" Target=\"../slicerCaches/slicerCache{si + 1}.xml\"/>");
+                    srsw.Write("</Relationships>");
+                }
             }
         }
 
