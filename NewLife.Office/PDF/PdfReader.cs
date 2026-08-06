@@ -1,5 +1,6 @@
 ﻿using System.Globalization;
 using System.Text;
+using NewLife.Office.Markdown;
 
 namespace NewLife.Office.Pdf;
 
@@ -9,7 +10,7 @@ namespace NewLife.Office.Pdf;
 /// 支持 PDF 1.0-1.7，正确提取文本、图片、元数据和书签结构。
 /// 对加密 PDF 的文本提取有限（需先解密）。
 /// </remarks>
-public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
+public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IMarkdownDocumentExtractable
 {
     #region 属性
     /// <summary>源文件路径</summary>
@@ -1828,8 +1829,119 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable
     /// <returns>纯文本字符串</returns>
     String? ITextExtractable.ExtractText() => ExtractText();
 
-    /// <summary>提取 Markdown 格式</summary>
+    /// <summary>提取 Markdown 格式（结构化 AST 序列化）</summary>
     /// <returns>Markdown 字符串</returns>
-    String? IMarkdownExtractable.ExtractMarkdown() => ExtractText();
+    String? IMarkdownExtractable.ExtractMarkdown() => ToMarkdownDocument()?.ToMarkdown();
+
+    /// <summary>提取 Markdown 文档对象（AST）</summary>
+    /// <remarks>
+    /// 结构检测（对标 MarkItDown 启发式）：按 Y 坐标聚合文本行为段落，
+    /// 字号显著大于正文基准 → 标题；每页输出 ## 标题分隔。
+    /// </remarks>
+    /// <returns>Markdown 文档对象，无内容返回 null</returns>
+    public MarkdownDocument? ToMarkdownDocument()
+    {
+        var pageCount = GetPageCount();
+        if (pageCount == 0) return TextFallback();
+
+        // 正文基准字号 = 全文档最常见字号
+        var fontSizes = new List<Single>();
+        for (var p = 0; p < pageCount; p++)
+        {
+            foreach (var tb in GetPageTextBlocks(p))
+            {
+                if (tb.FontSize > 0) fontSizes.Add(tb.FontSize);
+            }
+        }
+        var baseSize = fontSizes.GroupBy(x => Math.Round(x)).OrderByDescending(g => g.Count()).Select(g => g.Key).FirstOrDefault();
+        if (baseSize <= 0) baseSize = 12;
+
+        var doc = new MarkdownDocument();
+        var hasContent = false;
+        for (var p = 0; p < pageCount; p++)
+        {
+            var blocks = GetPageTextBlocks(p);
+            if (blocks.Count == 0) continue;
+            hasContent = true;
+
+            doc.Blocks.Add(MarkdownBlock.CreateHeading(2, [MarkdownInline.CreateText($"第 {p + 1} 页")]));
+
+            foreach (var line in GroupLines(blocks))
+            {
+                var text = MarkdownTextCleaner.Clean(line.Text);
+                if (String.IsNullOrWhiteSpace(text)) continue;
+
+                // 标题推断：字号显著大于正文基准
+                if (line.FontSize > baseSize * 1.25 && line.FontSize >= 14)
+                {
+                    var level = line.FontSize >= baseSize * 1.6 ? 3 : 4;
+                    doc.Blocks.Add(MarkdownBlockBuilder.Heading(level, text));
+                }
+                else
+                {
+                    doc.Blocks.Add(MarkdownBlockBuilder.Paragraph(text));
+                }
+            }
+        }
+        if (!hasContent) return TextFallback();
+        return doc.Blocks.Count > 0 ? doc : null;
+    }
+
+    /// <summary>回退：无法按页/文本块读取时，按行输出纯文本段落</summary>
+    /// <returns>Markdown 文档对象，无内容返回 null</returns>
+    private MarkdownDocument? TextFallback()
+    {
+        var text = ExtractText();
+        if (String.IsNullOrWhiteSpace(text)) return null;
+
+        var doc = new MarkdownDocument();
+        foreach (var line in text.Split('\n'))
+        {
+            var t = MarkdownTextCleaner.Clean(line).Trim();
+            if (String.IsNullOrWhiteSpace(t)) continue;
+            doc.Blocks.Add(MarkdownBlockBuilder.Paragraph(t));
+        }
+        return doc.Blocks.Count > 0 ? doc : null;
+    }
+
+    /// <summary>将文本块按 Y 坐标聚合为文本行（行内按 X 排序），自上而下排序</summary>
+    /// <param name="blocks">页面文本块</param>
+    /// <returns>文本行序列（文本, 最大字号, Y）</returns>
+    private static List<(String Text, Single FontSize, Single Y)> GroupLines(List<PdfText> blocks)
+    {
+        const Single yTolerance = 5f;
+        var lines = new List<(String Text, Single FontSize, Single Y)>();
+        var used = new Boolean[blocks.Count];
+        for (var i = 0; i < blocks.Count; i++)
+        {
+            if (used[i]) continue;
+            used[i] = true;
+
+            var lineItems = new List<PdfText> { blocks[i] };
+            for (var j = i + 1; j < blocks.Count; j++)
+            {
+                if (used[j]) continue;
+                if (Math.Abs(blocks[j].Y - blocks[i].Y) <= yTolerance)
+                {
+                    used[j] = true;
+                    lineItems.Add(blocks[j]);
+                }
+            }
+
+            lineItems.Sort((a, b) => a.X.CompareTo(b.X));
+            var sb = new StringBuilder();
+            var maxSize = 0f;
+            foreach (var item in lineItems)
+            {
+                sb.Append(item.Text);
+                if (item.FontSize > maxSize) maxSize = item.FontSize;
+            }
+            lines.Add((sb.ToString(), maxSize, blocks[i].Y));
+        }
+
+        // 自上而下：PDF 坐标原点在左下，Y 大者在上
+        lines.Sort((a, b) => b.Y.CompareTo(a.Y));
+        return lines;
+    }
     #endregion
 }

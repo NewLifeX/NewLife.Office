@@ -103,6 +103,7 @@ Nuget：NewLife.Office（渲染扩展包：NewLife.Office.Rendering）
 - `MarkdownDocument.ToWord()` / `ToPdf()` 快捷方法
 - `MarkdownPipeline`：Markdown 处理管线，支持扩展挂载与阶段化处理
 - `FormatToMarkdown`：全格式转换中枢，Excel/Word/PPT/PDF 等任意支持格式一键转换为 Markdown
+- `IMarkdownDocumentExtractable`：统一 AST 转换接口，各 Reader 直接产出 `MarkdownDocument` 块模型（对标 Firecrawl anydoc 架构），支持 YAML FrontMatter 元数据，为 NewLife.AI / ChatAI 知识库喂入提供结构化入口
 - `HtmlToMarkdownConverter`：HTML → Markdown 反向转换（配置选项）
 - 高级解析扩展：AutoLinks 自动链接、YAML FrontMatter、脚注、数学公式、Emoji 短码（50+ 常用映射）、定义列表、自定义属性 `{.class #id}`、缩写 `*[ABBR]:`
 

@@ -2,6 +2,7 @@
 using System.IO.Compression;
 using System.Text;
 using System.Xml;
+using NewLife.Office.Markdown;
 
 namespace NewLife.Office.Ppt;
 
@@ -9,7 +10,7 @@ namespace NewLife.Office.Ppt;
 /// <remarks>
 /// 直接解析 Open XML（ZIP+XML）提取幻灯片文本、形状等内容。
 /// </remarks>
-public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
+public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, IMarkdownDocumentExtractable
 {
     #region 属性
     /// <summary>源文件路径</summary>
@@ -1709,22 +1710,123 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable
     /// <returns>纯文本字符串</returns>
     public String? ExtractText() => ReadAllText();
 
-    /// <summary>提取 Markdown 格式（每页用标题分隔）</summary>
+    /// <summary>提取 Markdown 格式（每页用标题分隔，结构化 AST 序列化）</summary>
     /// <returns>Markdown 字符串</returns>
-    public String? ExtractMarkdown()
+    public String? ExtractMarkdown() => ToMarkdownDocument()?.ToMarkdown();
+
+    /// <summary>提取 Markdown 文档对象（AST）</summary>
+    /// <remarks>
+    /// 结构化输出：每张幻灯片 → ## 标题；字号最大的文本框 → ### 标题；
+    /// 正文段落、带项目符号的列表、表格 → GFM 表格、备注 → 引用块（对标 anydoc 固定策略）。
+    /// </remarks>
+    /// <returns>Markdown 文档对象，无内容返回 null</returns>
+    public MarkdownDocument? ToMarkdownDocument()
     {
         var count = GetSlideCount();
         if (count == 0) return null;
 
-        var sb = new StringBuilder();
-        for (var i = 0; i < count; i++)
+        var doc = new MarkdownDocument();
+        var slides = ReadAllSlides().ToList();
+        for (var i = 0; i < slides.Count; i++)
         {
-            if (i > 0) sb.AppendLine();
-            sb.AppendLine($"## 幻灯片 {i + 1}");
-            sb.AppendLine();
-            sb.AppendLine(GetSlideText(i));
+            var slide = slides[i];
+            if (slide == null) continue;
+
+            doc.Blocks.Add(MarkdownBlock.CreateHeading(2, [MarkdownInline.CreateText($"幻灯片 {i + 1}")]));
+
+            // 标题识别：字号最大的文本框作为幻灯片标题
+            var maxSize = 0;
+            foreach (var tb in slide.TextBoxes)
+            {
+                if (tb.FontSize > maxSize) maxSize = tb.FontSize;
+            }
+
+            var bulletItems = new List<MarkdownBlock>();
+            foreach (var tb in slide.TextBoxes)
+            {
+                var text = TextBoxPlainText(tb);
+                if (String.IsNullOrWhiteSpace(text)) continue;
+
+                // 字号最大的文本框 → 标题（需足够大，避免把普通文字误判为标题）
+                if (maxSize >= 20 && tb.FontSize >= maxSize && tb.Paragraphs.Count <= 1)
+                {
+                    doc.Blocks.Add(MarkdownBlockBuilder.Heading(3, text));
+                }
+                else if (tb.Paragraphs.Count > 0)
+                {
+                    foreach (var para in tb.Paragraphs)
+                    {
+                        var inlines = ParagraphInlines(para);
+                        if (inlines.Count == 0) continue;
+                        if (para.BulletChar != null || para.Level > 0)
+                            bulletItems.Add(MarkdownBlock.CreateListItem(inlines));
+                        else
+                            doc.Blocks.Add(MarkdownBlock.CreateParagraph(inlines));
+                    }
+                }
+                else
+                {
+                    doc.Blocks.Add(MarkdownBlockBuilder.Paragraph(text));
+                }
+            }
+            if (bulletItems.Count > 0)
+                doc.Blocks.Add(MarkdownBlock.CreateBulletList(bulletItems));
+
+            // 表格 → GFM 表格
+            foreach (var tbl in slide.Tables)
+            {
+                if (tbl.Rows.Count == 0) continue;
+                doc.Blocks.Add(MarkdownBlockBuilder.Table(tbl.Rows.ToArray(), tbl.FirstRowHeader));
+            }
+
+            // 备注 → 引用块
+            if (!String.IsNullOrWhiteSpace(slide.Notes))
+                doc.Blocks.Add(MarkdownBlockBuilder.BlockQuote(slide.Notes));
         }
-        return sb.ToString();
+        return doc;
+    }
+
+    /// <summary>拼接文本框纯文本（优先段落 Runs）</summary>
+    /// <param name="tb">文本框</param>
+    /// <returns>纯文本</returns>
+    private static String TextBoxPlainText(TextBox tb)
+    {
+        if (tb.Paragraphs.Count > 0)
+        {
+            var sb = new StringBuilder();
+            foreach (var p in tb.Paragraphs)
+            {
+                foreach (var run in p.Runs) sb.Append(run.Text);
+            }
+            return sb.ToString();
+        }
+        return tb.Text;
+    }
+
+    /// <summary>构建段落行内元素（保留粗体/斜体/超链接）</summary>
+    /// <param name="para">段落</param>
+    /// <returns>行内元素列表</returns>
+    private static List<MarkdownInline> ParagraphInlines(Paragraph para)
+    {
+        var list = new List<MarkdownInline>();
+        foreach (var run in para.Runs)
+        {
+            if (String.IsNullOrEmpty(run.Text)) continue;
+            var clean = MarkdownTextCleaner.Clean(run.Text);
+
+            // 超链接优先
+            if (!run.HyperlinkUrl.IsNullOrEmpty())
+            {
+                list.Add(MarkdownInline.CreateLink(run.HyperlinkUrl!, "", [MarkdownInline.CreateText(clean)]));
+                continue;
+            }
+
+            List<MarkdownInline> inlines = [MarkdownInline.CreateText(clean)];
+            if (run.Italic) inlines = [MarkdownInline.CreateEmphasis(inlines)];
+            if (run.Bold) inlines = [MarkdownInline.CreateStrong(inlines)];
+            list.AddRange(inlines);
+        }
+        return list;
     }
     #endregion
 }

@@ -5,6 +5,7 @@ using System.IO.Compression;
 using System.Reflection;
 using System.Text;
 using System.Xml.Linq;
+using NewLife.Office.Markdown;
 
 namespace NewLife.Office.Excel;
 
@@ -16,7 +17,7 @@ namespace NewLife.Office.Excel;
 /// 合并区域、超链接、图片、页面设置、条件格式、批注、数据验证、公式等。
 /// 通过 <see cref="ReadExcel"/> 一键获取工作簿完整快照。
 /// </remarks>
-public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
+public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, IMarkdownDocumentExtractable
 {
     #region 属性
     /// <summary>文件名</summary>
@@ -2513,59 +2514,65 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         return sb.ToString();
     }
 
-    /// <summary>提取 Markdown 格式（表格）</summary>
+    /// <summary>提取 Markdown 格式（表格），结构化 AST 序列化</summary>
     /// <returns>Markdown 表格字符串</returns>
-    public String? ExtractMarkdown()
+    public String? ExtractMarkdown() => ToMarkdownDocument()?.ToMarkdown();
+
+    /// <summary>提取 Markdown 文档对象（AST）</summary>
+    /// <remarks>
+    /// 每个工作表 → ## 标题（多表时）+ GFM 表格。自动清理空行与尾部空列，
+    /// 保持输出洁净（对标 anydoc shared 层表格组装）。
+    /// </remarks>
+    /// <returns>Markdown 文档对象，无内容返回 null</returns>
+    public MarkdownDocument? ToMarkdownDocument()
     {
         var sheets = Sheets;
         if (sheets == null || sheets.Count == 0) return null;
 
-        var sb = new StringBuilder();
+        var doc = new MarkdownDocument();
         var sheetList = sheets.ToList();
         for (var si = 0; si < sheetList.Count; si++)
         {
             var sheetName = sheetList[si];
             if (sheetList.Count > 1)
-            {
-                if (si > 0) sb.AppendLine();
-                sb.AppendLine($"## {sheetName}");
-                sb.AppendLine();
-            }
+                doc.Blocks.Add(MarkdownBlockBuilder.Heading(2, sheetName));
 
             var rows = ReadRows(sheetName).ToList();
             if (rows.Count == 0) continue;
 
-            // 第一行作为表头
-            var header = rows[0];
-            sb.Append('|');
-            foreach (var cell in header)
-            {
-                sb.Append(' ').Append(MdEscape(cell?.ToString())).Append(" |");
-            }
-            sb.AppendLine();
+            // 清理空行（整行全空）
+            var cleanRows = rows.Where(r => r.Any(c => c != null && !String.IsNullOrWhiteSpace(c.ToString()))).ToList();
+            if (cleanRows.Count == 0) continue;
 
-            // 分隔线
-            sb.Append('|');
-            for (var i = 0; i < header.Length; i++)
+            // 清理尾部全空列
+            var maxCols = cleanRows.Max(r => r.Length);
+            while (maxCols > 1)
             {
-                sb.Append(" --- |");
-            }
-            sb.AppendLine();
-
-            // 数据行
-            for (var ri = 1; ri < rows.Count; ri++)
-            {
-                var row = rows[ri];
-                sb.Append('|');
-                for (var i = 0; i < header.Length; i++)
+                var empty = true;
+                foreach (var r in cleanRows)
                 {
-                    var val = i < row.Length ? row[i]?.ToString() : "";
-                    sb.Append(' ').Append(MdEscape(val)).Append(" |");
+                    if (r.Length > maxCols - 1 && r[maxCols - 1] != null && !String.IsNullOrWhiteSpace(r[maxCols - 1].ToString()))
+                    {
+                        empty = false;
+                        break;
+                    }
                 }
-                sb.AppendLine();
+                if (!empty) break;
+                maxCols--;
             }
+
+            // 构造字符串二维数组
+            var data = new String[cleanRows.Count][];
+            for (var r = 0; r < cleanRows.Count; r++)
+            {
+                data[r] = new String[maxCols];
+                for (var c = 0; c < maxCols; c++)
+                    data[r][c] = c < cleanRows[r].Length && cleanRows[r][c] != null ? cleanRows[r][c]!.ToString()! : "";
+            }
+
+            doc.Blocks.Add(MarkdownBlockBuilder.Table(data, true));
         }
-        return sb.ToString();
+        return doc.Blocks.Count > 0 ? doc : null;
     }
 
     private static String CsvEscape(String? value)
@@ -2574,12 +2581,6 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable
         if (value!.IndexOfAny([',', '"', '\n', '\r']) >= 0)
             return "\"" + value.Replace("\"", "\"\"") + "\"";
         return value;
-    }
-
-    private static String MdEscape(String? value)
-    {
-        if (String.IsNullOrEmpty(value)) return "";
-        return value!.Replace("|", "\\|").Replace("\n", " ").Replace("\r", "");
     }
 
     /// <summary>从 docProps/core.xml 读取文档属性</summary>
