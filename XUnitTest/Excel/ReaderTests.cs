@@ -198,7 +198,7 @@ public class ExcelReaderTests
                      // 7: Unknown (999) -> null style entry
                      "<xf numFmtId=\"999\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/>" +
                      "</cellXfs></styleSheet>";
-        // Row cells: A1 General 2147483648 (long), B1 Date serial 5 => 1900-01-04, C1 Time 0.5 => 12:00, D1 Int style decimal won't parse => string, E1 Decimal 123.45 => decimal/double, F1 Double 0.25 => double, G1 Text 123.456 => string, H1 Unknown style 99 => remains string, I1 style index=99(越界) remains string
+        // Row cells: A1 General 2147483648 (long), B1 Date serial 5 => 1900-01-05, C1 Time 0.5 => 12:00, D1 Int style decimal won't parse => string, E1 Decimal 123.45 => decimal/double, F1 Double 0.25 => double, G1 Text 123.456 => string, H1 Unknown style 99 => remains string, I1 style index=99(越界) remains string
         var sheet = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData><row r=\"1\">" +
                      "<c r=\"A1\" s=\"0\"><v>2147483648</v></c>" +
                      "<c r=\"B1\" s=\"1\"><v>5</v></c>" +
@@ -216,7 +216,7 @@ public class ExcelReaderTests
         Assert.Equal(9, row.Length);
         Assert.IsType<Int64>(row[0]);
         Assert.IsType<DateTime>(row[1]);
-        Assert.Equal(new DateTime(1900, 1, 4), (DateTime)row[1]);
+        Assert.Equal(new DateTime(1900, 1, 5), (DateTime)row[1]); // Excel 序列 5 = 1900-01-05（2026-08-07 修正：旧实现差一天）
         Assert.IsType<TimeSpan>(row[2]);
         Assert.Equal(TimeSpan.FromHours(12), (TimeSpan)row[2]);
         Assert.Equal("12.34", row[3]); // 未转换
@@ -278,7 +278,7 @@ public class ExcelReaderTests
         var row = reader.ReadRows().First();
         Assert.Equal(29, row.Length);
         for (var i = 0; i < 28; i++) Assert.Null(row[i]);
-        Assert.Equal("1", row[28]);
+        Assert.Equal(1, row[28]); // 无 styles 部件时按 OOXML 规范默认为数字（2026-08-07 改进）
     }
 
     [Fact]

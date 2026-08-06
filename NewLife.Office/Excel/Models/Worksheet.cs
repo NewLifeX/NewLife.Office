@@ -40,6 +40,12 @@ public class Worksheet
     /// <summary>列宽（0基列号 → 字符宽度）</summary>
     public Dictionary<Int32, Double> ColumnWidths { get; set; } = [];
 
+    /// <summary>隐藏行（0基行号集合），源文件 row hidden="1" 的行</summary>
+    public HashSet<Int32> HiddenRows { get; set; } = [];
+
+    /// <summary>隐藏列（0基列号集合），源文件 &lt;col hidden="1"&gt; 的列</summary>
+    public HashSet<Int32> HiddenColumns { get; set; } = [];
+
     /// <summary>超链接（0基行, 0基列）→ (URL, 显示文本)</summary>
     public Dictionary<(Int32 Row, Int32 Col), (String Url, String? Display)> Hyperlinks { get; set; } = [];
 

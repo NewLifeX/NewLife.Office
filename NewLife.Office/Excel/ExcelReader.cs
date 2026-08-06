@@ -34,6 +34,8 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     private ExcelNumberFormat?[]? _styles;
     private IDictionary<String, ZipArchiveEntry>? _entries;
     private List<String>? _orderedSheets;
+    private Boolean _date1904; // 1904 日期系统（Mac Excel 旧文件，workbook.xml workbookPr date1904="1"）
+    private Dictionary<Int32, String>? _themeColors; // 主题色表（theme1.xml clrScheme，索引 → RGB 六位十六进制）
 
     // 完整样式解析
     private List<FontInfo>? _fontInfos;
@@ -179,6 +181,16 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             _entries = ReadSheets(_zip);
         }
 
+        // 读取主题色（可缺失，用于解析 "theme:N" 颜色为实际 RGB）
+        {
+            var entry = _zip.GetEntry("xl/theme/theme1.xml");
+            if (entry != null)
+            {
+                using var es = entry.Open();
+                _themeColors = ReadThemeColors(es);
+            }
+        }
+
         // 二次解析完整样式（需要重新读取 styles.xml，因为流已关闭）
         {
             var entry = _zip.GetEntry("xl/styles.xml");
@@ -189,8 +201,6 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             }
         }
     }
-
-    private static DateTime _1900 = new(1900, 1, 1);
 
     /// <summary>逐行读取数据，第一行通常是表头。支持超过26列（AA/AB等）以及缺失列自动补 null。</summary>
     /// <param name="sheet">工作表名。默认 null 取第一个数据表</param>
@@ -246,7 +256,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                 else
                     val = col.Value; // inlineStr 等情况会走这里
 
-                // t=DataType: s=SharedString, b=Boolean, n=Number(默认), d=Date(较少出现), str=公式结果文本, inlineStr=内联字符串
+                // t=DataType: s=SharedString, b=Boolean, n=Number(默认), d=ISO日期, e=错误, str=公式结果文本, inlineStr=内联字符串
                 var t = col.Attribute("t")?.Value;
                 if (t == "s")
                 {
@@ -258,6 +268,15 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                     // 布尔：0 / 1 以及 true / false
                     if (val is String sb) val = sb == "1" || sb.EqualIgnoreCase("true");
                 }
+                else if (t == "e")
+                {
+                    // 错误单元格（#DIV/0! 等），保持错误字符串，不做数字转换
+                }
+                else if (t == "d")
+                {
+                    // ISO 8601 日期（如 2020-01-15T00:00:00）
+                    if (val is String sd && DateTime.TryParse(sd, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)) val = dt;
+                }
                 else if (t == "inlineStr")
                 {
                     // 已经在 col.Value 中
@@ -267,11 +286,11 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                     // 公式结果文本，不再特别处理
                 }
 
-                // 样式转换（日期 / 时间 / 数字）。仅当未被布尔/共享字符串提前转换
-                if (val is String && styles != null)
+                // 样式转换（日期 / 时间 / 数字）。仅当未被布尔/共享字符串提前转换；错误/日期单元格跳过
+                if (val is String && t is not "e" and not "d")
                 {
                     var sAttr = col.Attribute("s"); // StyleIndex
-                    if (sAttr != null)
+                    if (sAttr != null && styles != null)
                     {
                         var si = sAttr.Value.ToInt();
                         if (si >= 0 && si < styles.Length)
@@ -283,7 +302,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                     }
                     else if (t.IsNullOrEmpty())
                     {
-                        // OOXML 规定：无 t 属性且无 s 属性时，<v> 值默认为数字（General 格式）
+                        // OOXML 规定：无 t 属性且无 s 属性时，<v> 值默认为数字（General 格式）；无 styles 部件时同样适用
                         if (val is String rawStr)
                         {
                             if (Int32.TryParse(rawStr, out var ni)) val = ni;
@@ -367,11 +386,20 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                 {
                     if (val is String sb) val = sb == "1" || sb.EqualIgnoreCase("true");
                 }
+                else if (t == "e")
+                {
+                    // 错误单元格（#DIV/0! 等），保持错误字符串
+                }
+                else if (t == "d")
+                {
+                    // ISO 8601 日期
+                    if (val is String sd && DateTime.TryParse(sd, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)) val = dt;
+                }
 
-                if (val is String && styles != null)
+                if (val is String && t is not "e" and not "d")
                 {
                     var sAttr = col.Attribute("s");
-                    if (sAttr != null)
+                    if (sAttr != null && styles != null)
                     {
                         var si = sAttr.Value.ToInt();
                         if (si >= 0 && si < styles.Length)
@@ -382,6 +410,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                     }
                     else if (t.IsNullOrEmpty())
                     {
+                        // OOXML 规定：无 t 属性时 <v> 值默认为数字（General 格式）；无 styles 部件时同样适用
                         if (val is String rawStr)
                         {
                             if (Int32.TryParse(rawStr, out var ni)) val = ni;
@@ -407,19 +436,24 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     /// <summary>按 Excel 数字格式尝试转换值</summary>
     private Object? ChangeType(Object? val, ExcelNumberFormat st)
     {
-        // 日期格式。Excel 以 1900-1-1 为基准(含虚构闰年Bug)，序列值 1 = 1900-01-01。这里减2 与历史实现保持兼容。
+        // 日期格式。Excel 1900 系统含虚构闰日 Bug（序列 60 为不存在的 1900-02-29），序列 1 = 1900-01-01。
+        // 换算规则：序列 <60 时 1899-12-31 为纪元（+n 天）；序列 >=61 时 1899-12-30 为纪元（虚构闰日偏移 1 天）；
+        // 序列 60 不存在，钳制为 1900-02-28。旧实现统一按 1899-12-30 + n 换算，导致 1900-03-01 之前的日期差一天。
         if (st.Format.Contains("yy") || st.Format.Contains("mmm") || st.NumFmtId >= 14 && st.NumFmtId <= 17 || st.NumFmtId == 22)
         {
             if (val is String str && Double.TryParse(str, out var d))
             {
-                // 暂时不明白为何要减2，实际上这么做就对了
-                //val = _1900.AddDays(str.ToDouble() - 2);
-                // 取整秒，剔除毫秒部分，避免浮点误差
-                val = _1900.AddSeconds(Math.Round((d - 2) * 24 * 3600));
-                //var ss = str.Split('.');
-                //var dt = _1900.AddDays(ss[0].ToInt() - 2);
-                //dt = dt.AddSeconds(ss[1].ToLong() / 115740);
-                //val = dt.ToFullString();
+                // 换算为秒并取整，消除 Double 序列值的浮点误差（直接 AddDays 会有毫秒级偏差）
+                var secs = Math.Round(d * 86400);
+                // 1904 日期系统：Mac Excel 以 1904-01-01 为基准，无虚构闰日
+                if (_date1904)
+                    val = new DateTime(1904, 1, 1).AddSeconds(secs);
+                else if (d >= 61)
+                    val = new DateTime(1899, 12, 30).AddSeconds(secs);
+                else if (d == 60)
+                    val = new DateTime(1900, 2, 28); // 虚构闰日，钳制
+                else
+                    val = new DateTime(1899, 12, 31).AddSeconds(secs);
             }
         }
         else if (st.NumFmtId is >= 18 and <= 21 or >= 45 and <= 47)
@@ -484,10 +518,101 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         var list = new List<String>();
         foreach (var item in doc.Root.Elements())
         {
-            list.Add(item.Value);
+            // 仅拼接 <t> 文本节点（富文本 <r> run 依次拼接），跳过 <rPh>/<phoneticPr> 音标内容
+            var sb = new StringBuilder();
+            foreach (var child in item.Elements())
+            {
+                if (child.Name.LocalName == "t")
+                    sb.Append(child.Value);
+                else if (child.Name.LocalName == "r")
+                {
+                    foreach (var t in child.Elements())
+                    {
+                        if (t.Name.LocalName == "t") sb.Append(t.Value);
+                    }
+                }
+            }
+            list.Add(sb.ToString());
         }
 
         return list.ToArray();
+    }
+
+    /// <summary>解析主题色定义（theme1.xml 的 &lt;clrScheme&gt;），返回 12 个主题色索引 → RGB 六位十六进制</summary>
+    /// <param name="ms">theme1.xml 流</param>
+    private static Dictionary<Int32, String>? ReadThemeColors(Stream ms)
+    {
+        var doc = XDocument.Load(ms);
+        if (doc?.Root == null) return null;
+
+        var scheme = doc.Root.Descendants().FirstOrDefault(e => e.Name.LocalName == "clrScheme");
+        if (scheme == null) return null;
+
+        var result = new Dictionary<Int32, String>();
+        // OOXML 主题色顺序：dk1, lt1, dk2, lt2, accent1-6, hlink, folHlink（共 12 个）
+        var idx = 0;
+        foreach (var el in scheme.Elements())
+        {
+            var srgb = el.Elements().FirstOrDefault(e => e.Name.LocalName == "srgbClr");
+            if (srgb != null)
+            {
+                var val = srgb.Attribute("val")?.Value;
+                if (!val.IsNullOrEmpty()) result[idx] = val;
+            }
+            else
+            {
+                var sys = el.Elements().FirstOrDefault(e => e.Name.LocalName == "sysClr");
+                if (sys != null)
+                {
+                    var last = sys.Attribute("lastClr")?.Value;
+                    if (!last.IsNullOrEmpty()) result[idx] = last;
+                }
+            }
+            idx++;
+        }
+        return result;
+    }
+
+    /// <summary>解析主题色引用为实际 RGB 十六进制（如 "theme:0" → "FFFFFF"）</summary>
+    /// <param name="color">颜色字符串，支持 "theme:N" 与 "theme:N;tint:x" 两种格式；非主题色原样返回</param>
+    /// <returns>实际 RGB 六位十六进制；无主题部件或无法解析时原样返回</returns>
+    public String? ResolveThemeColor(String? color)
+    {
+        if (color.IsNullOrEmpty() || !color!.StartsWith("theme:", StringComparison.OrdinalIgnoreCase) || _themeColors == null) return color;
+
+        var theme = -1;
+        var tint = 0.0;
+        foreach (var part in color.Split(';'))
+        {
+            var kv = part.Split(':');
+            if (kv.Length != 2) continue;
+            if (kv[0].EqualIgnoreCase("theme")) theme = kv[1].ToInt(-1);
+            else if (kv[0].EqualIgnoreCase("tint")) tint = kv[1].ToDouble();
+        }
+        if (theme < 0 || !_themeColors.TryGetValue(theme, out var rgb)) return color;
+
+        var hex = rgb;
+        if (Math.Abs(tint) > 0.0001)
+        {
+            // Office 规范：tint 正值向白色混合，负值向黑色混合
+            var r = Convert.ToInt32(hex.Substring(0, 2), 16);
+            var g = Convert.ToInt32(hex.Substring(2, 2), 16);
+            var b = Convert.ToInt32(hex.Substring(4, 2), 16);
+            if (tint > 0)
+            {
+                r = (Int32)(r + (255 - r) * tint);
+                g = (Int32)(g + (255 - g) * tint);
+                b = (Int32)(b + (255 - b) * tint);
+            }
+            else
+            {
+                r = (Int32)(r * (1 + tint));
+                g = (Int32)(g * (1 + tint));
+                b = (Int32)(b * (1 + tint));
+            }
+            hex = $"{r:X2}{g:X2}{b:X2}";
+        }
+        return hex;
     }
 
     private ExcelNumberFormat?[]? ReadStyles(Stream ms)
@@ -783,6 +908,10 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             var doc = XDocument.Load(es);
             if (doc?.Root != null)
             {
+                // 1904 日期系统检测（Mac Excel 旧文件以 1904-01-01 为基准，与 1900 系统相差 1462 天）
+                var wbPr = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "workbookPr");
+                if (wbPr?.Attribute("date1904")?.Value is "1" or "true") _date1904 = true;
+
                 //var list = new List<String>();
                 var sheets = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "sheets");
                 if (sheets != null)
@@ -1199,6 +1328,10 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         // 列宽
         sd.ColumnWidths = ReadColumnWidths(sheet);
 
+        // 隐藏行列
+        sd.HiddenRows = ReadHiddenRows(sheet);
+        sd.HiddenColumns = ReadHiddenColumns(sheet);
+
         // 超链接
         var links = ReadHyperlinks(sheet);
         foreach (var kv in links)
@@ -1387,6 +1520,55 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             var r = rAttr != null ? rAttr.Value.ToInt(-1) : -1;
             if (r < 1) continue;
             result[r - 1] = ht.Value.ToDouble();
+        }
+        return result;
+    }
+
+    /// <summary>读取指定工作表的隐藏行（0基行号集合）</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>隐藏行的 0基行号集合</returns>
+    public HashSet<Int32> ReadHiddenRows(String sheet)
+    {
+        var result = new HashSet<Int32>();
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return result;
+
+        var data = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sheetData"));
+        if (data == null) return result;
+
+        foreach (var row in data.Elements())
+        {
+            if (row.Name.LocalName != "row") continue;
+            var hidden = row.Attribute("hidden")?.Value;
+            if (hidden != "1" && !hidden.EqualIgnoreCase("true")) continue;
+
+            var r = (row.Attribute("r")?.Value.ToInt(-1) ?? -1) - 1;
+            if (r >= 0) result.Add(r);
+        }
+        return result;
+    }
+
+    /// <summary>读取指定工作表的隐藏列（0基列号集合）</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>隐藏列的 0基列号集合</returns>
+    public HashSet<Int32> ReadHiddenColumns(String sheet)
+    {
+        var result = new HashSet<Int32>();
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return result;
+
+        var cols = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("cols"));
+        if (cols == null) return result;
+
+        foreach (var col in cols.Elements())
+        {
+            if (col.Name.LocalName != "col") continue;
+            var hidden = col.Attribute("hidden")?.Value;
+            if (hidden != "1" && !hidden.EqualIgnoreCase("true")) continue;
+
+            var min = col.Attribute("min")?.Value.ToInt(1) ?? 1;
+            var max = col.Attribute("max")?.Value.ToInt(min) ?? min;
+            for (var c = min - 1; c < max; c++) result.Add(c);
         }
         return result;
     }
