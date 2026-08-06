@@ -83,6 +83,10 @@ public class PdfWriter : IDisposable
     /// <summary>书签列表</summary>
     public List<PdfOutline> Bookmarks { get; } = [];
 
+    /// <summary>是否对嵌入中文字体启用子集化（P08），仅保留实际使用字符，显著减小 PDF 体积</summary>
+    /// <remarks>启用后嵌入字体的 FontFile2 将替换为子集字体，需 PDF 阅读器支持子集化 TrueType。</remarks>
+    public Boolean SubsetFonts { get; set; }
+
     /// <summary>注释列表（所有类型的页面注释）</summary>
     public List<PdfAnnotation> Annotations { get; } = [];
     #endregion
@@ -98,6 +102,9 @@ public class PdfWriter : IDisposable
 
     // 嵌入文件列表
     private readonly List<(String FileName, Byte[] Data)> _embeddedFiles = [];
+
+    // 每个字体实际使用的 Unicode 码点（子集化用，P08）
+    private readonly Dictionary<PdfFont, HashSet<Int32>> _usedChars = [];
 
     // WinAnsiEncoding 在 Latin-1 之外的 CP1252 扩展字符映射（U+0080-U+009F 区段）
     private static readonly Dictionary<Char, Char> _cp1252Map = new Dictionary<Char, Char>
@@ -261,6 +268,9 @@ public class PdfWriter : IDisposable
         else
             _content.AppendLine($"({EncodePdfText(text)}) Tj");
         _content.AppendLine("ET");
+
+        // 子集化：记录该字体实际使用的字符（P08）
+        if (SubsetFonts) RecordUsedChars(font, text);
     }
 
     /// <summary>绘制文本（支持字符间距和词间距）</summary>
@@ -287,6 +297,24 @@ public class PdfWriter : IDisposable
         else
             _content.AppendLine($"({EncodePdfText(text)}) Tj");
         _content.AppendLine("ET");
+
+        // 子集化：记录该字体实际使用的字符（P08）
+        if (SubsetFonts) RecordUsedChars(font, text);
+    }
+
+    /// <summary>记录字体实际使用的 Unicode 码点（子集化用）</summary>
+    /// <param name="font">字体</param>
+    /// <param name="text">绘制文本</param>
+    private void RecordUsedChars(PdfFont font, String text)
+    {
+        if (String.IsNullOrEmpty(text)) return;
+        if (!_usedChars.TryGetValue(font, out var set))
+        {
+            set = [];
+            _usedChars[font] = set;
+        }
+        foreach (var ch in text)
+            set.Add(ch);
     }
 
     /// <summary>创建简体中文字体（Adobe 预定义 STSong-Light，PDF 阅读器需安装 CJK 字体包）</summary>
@@ -1458,17 +1486,33 @@ public class PdfWriter : IDisposable
                     // ── 嵌入 TrueType/TTC 字体 ──
                     var fontData = File.ReadAllBytes(f.FontFilePath);
                     var sfOff = GetSfOffset(fontData, f.TtcFontIndex);
-                    var (upm, ascent, descent, xMin, yMin, xMax, yMax) = ReadTtfMetrics(fontData, sfOff);
+
+                    // P08：子集化，仅保留实际使用字符（显著减小 PDF 体积）
+                    Byte[] embedData = fontData;
+                    Dictionary<UInt16, UInt16> glyphMap;
+                    if (SubsetFonts && _usedChars.TryGetValue(f, out var used) && used.Count > 0)
+                    {
+                        var (subsetBytes, subsetCmap) = TrueTypeSubsetter.Subset(fontData, sfOff, used);
+                        embedData = subsetBytes;
+                        glyphMap = subsetCmap;
+                        sfOff = 0; // 子集为单字体 TTF
+                    }
+                    else
+                    {
+                        glyphMap = ParseTtfCmap(fontData, sfOff);
+                    }
+
+                    var (upm, ascent, descent, xMin, yMin, xMax, yMax) = ReadTtfMetrics(embedData, sfOff);
                     var scale  = upm > 0 ? 1000.0 / upm : 1.0;
                     var a1000  = (Int32)(ascent  * scale);
                     var d1000  = (Int32)(descent * scale);
                     var bb     = $"[{(Int32)(xMin*scale)} {(Int32)(yMin*scale)} {(Int32)(xMax*scale)} {(Int32)(yMax*scale)}]";
 
-                    // FontFile2 流（原始字体字节）
+                    // FontFile2 流（子集化后字体字节）
                     offsets[fontFile2ObjIds[fi] - 1] = written;
-                    var ff2h = latin1.GetBytes($"{fontFile2ObjIds[fi]} 0 obj\n<< /Length {fontData.Length} /Length1 {fontData.Length} >>\nstream\n");
+                    var ff2h = latin1.GetBytes($"{fontFile2ObjIds[fi]} 0 obj\n<< /Length {embedData.Length} /Length1 {embedData.Length} >>\nstream\n");
                     WriteBytes(ff2h, 0, ff2h.Length);
-                    WriteBytes(fontData, 0, fontData.Length);
+                    WriteBytes(embedData, 0, embedData.Length);
                     WriteBytes(streamEndBytes, 0, streamEndBytes.Length);
 
                     // FontDescriptor
@@ -1478,7 +1522,6 @@ public class PdfWriter : IDisposable
                         $"/CapHeight {a1000}\n/StemV 80\n/FontFile2 {fontFile2ObjIds[fi]} 0 R\n>>");
 
                     // CIDToGIDMap 流（Unicode → GlyphID，压缩以减小体积）
-                    var glyphMap = ParseTtfCmap(fontData, sfOff);
                     var ctgData  = ZlibCompress(BuildCidToGidMap(glyphMap));
                     offsets[cidToGidObjIds[fi] - 1] = written;
                     var ctgh = latin1.GetBytes($"{cidToGidObjIds[fi]} 0 obj\n<< /Length {ctgData.Length} /Filter /FlateDecode >>\nstream\n");
