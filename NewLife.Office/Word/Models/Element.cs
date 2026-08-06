@@ -28,6 +28,9 @@ public class Element
     /// <summary>内容控件（Type=Sdt 时有效）</summary>
     public SdtElement? Sdt { get; set; }
 
+    /// <summary>自选图形（Type=Shape 时有效，W12）</summary>
+    public WordShape? Shape { get; set; }
+
     /// <summary>
     /// 元素原始 XML，由 Reader 将对应 <c>w:p</c>/<c>w:tbl</c> 的 OuterXml 存入。
     /// Writer 在此不为空时<strong>优先直接写入</strong>，完整保留所有内联格式

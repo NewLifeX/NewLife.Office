@@ -11,4 +11,6 @@ public enum ElementType
     Image,
     /// <summary>内容控件（SDT）</summary>
     Sdt,
+    /// <summary>自选图形（W12）</summary>
+    Shape,
 }

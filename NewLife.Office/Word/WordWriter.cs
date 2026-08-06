@@ -413,6 +413,17 @@ public class WordWriter : IDisposable
         };
         _elements.Add(new Element { Type = ElementType.Image, Image = img });
     }
+
+    /// <summary>追加自选图形（W12，矩形/椭圆/线条等 DrawingML 形状）</summary>
+    /// <param name="shape">形状对象（类型/尺寸/填充/线条/文本）</param>
+    /// <returns>形状对象</returns>
+    /// <exception cref="ArgumentNullException">shape 为空</exception>
+    public WordShape AppendShape(WordShape shape)
+    {
+        if (shape == null) throw new ArgumentNullException(nameof(shape));
+        _elements.Add(new Element { Type = ElementType.Shape, Shape = shape });
+        return shape;
+    }
     #endregion
 
     #region 保存方法
@@ -993,6 +1004,9 @@ public class WordWriter : IDisposable
                     case ElementType.Image when el.Image != null:
                         BuildImageXml(sb, el.Image);
                         break;
+                    case ElementType.Shape when el.Shape != null:
+                        BuildShapeXml(sb, el.Shape);
+                        break;
                     case ElementType.Sdt:
                         if (el.RawXml != null)
                             sb.Append(el.RawXml);
@@ -1493,6 +1507,42 @@ public class WordWriter : IDisposable
         sb.Append($"<pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{img.WidthEmu}\" cy=\"{img.HeightEmu}\"/></a:xfrm>");
         sb.Append("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr>");
         sb.Append("</pic:pic></a:graphicData></a:graphic>");
+        sb.Append("</wp:inline></w:drawing></w:r></w:p>");
+    }
+
+    private static void BuildShapeXml(StringBuilder sb, WordShape shape)
+    {
+        var id = Math.Abs(shape.GetHashCode()) + 2;
+        var cx = (Int64)(shape.WidthCm * 360000);
+        var cy = (Int64)(shape.HeightCm * 360000);
+        sb.Append("<w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">");
+        sb.Append($"<wp:extent cx=\"{cx}\" cy=\"{cy}\"/>");
+        sb.Append($"<wp:docPr id=\"{id}\" name=\"Shape{id}\"/>");
+        sb.Append("<a:graphic><a:graphicData uri=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\">");
+        sb.Append("<wps:wsp><wps:cNvSpPr/><wps:spPr>");
+        sb.Append($"<a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{cx}\" cy=\"{cy}\"/></a:xfrm>");
+        sb.Append($"<a:prstGeom prst=\"{shape.Type}\"><a:avLst/></a:prstGeom>");
+        if (!String.IsNullOrEmpty(shape.FillColor))
+            sb.Append($"<a:solidFill><a:srgbClr val=\"{shape.FillColor.TrimStart('#')}\"/></a:solidFill>");
+        else
+            sb.Append("<a:noFill/>");
+        if (!String.IsNullOrEmpty(shape.LineColor) || shape.LineWidth > 0)
+        {
+            var w = (Int32)(shape.LineWidth * 12700);
+            sb.Append($"<a:ln w=\"{w}\">");
+            if (!String.IsNullOrEmpty(shape.LineColor))
+                sb.Append($"<a:solidFill><a:srgbClr val=\"{shape.LineColor.TrimStart('#')}\"/></a:solidFill>");
+            sb.Append("</a:ln>");
+        }
+        sb.Append("</wps:spPr>");
+        if (!String.IsNullOrEmpty(shape.Text))
+        {
+            sb.Append("<wps:txbx><w:txbxContent><w:p><w:r><w:t>");
+            sb.Append(Esc(shape.Text));
+            sb.Append("</w:t></w:r></w:p></w:txbxContent></wps:txbx>");
+        }
+        sb.Append("<wps:bodyPr/>");
+        sb.Append("</wps:wsp></a:graphicData></a:graphic>");
         sb.Append("</wp:inline></w:drawing></w:r></w:p>");
     }
 
