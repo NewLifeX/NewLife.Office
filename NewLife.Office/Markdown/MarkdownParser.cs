@@ -24,6 +24,9 @@ internal sealed class MarkdownParser
 
     /// <summary>处理管线（MD06），为 null 时使用默认全功能管线</summary>
     public MarkdownPipeline? Pipeline { get; set; }
+
+    /// <summary>是否启用往返模式（捕获块原始源码与快照，供 MD06-03 往返渲染；非往返省去捕获开销）</summary>
+    internal Boolean Roundtrip;
     #endregion
 
     #region 正则（静态缓存，避免热点路径重复编译）
@@ -47,7 +50,21 @@ internal sealed class MarkdownParser
     {
         // 统一换行符，展开 Tab（CommonMark 规范：Tab = 4 空格）
         text = text.Replace("\r\n", "\n").Replace('\r', '\n');
-        _lines = text.Split('\n');
+        return ParseCore(text.Split('\n'));
+    }
+
+    /// <summary>从行列表解析（内部复用，子解析器避免 Join+Split 重复分配）</summary>
+    /// <param name="lines">已按 \n 规范化的行列表</param>
+    /// <returns>解析后的文档</returns>
+    internal MarkdownDocument ParseLines(List<String> lines)
+        => ParseCore(lines.ToArray());
+
+    /// <summary>解析核心：从行数组构建文档</summary>
+    /// <param name="lines">已按 \n 规范化的行数组</param>
+    /// <returns>解析后的文档</returns>
+    private MarkdownDocument ParseCore(String[] lines)
+    {
+        _lines = lines;
         _pos = 0;
 
         var doc = new MarkdownDocument();
@@ -69,12 +86,14 @@ internal sealed class MarkdownParser
             var blockCount = doc.Blocks.Count;
             ParseBlock(doc.Blocks);
 
-            // 设置新生成块的源码位置（MD06-04）并捕获原始文本（MD06-03）
+            // 设置新生成块的源码位置（MD06-04）并捕获原始文本（MD06-03，仅往返模式需要）
             for (var bi = blockCount; bi < doc.Blocks.Count; bi++)
             {
                 var block = doc.Blocks[bi];
                 block.SourceLine = blockStart;
                 block.SourceColumn = 0;
+
+                if (!Roundtrip) continue;
 
                 // 捕获原始源码文本用于往返渲染（跳过前导空白行，含尾部空行以保留块间分隔）
                 var srcStart = blockStart;
@@ -512,7 +531,7 @@ internal sealed class MarkdownParser
         }
         // Re-parse quoted content
         var inner = new MarkdownParser { _refs = _refs, Pipeline = Pipeline };
-        var innerDoc = inner.Parse(String.Join("\n", quotedLines));
+        var innerDoc = inner.ParseLines(quotedLines);
         return MarkdownBlock.CreateBlockQuote(innerDoc.Blocks);
     }
 
@@ -774,7 +793,7 @@ internal sealed class MarkdownParser
             _refs = _refs,
             Pipeline = Pipeline,
         };
-        var innerDoc = inner.Parse(String.Join("\n", contentLines));
+        var innerDoc = inner.ParseLines(contentLines);
 
         if (innerDoc.Blocks.Count == 1 && innerDoc.Blocks[0].Type == MarkdownBlockType.Paragraph)
         {
@@ -1451,6 +1470,7 @@ internal sealed class MarkdownParser
                     CanOpen = canOpen,
                     CanClose = canClose,
                     Token = token,
+                    Index = tokens.Count - 1,
                 });
                 i += run;
                 textStart = i;
@@ -1771,6 +1791,9 @@ internal sealed class MarkdownParser
 
         /// <summary>对应令牌（Text 节点）</summary>
         public MarkdownInline Token = null!;
+
+        /// <summary>令牌在 tokens 列表中的当前索引（避免 IndexOf 重复查找）</summary>
+        public Int32 Index;
     }
 
     /// <summary>计算分隔符 run 的开闭能力（CommonMark 左/右 flanking 规则）</summary>
@@ -1819,8 +1842,9 @@ internal sealed class MarkdownParser
             }
 
             // 向前查找最近的同字符可开分隔符（CommonMark：跳过已耗尽与被 rule-of-3 排除者）
+            Int32 oi = ci - 1;
             DelimInfo? opener = null;
-            for (var oi = ci - 1; oi >= 0; oi--)
+            for (; oi >= 0; oi--)
             {
                 var d = delims[oi];
                 if (d.Len <= 0 || d.Ch != closer.Ch || !d.CanOpen) continue;
@@ -1852,8 +1876,8 @@ internal sealed class MarkdownParser
                 continue;
             }
 
-            var oi2 = tokens.IndexOf(opener.Token);
-            var ci2 = tokens.IndexOf(closer.Token);
+            var oi2 = opener.Index;
+            var ci2 = closer.Index;
             if (oi2 < 0 || ci2 < 0 || oi2 >= ci2)
             {
                 ci++;
@@ -1877,6 +1901,7 @@ internal sealed class MarkdownParser
             {
                 var t = MarkdownInline.CreateText(new String(opener.Ch, openerLeftover));
                 opener.Token = t;
+                opener.Index = oi2;
                 newItems.Add(t);
             }
             newItems.Add(emph);
@@ -1884,11 +1909,22 @@ internal sealed class MarkdownParser
             {
                 var t2 = MarkdownInline.CreateText(new String(closer.Ch, closerLeftover));
                 closer.Token = t2;
+                closer.Index = oi2 + newItems.Count;
                 newItems.Add(t2);
             }
 
-            tokens.RemoveRange(oi2, ci2 - oi2 + 1);
+            // 失活 opener 与 closer 之间的分隔符（进入强调内部，CommonMark 规范不可再参与配对）
+            for (var k = oi + 1; k < ci; k++) delims[k].Len = 0;
+
+            // 更新 tokens 并维护索引（oi2 之后的分隔符整体平移 delta）
+            var removedCount = ci2 - oi2 + 1;
+            var delta = newItems.Count - removedCount;
+            tokens.RemoveRange(oi2, removedCount);
             tokens.InsertRange(oi2, newItems);
+            for (var k = ci + 1; k < delims.Count; k++)
+            {
+                delims[k].Index += delta;
+            }
 
             opener.Len = openerLeftover;
             closer.Len = closerLeftover;

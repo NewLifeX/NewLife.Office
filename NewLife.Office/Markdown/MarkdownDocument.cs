@@ -78,7 +78,11 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
     /// <returns>已解析的文档对象（<see cref="Roundtrip"/>=true）</returns>
     public static MarkdownDocument ParseRoundtrip(String text, MarkdownPipeline? pipeline)
     {
-        var doc = pipeline == null ? Parse(text) : Parse(text, pipeline);
+        if (String.IsNullOrEmpty(text)) return new MarkdownDocument { Roundtrip = true };
+
+        var parser = new MarkdownParser { Roundtrip = true };
+        if (pipeline != null) parser.Pipeline = pipeline;
+        var doc = parser.Parse(text);
         doc.Roundtrip = true;
         return doc;
     }

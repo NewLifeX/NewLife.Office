@@ -184,8 +184,7 @@ public class MarkdownWriterTests
     [DisplayName("往返模式：修改块后序列化反映修改，未修改块保留原始格式")]
     public void Roundtrip_ModifiedReflectsChange()
     {
-        var doc = MarkdownDocument.Parse("# 标题\n\n原始段落\n");
-        doc.Roundtrip = true;
+        var doc = MarkdownDocument.ParseRoundtrip("# 标题\n\n原始段落\n");
 
         // 修改第二个块（段落）的文本
         var para = doc.Blocks[1];
@@ -203,8 +202,7 @@ public class MarkdownWriterTests
     public void Roundtrip_PreservesBlankLines()
     {
         var src = "第一段\n\n第二段\n\n第三段\n";
-        var doc = MarkdownDocument.Parse(src);
-        doc.Roundtrip = true;
+        var doc = MarkdownDocument.ParseRoundtrip(src);
 
         var md = doc.ToMarkdown();
         Assert.Contains("\n\n", md);
@@ -221,8 +219,7 @@ public class MarkdownWriterTests
     public void Roundtrip_PreservesListBullet()
     {
         var src = "* 第一项\n* 第二项\n";
-        var doc = MarkdownDocument.Parse(src);
-        doc.Roundtrip = true;
+        var doc = MarkdownDocument.ParseRoundtrip(src);
 
         var md = doc.ToMarkdown();
         // 原始列表用 * 作为项目符号，往返后应保留而非默认 -
@@ -234,8 +231,7 @@ public class MarkdownWriterTests
     [DisplayName("往返模式：新增块正常序列化")]
     public void Roundtrip_AppendedBlockSerialized()
     {
-        var doc = MarkdownDocument.Parse("第一段\n");
-        doc.Roundtrip = true;
+        var doc = MarkdownDocument.ParseRoundtrip("第一段\n");
 
         // 追加新块
         doc.Blocks.Add(MarkdownBlock.CreateHeading(2, [MarkdownInline.CreateText("新标题")]));
