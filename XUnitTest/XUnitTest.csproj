@@ -41,6 +41,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\NewLife.Office\NewLife.Office.csproj" />
+    <ProjectReference Include="..\NewLife.Office.Cli\NewLife.Office.Cli.csproj" />
   </ItemGroup>
 
 </Project>
