@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Security;
 using System.Text;
 using System.Xml;
+using NewLife.Office.Excel;
 
 namespace NewLife.Office.Word;
 
@@ -161,7 +162,17 @@ public class WordWriter : IDisposable
         _elements.Add(new Element { Type = ElementType.Paragraph, RawXml = xml });
     }
 
-    /// <summary>追加邮件合并域（MERGEFIELD）</summary>
+    /// <summary>追加 OMML 数学公式（W13，独立公式块）</summary>
+    /// <param name="formula">公式对象（分数/上下标/根式/积分等）</param>
+    /// <returns>公式对象</returns>
+    /// <exception cref="ArgumentNullException">formula 为空</exception>
+    public OmmlFormula AppendFormula(OmmlFormula formula)
+    {
+        if (formula == null) throw new ArgumentNullException(nameof(formula));
+        var xml = "<w:p><m:oMathPara><m:oMath>" + formula.Xml + "</m:oMath></m:oMathPara></w:p>";
+        _elements.Add(new Element { Type = ElementType.Paragraph, RawXml = xml });
+        return formula;
+    }
     /// <param name="fieldName">合并域名（如 "FirstName"、"Company"）</param>
     /// <remarks>
     /// 生成标准 MERGEFIELD 域代码，Word 打开后可执行邮件合并填充数据源。
@@ -424,6 +435,17 @@ public class WordWriter : IDisposable
         _elements.Add(new Element { Type = ElementType.Shape, Shape = shape });
         return shape;
     }
+
+    /// <summary>追加图表（W13，柱状/折线/饼图，含嵌入式数据包）</summary>
+    /// <param name="chart">图表对象（类型/标题/分类/系列）</param>
+    /// <returns>图表对象</returns>
+    /// <exception cref="ArgumentNullException">chart 为空</exception>
+    public WordChart AppendChart(WordChart chart)
+    {
+        if (chart == null) throw new ArgumentNullException(nameof(chart));
+        _elements.Add(new Element { Type = ElementType.Chart, Chart = chart });
+        return chart;
+    }
     #endregion
 
     #region 保存方法
@@ -482,6 +504,8 @@ public class WordWriter : IDisposable
             using var entry = za.CreateEntry($"word/media/{relId}.{ext}").Open();
             entry.Write(data, 0, data.Length);
         }
+        // 图表部件（W13）：chart XML + 嵌入式 xlsx + chart 关系
+        WriteCharts(za);
     }
 
     /// <summary>保存文档模型到文件</summary>
@@ -608,6 +632,12 @@ public class WordWriter : IDisposable
             sb.Append("<Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/>");
         if (DocumentProperties.CustomProperties.Count > 0)
             sb.Append("<Override PartName=\"/docProps/custom.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.custom-properties+xml\"/>");
+        // 图表（W13）：chart 部件 + 嵌入式 xlsx
+        if (_elements.Any(e => e.Type == ElementType.Chart && e.Chart != null))
+        {
+            sb.Append("<Override PartName=\"/word/charts/chart1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawingml.chart+xml\"/>");
+            sb.Append("<Default Extension=\"xlsx\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"/>");
+        }
         // image content types
         var addedPng = false; var addedJpeg = false;
         foreach (var (_, ext, _) in _imageRels)
@@ -661,9 +691,157 @@ public class WordWriter : IDisposable
         {
             sb.Append($"<Relationship Id=\"{relId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/{relId}.{ext}\"/>");
         }
+        // 图表关系（W13）：段落 rChart{n} → charts/chart{n}.xml
+        var chartCount = _elements.Count(e => e.Type == ElementType.Chart && e.Chart != null);
+        for (var i = 1; i <= chartCount; i++)
+        {
+            sb.Append($"<Relationship Id=\"rChart{i}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart\" Target=\"charts/chart{i}.xml\"/>");
+        }
         sb.Append("</Relationships>");
         WriteEntry(za, "word/_rels/document.xml.rels", sb.ToString());
     }
+
+    #region 图表生成（W13）
+    private void WriteCharts(ZipArchive za)
+    {
+        var charts = _elements.Where(e => e.Type == ElementType.Chart && e.Chart != null).Select(e => e.Chart!).ToList();
+        for (var ci = 0; ci < charts.Count; ci++)
+        {
+            var chart = charts[ci];
+            var chartId = ci + 1;
+
+            // chart{n}.xml
+            WriteEntry(za, $"word/charts/chart{chartId}.xml", BuildChartSpaceXml(chart));
+
+            // 嵌入式数据包（ExcelWriter 生成最小 xlsx）
+            using (var entry = za.CreateEntry($"word/embeddings/Microsoft_Excel_Worksheet{chartId}.xlsx").Open())
+            {
+                var data = BuildEmbeddedXlsx(chart);
+                entry.Write(data, 0, data.Length);
+            }
+
+            // chart 关系：关联嵌入式 xlsx
+            WriteEntry(za, $"word/charts/_rels/chart{chartId}.xml.rels",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                $"<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/package\" Target=\"../embeddings/Microsoft_Excel_Worksheet{chartId}.xlsx\"/>" +
+                "</Relationships>");
+        }
+    }
+
+    /// <summary>构建 chartSpace XML</summary>
+    private static String BuildChartSpaceXml(WordChart chart)
+    {
+        var sb = new StringBuilder();
+        sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        sb.Append("<c:chartSpace xmlns:c=\"http://schemas.openxmlformats.org/drawingml/2006/chart\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">");
+        sb.Append("<c:chart>");
+        sb.Append("<c:plotArea><c:layout/>");
+
+        var n = chart.Categories.Length;
+        var seriesCount = chart.Series.Count;
+        var type = chart.Type.ToLowerInvariant();
+        var chartTag = type switch
+        {
+            "bar" or "column" => "c:barChart",
+            "line" => "c:lineChart",
+            "pie" => "c:pieChart",
+            _ => "c:barChart",
+        };
+
+        sb.Append($"<{chartTag}>");
+        if (chartTag == "c:barChart")
+            sb.Append($"<c:barDir val=\"{(type == "bar" ? "bar" : "col")}\"/><c:grouping val=\"clustered\"/>");
+        if (chartTag == "c:pieChart")
+            sb.Append("<c:varyColors val=\"1\"/>");
+
+        for (var si = 0; si < seriesCount; si++)
+        {
+            var s = chart.Series[si];
+            var colName = GetExcelColName(si + 1); // B=1, C=2...
+            sb.Append("<c:ser>");
+            sb.Append($"<c:idx val=\"{si}\"/><c:order val=\"{si}\"/>");
+            sb.Append($"<c:tx><c:strRef><c:f>Sheet1!${colName}$1</c:f><c:strCache><c:ptCount val=\"1\"/><c:pt idx=\"0\"><c:v>{Esc(s.Name)}</c:v></c:pt></c:strCache></c:strRef></c:tx>");
+            if (chartTag != "c:pieChart")
+            {
+                // 类别引用（A 列 2..n+1 行）
+                sb.Append($"<c:cat><c:strRef><c:f>Sheet1!$A$2:$A${n + 1}</c:f><c:strCache><c:ptCount val=\"{n}\"/>");
+                for (var i = 0; i < n; i++)
+                    sb.Append($"<c:pt idx=\"{i}\"><c:v>{Esc(chart.Categories[i])}</c:v></c:pt>");
+                sb.Append("</c:strCache></c:strRef></c:cat>");
+            }
+            // 数值引用
+            sb.Append($"<c:val><c:numRef><c:f>Sheet1!${colName}$2:${colName}${n + 1}</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val=\"{n}\"/>");
+            for (var i = 0; i < n; i++)
+            {
+                var v = i < s.Values.Length ? s.Values[i] : 0;
+                sb.Append($"<c:pt idx=\"{i}\"><c:v>{v.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture)}</c:v></c:pt>");
+            }
+            sb.Append("</c:numCache></c:numRef></c:val>");
+            sb.Append("</c:ser>");
+        }
+
+        if (chartTag == "c:barChart" || chartTag == "c:lineChart")
+        {
+            sb.Append("<c:axId val=\"1\"/><c:axId val=\"2\"/>");
+        }
+        sb.Append($"</{chartTag}>");
+
+        if (chartTag == "c:barChart" || chartTag == "c:lineChart")
+        {
+            sb.Append("<c:catAx><c:axId val=\"1\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"b\"/><c:crossAx val=\"2\"/></c:catAx>");
+            sb.Append("<c:valAx><c:axId val=\"2\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"l\"/><c:crossAx val=\"1\"/></c:valAx>");
+        }
+        sb.Append("</c:plotArea>");
+
+        // 标题
+        if (!String.IsNullOrEmpty(chart.Title))
+        {
+            sb.Append($"<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>{Esc(chart.Title)}</a:t></a:r></a:p></c:rich></c:tx></c:title>");
+        }
+
+        sb.Append("</c:chart>");
+        // 嵌入式数据引用
+        sb.Append("<c:externalData r:id=\"rId1\"><c:autoUpdate val=\"0\"/></c:externalData>");
+        sb.Append("</c:chartSpace>");
+        return sb.ToString();
+    }
+
+    /// <summary>生成嵌入式 xlsx（第 1 行表头，2..n+1 行数据）</summary>
+    private static Byte[] BuildEmbeddedXlsx(WordChart chart)
+    {
+        using var ms = new MemoryStream();
+        using (var writer = new ExcelWriter(ms))
+        {
+            writer.SheetName = "Sheet1";
+            var header = new List<Object?> { "类别" };
+            foreach (var s in chart.Series) header.Add(s.Name);
+            writer.WriteRow("Sheet1", header.ToArray());
+            for (var i = 0; i < chart.Categories.Length; i++)
+            {
+                var row = new List<Object?> { chart.Categories[i] };
+                foreach (var s in chart.Series)
+                    row.Add(i < s.Values.Length ? s.Values[i] : 0);
+                writer.WriteRow("Sheet1", row.ToArray());
+            }
+            writer.Save();
+        }
+        return ms.ToArray();
+    }
+
+    /// <summary>列索引 → Excel 列名（0=A, 1=B...）</summary>
+    private static String GetExcelColName(Int32 index)
+    {
+        var sb = new StringBuilder();
+        var i = index;
+        while (i >= 0)
+        {
+            sb.Insert(0, (Char)('A' + i % 26));
+            i = i / 26 - 1;
+        }
+        return sb.ToString();
+    }
+    #endregion
 
     private void WriteStyles(ZipArchive za)
     {
@@ -984,6 +1162,7 @@ public class WordWriter : IDisposable
         sb.Append($"<w:document{nsSb}>");
         sb.Append("<w:body>");
 
+        var chartCounter = 0; // 图表编号（W13）
         foreach (var el in _elements)
         {
             if (el.RawXml != null)
@@ -1006,6 +1185,9 @@ public class WordWriter : IDisposable
                         break;
                     case ElementType.Shape when el.Shape != null:
                         BuildShapeXml(sb, el.Shape);
+                        break;
+                    case ElementType.Chart when el.Chart != null:
+                        BuildChartXml(sb, el.Chart, ++chartCounter);
                         break;
                     case ElementType.Sdt:
                         if (el.RawXml != null)
@@ -1543,6 +1725,20 @@ public class WordWriter : IDisposable
         }
         sb.Append("<wps:bodyPr/>");
         sb.Append("</wps:wsp></a:graphicData></a:graphic>");
+        sb.Append("</wp:inline></w:drawing></w:r></w:p>");
+    }
+
+    private static void BuildChartXml(StringBuilder sb, WordChart chart, Int32 chartId)
+    {
+        var cx = (Int64)(chart.WidthCm * 360000);
+        var cy = (Int64)(chart.HeightCm * 360000);
+        var id = 100 + chartId;
+        sb.Append("<w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">");
+        sb.Append($"<wp:extent cx=\"{cx}\" cy=\"{cy}\"/>");
+        sb.Append($"<wp:docPr id=\"{id}\" name=\"Chart{chartId}\"/>");
+        sb.Append("<a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/chart\">");
+        sb.Append($"<c:chart r:id=\"rChart{chartId}\"/>");
+        sb.Append("</a:graphicData></a:graphic>");
         sb.Append("</wp:inline></w:drawing></w:r></w:p>");
     }
 

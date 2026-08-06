@@ -13,4 +13,6 @@ public enum ElementType
     Sdt,
     /// <summary>自选图形（W12）</summary>
     Shape,
+    /// <summary>图表（W13）</summary>
+    Chart,
 }
