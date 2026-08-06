@@ -1,8 +1,11 @@
 using System;
 using System.IO;
+using NewLife.Office.Epub;
 using NewLife.Office.Excel;
+using NewLife.Office.Ods;
 using NewLife.Office.Pdf;
 using NewLife.Office.Ppt;
+using NewLife.Office.Rtf;
 using NewLife.Office.Word;
 
 namespace NewLife.Office.Markdown;
@@ -143,6 +146,102 @@ public static class FormatToMarkdown
     }
     #endregion
 
+    #region ODS → Markdown (MD09-01)
+    /// <summary>将 ODS 文件转换为 Markdown GFM 表格</summary>
+    /// <param name="filePath">ods 文件路径</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromOds(String filePath) => FromOds(filePath, null);
+
+    /// <summary>将 ODS 文件转换为 Markdown GFM 表格</summary>
+    /// <param name="filePath">ods 文件路径</param>
+    /// <param name="options">转换选项，null 使用默认</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromOds(String filePath, MarkdownConverterOptions? options)
+    {
+        var doc = new OdsDocument(OdsReader.ReadFile(filePath));
+        return ToMarkdownString(doc, filePath, options);
+    }
+
+    /// <summary>将 ODS 流转换为 Markdown</summary>
+    /// <param name="stream">ods 流</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromOds(Stream stream) => FromOds(stream, null);
+
+    /// <summary>将 ODS 流转换为 Markdown</summary>
+    /// <param name="stream">ods 流</param>
+    /// <param name="options">转换选项，null 使用默认</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromOds(Stream stream, MarkdownConverterOptions? options)
+    {
+        var doc = new OdsDocument(OdsReader.Read(stream));
+        return ToMarkdownString(doc, null, options);
+    }
+    #endregion
+
+    #region RTF → Markdown (MD09-02)
+    /// <summary>将 RTF 文件转换为 Markdown</summary>
+    /// <param name="filePath">rtf 文件路径</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromRtf(String filePath) => FromRtf(filePath, null);
+
+    /// <summary>将 RTF 文件转换为 Markdown</summary>
+    /// <param name="filePath">rtf 文件路径</param>
+    /// <param name="options">转换选项，null 使用默认</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromRtf(String filePath, MarkdownConverterOptions? options)
+    {
+        var doc = RtfDocument.ParseFile(filePath);
+        return ToMarkdownString(doc, filePath, options);
+    }
+
+    /// <summary>将 RTF 流转换为 Markdown</summary>
+    /// <param name="stream">rtf 流</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromRtf(Stream stream) => FromRtf(stream, null);
+
+    /// <summary>将 RTF 流转换为 Markdown</summary>
+    /// <param name="stream">rtf 流</param>
+    /// <param name="options">转换选项，null 使用默认</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromRtf(Stream stream, MarkdownConverterOptions? options)
+    {
+        var doc = RtfDocument.Parse(stream);
+        return ToMarkdownString(doc, null, options);
+    }
+    #endregion
+
+    #region EPUB → Markdown (MD09-03)
+    /// <summary>将 EPUB 文件转换为 Markdown（含章节标题结构）</summary>
+    /// <param name="filePath">epub 文件路径</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromEpub(String filePath) => FromEpub(filePath, null);
+
+    /// <summary>将 EPUB 文件转换为 Markdown（含章节标题结构）</summary>
+    /// <param name="filePath">epub 文件路径</param>
+    /// <param name="options">转换选项，null 使用默认</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromEpub(String filePath, MarkdownConverterOptions? options)
+    {
+        var doc = new EpubReader().Read(filePath);
+        return ToMarkdownString(doc, filePath, options);
+    }
+
+    /// <summary>将 EPUB 流转换为 Markdown</summary>
+    /// <param name="stream">epub 流</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromEpub(Stream stream) => FromEpub(stream, null);
+
+    /// <summary>将 EPUB 流转换为 Markdown</summary>
+    /// <param name="stream">epub 流</param>
+    /// <param name="options">转换选项，null 使用默认</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromEpub(Stream stream, MarkdownConverterOptions? options)
+    {
+        var doc = new EpubReader().Read(stream);
+        return ToMarkdownString(doc, null, options);
+    }
+    #endregion
+
     #region 通用入口
     /// <summary>根据文件扩展名自动选择转换器</summary>
     /// <param name="filePath">文件路径</param>
@@ -162,6 +261,9 @@ public static class FormatToMarkdown
             ".docx" or ".doc" => FromWord(filePath, options),
             ".pptx" or ".ppt" => FromPpt(filePath, options),
             ".pdf" => FromPdf(filePath, options),
+            ".ods" => FromOds(filePath, options),
+            ".rtf" => FromRtf(filePath, options),
+            ".epub" => FromEpub(filePath, options),
             _ => throw ConvertErrorException.Unsupported($"不支持的文件格式: {ext}"),
         };
     }
@@ -182,6 +284,9 @@ public static class FormatToMarkdown
             ".docx" or ".doc" => FromWord(stream, options),
             ".pptx" or ".ppt" => FromPpt(stream, options),
             ".pdf" => FromPdf(stream, options),
+            ".ods" => FromOds(stream, options),
+            ".rtf" => FromRtf(stream, options),
+            ".epub" => FromEpub(stream, options),
             _ => throw ConvertErrorException.Unsupported($"不支持的文件格式: {extension}"),
         };
     }
