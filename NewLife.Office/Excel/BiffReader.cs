@@ -877,6 +877,61 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     }
     #endregion
 
+    #region 批注读取
+    /// <summary>读取指定工作表的批注（NOTE + TXO 记录）</summary>
+    /// <param name="sheet">工作表名称，null 取第一个</param>
+    /// <returns>(0基行, 0基列) → 批注（文本/作者）</returns>
+    /// <remarks>
+    /// NOTE 记录含位置与作者；批注文本在 TXO 记录中。同一批注的 NOTE/TXO 按流顺序配对（简单文件 1:1）。
+    /// </remarks>
+    public Dictionary<(Int32 Row, Int32 Col), Comment> GetComments(String? sheet = null)
+    {
+        var result = new Dictionary<(Int32, Int32), Comment>();
+        var idx = ResolveSheetIndex(sheet);
+        if (idx < 0) return result;
+
+        var sheetReader = new SpanReader(_workbook, 0, _workbook.Length);
+        var sheetRecords = ReadSheetRecords(ref sheetReader, _sheetBofOffsets[idx]);
+
+        var notes = new List<(Int32 Row, Int32 Col, String Author)>();
+        var texts = new List<String>();
+
+        foreach (var (type, data) in sheetRecords)
+        {
+            if (type == RecNote && data.Length >= 11)
+            {
+                // NOTE：row(2)+col(2)+objectId(2)+flags(2)+cch(2)+fHighByte(1)+作者
+                var row = (Int32)ReadUInt16(data, 0);
+                var col = (Int32)ReadUInt16(data, 2);
+                var cch = ReadUInt16(data, 8);
+                var fHighByte = data[10];
+                var author = fHighByte != 0
+                    ? Encoding.Unicode.GetString(data, 11, Math.Min(cch * 2, data.Length - 11))
+                    : DecodeLatin1(data, 11, Math.Min(cch, data.Length - 11));
+                notes.Add((row, col, author));
+            }
+            else if (type == RecTxo && data.Length >= 12)
+            {
+                // TXO：grbit(2)+rot(2)+cchText(2)+cbRuns(2)+ifntEmpty(2)+reserved(2)+文本(UTF-16LE)
+                var cchText = ReadUInt16(data, 4);
+                var text = cchText > 0
+                    ? Encoding.Unicode.GetString(data, 12, Math.Min(cchText * 2, data.Length - 12))
+                    : String.Empty;
+                texts.Add(text);
+            }
+        }
+
+        // NOTE 与 TXO 按流顺序配对（每个批注恰好一个 TXO）
+        for (var i = 0; i < notes.Count; i++)
+        {
+            var (row, col, author) = notes[i];
+            var text = i < texts.Count ? texts[i] : String.Empty;
+            result[(row, col)] = new Comment { Text = text, Author = author };
+        }
+        return result;
+    }
+    #endregion
+
     #region 单元格解析辅助
     private void ParseLabelSst(Byte[] data, SortedDictionary<Int32, SortedDictionary<Int32, Object?>> cells, ref Int32 maxCol)
     {
@@ -1173,6 +1228,8 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     private const UInt16 RecFormat = 0x041E;
     private const UInt16 RecXf = 0x00E0;
     private const UInt16 RecName = 0x0018;
+    private const UInt16 RecNote = 0x001C;
+    private const UInt16 RecTxo = 0x01B6;
     #endregion
 
     #region 文本提取

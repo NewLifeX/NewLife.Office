@@ -305,4 +305,45 @@ public class BiffReaderTests
         using var ms = new MemoryStream(fakeData);
         Assert.Throws<InvalidDataException>(() => new BiffReader(ms));
     }
+
+    // ─── 批注（NOTE + TXO）───────────────────────────────────────────────
+
+    [Fact, DisplayName("读取批注（NOTE 作者 + TXO 文本）")]
+    public void ReadComments_NoteAndTxo()
+    {
+        // NOTE：row=0,col=1,objectId=1,flags=0,cch=3,fHighByte=1,作者="李四"
+        var noteData = Concat(
+            LE2(0), LE2(1),                 // row, col
+            LE2(1), LE2(0),                 // objectId, flags
+            LE2(3),                         // cch = 3
+            new Byte[] { 0x01 },            // fHighByte = UTF-16
+            Encoding.Unicode.GetBytes("李四"));
+        var noteRec = Rec(0x001C, noteData);
+
+        // TXO：grbit=0,rot=0,cchText=2,cbRuns=0,ifntEmpty=0,reserved=0,文本="你好"
+        var txoData = Concat(
+            LE2(0), LE2(0),                 // grbit, rot
+            LE2(2),                         // cchText = 2
+            LE2(0), LE2(0), LE2(0),         // cbRuns, ifntEmpty, reserved
+            Encoding.Unicode.GetBytes("你好"));
+        var txoRec = Rec(0x01B6, txoData);
+
+        var sheetBody = Concat(LabelSst(0, 0, 0), noteRec, txoRec);
+        var xls = BuildXls(BuildMinimalXls("Sheet1", sheetBody, new[] { "值" }));
+
+        using var reader = new BiffReader(new MemoryStream(xls));
+        var comments = reader.GetComments();
+        Assert.Single(comments);
+        Assert.True(comments.TryGetValue((0, 1), out var c));
+        Assert.Equal("你好", c.Text);
+        Assert.Equal("李四", c.Author);
+    }
+
+    [Fact, DisplayName("无批注时 GetComments 返回空")]
+    public void ReadComments_None()
+    {
+        var xls = BuildXls(BuildMinimalXls("Sheet1", LabelSst(0, 0, 0), new[] { "值" }));
+        using var reader = new BiffReader(new MemoryStream(xls));
+        Assert.Empty(reader.GetComments());
+    }
 }
