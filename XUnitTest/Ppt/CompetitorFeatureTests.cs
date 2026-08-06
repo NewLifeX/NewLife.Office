@@ -110,6 +110,27 @@ public class CompetitorFeatureTests
             File.Delete(path);
         }
     }
+
+    [Fact, DisplayName("S17 加密：错误密码读取抛异常")]
+    public void Encrypt_WrongPassword_Throws()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "enc_" + Guid.NewGuid().ToString("N") + ".pptx");
+        try
+        {
+            using (var writer = new PptxWriter())
+            {
+                writer.AddSlide();
+                writer.Slides[0].TextBoxes.Add(new TextBox { Left = 100000, Top = 100000, Width = 8000000, Height = 400000, Runs = { new Run { Text = "机密内容" } } });
+                writer.SaveEncrypted(path, "pwd123");
+            }
+            // 错误密码：Agile 解密密钥不符 → 解密/解包失败抛异常
+            Assert.ThrowsAny<Exception>(() => new PptxReader(path, "wrongpwd"));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
     #endregion
 
     #region S18 形状图片填充
@@ -143,6 +164,43 @@ public class CompetitorFeatureTests
         Assert.NotNull(doc);
         var shapes = doc.Slides[0].Shapes;
         var fillShape = shapes.FirstOrDefault(s => s.FillImage is { Length: > 0 });
+        Assert.NotNull(fillShape);
+        Assert.Equal(png.Length, fillShape!.FillImage!.Length);
+    }
+
+    [Fact, DisplayName("S18 图片填充：组形状内写入与读取还原")]
+    public void FillImage_GroupShape()
+    {
+        // 1x1 PNG
+        var png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==");
+        var bytes = BuildPptx(w =>
+        {
+            var grp = new GroupShape { Left = 500000, Top = 500000, Width = 4000000, Height = 3000000 };
+            grp.Shapes.Add(new Shape
+            {
+                ShapeType = "ellipse",
+                Left = 1000000, Top = 1000000, Width = 2000000, Height = 1500000,
+                FillImage = png,
+                FillImageExt = "png",
+            });
+            w.Slides[0].Groups.Add(grp);
+        });
+
+        // slide rels 含图片填充关系（组内形状）
+        var rels = ReadZipEntry(bytes, "ppt/slides/_rels/slide1.xml.rels");
+        Assert.Contains("rImgFill", rels);
+
+        // 媒体文件存在
+        var mediaEntry = GetEntry(bytes, "ppt/media/rImgFill");
+        Assert.NotNull(mediaEntry);
+
+        // 读取还原：组内形状 FillImage
+        using var reader = new PptxReader(new MemoryStream(bytes));
+        var doc = reader.ReadDocument();
+        Assert.NotNull(doc);
+        Assert.NotEmpty(doc.Slides[0].Groups);
+        var grpShapes = doc.Slides[0].Groups[0].Shapes;
+        var fillShape = grpShapes.FirstOrDefault(s => s.FillImage is { Length: > 0 });
         Assert.NotNull(fillShape);
         Assert.Equal(png.Length, fillShape!.FillImage!.Length);
     }

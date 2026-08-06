@@ -637,7 +637,14 @@ partial class PptxWriter
                 sb.Append("<p:spPr>");
                 sb.Append($"<a:xfrm><a:off x=\"{sp.Left}\" y=\"{sp.Top}\"/><a:ext cx=\"{sp.Width}\" cy=\"{sp.Height}\"/></a:xfrm>");
                 sb.Append($"<a:prstGeom prst=\"{sp.ShapeType}\"><a:avLst/></a:prstGeom>");
-                if (sp.FillColor != null)
+                if (sp.FillImage != null && sp.FillImage.Length > 0)
+                {
+                    sp.ShapeImageRelId ??= $"rImgFill{_mediaGlobal}";
+                    sb.Append($"<a:blipFill dpi=\"0\" rotWithShape=\"1\">");
+                    sb.Append($"<a:blip r:embed=\"{sp.ShapeImageRelId}\"/>");
+                    sb.Append("<a:stretch><a:fillRect/></a:stretch></a:blipFill>");
+                }
+                else if (sp.FillColor != null)
                     sb.Append($"<a:solidFill><a:srgbClr val=\"{sp.FillColor.TrimStart('#')}\"/></a:solidFill>");
                 else
                     sb.Append("<a:noFill/>");
@@ -817,8 +824,8 @@ partial class PptxWriter
         {
             relsSb.Append($"<Relationship Id=\"rBg{idx + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/bg{idx + 1}.{slide.BackgroundImage.Extension}\"/>");
         }
-        // 形状图片填充关系（S18）
-        foreach (var shp in slide.Shapes)
+        // 形状图片填充关系（S18）：顶层 + 组内
+        foreach (var shp in EnumerateShapes(slide))
         {
             if (shp.FillImage is { Length: > 0 })
             {
@@ -858,8 +865,8 @@ partial class PptxWriter
             entry.Write(slide.BackgroundImage.Data, 0, slide.BackgroundImage.Data.Length);
         }
 
-        // write shape fill image media（S18）
-        foreach (var shp in slide.Shapes)
+        // write shape fill image media（S18）：顶层 + 组内
+        foreach (var shp in EnumerateShapes(slide))
         {
             if (shp.FillImage is { Length: > 0 } && shp.ShapeImageRelId != null)
             {
@@ -991,6 +998,18 @@ partial class PptxWriter
             }
             csb.Append("</p:cmLst>");
             WriteZipEntryText(za, $"ppt/comments/comment{slideIdx + 1}.xml", csb.ToString());
+        }
+    }
+
+    /// <summary>枚举幻灯片的所有形状（顶层 + 组内，S18 图片填充媒体/关系用）</summary>
+    /// <param name="slide">幻灯片</param>
+    /// <returns>形状序列</returns>
+    private static IEnumerable<Shape> EnumerateShapes(Slide slide)
+    {
+        foreach (var shp in slide.Shapes) yield return shp;
+        foreach (var grp in slide.Groups)
+        {
+            foreach (var shp in grp.Shapes) yield return shp;
         }
     }
 

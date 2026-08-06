@@ -1466,7 +1466,9 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var isTB = sp.SelectSingleNode(".//*[local-name()='cNvSpPr']")?.Attributes?["txBox"]?.Value == "1";
         var (l, t, w, h) = ParseXfrm(sp.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement);
         var st = sp.SelectSingleNode(".//*[local-name()='prstGeom']")?.Attributes?["prst"]?.Value ?? "textBox";
-        var fc = ParseFillColor(sp.SelectSingleNode(".//*[local-name()='spPr']") as XmlElement);
+        var spPr = sp.SelectSingleNode(".//*[local-name()='spPr']") as XmlElement;
+        var fc = ParseFillColor(spPr);
+        var fillImage = ParseFillImage(spPr, rels);
         var txt = new StringBuilder();
         foreach (XmlElement tt in sp.SelectNodes(".//*[local-name()='t']")!) txt.Append(tt.InnerText);
         var text = txt.ToString();
@@ -1536,6 +1538,8 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 FontSize = fontSize > 0 ? fontSize : 14, Bold = bold, FontColor = fontColor,
                 LatinFontName = latinFn, EastAsianFontName = eaFn,
                 ComplexScriptFontName = csFn, SymbolFontName = symFn,
+                FillImage = fillImage,
+                FillImageExt = fillImage != null ? GetFillImageExt(spPr, rels) : "png",
             });
     }
 

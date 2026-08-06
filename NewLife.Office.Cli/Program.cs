@@ -62,13 +62,26 @@ public static class Program
             return 1;
         }
 
-        // Markdown 直接透传，其余格式走转换中枢
+        // Markdown 直接透传，其余格式走转换中枢（失败时内容识别兜底，GEN-2b）
         String? md;
         var ext = Path.GetExtension(input).ToLowerInvariant();
         if (ext is ".md" or ".markdown")
+        {
             md = File.ReadAllText(input);
+        }
         else
-            md = FormatToMarkdown.Convert(input);
+        {
+            try
+            {
+                md = FormatToMarkdown.Convert(input);
+            }
+            catch (ConvertErrorException)
+            {
+                // 扩展名缺失/错误：按文件头内容识别路由（GEN-2b）
+                var reader = OfficeFactory.CreateReaderByContent(input);
+                md = (reader as IMarkdownExtractable)?.ExtractMarkdown();
+            }
+        }
 
         if (md == null)
         {

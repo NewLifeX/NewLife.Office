@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using NewLife.Office.Cli;
 using NewLife.Office.Markdown;
+using NewLife.Office.Pdf;
 using Xunit;
 
 namespace XUnitTest.Common;
@@ -79,6 +80,44 @@ public class CliToolTests
         {
             Directory.Delete(dir, true);
         }
+    }
+
+    [Fact, DisplayName("CLI：convert 扩展名错误时内容识别兜底（GEN-2b）")]
+    public void Convert_ContentDetectFallback()
+    {
+        var dir = GetTempDir();
+        Directory.CreateDirectory(dir);
+        try
+        {
+            // 用 PdfWriter 生成 PDF，但扩展名写 .dat（内容识别应兜底）
+            var pdfBytes = BuildSimplePdf();
+            var input = Path.Combine(dir, "data.dat");
+            File.WriteAllBytes(input, pdfBytes);
+            var output = Path.Combine(dir, "out.md");
+
+            var code = Program.Main(["convert", input, output]);
+
+            Assert.Equal(0, code);
+            Assert.True(File.Exists(output));
+            Assert.Contains("Hello", File.ReadAllText(output));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    /// <summary>生成含英文文本的最小 PDF（PdfWriter）</summary>
+    private static Byte[] BuildSimplePdf()
+    {
+        using var ms = new MemoryStream();
+        using (var writer = new PdfWriter())
+        {
+            writer.BeginPage();
+            writer.DrawText("Hello PDF", 56, 780, 12);
+            writer.Save(ms);
+        }
+        return ms.ToArray();
     }
 
     [Fact, DisplayName("CLI：无参数返回 1")]

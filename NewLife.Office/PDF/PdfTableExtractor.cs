@@ -25,23 +25,56 @@ public static class PdfTableExtractor
         if (reader == null) throw new ArgumentNullException(nameof(reader));
         var result = new List<PdfTableData>();
 
-        // 提取全部带位置文本（内部含 xref 失败回退），单页文档 PageIndex=0
-        var blocks = reader.ExtractTextWithPositions().ToList();
-        if (blocks.Count < 4) return result;
+        // 按页提取文本块（xref 正常时每页 PageIndex 正确；xref 失败时回退合并 PageIndex=0）
+        foreach (var (pageIdx, blocks) in GetPageBlocks(reader))
+        {
+            var table = ExtractFromBlocks(blocks, pageIdx, yTolerance, xGap, minRows);
+            if (table != null)
+                result.Add(table);
+        }
+        return result;
+    }
+
+    /// <summary>按页获取文本块；所有页为空（xref 不可靠）时回退 ExtractTextWithPositions 合并</summary>
+    private static List<(Int32 Page, List<PdfText> Blocks)> GetPageBlocks(PdfReader reader)
+    {
+        var result = new List<(Int32, List<PdfText>)>();
+        var pageCount = reader.GetPageCount();
+        for (var pi = 0; pi < pageCount; pi++)
+        {
+            var blocks = reader.GetPageTextBlocks(pi);
+            if (blocks is { Count: > 0 })
+                result.Add((pi, blocks));
+        }
+        // 回退：全部文本块合并到第 0 页
+        if (result.Count == 0)
+        {
+            var all = reader.ExtractTextWithPositions().ToList();
+            if (all.Count > 0)
+                result.Add((0, all));
+        }
+        return result;
+    }
+
+    /// <summary>从单页文本块提取表格（Y 分组 → X 聚类 → 单元格分配）</summary>
+    private static PdfTableData? ExtractFromBlocks(List<PdfText> blocks, Int32 pageIdx,
+        Single yTolerance, Single xGap, Int32 minRows)
+    {
+        if (blocks.Count < 4) return null;
 
         // 按 Y 分组为行
         var rows = GroupByY(blocks, yTolerance);
-        if (rows.Count < minRows) return result;
+        if (rows.Count < minRows) return null;
 
         // 聚类列边界
         var bounds = DetectColumnBounds(rows, xGap);
-        if (bounds.Count < 2) return result;
+        if (bounds.Count < 2) return null;
 
         // 筛选参与表格的行（行内存在多列分布的行）
         var tableRows = rows.Where(r => CountColumns(r, bounds) >= 2).ToList();
-        if (tableRows.Count < minRows) return result;
+        if (tableRows.Count < minRows) return null;
 
-        var table = new PdfTableData { PageIndex = 0 };
+        var table = new PdfTableData { PageIndex = pageIdx };
         foreach (var row in tableRows.OrderByDescending(r => r[0].Y))
         {
             var tr = new PdfTableRowData();
@@ -59,9 +92,7 @@ public static class PdfTableExtractor
             if (tr.CellCount > 0)
                 table.Rows.Add(tr);
         }
-        if (table.RowCount >= minRows)
-            result.Add(table);
-        return result;
+        return table.RowCount >= minRows ? table : null;
     }
 
     /// <summary>按 Y 坐标分组为行（行内保留全部文本块）</summary>
