@@ -196,6 +196,8 @@ var html = CommonMarkConverter.Convert("# Hello\nWorld");
 
 **战略定位**：NewLife.Office 不只是一个 Markdown 解析器，而是 **.NET 生态中唯一的办公文档 ↔ Markdown 双向转换中枢**，能力覆盖 Markdig（解析）+ ReverseMarkdown（HTML→MD）+ anydoc（文档→MD）三者的并集，并补上了三者都没有的 **MD→办公文档正向通道**。
 
+> **2026-08 读写完善（MD08）**：完成 CommonMark 核心语法补全——引用链接三形态、缩进代码块、HTML 实体解码、行内 HTML 与 6 种 HTML 块类型、列表续行与嵌套；写入侧上下文相关转义与往返修改检测（快照比较）；`MarkdownPipeline` 开关真实生效；文件编码自动检测（BOM/严格 UTF-8/GBK）。日常读写解析能力已对标 Markdig 核心语法。
+
 **真实未实现项（不虚标）**：
 - **内容识别格式（magic bytes）**：anydoc 通过文件内容而非扩展名识别格式；NewLife.Office 目前按扩展名/显式入口分发
 - **Agent Skill / CLI**：anydoc 提供 Node.js/Python 绑定与 CLI；NewLife.Office 目前为纯 .NET 库 API
