@@ -105,6 +105,9 @@ public partial class ExcelWriter : DisposeBase
         public Int32 Col { get; set; }   // 0-based
         public String Text { get; set; } = null!;
         public String Author { get; set; } = String.Empty;
+
+        /// <summary>富文本段（非空时优先于 Text 输出）</summary>
+        public List<CommentSegment>? Segments { get; set; }
     }
 
     /// <summary>Excel 文档属性（写入 docProps/core.xml）</summary>
@@ -941,6 +944,39 @@ public partial class ExcelWriter : DisposeBase
             _sheetComments[sheet] = list;
         }
         list.Add(new SheetComment { Row = row, Col = col, Text = text, Author = author ?? String.Empty });
+    }
+
+    /// <summary>为指定单元格添加富文本批注（M26）</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="row">行号（1基）</param>
+    /// <param name="col">列号（0基）</param>
+    /// <param name="segments">富文本段列表</param>
+    /// <param name="author">批注作者（可空）</param>
+    /// <exception cref="ArgumentNullException">segments 为空</exception>
+    /// <exception cref="ArgumentOutOfRangeException">row 小于 1</exception>
+    public void AddComment(String? sheet, Int32 row, Int32 col, IEnumerable<CommentSegment> segments, String? author = null)
+    {
+        if (segments == null) throw new ArgumentNullException(nameof(segments));
+        if (row < 1) throw new ArgumentOutOfRangeException(nameof(row));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+
+        var list2 = segments.ToList();
+        if (list2.Count == 0) throw new ArgumentException("富文本段不能为空", nameof(segments));
+
+        if (!_sheetComments.TryGetValue(sheet, out var list))
+        {
+            list = [];
+            _sheetComments[sheet] = list;
+        }
+        list.Add(new SheetComment
+        {
+            Row = row,
+            Col = col,
+            Text = String.Join("", list2.Select(s => s.Text)),
+            Author = author ?? String.Empty,
+            Segments = list2,
+        });
     }
 
     /// <summary>设置指定单元格的样式（覆盖行级样式）</summary>

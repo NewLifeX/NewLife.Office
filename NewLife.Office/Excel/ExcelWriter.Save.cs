@@ -988,7 +988,33 @@ partial class ExcelWriter
                     var cellRef = MakeCellRef(c.Row - 1, c.Col);
                     var authorId = authors.IndexOf(c.Author);
                     csw.Write($"<comment ref=\"{cellRef}\" authorId=\"{authorId}\">");
-                    csw.Write($"<text><r><t xml:space=\"preserve\">{SecurityElement.Escape(c.Text)}</t></r></text>");
+                    if (c.Segments is { Count: > 0 })
+                    {
+                        // 富文本批注：多段 + 独立样式
+                        csw.Write("<text>");
+                        foreach (var seg in c.Segments)
+                        {
+                            csw.Write("<r>");
+                            var hasPr = !String.IsNullOrEmpty(seg.FontName) || seg.FontSize > 0 || seg.Bold || seg.Italic || !String.IsNullOrEmpty(seg.Color);
+                            if (hasPr)
+                            {
+                                csw.Write("<rPr>");
+                                if (seg.Bold) csw.Write("<b/>");
+                                if (seg.Italic) csw.Write("<i/>");
+                                if (seg.FontSize > 0) csw.Write($"<sz val=\"{seg.FontSize:0.##}\"/>");
+                                if (!String.IsNullOrEmpty(seg.Color)) csw.Write($"<color rgb=\"{seg.Color}\"/>");
+                                if (!String.IsNullOrEmpty(seg.FontName)) csw.Write($"<rFont val=\"{SecurityElement.Escape(seg.FontName)}\"/>");
+                                csw.Write("</rPr>");
+                            }
+                            csw.Write($"<t xml:space=\"preserve\">{SecurityElement.Escape(seg.Text)}</t>");
+                            csw.Write("</r>");
+                        }
+                        csw.Write("</text>");
+                    }
+                    else
+                    {
+                        csw.Write($"<text><r><t xml:space=\"preserve\">{SecurityElement.Escape(c.Text)}</t></r></text>");
+                    }
                     csw.Write("</comment>");
                 }
                 csw.Write("</commentList></comments>");

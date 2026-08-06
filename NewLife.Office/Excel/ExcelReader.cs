@@ -1937,6 +1937,79 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         return result;
     }
 
+    /// <summary>读取批注富文本段（M26）</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>(行, 列) → (作者, 富文本段列表)，行列均为0基</returns>
+    public Dictionary<(Int32 Row, Int32 Col), (String Author, List<CommentSegment> Segments)> ReadCommentSegments(String sheet)
+    {
+        var result = new Dictionary<(Int32, Int32), (String, List<CommentSegment>)>();
+        if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry)) return result;
+
+        var n = sheetEntry.Name.TrimEnd(".xml");
+        if (n.StartsWith("sheet")) n = n.Substring(5);
+        var sheetIdx = n.ToInt(-1);
+        if (sheetIdx < 1) return result;
+
+        var commentsPath = $"xl/comments{sheetIdx}.xml";
+        var commentsEntry = _zip.GetEntry(commentsPath);
+        if (commentsEntry == null) return result;
+
+        var authors = new List<String>();
+        using (var cs = commentsEntry.Open())
+        {
+            var doc = XDocument.Load(cs);
+            if (doc.Root == null) return result;
+
+            var authorsEl = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "authors");
+            if (authorsEl != null)
+            {
+                foreach (var a in authorsEl.Elements())
+                    authors.Add(a.Value);
+            }
+
+            var commentList = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "commentList");
+            if (commentList == null) return result;
+
+            foreach (var cmt in commentList.Elements())
+            {
+                var refAttr = cmt.Attribute("ref")?.Value;
+                if (refAttr.IsNullOrEmpty()) continue;
+
+                var (row, col) = ParseCellRef(refAttr!);
+                var authorId = cmt.Attribute("authorId")?.Value.ToInt() ?? 0;
+                var author = authorId >= 0 && authorId < authors.Count ? authors[authorId] : String.Empty;
+
+                var segments = new List<CommentSegment>();
+                var textEl = cmt.Elements().FirstOrDefault(e => e.Name.LocalName == "text");
+                if (textEl != null)
+                {
+                    foreach (var r in textEl.Elements().Where(e => e.Name.LocalName == "r"))
+                    {
+                        var seg = new CommentSegment();
+                        var rPr = r.Elements().FirstOrDefault(e => e.Name.LocalName == "rPr");
+                        if (rPr != null)
+                        {
+                            seg.Bold = rPr.Elements().Any(e => e.Name.LocalName == "b");
+                            seg.Italic = rPr.Elements().Any(e => e.Name.LocalName == "i");
+                            var sz = rPr.Elements().FirstOrDefault(e => e.Name.LocalName == "sz");
+                            if (sz?.Attribute("val") != null && Double.TryParse(sz.Attribute("val")!.Value, out var size))
+                                seg.FontSize = size;
+                            var color = rPr.Elements().FirstOrDefault(e => e.Name.LocalName == "color");
+                            seg.Color = color?.Attribute("rgb")?.Value;
+                            var rFont = rPr.Elements().FirstOrDefault(e => e.Name.LocalName == "rFont");
+                            seg.FontName = rFont?.Attribute("val")?.Value;
+                        }
+                        var t = r.Elements().FirstOrDefault(e => e.Name.LocalName == "t");
+                        seg.Text = t?.Value ?? String.Empty;
+                        segments.Add(seg);
+                    }
+                }
+                result[(row, col)] = (author, segments);
+            }
+        }
+        return result;
+    }
+
     /// <summary>读取数据验证</summary>
     /// <param name="sheet">工作表名称</param>
     /// <returns>数据验证列表</returns>
