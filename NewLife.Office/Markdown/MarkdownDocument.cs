@@ -101,6 +101,18 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
         return Parse(DecodeText(bytes));
     }
 
+    /// <summary>读取文件文本（编码自动检测：BOM/严格 UTF-8/GBK 兜底），原始文本未经解析</summary>
+    /// <param name="path">文件路径</param>
+    /// <returns>解码后文本</returns>
+    public static String ReadFileText(String path)
+        => DecodeText(File.ReadAllBytes(path));
+
+    /// <summary>读取流文本（编码自动检测：BOM/严格 UTF-8/GBK 兜底），原始文本未经解析</summary>
+    /// <param name="stream">输入流</param>
+    /// <returns>解码后文本</returns>
+    public static String ReadStreamText(Stream stream)
+        => ReadAllText(stream);
+
     /// <summary>读取流文本，自动检测编码（BOM/严格 UTF-8/GBK 兜底）</summary>
     /// <param name="stream">输入流</param>
     /// <returns>解码后文本</returns>

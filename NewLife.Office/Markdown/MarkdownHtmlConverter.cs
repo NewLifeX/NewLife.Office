@@ -9,6 +9,9 @@ internal sealed class MarkdownHtmlConverter
 {
     #region 属性
     private readonly MarkdownHtmlOptions _options;
+
+    /// <summary>当前列表是否松散（CommonMark：松散列表项内容渲染为 &lt;p&gt;）</summary>
+    private Boolean _looseList;
     #endregion
 
     #region 构造
@@ -59,22 +62,29 @@ internal sealed class MarkdownHtmlConverter
                 sb.AppendLine("</blockquote>");
                 break;
             case MarkdownBlockType.BulletList:
+                var bl = (BulletListBlock)block;
+                var savedLoose = _looseList;
+                _looseList = bl.IsLoose;
                 sb.AppendLine("<ul>");
                 foreach (var child in block.Children)
                 {
                     RenderBlock(sb, child);
                 }
                 sb.AppendLine("</ul>");
+                _looseList = savedLoose;
                 break;
             case MarkdownBlockType.OrderedList:
                 var ol = (OrderedListBlock)block;
                 var start = ol.OrderedStart > 1 ? " start=\"" + ol.OrderedStart + "\"" : "";
+                savedLoose = _looseList;
+                _looseList = ol.IsLoose;
                 sb.AppendLine("<ol" + start + ">");
                 foreach (var child in block.Children)
                 {
                     RenderBlock(sb, child);
                 }
                 sb.AppendLine("</ol>");
+                _looseList = savedLoose;
                 break;
             case MarkdownBlockType.ListItem:
                 RenderListItem(sb, block);
@@ -177,7 +187,17 @@ internal sealed class MarkdownHtmlConverter
 
         if (block.Children.Count == 0)
         {
-            RenderInlines(sb, block.Inlines);
+            // 松散列表：简单项内容包裹 <p>（CommonMark）
+            if (_looseList && block.Inlines.Count > 0)
+            {
+                sb.Append("<p>");
+                RenderInlines(sb, block.Inlines);
+                sb.Append("</p>");
+            }
+            else
+            {
+                RenderInlines(sb, block.Inlines);
+            }
         }
         else
         {

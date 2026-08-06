@@ -164,9 +164,12 @@ internal sealed class MarkdownWriter
                 break;
 
             case MarkdownBlockType.BulletList:
-                foreach (var item in block.Children)
+                var bl = (BulletListBlock)block;
+                for (var i = 0; i < block.Children.Count; i++)
                 {
-                    WriteListItem(sb, item, false, 0, indent);
+                    WriteListItem(sb, block.Children[i], false, 0, indent);
+                    // 松散列表：项间空行（CommonMark 保真）
+                    if (bl.IsLoose && i < block.Children.Count - 1) sb.AppendLine();
                 }
                 sb.AppendLine();
                 break;
@@ -174,9 +177,11 @@ internal sealed class MarkdownWriter
             case MarkdownBlockType.OrderedList:
                 var ol = (OrderedListBlock)block;
                 var num = ol.OrderedStart;
-                foreach (var item in block.Children)
+                for (var i = 0; i < block.Children.Count; i++)
                 {
-                    WriteListItem(sb, item, true, num++, indent);
+                    WriteListItem(sb, block.Children[i], true, num++, indent);
+                    // 松散列表：项间空行（CommonMark 保真）
+                    if (ol.IsLoose && i < block.Children.Count - 1) sb.AppendLine();
                 }
                 sb.AppendLine();
                 break;

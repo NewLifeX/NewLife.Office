@@ -295,19 +295,19 @@ public static class FormatToMarkdown
         };
     }
 
-    /// <summary>Markdown 文件直通读取（已是 Markdown，原样返回不重复转换）</summary>
+    /// <summary>Markdown 文件直通读取（已是 Markdown，原样返回不重复转换；编码自动检测 BOM/UTF-8/GBK）</summary>
     /// <param name="filePath">文件路径</param>
     /// <param name="options">转换选项（直通模式忽略）</param>
     /// <returns>Markdown 文本</returns>
     private static String? ConvertMarkdownFile(String filePath, MarkdownConverterOptions? options)
-        => File.ReadAllText(filePath);
+        => MarkdownDocument.ReadFileText(filePath);
 
-    /// <summary>Markdown 流直通读取（编码自动检测 BOM/UTF-8/GBK）</summary>
+    /// <summary>Markdown 流直通读取（编码自动检测 BOM/UTF-8/GBK，原样返回不重复转换）</summary>
     /// <param name="stream">数据流</param>
     /// <param name="options">转换选项（直通模式忽略）</param>
     /// <returns>Markdown 文本</returns>
     private static String? ConvertMarkdownStream(Stream stream, MarkdownConverterOptions? options)
-        => MarkdownDocument.Parse(stream).ToMarkdown();
+        => MarkdownDocument.ReadStreamText(stream);
 
     /// <summary>扩展名未知/不支持时按内容识别兜底（复用 <see cref="OfficeFactory.CreateReaderByContent(String)"/>）</summary>
     /// <param name="filePath">文件路径</param>

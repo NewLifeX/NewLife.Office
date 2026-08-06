@@ -9,6 +9,8 @@ namespace XUnitTest.Markdown;
 /// <remarks>覆盖 2026-08-06 读写全面完善（MD10）全部新增与修复行为，防止回归。</remarks>
 public class MarkdownSpecExtendedTests
 {
+    static MarkdownSpecExtendedTests() => Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
     private static MarkdownDocument P(String md) => MarkdownDocument.Parse(md);
 
     #region 1.1 HTML 实体
@@ -476,6 +478,94 @@ public class MarkdownSpecExtendedTests
         Assert.Contains("graph TD", outMd);
         // HTML 输出带 language-mermaid 类（供前端渲染）
         Assert.Contains("language-mermaid", doc.ToHtml());
+    }
+
+    #endregion
+
+    #region MD11 优化回归（硬换行/直通编码/紧松列表）
+
+    [Fact, DisplayName("硬换行：标记两空格不进入文本令牌")]
+    public void HardBreak_MarkerSpacesStripped()
+    {
+        // CommonMark：`  \n` 的两空格是换行标记，不属于内容
+        var doc = P("a  \nb");
+        Assert.Equal("a b", doc.Blocks[0].GetPlainText());
+        Assert.Contains(doc.Blocks[0].Inlines, i => i.Type == MarkdownInlineType.HardBreak);
+        // 反斜杠硬换行
+        var doc2 = P("a\\\nb");
+        Assert.Equal("a b", doc2.Blocks[0].GetPlainText());
+        Assert.Contains(doc2.Blocks[0].Inlines, i => i.Type == MarkdownInlineType.HardBreak);
+        // 软换行保持
+        var doc3 = P("a\nb");
+        Assert.Contains(doc3.Blocks[0].Inlines, i => i.Type == MarkdownInlineType.SoftBreak);
+    }
+
+    [Fact, DisplayName("转换中枢：.md 直通 GBK 编码文件不乱码")]
+    public void Convert_MdPassthrough_Encoding()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"nlo_md_gbk_{Guid.NewGuid():N}.md");
+        try
+        {
+            var text = "# GBK 测试\n\n中文内容。";
+            // 用 GBK 编码写文件（无 BOM），File.ReadAllText 会乱码，ReadFileText 应正确解码
+            File.WriteAllText(path, text, Encoding.GetEncoding(936));
+            var md = FormatToMarkdown.Convert(path);
+            Assert.Contains("GBK 测试", md);
+            Assert.Contains("中文内容", md);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    [Fact, DisplayName("紧/松列表：项间空行判定 IsLoose")]
+    public void List_TightLooseDetection()
+    {
+        // 紧列表：无空行
+        var tight = P("- a\n- b\n- c");
+        var bl = Assert.IsType<BulletListBlock>(tight.Blocks[0]);
+        Assert.False(bl.IsLoose);
+
+        // 松列表：项间空行
+        var loose = P("- a\n\n- b\n- c");
+        var bl2 = Assert.IsType<BulletListBlock>(loose.Blocks[0]);
+        Assert.True(bl2.IsLoose);
+
+        // 有序列表
+        var ol = P("1. a\n\n2. b");
+        Assert.True(Assert.IsType<OrderedListBlock>(ol.Blocks[0]).IsLoose);
+    }
+
+    [Fact, DisplayName("紧/松列表：HTML 渲染差异（松列表项包裹 p）")]
+    public void List_TightLooseHtml()
+    {
+        var tightHtml = P("- a\n- b").ToHtml();
+        Assert.Contains("<li>a</li>", tightHtml);
+        Assert.DoesNotContain("<li><p>a</p>", tightHtml);
+
+        var looseHtml = P("- a\n\n- b").ToHtml();
+        Assert.Contains("<li><p>a</p></li>", looseHtml);
+        Assert.Contains("<li><p>b</p></li>", looseHtml);
+    }
+
+    [Fact, DisplayName("紧/松列表：松散列表序列化保留空行（往返保真）")]
+    public void List_LooseRoundtrip()
+    {
+        var md = "- a\n\n- b\n";
+        var doc = MarkdownDocument.ParseRoundtrip(md);
+        Assert.Equal(md, doc.ToMarkdown());
+        // 程序化松列表序列化带空行
+        var prog = new MarkdownDocument();
+        var loose = new BulletListBlock([
+            MarkdownBlock.CreateListItem([MarkdownInline.CreateText("a")]),
+            MarkdownBlock.CreateListItem([MarkdownInline.CreateText("b")]),
+        ]) { IsLoose = true };
+        prog.Blocks.Add(loose);
+        var outMd = prog.ToMarkdown();
+        Assert.Contains("- a\n\n- b", outMd);
+        // 再解析回松列表
+        Assert.True(Assert.IsType<BulletListBlock>(P(outMd).Blocks[0]).IsLoose);
     }
 
     #endregion

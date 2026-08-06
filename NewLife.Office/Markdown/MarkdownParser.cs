@@ -26,6 +26,19 @@ internal sealed class MarkdownParser
     public MarkdownPipeline? Pipeline { get; set; }
     #endregion
 
+    #region 正则（静态缓存，避免热点路径重复编译）
+    private static readonly Regex _atxHeading = new(@"^(#{1,6})(\s+|$)(.*)$", RegexOptions.Compiled);
+    private static readonly Regex _trailingHashes = new(@"\s+#+\s*$", RegexOptions.Compiled);
+    private static readonly Regex _orderedList = new(@"^(\d{1,9})([.)]) ", RegexOptions.Compiled);
+    private static readonly Regex _taskMarker = new(@"^\[([ xX])\] (.*)$", RegexOptions.Compiled);
+    private static readonly Regex _setext1 = new(@"^[=]+\s*$", RegexOptions.Compiled);
+    private static readonly Regex _setext2 = new(@"^[-]+\s*$", RegexOptions.Compiled);
+    private static readonly Regex _tableSep = new(@"^[|\-: ]+$", RegexOptions.Compiled);
+    private static readonly Regex _footnoteDef = new(@"^\[\^([^\]]+)\]:\s*(.*)$", RegexOptions.Compiled);
+    private static readonly Regex _abbrDef = new(@"^\*\[([^\]]+)\]:\s*(.*)$", RegexOptions.Compiled);
+    private static readonly Regex _referenceDef = new(@"^\[([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))(?:\s+(.*))?$", RegexOptions.Compiled);
+    #endregion
+
     #region 入口
     /// <summary>解析 Markdown 文本，返回文档对象</summary>
     /// <param name="text">Markdown 文本</param>
@@ -207,12 +220,12 @@ internal sealed class MarkdownParser
 
     private MarkdownBlock? TryParseAtxHeading(String trimmed)
     {
-        var match = Regex.Match(trimmed, @"^(#{1,6})(\s+|$)(.*)$");
+        var match = _atxHeading.Match(trimmed);
         if (!match.Success) return null;
         var hashes = match.Groups[1].Value;
         // trailing #? remove it
         var text = match.Groups[3].Value.TrimEnd();
-        text = Regex.Replace(text, @"\s+#+\s*$", "").TrimEnd();
+        text = _trailingHashes.Replace(text, "").TrimEnd();
         var inlines = ParseInlineWithRefs(text);
         return MarkdownBlock.CreateHeading(hashes.Length, inlines);
     }
@@ -517,7 +530,7 @@ internal sealed class MarkdownParser
     private static Boolean IsOrderedListMarker(String trimmed, out Int32 num, out Char delimiter)
     {
         num = 1; delimiter = '.';
-        var match = Regex.Match(trimmed, @"^(\d{1,9})([.)]) ");
+        var match = _orderedList.Match(trimmed);
         if (!match.Success) return false;
         num = Int32.Parse(match.Groups[1].Value);
         delimiter = match.Groups[2].Value[0];
@@ -621,6 +634,7 @@ internal sealed class MarkdownParser
         var isTask = false;
         var isChecked = false;
         var first = true;
+        var loose = false; // CommonMark 松散列表：项间/项内出现空行
 
         while (_pos < _lines.Length)
         {
@@ -642,7 +656,8 @@ internal sealed class MarkdownParser
                         : IsOrderedListMarker(nextTrimmed, out var _, out var _) && (markerIndent < 0 || nextIndent == markerIndent);
                     if (nextMarker || nextIndent >= contentColumn)
                     {
-                        // 列表延续：跳过空行，空行作为项内段落分隔
+                        // 列表延续：跳过空行，空行作为项内段落分隔 → 松散列表
+                        loose = true;
                         while (_pos < next) _pos++;
                         currentLines.Add("");
                         continue;
@@ -727,8 +742,8 @@ internal sealed class MarkdownParser
             items.Add(BuildItemFromContent(itemContents[i], taskFlags[i].isTask, taskFlags[i].isChecked));
         }
 
-        if (!ordered) return MarkdownBlock.CreateBulletList(items);
-        return MarkdownBlock.CreateOrderedList(items, firstNum);
+        if (!ordered) return new BulletListBlock(items) { IsLoose = loose };
+        return new OrderedListBlock(items, firstNum) { IsLoose = loose };
     }
 
     /// <summary>从列表项内容行构建块（单个段落用行内表示，多块/嵌套用子块）</summary>
@@ -779,7 +794,7 @@ internal sealed class MarkdownParser
         rest = content;
         isTask = false;
         isChecked = false;
-        var m = Regex.Match(content, @"^\[([ xX])\] (.*)$");
+        var m = _taskMarker.Match(content);
         if (m.Success)
         {
             isTask = true;
@@ -800,13 +815,13 @@ internal sealed class MarkdownParser
             var trimmedNext = line.TrimStart();
 
             // Setext heading underline
-            if (lines.Count > 0 && Regex.IsMatch(trimmedNext, @"^[=]+\s*$"))
+            if (lines.Count > 0 && _setext1.IsMatch(trimmedNext))
             {
                 _pos++;
                 var headingText = String.Join(" ", lines).Trim();
                 return MarkdownBlock.CreateHeading(1, ParseInlineWithRefs(headingText));
             }
-            if (lines.Count > 0 && Regex.IsMatch(trimmedNext, @"^[-]+\s*$"))
+            if (lines.Count > 0 && _setext2.IsMatch(trimmedNext))
             {
                 _pos++;
                 var headingText = String.Join(" ", lines).Trim();
@@ -839,7 +854,7 @@ internal sealed class MarkdownParser
 
         // Check if it looks like a GFM table
         if (lines.Count >= 2 && (Pipeline == null || Pipeline.EnableTables) &&
-            (lines[1].TrimStart().StartsWith("|") || Regex.IsMatch(lines[1].Trim(), @"^[|\-: ]+$")))
+            (lines[1].TrimStart().StartsWith("|") || _tableSep.IsMatch(lines[1].Trim())))
         {
             var table = TryParseTable(lines);
             if (table != null) return table;
@@ -1158,7 +1173,7 @@ internal sealed class MarkdownParser
         block = null;
 
         // [^id]: text
-        var match = Regex.Match(trimmed, @"^\[\^([^\]]+)\]:\s*(.*)$");
+        var match = _footnoteDef.Match(trimmed);
         if (!match.Success) return false;
 
         var id = match.Groups[1].Value;
@@ -1172,7 +1187,7 @@ internal sealed class MarkdownParser
     private void ParseAbbreviation(String trimmed)
     {
         // 格式: *[ABBR]: Full Definition
-        var match = Regex.Match(trimmed, @"^\*\[([^\]]+)\]:\s*(.*)$");
+        var match = _abbrDef.Match(trimmed);
         if (!match.Success) return;
 
         var abbr = match.Groups[1].Value.Trim();
@@ -1317,9 +1332,13 @@ internal sealed class MarkdownParser
             // Hard break: "  \n" or "\\\n"
             if (ch == '\n')
             {
-                FlushText(text, textStart, i, tokens);
                 var isHard = i >= 2 && text[i - 1] == ' ' && text[i - 2] == ' ';
                 var isBackslashHard = i >= 1 && text[i - 1] == '\\';
+                // 硬换行：剥离标记用的两个空格/反斜杠，避免进入文本令牌（CommonMark 硬换行标记不属于内容）
+                if (isHard)
+                    FlushText(text, textStart, i - 2, tokens);
+                else
+                    FlushText(text, textStart, i, tokens);
                 if (isHard || isBackslashHard)
                     tokens.Add(MarkdownInline.CreateHardBreak());
                 else
@@ -2226,7 +2245,7 @@ internal sealed class MarkdownParser
             var trimmed = _lines[i].Trim();
             // 排除脚注定义 [^id]:
             if (trimmed.StartsWith("[^") || trimmed.StartsWith("[") && trimmed.Length > 1 && trimmed[1] == '^') continue;
-            var match = Regex.Match(trimmed, @"^\[([^\]]+)\]:\s*(?:<([^>]+)>|(\S+))(?:\s+(.*))?$");
+            var match = _referenceDef.Match(trimmed);
             if (!match.Success) continue;
 
             var id = match.Groups[1].Value;
