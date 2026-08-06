@@ -200,6 +200,12 @@ var html = CommonMarkConverter.Convert("# Hello\nWorld");
 
 > **2026-08 全面完善（MD10）**：CommonMark 规范级补全——完整 HTML5 实体解码（含代理对）、引用图片三形态、GFM 删除线边界、HTML 块中断段落、表格代码段管道符与列数规则、自动链接括号平衡与链接内抑制、**完整强调分隔符栈算法**（flanking + rule of 3，对标 CommonMark 参考实现）；写入侧往返引用定义原位保留、FrontMatter 值转义、`ParseRoundtrip` 公开 API、输出行尾统一 `\n`；HTML→MD 补 `<dl>` 定义列表、checkbox 任务列表、details/summary；转换中枢支持 `.md` 直通与**内容识别（magic bytes）兜底**（对标 anydoc）。配套 Benchmark 性能基准与 33 项规范回归测试。
 
+> **2026-08 细节优化（MD11）**：硬换行标记剥离（`  \n` 两空格不进入文本令牌）、`.md` 直通 BOM/UTF-8/GBK 编码检测、解析器热点正则静态缓存（10 处）、紧/松列表（CommonMark）检测与 HTML/序列化保真。
+
+> **2026-08 性能优化与规范套件（MD12）**：往返捕获门控（非往返 `Parse` 不再生成块快照，**解析分配 -22%、耗时 -7%**，基准实测）、子解析器行复用、强调分隔符索引化 + CommonMark 失活规则；`MarkdownCommonMarkSuiteTests` 50 项数据驱动套件。
+
+> **2026-08 规范边界修复（MD13）**：数据驱动探测定位并修复 5 类 CommonMark/GFM 边缘缺陷——① setext 单个 `-`（空列表项）不构成 underline（例 77）；② 代码跨度闭合须匹配**等长**反引号 run（§6.4 例 344）；③ 表格 delimiter/header 行须含 `|`（GFM，修复 `Foo\n-` 误判表格）；④ 表格 delimiter 行优先于列表中断（例 205）；⑤ 链接文本不能包含嵌套链接（例 509，图片除外）。配套 `MarkdownCommonMarkEdgeTests` 28 项回归套件。
+
 **真实未实现项（不虚标）**：
 - **Agent Skill（Node.js/Python 绑定）**：anydoc 提供多语言绑定；NewLife.Office 为纯 .NET 库 API + CLI 工具（`NewLife.Office.Cli` convert/info，内容识别路由）
 - **Mermaid 图表 / 媒体嵌入**：Markdig 独有，本项目有意不实现（需引入 JS 引擎，偏离零依赖原则）

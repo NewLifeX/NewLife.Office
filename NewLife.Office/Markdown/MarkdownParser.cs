@@ -840,7 +840,8 @@ internal sealed class MarkdownParser
                 var headingText = String.Join(" ", lines).Trim();
                 return MarkdownBlock.CreateHeading(1, ParseInlineWithRefs(headingText));
             }
-            if (lines.Count > 0 && _setext2.IsMatch(trimmedNext))
+            // Setext heading underline（单个 `-` 是空列表项标记，不构成 underline，CommonMark 例 77）
+            if (lines.Count > 0 && trimmedNext != "-" && _setext2.IsMatch(trimmedNext))
             {
                 _pos++;
                 var headingText = String.Join(" ", lines).Trim();
@@ -857,9 +858,11 @@ internal sealed class MarkdownParser
             if (trimmedNext.StartsWith(">")) break;
             // HTML 块（type 1-6）可中断段落；type 7 单行完整标签不可中断
             if (trimmedNext.StartsWith("<") && IsHtmlBlockStart(trimmedNext)) break;
-            // List markers interrupt (after first line)
+            // List markers interrupt (after first line)；表格 delimiter 行仅在首行也含 |（构成表格的前提）时豁免中断，避免 `Foo\n- | -` 误合并为段落
             if (lines.Count > 0 && (IsBulletListMarker(trimmedNext, out var _)
-                || IsOrderedListMarker(trimmedNext, out var _, out var _))) break;
+                || IsOrderedListMarker(trimmedNext, out var _, out var _)) &&
+                !(lines[0].Contains("|") && IsTableDelimiterLine(trimmedNext)))
+                break;
 
             // Hard break: trailing 2+ spaces before newline
             if (line.EndsWith("  ") && lines.Count > 0)
@@ -871,9 +874,9 @@ internal sealed class MarkdownParser
 
         if (lines.Count == 0) return MarkdownBlock.CreateParagraph([]);
 
-        // Check if it looks like a GFM table
+        // Check if it looks like a GFM table（header 与 delimiter 行均须含 `|`，GFM 规范；避免 `Foo\n-` / `Foo\n- | -` 误判）
         if (lines.Count >= 2 && (Pipeline == null || Pipeline.EnableTables) &&
-            (lines[1].TrimStart().StartsWith("|") || _tableSep.IsMatch(lines[1].Trim())))
+            lines[0].Contains("|") && lines[1].Contains("|"))
         {
             var table = TryParseTable(lines);
             if (table != null) return table;
@@ -969,6 +972,21 @@ internal sealed class MarkdownParser
         if (!hasHyphen) return false;
         if (i < cell.Length && cell[i] == ':') i++;
         return i == cell.Length;
+    }
+
+    /// <summary>判断整行是否为合法表格分隔行（GFM：含 | 且每个单元格均为 :?-+:?）</summary>
+    /// <param name="line">行文本</param>
+    /// <returns>是否为分隔行</returns>
+    private static Boolean IsTableDelimiterLine(String line)
+    {
+        if (!line.Contains("|")) return false;
+        var cells = SplitTableRow(line);
+        if (cells.Count == 0) return false;
+        foreach (var cell in cells)
+        {
+            if (!IsTableDelimiterCell(cell.Trim())) return false;
+        }
+        return true;
     }
 
     /// <summary>拆分表格行，支持 \| 转义管道符与代码段内管道符不拆分（GFM）</summary>
@@ -1673,6 +1691,9 @@ internal sealed class MarkdownParser
         if (closeText < 0 || closeText + 1 >= end || text[closeText + 1] != '(') return false;
 
         var linkText = text.Substring(start + 1, closeText - start - 1);
+        // CommonMark §6.3：链接文本不能包含嵌套链接（图片允许）。如 [foo [bar](/uri)](/uri) 内层链接优先，外层失败
+        if (HasNestedLink(linkText)) return false;
+
         var (url, title, endParen) = ParseLinkDestination(text, closeText + 1, end);
         if (endParen < 0) return false;
 
@@ -1681,6 +1702,39 @@ internal sealed class MarkdownParser
         result = MarkdownInline.CreateLink(url, title, innerInlines);
         newPos = endParen + 1;
         return true;
+    }
+
+    /// <summary>检测链接文本中是否包含嵌套链接（CommonMark §6.3：链接不能包含链接，图片除外）</summary>
+    /// <param name="text">链接文本（不含外层 [ ]）</param>
+    /// <returns>包含内联/引用链接时为 true</returns>
+    private static Boolean HasNestedLink(String text)
+    {
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] != '[') continue;
+
+            // 图片 ![alt](url) / ![alt][id]：允许嵌套，跳过整个图片
+            var isImage = i > 0 && text[i - 1] == '!';
+            if (isImage)
+            {
+                var close = FindClosingBracket(text, i, text.Length);
+                if (close >= 0 && close + 1 < text.Length && text[close + 1] == '(')
+                {
+                    var (_, _, endParen) = ParseLinkDestination(text, close + 1, text.Length);
+                    if (endParen >= 0) { i = endParen; continue; }
+                }
+                continue;
+            }
+
+            // [text](url) 内联链接 或 [text][id] 引用链接 → 嵌套链接，外层失败
+            var close2 = FindClosingBracket(text, i, text.Length);
+            if (close2 < 0) return false;
+            if (close2 + 1 < text.Length && (text[close2 + 1] == '(' || text[close2 + 1] == '['))
+                return true;
+            // shortcut [text]：保守允许（是否引用需 refs 判定，无法精确判断）
+            i = close2;
+        }
+        return false;
     }
 
     private static (String url, String title, Int32 endParen) ParseLinkDestination(String text, Int32 openParen, Int32 end)
@@ -1752,6 +1806,7 @@ internal sealed class MarkdownParser
     }
 
     /// <summary>查找指定长度的反引号串闭合位置（行内代码，CommonMark 兼容）</summary>
+    /// <remarks>闭合反引号串必须恰好等长：run 前后均不能是反引号（CommonMark §6.4 例 344，如 `foo `` bar` 的闭合是末尾单反引号而非双反引号）</remarks>
     /// <param name="text">文本</param>
     /// <param name="start">开始搜索位置</param>
     /// <param name="end">结束位置（不含）</param>
@@ -1761,6 +1816,9 @@ internal sealed class MarkdownParser
     {
         for (var i = start; i <= end - ticks; i++)
         {
+            // 闭合 run 必须恰好等长：run 前后均不能是反引号，否则属于更长 run
+            if (i > start && text[i - 1] == '`') continue;
+            if (i + ticks < end && text[i + ticks] == '`') continue;
             var ok = true;
             for (var k = 0; k < ticks; k++)
             {
