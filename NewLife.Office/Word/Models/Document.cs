@@ -26,6 +26,9 @@ public class Document
     /// <summary>文档元素列表（段落/表格/图片），按文档顺序排列</summary>
     public List<Element> Elements { get; set; } = [];
 
+    /// <summary>修订追踪记录（Track Changes，W11），读取自 w:ins/w:del</summary>
+    public List<TrackChange> TrackChanges { get; set; } = [];
+
     /// <summary>页面设置（尺寸/边距/方向/页眉页脚）</summary>
     public PageSettings PageSettings { get; set; } = new();
 

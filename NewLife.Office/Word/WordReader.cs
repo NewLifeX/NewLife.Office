@@ -267,55 +267,12 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             foreach (XmlNode child in body.ChildNodes)
             {
                 if (child is not XmlElement el) continue;
-
-                if (el.LocalName == "p")
-                {
-                    var drawing = el.SelectSingleNode(".//w:drawing", ns) as XmlElement;
-                    var hasText = el.SelectSingleNode(".//w:t", ns) != null;
-
-                    if (!hasText && drawing != null)
-                    {
-                        // 纯图片段落：用 Image 元素表示（不保留空段落）
-                        var ie = ParseDrawing(drawing, ns, rels, doc);
-                        if (ie != null) doc.Elements.Add(ie);
-                    }
-                    else
-                    {
-                        // 文字段落（可能含内嵌图片）——保存完整 RawXml，图片已包含在其中
-                        var pe = ParsePara(el, ns, rels, styleMap);
-                        if (pe.Paragraph != null && !IsEmptyPara(pe.Paragraph))
-                        {
-                            pe.RawXml = el.OuterXml;
-                            doc.Elements.Add(pe);
-                        }
-                        // 加载图片数据到 doc.Images（需要，即使 RawXml 已包含 XML）
-                        if (drawing != null)
-                            ParseDrawing(drawing, ns, rels, doc); // 将图片加入 Images，不追加到 Elements
-                    }
-                }
-                else if (el.LocalName == "tbl")
-                {
-                    var te = ParseTable(el, ns, rels, styleMap);
-                    te.RawXml = el.OuterXml; // 保存表格原始 XML
-                    doc.Elements.Add(te);
-                }
-                else if (el.LocalName == "sdt")
-                {
-                    var se = ParseSdt(el, ns);
-                    if (se != null)
-                    {
-                        se.RawXml = el.OuterXml;
-                        doc.SdtElements.Add(se);
-                        doc.Elements.Add(new Element { Type = ElementType.Sdt, Sdt = se, RawXml = el.OuterXml });
-                    }
-                }
-                else if (el.LocalName == "sectPr")
-                {
-                    ParseSectPr(el, ns, doc);
-                    doc.SectPrXml = el.OuterXml; // 保存页面设置原始 XML
-                }
+                ProcessBodyElement(el, ns, rels, styleMap, doc);
             }
         }
+
+        // 修订追踪（W11）：收集全文 w:ins/w:del 记录
+        ParseTrackChanges(doc, xml, ns);
 
         foreach (var kv in rels)
         {
@@ -418,6 +375,105 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     private static readonly String Rns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
     private static readonly String WPns = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
     private static readonly String Ans = "http://schemas.openxmlformats.org/drawingml/2006/main";
+
+    /// <summary>处理 body 下的单个块级元素（段落/表格/内容控件/修订包裹块/节设置）</summary>
+    private void ProcessBodyElement(XmlElement el, XmlNamespaceManager ns, Dictionary<String, String> rels,
+        Dictionary<String, RunProperties> styleMap, Document doc)
+    {
+        if (el.LocalName == "p")
+        {
+            var drawing = el.SelectSingleNode(".//w:drawing", ns) as XmlElement;
+            var hasText = el.SelectSingleNode(".//w:t", ns) != null;
+
+            if (!hasText && drawing != null)
+            {
+                // 纯图片段落：用 Image 元素表示（不保留空段落）
+                var ie = ParseDrawing(drawing, ns, rels, doc);
+                if (ie != null) doc.Elements.Add(ie);
+            }
+            else
+            {
+                // 文字段落（可能含内嵌图片）——保存完整 RawXml，图片已包含在其中
+                var pe = ParsePara(el, ns, rels, styleMap);
+                if (pe.Paragraph != null && !IsEmptyPara(pe.Paragraph))
+                {
+                    pe.RawXml = el.OuterXml;
+                    doc.Elements.Add(pe);
+                }
+                // 加载图片数据到 doc.Images（需要，即使 RawXml 已包含 XML）
+                if (drawing != null)
+                    ParseDrawing(drawing, ns, rels, doc); // 将图片加入 Images，不追加到 Elements
+            }
+        }
+        else if (el.LocalName == "tbl")
+        {
+            var te = ParseTable(el, ns, rels, styleMap);
+            te.RawXml = el.OuterXml; // 保存表格原始 XML
+            doc.Elements.Add(te);
+        }
+        else if (el.LocalName == "sdt")
+        {
+            var se = ParseSdt(el, ns);
+            if (se != null)
+            {
+                se.RawXml = el.OuterXml;
+                doc.SdtElements.Add(se);
+                doc.Elements.Add(new Element { Type = ElementType.Sdt, Sdt = se, RawXml = el.OuterXml });
+            }
+        }
+        else if (el.LocalName == "sectPr")
+        {
+            ParseSectPr(el, ns, doc);
+            doc.SectPrXml = el.OuterXml; // 保存页面设置原始 XML
+        }
+        else if (el.LocalName is "ins" or "del")
+        {
+            // 段落级修订（w:ins/w:del 包裹整个段落）：递归处理子块，修订记录由 ParseTrackChanges 统一收集
+            foreach (XmlNode inner in el.ChildNodes)
+            {
+                if (inner is XmlElement innerEl)
+                    ProcessBodyElement(innerEl, ns, rels, styleMap, doc);
+            }
+        }
+    }
+
+    /// <summary>收集全文修订追踪记录（w:ins 插入 / w:del 删除，W11）</summary>
+    /// <param name="doc">文档对象（填充 TrackChanges）</param>
+    /// <param name="xml">document.xml</param>
+    /// <param name="ns">命名空间管理器</param>
+    private void ParseTrackChanges(Document doc, XmlDocument xml, XmlNamespaceManager ns)
+    {
+        var changes = new List<TrackChange>();
+        foreach (XmlElement el in xml.SelectNodes("//w:ins | //w:del", ns)!)
+        {
+            var change = new TrackChange
+            {
+                Type = el.LocalName == "ins" ? TrackChangeType.Insert : TrackChangeType.Delete,
+                Author = el.GetAttribute("w:author") ?? "",
+                Date = el.GetAttribute("w:date"),
+                Id = el.GetAttribute("w:id"),
+            };
+
+            // 修订文本：插入取 w:t，删除取 w:delText
+            var sb = new StringBuilder();
+            foreach (XmlElement t in el.SelectNodes(".//w:t | .//w:delText", ns)!)
+                sb.Append(t.InnerText);
+            change.Text = sb.ToString();
+
+            // 所在段落纯文本上下文（含 w:delText，反映修订前后全貌）
+            var para = el.SelectSingleNode("ancestor::w:p[1]", ns) as XmlElement;
+            if (para != null)
+            {
+                var ctx = new StringBuilder();
+                foreach (XmlElement t in para.SelectNodes(".//w:t | .//w:delText", ns)!)
+                    ctx.Append(t.InnerText);
+                change.ParagraphText = ctx.ToString();
+            }
+
+            changes.Add(change);
+        }
+        doc.TrackChanges = changes;
+    }
 
     private static XmlNamespaceManager WmlNs(XmlDocument doc)
     {
