@@ -8,7 +8,7 @@
 
 功能全面的 .NET 办公自动化库，一库覆盖 Excel、Word、PPT、PDF 等 15+ 文档格式
 
-[English](Readme_EN.MD) | 简体中文
+[English](Readme_EN.MD) | 简体中文 | [繁體中文](Readme_TW.MD) | [日本語](Readme_JA.MD) | [한국어](Readme_KO.MD) | [Español](Readme_ES.MD) | [Français](Readme_FR.MD) | [Deutsch](Readme_DE.MD) | [Português](Readme_PT.MD) | [Русский](Readme_RU.MD)
 
 源码： https://github.com/NewLifeX/NewLife.Office  
 Nuget：NewLife.Office（渲染扩展包：NewLife.Office.Rendering）  
