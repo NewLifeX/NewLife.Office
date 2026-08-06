@@ -55,14 +55,16 @@ internal sealed class MarkdownParser
 
     /// <summary>从行列表解析（内部复用，子解析器避免 Join+Split 重复分配）</summary>
     /// <param name="lines">已按 \n 规范化的行列表</param>
+    /// <param name="skipFrontMatter">是否跳过 YAML Front Matter（子解析器内容不可能有文档级 Front Matter）</param>
     /// <returns>解析后的文档</returns>
-    internal MarkdownDocument ParseLines(List<String> lines)
-        => ParseCore(lines.ToArray());
+    internal MarkdownDocument ParseLines(List<String> lines, Boolean skipFrontMatter = false)
+        => ParseCore(lines.ToArray(), skipFrontMatter);
 
     /// <summary>解析核心：从行数组构建文档</summary>
     /// <param name="lines">已按 \n 规范化的行数组</param>
+    /// <param name="skipFrontMatter">是否跳过 YAML Front Matter（子解析器内容不可能有文档级 Front Matter）</param>
     /// <returns>解析后的文档</returns>
-    private MarkdownDocument ParseCore(String[] lines)
+    private MarkdownDocument ParseCore(String[] lines, Boolean skipFrontMatter = false)
     {
         _lines = lines;
         _pos = 0;
@@ -70,11 +72,11 @@ internal sealed class MarkdownParser
         var doc = new MarkdownDocument();
         _doc = doc;
 
-        // YAML Front Matter (MD05-02)
-        if (Pipeline == null || Pipeline.EnableFrontMatter)
+        // YAML Front Matter (MD05-02)；子解析器（列表/引用内容）跳过——块内容不可能有文档级 Front Matter，且避免 `- ---` 被误判
+        if (!skipFrontMatter && (Pipeline == null || Pipeline.EnableFrontMatter))
             ParseFrontMatter(doc);
 
-        // 预扫描引用链接定义（支持定义在后使用在前）
+        // 预扫描引用链接定义（支持定义在后使用在前；列表项内引用定义需保留）
         PreScanReferences(doc);
 
         while (_pos < _lines.Length)
@@ -765,6 +767,21 @@ internal sealed class MarkdownParser
         return new OrderedListBlock(items, firstNum) { IsLoose = loose };
     }
 
+    /// <summary>判断行是否为块级元素起始（列表项快速路径使用，MD14；避免单行普通内容误走子解析器）</summary>
+    /// <param name="line">内容行（已剥离列表标记）</param>
+    /// <returns>可能是块级起始时为 true</returns>
+    private static Boolean IsBlockStart(String line)
+    {
+        var t = line.TrimStart();
+        if (t.Length == 0) return false;
+        var c = t[0];
+        // ATX 标题 / 引用 / 列表 / 围栏 / HTML 块 / 表格 / 定义列表 / 引用定义 / 脚注
+        if (c is '#' or '>' or '-' or '*' or '+' or '`' or '~' or '<' or '|' or ':' or '[' or '$') return true;
+        // 有序列表（数字 + . 或 )）
+        if (Char.IsDigit(c)) return true;
+        return false;
+    }
+
     /// <summary>从列表项内容行构建块（单个段落用行内表示，多块/嵌套用子块）</summary>
     /// <param name="contentLines">剥离标记后的内容行</param>
     /// <param name="isTask">是否任务项</param>
@@ -786,6 +803,13 @@ internal sealed class MarkdownParser
             return MarkdownBlock.CreateListItem(ParseInlineWithRefs(text), isTask, isChecked);
         }
 
+        // 快速路径（MD14）：单行普通内容（非块级起始）直接行内解析，避免创建子解析器（列表分配主成本）
+        if (contentLines.Count == 1 && !IsBlockStart(contentLines[0]))
+        {
+            var inlines = ParseInlineWithRefs(contentLines[0].Trim());
+            return MarkdownBlock.CreateListItem(inlines, isTask, isChecked);
+        }
+
         // 重新解析为块，支持嵌套列表/引用/代码块/多段落等
         var inner = new MarkdownParser
         {
@@ -793,7 +817,7 @@ internal sealed class MarkdownParser
             _refs = _refs,
             Pipeline = Pipeline,
         };
-        var innerDoc = inner.ParseLines(contentLines);
+        var innerDoc = inner.ParseLines(contentLines, true);
 
         if (innerDoc.Blocks.Count == 1 && innerDoc.Blocks[0].Type == MarkdownBlockType.Paragraph)
         {
@@ -1623,7 +1647,7 @@ internal sealed class MarkdownParser
     {
         if (start >= end) return;
         var s = text[start..end];
-        // Remove trailing backslash before hard break
+        // 硬换行前的尾部反斜杠标记不进入文本令牌（MD11）
         if (s.EndsWith("\\")) s = s[..^1];
         if (s.Length > 0)
             result.Add(MarkdownInline.CreateText(s));

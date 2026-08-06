@@ -206,6 +206,8 @@ var html = CommonMarkConverter.Convert("# Hello\nWorld");
 
 > **2026-08 规范边界修复（MD13）**：数据驱动探测定位并修复 5 类 CommonMark/GFM 边缘缺陷——① setext 单个 `-`（空列表项）不构成 underline（例 77）；② 代码跨度闭合须匹配**等长**反引号 run（§6.4 例 344）；③ 表格 delimiter/header 行须含 `|`（GFM，修复 `Foo\n-` 误判表格）；④ 表格 delimiter 行优先于列表中断（例 205）；⑤ 链接文本不能包含嵌套链接（例 509，图片除外）。配套 `MarkdownCommonMarkEdgeTests` 28 项回归套件。
 
+> **2026-08 解析分配优化（MD14）**：GC 分段量化定位真实热点——**每列表项都创建子解析器+子文档+FrontMatter 检查+引用预扫描**（列表输入 233x 放大）。单行普通内容快速路径直接行内解析，列表分配 -61%、**Parse 分配 -18%/耗时 -20%**（基准实测）。同时修正 MD12「AST 字符串复制 ~120x 主成本」猜测（实测文本令牌仅 1.3%），`Memory<Char>` 惰性切片经实测无收益后回滚——数据驱动的性能优化决策。
+
 **真实未实现项（不虚标）**：
 - **Agent Skill（Node.js/Python 绑定）**：anydoc 提供多语言绑定；NewLife.Office 为纯 .NET 库 API + CLI 工具（`NewLife.Office.Cli` convert/info，内容识别路由）
 - **Mermaid 图表 / 媒体嵌入**：Markdig 独有，本项目有意不实现（需引入 JS 引擎，偏离零依赖原则）
