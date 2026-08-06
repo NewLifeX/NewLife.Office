@@ -264,7 +264,9 @@ public static class FormatToMarkdown
             ".ods" => FromOds(filePath, options),
             ".rtf" => FromRtf(filePath, options),
             ".epub" => FromEpub(filePath, options),
-            _ => throw ConvertErrorException.Unsupported($"不支持的文件格式: {ext}"),
+            ".md" or ".markdown" => ConvertMarkdownFile(filePath, options),
+            // 扩展名未知/不支持时按内容识别兜底（magic bytes，对标 anydoc）
+            _ => ConvertByContent(filePath, options),
         };
     }
 
@@ -287,8 +289,86 @@ public static class FormatToMarkdown
             ".ods" => FromOds(stream, options),
             ".rtf" => FromRtf(stream, options),
             ".epub" => FromEpub(stream, options),
-            _ => throw ConvertErrorException.Unsupported($"不支持的文件格式: {extension}"),
+            ".md" or ".markdown" => ConvertMarkdownStream(stream, options),
+            // 扩展名未知/不支持时按内容识别兜底（magic bytes，对标 anydoc）
+            _ => ConvertByContent(stream, options),
         };
+    }
+
+    /// <summary>Markdown 文件直通读取（已是 Markdown，原样返回不重复转换）</summary>
+    /// <param name="filePath">文件路径</param>
+    /// <param name="options">转换选项（直通模式忽略）</param>
+    /// <returns>Markdown 文本</returns>
+    private static String? ConvertMarkdownFile(String filePath, MarkdownConverterOptions? options)
+        => File.ReadAllText(filePath);
+
+    /// <summary>Markdown 流直通读取（编码自动检测 BOM/UTF-8/GBK）</summary>
+    /// <param name="stream">数据流</param>
+    /// <param name="options">转换选项（直通模式忽略）</param>
+    /// <returns>Markdown 文本</returns>
+    private static String? ConvertMarkdownStream(Stream stream, MarkdownConverterOptions? options)
+        => MarkdownDocument.Parse(stream).ToMarkdown();
+
+    /// <summary>扩展名未知/不支持时按内容识别兜底（复用 <see cref="OfficeFactory.CreateReaderByContent(String)"/>）</summary>
+    /// <param name="filePath">文件路径</param>
+    /// <param name="options">转换选项，null 使用默认</param>
+    /// <returns>Markdown 字符串</returns>
+    private static String? ConvertByContent(String filePath, MarkdownConverterOptions? options)
+    {
+        Object? reader;
+        try
+        {
+            reader = OfficeFactory.CreateReaderByContent(filePath);
+        }
+        catch (Exception ex)
+        {
+            // 内容识别失败（文件不存在/无法解析）统一归为 Unsupported
+            throw new ConvertErrorException(ConvertErrorType.Unsupported, $"无法识别文件内容或格式不支持: {Path.GetExtension(filePath)}", ex);
+        }
+        if (reader is not IMarkdownExtractable extractable)
+        {
+            (reader as IDisposable)?.Dispose();
+            throw ConvertErrorException.Unsupported($"无法识别文件内容或格式不支持: {Path.GetExtension(filePath)}");
+        }
+        try
+        {
+            return ToMarkdownString(extractable, filePath, options);
+        }
+        finally
+        {
+            (reader as IDisposable)?.Dispose();
+        }
+    }
+
+    /// <summary>扩展名未知/不支持时按内容识别兜底（复用 <see cref="OfficeFactory.CreateReaderByContent(Stream)"/>）</summary>
+    /// <param name="stream">数据流</param>
+    /// <param name="options">转换选项，null 使用默认</param>
+    /// <returns>Markdown 字符串</returns>
+    private static String? ConvertByContent(Stream stream, MarkdownConverterOptions? options)
+    {
+        Object? reader;
+        try
+        {
+            reader = OfficeFactory.CreateReaderByContent(stream);
+        }
+        catch (Exception ex)
+        {
+            // 内容识别失败统一归为 Unsupported
+            throw new ConvertErrorException(ConvertErrorType.Unsupported, "无法识别流内容或格式不支持", ex);
+        }
+        if (reader is not IMarkdownExtractable extractable)
+        {
+            (reader as IDisposable)?.Dispose();
+            throw ConvertErrorException.Unsupported("无法识别流内容或格式不支持");
+        }
+        try
+        {
+            return ToMarkdownString(extractable, null, options);
+        }
+        finally
+        {
+            (reader as IDisposable)?.Dispose();
+        }
     }
     #endregion
 

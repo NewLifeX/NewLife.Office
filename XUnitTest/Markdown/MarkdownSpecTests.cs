@@ -123,7 +123,12 @@ public class MarkdownSpecTests
     {
         Assert.Equal(MarkdownInlineType.Emphasis, P("*foo*").Blocks[0].Inlines[0].Type);
         Assert.Equal(MarkdownInlineType.Strong, P("**foo**").Blocks[0].Inlines[0].Type);
-        Assert.Equal(MarkdownInlineType.StrongEmphasis, P("***foo***").Blocks[0].Inlines[0].Type);
+        // CommonMark 规范：***foo*** → <em><strong>foo</strong></em>（嵌套结构）
+        var se = P("***foo***").Blocks[0].Inlines[0];
+        Assert.Equal(MarkdownInlineType.Emphasis, se.Type);
+        Assert.Single(se.Children);
+        Assert.Equal(MarkdownInlineType.Strong, se.Children[0].Type);
+        Assert.Equal("foo", se.Children[0].GetPlainText());
         // 下划线
         Assert.Equal(MarkdownInlineType.Emphasis, P("_foo_").Blocks[0].Inlines[0].Type);
     }

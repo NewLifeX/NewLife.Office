@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace NewLife.Office.Markdown;
@@ -367,6 +368,25 @@ internal sealed class MarkdownParser
         if (nameEnd >= trimmed.Length) return true;
         var after = trimmed[nameEnd];
         return after is ' ' or '\t' or '>' or '/';
+    }
+
+    /// <summary>判断行是否为 HTML 块起始（CommonMark type 1-6，可中断段落）</summary>
+    /// <param name="trimmed">去前导空白后的行文本</param>
+    /// <returns>是否为可中断段落的 HTML 块起始</returns>
+    private static Boolean IsHtmlBlockStart(String trimmed)
+    {
+        if (trimmed.Length < 2 || trimmed[0] != '<') return false;
+
+        // 类型① 特殊标签（pre/script/style/textarea）
+        if (IsSpecialTagStart(trimmed)) return true;
+
+        // 类型②③④⑤ 注释/处理指令/CDATA/声明
+        if (trimmed.StartsWith("<!--") || trimmed.StartsWith("<?") || trimmed.StartsWith("<![CDATA["))
+            return true;
+        if (trimmed.Length > 2 && trimmed[1] == '!' && Char.IsUpper(trimmed[2])) return true;
+
+        // 类型⑥ 块级标签
+        return IsBlockTagStart(trimmed);
     }
 
     /// <summary>判断是否为单行完整标签（CommonMark 类型 ⑦）</summary>
@@ -801,6 +821,8 @@ internal sealed class MarkdownParser
             if (trimmedNext.StartsWith("```") || trimmedNext.StartsWith("~~~")) break;
             // Block quote interrupts
             if (trimmedNext.StartsWith(">")) break;
+            // HTML 块（type 1-6）可中断段落；type 7 单行完整标签不可中断
+            if (trimmedNext.StartsWith("<") && IsHtmlBlockStart(trimmedNext)) break;
             // List markers interrupt (after first line)
             if (lines.Count > 0 && (IsBulletListMarker(trimmedNext, out var _)
                 || IsOrderedListMarker(trimmedNext, out var _, out var _))) break;
@@ -848,15 +870,15 @@ internal sealed class MarkdownParser
     {
         if (lines.Count < 2) return null;
         var sep = lines[1].Trim();
-        if (!sep.Contains("---") && !sep.Contains(":--") && !sep.Contains("--:") && !sep.Contains(":-:"))
-            return null;
 
-        // Parse alignments
+        // 分隔行单元格解析与校验（GFM：每格必须为 :?-+:?，至少 1 个连字符）
         var alignCells = SplitTableRow(sep);
+        if (alignCells.Count == 0) return null;
         var alignments = new List<String>();
         foreach (var cell in alignCells)
         {
             var c = cell.Trim();
+            if (!IsTableDelimiterCell(c)) return null;
             if (c.StartsWith(":") && c.EndsWith(":")) alignments.Add("center");
             else if (c.EndsWith(":")) alignments.Add("right");
             else if (c.StartsWith(":")) alignments.Add("left");
@@ -865,15 +887,16 @@ internal sealed class MarkdownParser
 
         var table = new TableBlock();
 
-        // Header row
+        // Header row（列数以分隔行为准，多出丢弃、缺少补空，GFM 规范）
         var headerRow = new TableRowBlock();
         var headerCells = SplitTableRow(lines[0]);
-        for (var i = 0; i < headerCells.Count; i++)
+        for (var i = 0; i < alignments.Count; i++)
         {
+            var cellText = i < headerCells.Count ? headerCells[i].Trim() : "";
             var cell = new TableCellBlock(
-                ParseInlineWithRefs(headerCells[i].Trim()),
+                ParseInlineWithRefs(cellText),
                 isHeader: true,
-                alignment: i < alignments.Count ? alignments[i] : "");
+                alignment: alignments[i]);
             headerRow.Children.Add(cell);
         }
         table.Children.Add(headerRow);
@@ -889,7 +912,7 @@ internal sealed class MarkdownParser
                 var cell = new TableCellBlock(
                     ParseInlineWithRefs(cellText),
                     isHeader: false,
-                    alignment: i < alignments.Count ? alignments[i] : "");
+                    alignment: alignments[i]);
                 dataRow.Children.Add(cell);
             }
             table.Children.Add(dataRow);
@@ -898,7 +921,23 @@ internal sealed class MarkdownParser
         return table;
     }
 
-    /// <summary>拆分表格行，支持 \| 转义管道符（GFM）</summary>
+    /// <summary>校验表格分隔行单元格（GFM：1+ 个连字符，可选左右冒号）</summary>
+    /// <param name="cell">单元格文本（去首尾空白）</param>
+    /// <returns>是否合法分隔单元格</returns>
+    private static Boolean IsTableDelimiterCell(String cell)
+    {
+        if (cell.Length == 0) return false;
+        var i = 0;
+        if (cell[i] == ':') i++;
+        if (i >= cell.Length) return false;
+        var hasHyphen = false;
+        while (i < cell.Length && cell[i] == '-') { hasHyphen = true; i++; }
+        if (!hasHyphen) return false;
+        if (i < cell.Length && cell[i] == ':') i++;
+        return i == cell.Length;
+    }
+
+    /// <summary>拆分表格行，支持 \| 转义管道符与代码段内管道符不拆分（GFM）</summary>
     /// <param name="line">表格行文本</param>
     /// <returns>单元格列表</returns>
     private static List<String> SplitTableRow(String line)
@@ -910,9 +949,39 @@ internal sealed class MarkdownParser
         var cells = new List<String>();
         var sb = new System.Text.StringBuilder();
         var slashCount = 0;
-        foreach (var c in line)
+        var codeTicks = 0; // >0 表示处于代码段内，值为开头反引号个数
+        var i = 0;
+        while (i < line.Length)
         {
-            if (c == '\\') { sb.Append(c); slashCount++; continue; }
+            var c = line[i];
+            if (codeTicks > 0)
+            {
+                // 代码段内：管道符/转义不生效，等长反引号串闭合
+                if (c == '`')
+                {
+                    var run = 0;
+                    while (i + run < line.Length && line[i + run] == '`') run++;
+                    for (var k = 0; k < run; k++) sb.Append('`');
+                    if (run == codeTicks) codeTicks = 0;
+                    i += run;
+                    continue;
+                }
+                sb.Append(c);
+                i++;
+                continue;
+            }
+
+            if (c == '`')
+            {
+                // 进入代码段：记录反引号个数
+                var run = 0;
+                while (i + run < line.Length && line[i + run] == '`') run++;
+                codeTicks = run;
+                for (var k = 0; k < run; k++) sb.Append('`');
+                i += run;
+                continue;
+            }
+            if (c == '\\') { sb.Append(c); slashCount++; i++; continue; }
             if (c == '|')
             {
                 // 奇数个连续反斜杠 → 转义管道符，去掉转义用反斜杠
@@ -927,10 +996,12 @@ internal sealed class MarkdownParser
                     sb.Clear();
                 }
                 slashCount = 0;
+                i++;
                 continue;
             }
             slashCount = 0;
             sb.Append(c);
+            i++;
         }
         cells.Add(sb.ToString());
         return cells;
@@ -1024,12 +1095,16 @@ internal sealed class MarkdownParser
                     continue;
                 }
 
-                // 去掉引号
+                // 去掉引号（双引号值还原反斜杠转义，与 EscapeYamlValue 对称）
                 if (value.Length >= 2 &&
                     ((value[0] == '"' && value[^1] == '"') ||
                      (value[0] == '\'' && value[^1] == '\'')))
+                {
+                    var quote = value[0];
                     value = value[1..^1];
-                if (key.Length > 0 && value.Length > 0)
+                    if (quote == '"') value = UnescapeYaml(value);
+                }
+                if (key.Length > 0)
                     doc.FrontMatter[key] = value;
             }
             _pos++;
@@ -1056,6 +1131,26 @@ internal sealed class MarkdownParser
             if (c == ':') return i;
         }
         return -1;
+    }
+
+    /// <summary>还原 YAML 双引号值的反斜杠转义（\\ → \，\" → "）</summary>
+    /// <param name="value">带转义的值</param>
+    /// <returns>还原后值</returns>
+    private static String UnescapeYaml(String value)
+    {
+        if (!value.Contains('\\')) return value;
+        var sb = new System.Text.StringBuilder(value.Length);
+        for (var i = 0; i < value.Length; i++)
+        {
+            var c = value[i];
+            if (c == '\\' && i + 1 < value.Length)
+            {
+                var n = value[i + 1];
+                if (n == '\\' || n == '"') { sb.Append(n); i++; continue; }
+            }
+            sb.Append(c);
+        }
+        return sb.ToString();
     }
 
     private Boolean TryParseFootnoteDefinition(String trimmed, out MarkdownBlock? block)
@@ -1160,7 +1255,7 @@ internal sealed class MarkdownParser
     {
         var result = new List<MarkdownInline>();
         if (String.IsNullOrEmpty(text)) return result;
-        ParseInlineCore(text, 0, text.Length, result, null, null);
+        ParseInlineCore(text, 0, text.Length, result, null, null, false);
         return result;
     }
 
@@ -1171,7 +1266,7 @@ internal sealed class MarkdownParser
     {
         var result = new List<MarkdownInline>();
         if (String.IsNullOrEmpty(text)) return result;
-        ParseInlineCore(text, 0, text.Length, result, _refs, Pipeline);
+        ParseInlineCore(text, 0, text.Length, result, _refs, Pipeline, false);
         return result;
     }
 
@@ -1182,8 +1277,32 @@ internal sealed class MarkdownParser
     /// <param name="result">输出列表</param>
     /// <param name="refs">引用链接定义（可为 null）</param>
     /// <param name="pipeline">处理管线（可为 null，视为全开）</param>
+    /// <param name="inLink">是否处于链接内部（GFM：链接内不识别裸 URL 自动链接）</param>
     private static void ParseInlineCore(String text, Int32 start, Int32 end, List<MarkdownInline> result,
-        Dictionary<String, (String url, String title)>? refs, MarkdownPipeline? pipeline)
+        Dictionary<String, (String url, String title)>? refs, MarkdownPipeline? pipeline, Boolean inLink)
+    {
+        // 两阶段解析（CommonMark §6.2）：
+        // 1) 词法令牌化：文本拆分为令牌列表，* / _ 分隔符 run 收集为强调候选
+        // 2) 分隔符栈解析：按 flanking + rule of 3 配对强调/粗体，嵌套结构
+        var tokens = new List<MarkdownInline>();
+        var delims = new List<DelimInfo>();
+        TokenizeInline(text, start, end, tokens, delims, refs, pipeline, inLink);
+        ResolveEmphasis(tokens, delims);
+        result.AddRange(tokens);
+    }
+
+    /// <summary>行内令牌化：文本解析为令牌列表，* / _ 分隔符 run 收集为强调候选</summary>
+    /// <param name="text">行内文本（不含换行）</param>
+    /// <param name="start">开始位置</param>
+    /// <param name="end">结束位置（不含）</param>
+    /// <param name="tokens">输出令牌列表</param>
+    /// <param name="delims">输出分隔符信息列表</param>
+    /// <param name="refs">引用链接定义（可为 null）</param>
+    /// <param name="pipeline">处理管线（可为 null，视为全开）</param>
+    /// <param name="inLink">是否处于链接内部（GFM：链接内不识别裸 URL 自动链接）</param>
+    private static void TokenizeInline(String text, Int32 start, Int32 end, List<MarkdownInline> tokens,
+        List<DelimInfo> delims, Dictionary<String, (String url, String title)>? refs,
+        MarkdownPipeline? pipeline, Boolean inLink)
     {
         var i = start;
         var textStart = start;
@@ -1198,13 +1317,13 @@ internal sealed class MarkdownParser
             // Hard break: "  \n" or "\\\n"
             if (ch == '\n')
             {
-                FlushText(text, textStart, i, result);
+                FlushText(text, textStart, i, tokens);
                 var isHard = i >= 2 && text[i - 1] == ' ' && text[i - 2] == ' ';
                 var isBackslashHard = i >= 1 && text[i - 1] == '\\';
                 if (isHard || isBackslashHard)
-                    result.Add(MarkdownInline.CreateHardBreak());
+                    tokens.Add(MarkdownInline.CreateHardBreak());
                 else
-                    result.Add(MarkdownInline.CreateSoftBreak());
+                    tokens.Add(MarkdownInline.CreateSoftBreak());
                 i++;
                 textStart = i;
                 continue;
@@ -1213,25 +1332,25 @@ internal sealed class MarkdownParser
             // Escape
             if (ch == '\\' && i + 1 < end && IsEscapable(text[i + 1]))
             {
-                FlushText(text, textStart, i, result);
-                result.Add(MarkdownInline.CreateText(text[i + 1].ToString()));
+                FlushText(text, textStart, i, tokens);
+                tokens.Add(MarkdownInline.CreateText(text[i + 1].ToString()));
                 i += 2;
                 textStart = i;
                 continue;
             }
 
-            // HTML 实体解码：&amp; / &lt; / &#65; 等
+            // HTML 实体解码：&amp; / &lt; / &#65; 等（CommonMark 最长实体名 ~31 字符）
             if (ch == '&')
             {
                 var semi = text.IndexOf(';', i + 1);
-                if (semi > i + 1 && semi - i <= 12)
+                if (semi > i + 1 && semi - i <= 32)
                 {
                     var entity = text.Substring(i + 1, semi - i - 1);
                     var decoded = DecodeEntity(entity);
                     if (decoded != null)
                     {
-                        FlushText(text, textStart, i, result);
-                        result.Add(MarkdownInline.CreateText(decoded));
+                        FlushText(text, textStart, i, tokens);
+                        tokens.Add(MarkdownInline.CreateText(decoded));
                         i = semi + 1;
                         textStart = i;
                         continue;
@@ -1249,25 +1368,25 @@ internal sealed class MarkdownParser
                 var close = FindBacktickClose(text, i + ticks, end, ticks);
                 if (close >= 0)
                 {
-                    FlushText(text, textStart, i, result);
+                    FlushText(text, textStart, i, tokens);
                     var code = text.Substring(i + ticks, close - i - ticks);
                     // CommonMark：内容首尾各一个空格且非纯空格时去掉一个（如 ` foo ` / `` ` `` 场景）
                     if (code.Length >= 2 && code[0] == ' ' && code[^1] == ' ' && code.Trim(' ').Length > 0)
                         code = code[1..^1];
-                    result.Add(MarkdownInline.CreateCode(code));
+                    tokens.Add(MarkdownInline.CreateCode(code));
                     i = close + ticks;
                     textStart = i;
                     continue;
                 }
             }
 
-            // Image: ![alt](url "title")
+            // Image: ![alt](url "title") 或引用图片 ![alt][id] / ![alt][] / ![alt]
             if (ch == '!' && i + 1 < end && text[i + 1] == '[')
             {
-                if (TryParseImage(text, i, end, out var imgInline, out var imgEnd))
+                if (TryParseImage(text, i, end, refs, pipeline, out var imgInline, out var imgEnd))
                 {
-                    FlushText(text, textStart, i, result);
-                    result.Add(imgInline!);
+                    FlushText(text, textStart, i, tokens);
+                    tokens.Add(imgInline!);
                     i = imgEnd;
                     textStart = i;
                     continue;
@@ -1279,8 +1398,8 @@ internal sealed class MarkdownParser
             {
                 if (TryParseLink(text, i, end, out var linkInline, out var linkEnd, refs, pipeline))
                 {
-                    FlushText(text, textStart, i, result);
-                    result.Add(linkInline!);
+                    FlushText(text, textStart, i, tokens);
+                    tokens.Add(linkInline!);
                     i = linkEnd;
                     textStart = i;
                     continue;
@@ -1288,40 +1407,53 @@ internal sealed class MarkdownParser
                 // 引用链接 [text][id] / [text][] / [text]（shortcut）
                 if (TryParseReference(text, i, end, refs, pipeline, out var refInline, out var refEnd))
                 {
-                    FlushText(text, textStart, i, result);
-                    result.Add(refInline!);
+                    FlushText(text, textStart, i, tokens);
+                    tokens.Add(refInline!);
                     i = refEnd;
                     textStart = i;
                     continue;
                 }
             }
 
-            // Strong+Emphasis ***
+            // 强调分隔符 run：* 或 _（收集为令牌 + 分隔符信息，交由 ResolveEmphasis 配对）
             if (ch == '*' || ch == '_')
             {
-                if (TryParseEmphasis(text, i, end, out var emphInline, out var emphEnd, refs, pipeline))
+                var run = 0;
+                while (i + run < end && text[i + run] == ch) run++;
+                FlushText(text, textStart, i, tokens);
+                var token = MarkdownInline.CreateText(new String(ch, run));
+                tokens.Add(token);
+                var (canOpen, canClose) = ClassifyDelimiter(text, i, run, end);
+                delims.Add(new DelimInfo
                 {
-                    FlushText(text, textStart, i, result);
-                    result.Add(emphInline!);
-                    i = emphEnd;
-                    textStart = i;
-                    continue;
-                }
+                    Ch = ch,
+                    Len = run,
+                    Original = run,
+                    CanOpen = canOpen,
+                    CanClose = canClose,
+                    Token = token,
+                });
+                i += run;
+                textStart = i;
+                continue;
             }
 
-            // Strikethrough: ~~text~~
+            // Strikethrough: ~~text~~（GFM：内容非空且不以空白首尾）
             if (ch == '~' && i + 1 < end && text[i + 1] == '~' && IsOn(p => p.EnableStrikethrough))
             {
-                var closeIdx = text.IndexOf("~~", i + 2, StringComparison.Ordinal);
-                if (closeIdx > i + 1)
+                if (i + 2 < end && !Char.IsWhiteSpace(text[i + 2]))
                 {
-                    FlushText(text, textStart, i, result);
-                    var inner = new List<MarkdownInline>();
-                    ParseInlineCore(text, i + 2, closeIdx, inner, refs, pipeline);
-                    result.Add(MarkdownInline.CreateStrikethrough(inner));
-                    i = closeIdx + 2;
-                    textStart = i;
-                    continue;
+                    var closeIdx = FindStrikethroughClose(text, i + 2, end);
+                    if (closeIdx > i + 2)
+                    {
+                        FlushText(text, textStart, i, tokens);
+                        var inner = new List<MarkdownInline>();
+                        ParseInlineCore(text, i + 2, closeIdx, inner, refs, pipeline, inLink);
+                        tokens.Add(MarkdownInline.CreateStrikethrough(inner));
+                        i = closeIdx + 2;
+                        textStart = i;
+                        continue;
+                    }
                 }
             }
 
@@ -1330,8 +1462,8 @@ internal sealed class MarkdownParser
             {
                 if (TryParseAutoLink(text, i, end, out var autoInline, out var autoEnd))
                 {
-                    FlushText(text, textStart, i, result);
-                    result.Add(autoInline!);
+                    FlushText(text, textStart, i, tokens);
+                    tokens.Add(autoInline!);
                     i = autoEnd;
                     textStart = i;
                     continue;
@@ -1339,21 +1471,21 @@ internal sealed class MarkdownParser
                 // 行内 HTML 标签：<tag> / </tag> / <!-- --> 等
                 if (TryParseInlineHtml(text, i, end, out var htmlInline, out var htmlEnd))
                 {
-                    FlushText(text, textStart, i, result);
-                    result.Add(htmlInline!);
+                    FlushText(text, textStart, i, tokens);
+                    tokens.Add(htmlInline!);
                     i = htmlEnd;
                     textStart = i;
                     continue;
                 }
             }
 
-            // 裸 URL 自动链接 (MD05-01): http:// / https:// / ftp://
+            // 裸 URL 自动链接 (MD05-01): http:// / https:// / ftp:// / www.
             if (IsOn(p => p.EnableAutoLinks) && (ch == 'h' || ch == 'f' || ch == 'w'))
             {
-                if (TryParseBareUrl(text, i, end, out var bareInline, out var bareEnd))
+                if (TryParseBareUrl(text, i, end, inLink, out var bareInline, out var bareEnd))
                 {
-                    FlushText(text, textStart, i, result);
-                    result.Add(bareInline!);
+                    FlushText(text, textStart, i, tokens);
+                    tokens.Add(bareInline!);
                     i = bareEnd;
                     textStart = i;
                     continue;
@@ -1365,8 +1497,8 @@ internal sealed class MarkdownParser
             {
                 if (TryParseBareEmail(text, i, end, out var emailInline, out var emailEnd))
                 {
-                    FlushText(text, textStart, i, result);
-                    result.Add(emailInline!);
+                    FlushText(text, textStart, i, tokens);
+                    tokens.Add(emailInline!);
                     i = emailEnd;
                     textStart = i;
                     continue;
@@ -1379,8 +1511,8 @@ internal sealed class MarkdownParser
                 var mathEnd = text.IndexOf('$', i + 1);
                 if (mathEnd > i + 1)
                 {
-                    FlushText(text, textStart, i, result);
-                    result.Add(new MarkdownInline { Type = MarkdownInlineType.MathInline, Text = text[(i + 1)..mathEnd] });
+                    FlushText(text, textStart, i, tokens);
+                    tokens.Add(new MarkdownInline { Type = MarkdownInlineType.MathInline, Text = text[(i + 1)..mathEnd] });
                     i = mathEnd + 1;
                     textStart = i;
                     continue;
@@ -1397,8 +1529,8 @@ internal sealed class MarkdownParser
                     // 确保是有效脚注ID（非空且无换行）
                     if (fnId.Length > 0 && !fnId.Contains('\n') && !fnId.Contains('\r'))
                     {
-                        FlushText(text, textStart, i, result);
-                        result.Add(new MarkdownInline { Type = MarkdownInlineType.FootnoteRef, Text = fnId });
+                        FlushText(text, textStart, i, tokens);
+                        tokens.Add(new MarkdownInline { Type = MarkdownInlineType.FootnoteRef, Text = fnId });
                         i = closeBracket + 1;
                         textStart = i;
                         continue;
@@ -1415,8 +1547,8 @@ internal sealed class MarkdownParser
                     var code = text[(i + 1)..colonEnd];
                     if (EmojiMap.TryGetValue(code, out var emoji))
                     {
-                        FlushText(text, textStart, i, result);
-                        result.Add(MarkdownInline.CreateText(emoji));
+                        FlushText(text, textStart, i, tokens);
+                        tokens.Add(MarkdownInline.CreateText(emoji));
                         i = colonEnd + 1;
                         textStart = i;
                         continue;
@@ -1427,7 +1559,7 @@ internal sealed class MarkdownParser
             i++;
         }
 
-        FlushText(text, textStart, end, result);
+        FlushText(text, textStart, end, tokens);
     }
 
     private static void FlushText(String text, Int32 start, Int32 end, List<MarkdownInline> result)
@@ -1444,6 +1576,7 @@ internal sealed class MarkdownParser
         "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~".IndexOf(ch) >= 0;
 
     private static Boolean TryParseImage(String text, Int32 start, Int32 end,
+        Dictionary<String, (String url, String title)>? refs, MarkdownPipeline? pipeline,
         out MarkdownInline? result, out Int32 newPos)
     {
         result = null; newPos = start;
@@ -1451,14 +1584,44 @@ internal sealed class MarkdownParser
         if (start + 1 >= end || text[start + 1] != '[') return false;
 
         var closeAlt = FindClosingBracket(text, start + 1, end);
-        if (closeAlt < 0 || closeAlt + 1 >= end || text[closeAlt + 1] != '(') return false;
-
+        if (closeAlt < 0) return false;
         var alt = text.Substring(start + 2, closeAlt - start - 2);
-        var (url, title, endParen) = ParseLinkDestination(text, closeAlt + 1, end);
-        if (endParen < 0) return false;
 
-        result = MarkdownInline.CreateImage(url, alt, title);
-        newPos = endParen + 1;
+        // 行内图片 ![alt](url "title")
+        if (closeAlt + 1 < end && text[closeAlt + 1] == '(')
+        {
+            var (url, title, endParen) = ParseLinkDestination(text, closeAlt + 1, end);
+            if (endParen < 0) return false;
+
+            result = MarkdownInline.CreateImage(url, alt, title);
+            newPos = endParen + 1;
+            return true;
+        }
+
+        // 引用图片 ![alt][id] / ![alt][] / ![alt]（shortcut，与 TryParseReference 对称）
+        if (refs == null || refs.Count == 0 || alt.Length == 0) return false;
+
+        if (closeAlt + 1 < end && text[closeAlt + 1] == '[')
+        {
+            // ![alt][id] 或 ![alt][]（折叠引用）
+            var close2 = FindClosingBracket(text, closeAlt + 1, end);
+            if (close2 < 0) return false;
+            var id2 = text.Substring(closeAlt + 2, close2 - closeAlt - 2);
+            if (id2.Length > 0 && id2.Contains('^')) return false;
+            var id = id2.Length > 0 ? id2 : alt;
+            if (!refs.TryGetValue(id, out var def)) return false;
+
+            result = MarkdownInline.CreateImage(def.url, alt, def.title);
+            newPos = close2 + 1;
+            return true;
+        }
+
+        // ![alt] shortcut 引用（仅当 label 已定义，且后不跟 (）；允许位于文本末尾
+        if (closeAlt + 1 < end && text[closeAlt + 1] == '(') return false;
+        if (!refs.TryGetValue(alt, out var def2)) return false;
+
+        result = MarkdownInline.CreateImage(def2.url, alt, def2.title);
+        newPos = closeAlt + 1;
         return true;
     }
 
@@ -1475,7 +1638,7 @@ internal sealed class MarkdownParser
         if (endParen < 0) return false;
 
         var innerInlines = new List<MarkdownInline>();
-        ParseInlineCore(linkText, 0, linkText.Length, innerInlines, refs, pipeline);
+        ParseInlineCore(linkText, 0, linkText.Length, innerInlines, refs, pipeline, true);
         result = MarkdownInline.CreateLink(url, title, innerInlines);
         newPos = endParen + 1;
         return true;
@@ -1569,85 +1732,193 @@ internal sealed class MarkdownParser
         return -1;
     }
 
-    private static Boolean TryParseEmphasis(String text, Int32 start, Int32 end,
-        out MarkdownInline? result, out Int32 newPos,
-        Dictionary<String, (String url, String title)>? refs, MarkdownPipeline? pipeline)
+    /// <summary>强调分隔符信息（CommonMark 分隔符栈元素）</summary>
+    private sealed class DelimInfo
     {
-        result = null; newPos = start;
-        var ch = text[start];
+        /// <summary>分隔符字符（* 或 _）</summary>
+        public Char Ch;
 
-        // Count opening markers
-        var count = 0;
-        var i = start;
-        while (i < end && text[i] == ch) { count++; i++; }
+        /// <summary>当前剩余长度</summary>
+        public Int32 Len;
 
-        if (count >= 3)
-        {
-            // ***...*** strong+emphasis
-            var closeMarker = new String(ch, 3);
-            var closeIdx = FindCloseNotInCode(text, i, end, closeMarker);
-            if (closeIdx >= 0)
-            {
-                var inner = new List<MarkdownInline>();
-                ParseInlineCore(text, i, closeIdx, inner, refs, pipeline);
-                result = MarkdownInline.CreateStrongEmphasis(inner);
-                newPos = closeIdx + 3;
-                return true;
-            }
-        }
-        if (count >= 2)
-        {
-            // **...** or __...__
-            var closeMarker = new String(ch, 2);
-            var closeIdx = FindCloseNotInCode(text, i, end, closeMarker);
-            if (closeIdx >= 0)
-            {
-                var inner = new List<MarkdownInline>();
-                ParseInlineCore(text, i, closeIdx, inner, refs, pipeline);
-                result = MarkdownInline.CreateStrong(inner);
-                newPos = closeIdx + 2;
-                return true;
-            }
-        }
-        if (count >= 1)
-        {
-            // *...* or _..._
-            if (ch == '_')
-            {
-                // _ only starts emphasis if not surrounded by word chars
-                if (start > 0 && (Char.IsLetterOrDigit(text[start - 1]) || text[start - 1] == '_'))
-                    return false;
-            }
-            var closeIdx = FindCloseNotInCode(text, i, end, ch.ToString());
-            if (closeIdx >= 0)
-            {
-                var inner = new List<MarkdownInline>();
-                ParseInlineCore(text, i, closeIdx, inner, refs, pipeline);
-                result = MarkdownInline.CreateEmphasis(inner);
-                newPos = closeIdx + 1;
-                return true;
-            }
-        }
-        return false;
+        /// <summary>原始长度（用于 rule of 3）</summary>
+        public Int32 Original;
+
+        /// <summary>是否可开启强调</summary>
+        public Boolean CanOpen;
+
+        /// <summary>是否可关闭强调</summary>
+        public Boolean CanClose;
+
+        /// <summary>对应令牌（Text 节点）</summary>
+        public MarkdownInline Token = null!;
     }
 
-    private static Int32 FindCloseNotInCode(String text, Int32 start, Int32 end, String marker)
+    /// <summary>计算分隔符 run 的开闭能力（CommonMark 左/右 flanking 规则）</summary>
+    /// <param name="text">文本</param>
+    /// <param name="start">run 起始位置</param>
+    /// <param name="len">run 长度</param>
+    /// <param name="end">结束位置（不含）</param>
+    /// <returns>是否可开启 / 是否可关闭</returns>
+    private static (Boolean canOpen, Boolean canClose) ClassifyDelimiter(String text, Int32 start, Int32 len, Int32 end)
     {
-        var inCode = false;
-        var i = start;
-        var markerLen = marker.Length;
-        while (i < end - markerLen + 1)
-        {
-            if (text[i] == '`') { inCode = !inCode; i++; continue; }
-            if (inCode) { i++; continue; }
+        var ch = text[start];
+        var before = start > 0 ? text[start - 1] : '\0';
+        var after = start + len < end ? text[start + len] : '\0';
 
-            if (text[i] == marker[0])
+        // 行首/行尾视为空白（CommonMark 规范）
+        var beforeIsWs = before == '\0' || Char.IsWhiteSpace(before);
+        var afterIsWs = after == '\0' || Char.IsWhiteSpace(after);
+        var beforeIsPunct = before != '\0' && IsPunctuation(before);
+        var afterIsPunct = after != '\0' && IsPunctuation(after);
+
+        // 左 flanking：后非空白，且（后非标点 或 前为空白/标点）
+        var leftFlanking = !afterIsWs && (!afterIsPunct || beforeIsWs || beforeIsPunct);
+        // 右 flanking：前非空白，且（前非标点 或 后为空白/标点）
+        var rightFlanking = !beforeIsWs && (!beforeIsPunct || afterIsWs || afterIsPunct);
+
+        if (ch == '*')
+            return (leftFlanking, rightFlanking);
+
+        // '_'：可开要求前非 ASCII 字母数字（防 snake_case）；可闭要求后非 ASCII 字母数字
+        return (leftFlanking && !IsAsciiAlnum(before), rightFlanking && !IsAsciiAlnum(after));
+    }
+
+    /// <summary>按 CommonMark 分隔符栈算法解析强调（flanking + rule of 3 + 嵌套）</summary>
+    /// <param name="tokens">令牌列表（原地修改）</param>
+    /// <param name="delims">分隔符信息列表</param>
+    private static void ResolveEmphasis(List<MarkdownInline> tokens, List<DelimInfo> delims)
+    {
+        var ci = 0;
+        while (ci < delims.Count)
+        {
+            var closer = delims[ci];
+            if (closer.Len <= 0 || (closer.Ch != '*' && closer.Ch != '_') || !closer.CanClose)
             {
-                // 统计连续标记串长度：等长才闭合，否则作为嵌套强调/粗体内容跳过
-                var runLen = 1;
-                while (i + runLen < end && text[i + runLen] == marker[0]) runLen++;
-                if (runLen == markerLen) return i;
-                i += runLen;
+                ci++;
+                continue;
+            }
+
+            // 向前查找最近的同字符可开分隔符（CommonMark：跳过已耗尽与被 rule-of-3 排除者）
+            DelimInfo? opener = null;
+            for (var oi = ci - 1; oi >= 0; oi--)
+            {
+                var d = delims[oi];
+                if (d.Len <= 0 || d.Ch != closer.Ch || !d.CanOpen) continue;
+
+                // Rule of 3：若开或闭分隔符可同时开与闭，则两 run 长度和不能为 3 的倍数（除非两者都是 3 的倍数）
+                if ((d.CanOpen && d.CanClose) || (closer.CanOpen && closer.CanClose))
+                {
+                    var sum = d.Original + closer.Original;
+                    if (sum % 3 == 0 && !(d.Original % 3 == 0 && closer.Original % 3 == 0))
+                        continue;
+                }
+                opener = d;
+                break;
+            }
+            if (opener == null)
+            {
+                ci++;
+                continue;
+            }
+
+            // 使用字符数：两者皆为 3 的倍数用 2，长度和为 3 的倍数用 1，其余用 2
+            var use = (opener.Original % 3 == 0 && closer.Original % 3 == 0)
+                ? 2
+                : (opener.Original + closer.Original) % 3 == 0 ? 1 : 2;
+            use = Math.Min(use, Math.Min(closer.Len, opener.Len));
+            if (use <= 0)
+            {
+                ci++;
+                continue;
+            }
+
+            var oi2 = tokens.IndexOf(opener.Token);
+            var ci2 = tokens.IndexOf(closer.Token);
+            if (oi2 < 0 || ci2 < 0 || oi2 >= ci2)
+            {
+                ci++;
+                continue;
+            }
+
+            // 收集中间内容（含嵌套令牌）
+            var children = new List<MarkdownInline>();
+            for (var k = oi2 + 1; k < ci2; k++) children.Add(tokens[k]);
+
+            // 创建强调/粗体节点
+            MarkdownInline emph = use == 2
+                ? MarkdownInline.CreateStrong(children)
+                : MarkdownInline.CreateEmphasis(children);
+
+            // 重建 [oi2..ci2] 区间：剩余 opener 字符 + 强调节点 + 剩余 closer 字符
+            var openerLeftover = opener.Len - use;
+            var closerLeftover = closer.Len - use;
+            var newItems = new List<MarkdownInline>();
+            if (openerLeftover > 0)
+            {
+                var t = MarkdownInline.CreateText(new String(opener.Ch, openerLeftover));
+                opener.Token = t;
+                newItems.Add(t);
+            }
+            newItems.Add(emph);
+            if (closerLeftover > 0)
+            {
+                var t2 = MarkdownInline.CreateText(new String(closer.Ch, closerLeftover));
+                closer.Token = t2;
+                newItems.Add(t2);
+            }
+
+            tokens.RemoveRange(oi2, ci2 - oi2 + 1);
+            tokens.InsertRange(oi2, newItems);
+
+            opener.Len = openerLeftover;
+            closer.Len = closerLeftover;
+
+            // closer 仍有剩余 → 回退一格继续匹配同一 closer（如 ***foo*** 先粗后斜）
+            if (closer.Len > 0) ci--;
+            ci++;
+        }
+    }
+
+    /// <summary>判断字符是否为标点（CommonMark：ASCII 标点 + Unicode P* 类别）</summary>
+    /// <param name="c">字符</param>
+    /// <returns>是否标点</returns>
+    private static Boolean IsPunctuation(Char c)
+    {
+        if (c is '!' or '"' or '#' or '$' or '%' or '&' or '\'' or '(' or ')' or '*' or '+' or ',' or '-' or '.' or '/' or
+            ':' or ';' or '<' or '=' or '>' or '?' or '@' or '[' or '\\' or ']' or '^' or '_' or '`' or '{' or '|' or '}' or '~')
+            return true;
+        var cat = Char.GetUnicodeCategory(c);
+        return cat is UnicodeCategory.ConnectorPunctuation or UnicodeCategory.DashPunctuation
+            or UnicodeCategory.OpenPunctuation or UnicodeCategory.ClosePunctuation
+            or UnicodeCategory.InitialQuotePunctuation or UnicodeCategory.FinalQuotePunctuation
+            or UnicodeCategory.OtherPunctuation;
+    }
+
+    /// <summary>判断字符是否为 ASCII 字母数字</summary>
+    /// <param name="c">字符</param>
+    /// <returns>是否 ASCII 字母数字</returns>
+    private static Boolean IsAsciiAlnum(Char c) =>
+        c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9';
+
+    /// <summary>查找删除线闭合标记（GFM：恰好两个波浪线、且内容不以空白结尾）</summary>
+    /// <param name="text">文本</param>
+    /// <param name="start">开始搜索位置</param>
+    /// <param name="end">结束位置（不含）</param>
+    /// <returns>闭合起始位置，未找到返回 -1</returns>
+    private static Int32 FindStrikethroughClose(String text, Int32 start, Int32 end)
+    {
+        var i = start;
+        while (i < end - 1)
+        {
+            if (text[i] == '~')
+            {
+                var run = 0;
+                while (i + run < end && text[i + run] == '~') run++;
+                // 恰好 2 个波浪线且前一字符非空白（内容不以空白结尾）
+                if (run == 2 && i > start && !Char.IsWhiteSpace(text[i - 1]))
+                    return i;
+                i += run;
                 continue;
             }
             i++;
@@ -1663,23 +1934,74 @@ internal sealed class MarkdownParser
         if (closeAngle < 0 || closeAngle >= end) return false;
         var inner = text.Substring(start + 1, closeAngle - start - 1);
         if (inner.Length == 0) return false;
-        // URL autolink
-        if (inner.Contains("://") || inner.Contains('@'))
+
+        // URI autolink：<scheme:...>，scheme 为 2-32 位字母数字（CommonMark）
+        var colonIdx = inner.IndexOf(':');
+        if (colonIdx > 0 && colonIdx <= 32 && IsValidScheme(inner[..colonIdx]))
         {
-            var href = inner.Contains('@') ? "mailto:" + inner : inner;
             var children = new List<MarkdownInline> { MarkdownInline.CreateText(inner) };
-            result = MarkdownInline.CreateLink(href, "", children);
+            result = MarkdownInline.CreateLink(inner, "", children);
+            newPos = closeAngle + 1;
+            return true;
+        }
+
+        // Email autolink：<user@domain>
+        var atIdx = inner.IndexOf('@');
+        if (atIdx > 0 && atIdx < inner.Length - 1 &&
+            IsValidEmail(inner[..atIdx], inner[(atIdx + 1)..]))
+        {
+            var children = new List<MarkdownInline> { MarkdownInline.CreateText(inner) };
+            result = MarkdownInline.CreateLink("mailto:" + inner, "", children);
             newPos = closeAngle + 1;
             return true;
         }
         return false;
     }
 
-    /// <summary>尝试解析裸 URL（http/https/ftp）自动链接 (MD05-01)</summary>
-    private static Boolean TryParseBareUrl(String text, Int32 start, Int32 end,
+    /// <summary>校验 URI scheme（CommonMark：2-32 位，字母开头，字母数字+.-）</summary>
+    /// <param name="scheme">scheme 部分</param>
+    /// <returns>是否合法</returns>
+    private static Boolean IsValidScheme(String scheme)
+    {
+        if (scheme.Length < 2 || scheme.Length > 32) return false;
+        if (!Char.IsLetter(scheme[0])) return false;
+        for (var i = 1; i < scheme.Length; i++)
+        {
+            var c = scheme[i];
+            if (!(Char.IsLetterOrDigit(c) || c is '+' or '.' or '-')) return false;
+        }
+        return true;
+    }
+
+    /// <summary>校验邮箱 user@domain（CommonMark 简化规则）</summary>
+    /// <param name="user">@ 前部分</param>
+    /// <param name="domain">@ 后部分</param>
+    /// <returns>是否合法</returns>
+    private static Boolean IsValidEmail(String user, String domain)
+    {
+        if (user.Length == 0 || domain.Length == 0) return false;
+        for (var i = 0; i < user.Length; i++)
+        {
+            var c = user[i];
+            if (!(Char.IsLetterOrDigit(c) || "!#$%&'*+/=?^_`{|}~.-".IndexOf(c) >= 0)) return false;
+        }
+        if (!Char.IsLetterOrDigit(domain[0]) || !Char.IsLetterOrDigit(domain[^1])) return false;
+        for (var i = 0; i < domain.Length; i++)
+        {
+            var c = domain[i];
+            if (!(Char.IsLetterOrDigit(c) || c is '-' or '.')) return false;
+        }
+        return true;
+    }
+
+    /// <summary>尝试解析裸 URL（http/https/ftp/www）自动链接 (MD05-01, GFM)</summary>
+    private static Boolean TryParseBareUrl(String text, Int32 start, Int32 end, Boolean inLink,
         out MarkdownInline? result, out Int32 newPos)
     {
         result = null; newPos = start;
+
+        // GFM：链接内部不识别裸 URL
+        if (inLink) return false;
 
         // 检查是否是 URL 前缀
         var remaining = text[start..end];
@@ -1695,25 +2017,55 @@ internal sealed class MarkdownParser
         }
         if (matchedPrefix == null) return false;
 
-        // 收集 URL 字符直到空白或标点
+        // GFM：www. 链接前不能是字母数字字符
+        if (matchedPrefix == "www." && start > 0 &&
+            (Char.IsLetterOrDigit(text[start - 1]) || text[start - 1] == '_'))
+            return false;
+
+        // 收集 URL 字符直到空白或边界；支持括号平衡（GFM）
         var urlEnd = start;
+        var parenDepth = 0;
         while (urlEnd < end)
         {
             var c = text[urlEnd];
             if (Char.IsWhiteSpace(c) || c == '<' || c == '>' || c == '"' || c == '\'') break;
-            // 末尾标点不包含在 URL 中
-            if (c is '.' or ',' or ';' or ':' or '!' or '?' && urlEnd + 1 < end && (Char.IsWhiteSpace(text[urlEnd + 1]) || text[urlEnd + 1] == '<'))
+            if (c == '(') { parenDepth++; urlEnd++; continue; }
+            if (c == ')' || c == ']' || c == '}')
+            {
+                // 未闭合的右括号/方括号/花括号 → 结束 URL（不含该字符）
+                if (parenDepth == 0) break;
+                if (c == ')') parenDepth--;
+                urlEnd++;
+                continue;
+            }
+            // 末尾标点不包含在 URL 中（后跟空白/结束）
+            if (c is '.' or ',' or ';' or ':' or '!' or '?' or '*' or '_' or '~' &&
+                urlEnd + 1 < end && (Char.IsWhiteSpace(text[urlEnd + 1]) || text[urlEnd + 1] == '<'))
                 break;
             urlEnd++;
         }
 
-        // 去除末尾标点
-        while (urlEnd > start && text[urlEnd - 1] is '.' or ',' or ';' or ')' or '}' or ']')
-            urlEnd--;
+        // 去除末尾未闭合开括号与标点
+        while (urlEnd > start)
+        {
+            var c = text[urlEnd - 1];
+            if (c == '(' || c is '.' or ',' or ';' or ':' or '!' or '?' or '*' or '_' or '~')
+                urlEnd--;
+            else
+                break;
+        }
 
         if (urlEnd <= start + matchedPrefix.Length) return false;
 
         var url = text[start..urlEnd];
+
+        // GFM：www. 需包含点号的域名（点不能是末尾）
+        if (matchedPrefix == "www.")
+        {
+            var dotIdx = url.IndexOf('.', 4);
+            if (dotIdx < 0 || dotIdx == url.Length - 1) return false;
+        }
+
         var href = matchedPrefix == "www." ? "http://" + url : url;
         var children = new List<MarkdownInline> { MarkdownInline.CreateText(url) };
         result = MarkdownInline.CreateLink(href, "", children);
@@ -1794,7 +2146,7 @@ internal sealed class MarkdownParser
             if (!refs.TryGetValue(id, out var def)) return false;
 
             var innerInlines = new List<MarkdownInline>();
-            ParseInlineCore(text, start + 1, close1, innerInlines, refs, pipeline);
+            ParseInlineCore(text, start + 1, close1, innerInlines, refs, pipeline, true);
             result = MarkdownInline.CreateLink(def.url, def.title, innerInlines);
             newPos = close2 + 1;
             return true;
@@ -1805,7 +2157,7 @@ internal sealed class MarkdownParser
         if (!refs.TryGetValue(label, out var def2)) return false;
 
         var inner2 = new List<MarkdownInline>();
-        ParseInlineCore(text, start + 1, close1, inner2, refs, pipeline);
+        ParseInlineCore(text, start + 1, close1, inner2, refs, pipeline, true);
         result = MarkdownInline.CreateLink(def2.url, def2.title, inner2);
         newPos = close1 + 1;
         return true;
@@ -1861,62 +2213,9 @@ internal sealed class MarkdownParser
 
     /// <summary>解码单个 HTML 实体（含数字字符引用），未识别返回 null</summary>
     /// <param name="entity">实体名（不含 &amp; 与 ;）</param>
-    /// <returns>解码后字符，未识别返回 null</returns>
-    private static String? DecodeEntity(String entity)
-    {
-        // 数字字符引用 &#123; / &#x1F;
-        if (entity.StartsWith("#"))
-        {
-            try
-            {
-                Int32 code;
-                if (entity.Length > 2 && (entity[1] == 'x' || entity[1] == 'X'))
-                    code = Convert.ToInt32(entity[2..], 16);
-                else
-                    code = Int32.Parse(entity[1..]);
-                // 超出 BMP 的代理对不处理（保留原文）
-                if (code <= 0 || code > 0xFFFF || code >= 0xD800 && code <= 0xDFFF) return null;
-                return ((Char)code).ToString();
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        // 具名实体（常用子集）
-        return entity switch
-        {
-            "amp" => "&",
-            "lt" => "<",
-            "gt" => ">",
-            "quot" => "\"",
-            "apos" => "'",
-            "nbsp" => " ",
-            "copy" => "©",
-            "reg" => "®",
-            "trade" => "™",
-            "mdash" => "—",
-            "ndash" => "–",
-            "hellip" => "…",
-            "lsquo" => "'",
-            "rsquo" => "'",
-            "ldquo" => "\"",
-            "rdquo" => "\"",
-            "laquo" => "«",
-            "raquo" => "»",
-            "bull" => "•",
-            "middot" => "·",
-            "sect" => "§",
-            "para" => "¶",
-            "deg" => "°",
-            "plusmn" => "±",
-            "times" => "×",
-            "divide" => "÷",
-            "micro" => "µ",
-            _ => null,
-        };
-    }
+    /// <returns>解码后字符串，未识别返回 null</returns>
+    /// <remarks>委托 <see cref="EntityDecoder"/> 共享实现：具名实体全表（HTML5）+ 数字引用含补充平面代理对</remarks>
+    private static String? DecodeEntity(String entity) => EntityDecoder.Decode(entity);
 
     /// <summary>预扫描引用链接定义 [id]: url "title"（支持定义在后使用在前）</summary>
     /// <param name="doc">文档对象（填充 References）</param>
@@ -1951,6 +2250,17 @@ internal sealed class MarkdownParser
             _refs[id] = (url, title);
             doc.References[id] = url;
             _skipLines.Add(i);
+            // 捕获原始行（含标题与格式）及其后连续空行，供往返渲染原位输出（MD06-03）
+            var src = new System.Text.StringBuilder();
+            src.Append(_lines[i]).Append('\n');
+            var j = i + 1;
+            while (j < _lines.Length && String.IsNullOrWhiteSpace(_lines[j]))
+            {
+                src.Append('\n');
+                j++;
+            }
+            doc.ReferenceSourceLines.Add(src.ToString());
+            doc.ReferenceLineIndexes.Add(i);
         }
     }
     #endregion

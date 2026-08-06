@@ -33,6 +33,12 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
     /// <summary>引用链接定义（[id]: url），键为引用标识（CommonMark 引用链接）</summary>
     public Dictionary<String, String> References { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>引用链接定义原始行（解析时捕获，含标题与格式），供往返渲染原位输出</summary>
+    internal List<String> ReferenceSourceLines { get; } = [];
+
+    /// <summary>引用链接定义原始行号（对应 ReferenceSourceLines），供往返渲染定位</summary>
+    internal List<Int32> ReferenceLineIndexes { get; } = [];
+
     /// <summary>是否启用往返渲染模式（MD06-03），解析→修改→序列化时保留未修改块的原始格式</summary>
     public Boolean Roundtrip { get; set; }
     #endregion
@@ -57,6 +63,24 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
         var parser = new MarkdownParser();
         parser.Pipeline = pipeline;
         return parser.Parse(text);
+    }
+
+    /// <summary>从 Markdown 字符串解析文档并启用往返渲染模式（MD06-03）</summary>
+    /// <param name="text">Markdown 文本</param>
+    /// <returns>已解析的文档对象（<see cref="Roundtrip"/>=true）</returns>
+    /// <remarks>往返模式下，解析→修改→序列化时未修改块保留原始格式与块间空行</remarks>
+    public static MarkdownDocument ParseRoundtrip(String text)
+        => ParseRoundtrip(text, null);
+
+    /// <summary>从 Markdown 字符串解析文档并启用往返渲染模式（MD06-03）</summary>
+    /// <param name="text">Markdown 文本</param>
+    /// <param name="pipeline">处理管线（可为 null 使用默认全功能）</param>
+    /// <returns>已解析的文档对象（<see cref="Roundtrip"/>=true）</returns>
+    public static MarkdownDocument ParseRoundtrip(String text, MarkdownPipeline? pipeline)
+    {
+        var doc = pipeline == null ? Parse(text) : Parse(text, pipeline);
+        doc.Roundtrip = true;
+        return doc;
     }
 
     /// <summary>从流解析文档</summary>
@@ -154,13 +178,13 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
         var writer = new MarkdownWriter(bulletChar);
         var body = writer.ToMarkdown(this);
 
-        // 若有 FrontMatter，前置 YAML 块
+        // 若有 FrontMatter，前置 YAML 块（值必要时加引号，保证往返一致）
         if (FrontMatter.Count > 0)
         {
             var sb = new StringBuilder();
             sb.AppendLine("---");
             foreach (var kv in FrontMatter)
-                sb.AppendLine($"{kv.Key}: {kv.Value}");
+                sb.AppendLine($"{kv.Key}: {EscapeYamlValue(kv.Value)}");
             sb.AppendLine("---");
             sb.AppendLine();
             sb.Append(body);
@@ -169,6 +193,26 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
 
         return body;
     }
+
+    /// <summary>序列化 YAML 值（含冒号/引号/特殊起始字符/首尾空白时加双引号）</summary>
+    /// <param name="value">原始值</param>
+    /// <returns>可安全往返的 YAML 值</returns>
+    private static String EscapeYamlValue(String value)
+    {
+        if (String.IsNullOrEmpty(value)) return "\"\"";
+        if (value.Trim() != value) return QuoteYaml(value);
+        if (value[0] is '#' or '"' or '\'' or '-' or '[' or ']' or '{' or '}' or '&' or '*' or '!' or '|' or '>' or '%' or '@' or '`')
+            return QuoteYaml(value);
+        if (value.Contains(": ") || value.Contains(" #") || value.Contains('\t'))
+            return QuoteYaml(value);
+        return value;
+    }
+
+    /// <summary>双引号包裹并转义 YAML 值（反斜杠与双引号）</summary>
+    /// <param name="value">原始值</param>
+    /// <returns>引号包裹后的值</returns>
+    private static String QuoteYaml(String value) =>
+        "\"" + value.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
 
     /// <summary>转换为 HTML 字符串</summary>
     /// <param name="options">HTML 转换选项（null 使用默认）</param>

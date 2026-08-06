@@ -33,9 +33,28 @@ internal sealed class MarkdownWriter
     {
         var sb = new StringBuilder();
         var roundtrip = doc.Roundtrip;
+
+        var refLines = doc.ReferenceSourceLines;
+        var refIndexes = doc.ReferenceLineIndexes;
+        var refIdx = 0;
+
+        // 往返模式：输出指定行号之前的引用定义原始行（原位保留，不统一移到底部）
+        void EmitReferencesBefore(Int32 lineIndex)
+        {
+            if (!roundtrip) return;
+            while (refIdx < refIndexes.Count && refIndexes[refIdx] < lineIndex)
+            {
+                if (sb.Length > 0 && sb[^1] != '\n') sb.Append('\n');
+                sb.Append(refLines[refIdx]);
+                refIdx++;
+            }
+        }
+
         for (var i = 0; i < doc.Blocks.Count; i++)
         {
             var block = doc.Blocks[i];
+            EmitReferencesBefore(block.SourceLine);
+
             // 往返模式：若块有原始源码且内容未被修改，原样输出以保留原始格式；已修改则重新序列化
             if (roundtrip && block.SourceText != null && !IsModified(block))
             {
@@ -47,17 +66,28 @@ internal sealed class MarkdownWriter
             if (i < doc.Blocks.Count - 1) sb.AppendLine();
         }
 
-        // 引用链接定义（[id]: url），保证序列化/往返不丢失
-        if (doc.References.Count > 0)
+        // 引用链接定义（[id]: url）：往返模式输出剩余（原本在文档末尾的）；非往返模式追加到末尾
+        if (refLines.Count > 0)
         {
-            sb.AppendLine();
+            if (!roundtrip) refIdx = 0;
+            while (refIdx < refLines.Count)
+            {
+                if (sb.Length > 0 && sb[^1] != '\n') sb.Append('\n');
+                sb.Append(refLines[refIdx]);
+                refIdx++;
+            }
+        }
+        else if (doc.References.Count > 0)
+        {
+            // 程序化构造的文档（无原始行）：从字典生成
+            if (sb.Length > 0 && sb[^1] != '\n') sb.AppendLine();
             foreach (var kv in doc.References)
             {
                 sb.Append('[').Append(kv.Key).Append("]: ").AppendLine(kv.Value);
             }
         }
 
-        return sb.ToString().TrimEnd() + "\n";
+        return sb.ToString().Replace("\r\n", "\n").TrimEnd() + "\n";
     }
 
     /// <summary>判断块是否被修改：当前规范序列化与解析时快照比较（MD06-03 往返渲染）</summary>
@@ -122,7 +152,9 @@ internal sealed class MarkdownWriter
                 {
                     var inner = new StringBuilder();
                     WriteBlock(inner, child, 0);
-                    foreach (var line in inner.ToString().Split('\n'))
+                    // 去掉末尾空行，避免产生多余的空 ">" 行（保证往返快照一致）
+                    var text = inner.ToString().TrimEnd('\r', '\n');
+                    foreach (var line in text.Split('\n'))
                     {
                         if (line.Length == 0) sb.AppendLine(">");
                         else sb.Append("> ").AppendLine(line);
@@ -265,6 +297,8 @@ internal sealed class MarkdownWriter
     {
         if (table.Children.Count == 0) return;
         var headerRow = table.Children[0];
+        // 列数以表头行为准：数据行补空/截断，保证输出列数一致（GFM）
+        var headerCols = headerRow.Children.Count;
 
         // 表格单元格内转义管道符，避免破坏列结构
         _inTable = true;
@@ -296,10 +330,11 @@ internal sealed class MarkdownWriter
             {
                 var row = table.Children[r];
                 sb.Append('|');
-                foreach (var cell in row.Children)
+                for (var c = 0; c < headerCols; c++)
                 {
                     sb.Append(' ');
-                    WriteInlines(sb, cell.Inlines);
+                    if (c < row.Children.Count)
+                        WriteInlines(sb, row.Children[c].Inlines);
                     sb.Append(" |");
                 }
                 sb.AppendLine();

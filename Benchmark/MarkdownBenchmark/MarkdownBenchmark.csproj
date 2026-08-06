@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputPath>..\..\Bin\Benchmark</OutputPath>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- 本地源：引用打包后的主库，规避 BDN 强制 Deterministic 与通配版本冲突 -->
+    <RestoreSources>$(RestoreSources);$(MSBuildThisFileDirectory)..\..\Bin\LocalFeed</RestoreSources>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.14.0" />
+    <PackageReference Include="NewLife.Office" Version="1.3.2026.806" />
+  </ItemGroup>
+
+</Project>

@@ -64,7 +64,7 @@
 | **PDF → MD** | ✅ (FormatToMarkdown) | ❌ | ❌ | ❌ | ❌ | ✅ |
 | **PPT → MD** | ✅ (FormatToMarkdown) | ❌ | ❌ | ❌ | ❌ | ✅ |
 | **Excel → MD** | ✅ (FormatToMarkdown) | ❌ | ❌ | ❌ | ❌ | ✅ |
-| ODS/RTF/EPUB → MD | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| ODS/RTF/EPUB → MD | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | 元数据 FrontMatter（标题/源文件/格式） | ✅ | ❌ | ❌ | ❌ | ❌ | ⚠️ |
 | HTML 安全选项 (SafeLinks) | ✅ | ❌ | ❌ | ⚠️ | ⚠️ | — |
 
@@ -198,8 +198,9 @@ var html = CommonMarkConverter.Convert("# Hello\nWorld");
 
 > **2026-08 读写完善（MD08）**：完成 CommonMark 核心语法补全——引用链接三形态、缩进代码块、HTML 实体解码、行内 HTML 与 6 种 HTML 块类型、列表续行与嵌套；写入侧上下文相关转义与往返修改检测（快照比较）；`MarkdownPipeline` 开关真实生效；文件编码自动检测（BOM/严格 UTF-8/GBK）。日常读写解析能力已对标 Markdig 核心语法。
 
+> **2026-08 全面完善（MD10）**：CommonMark 规范级补全——完整 HTML5 实体解码（含代理对）、引用图片三形态、GFM 删除线边界、HTML 块中断段落、表格代码段管道符与列数规则、自动链接括号平衡与链接内抑制、**完整强调分隔符栈算法**（flanking + rule of 3，对标 CommonMark 参考实现）；写入侧往返引用定义原位保留、FrontMatter 值转义、`ParseRoundtrip` 公开 API、输出行尾统一 `\n`；HTML→MD 补 `<dl>` 定义列表、checkbox 任务列表、details/summary；转换中枢支持 `.md` 直通与**内容识别（magic bytes）兜底**（对标 anydoc）。配套 Benchmark 性能基准与 33 项规范回归测试。
+
 **真实未实现项（不虚标）**：
-- **内容识别格式（magic bytes）**：anydoc 通过文件内容而非扩展名识别格式；NewLife.Office 目前按扩展名/显式入口分发
-- **Agent Skill / CLI**：anydoc 提供 Node.js/Python 绑定与 CLI；NewLife.Office 目前为纯 .NET 库 API
+- **Agent Skill（Node.js/Python 绑定）**：anydoc 提供多语言绑定；NewLife.Office 为纯 .NET 库 API + CLI 工具（`NewLife.Office.Cli` convert/info，内容识别路由）
 - **Mermaid 图表 / 媒体嵌入**：Markdig 独有，本项目有意不实现（需引入 JS 引擎，偏离零依赖原则）
-- **ODS/RTF/EPUB → MD**：anydoc 覆盖的格式家族，本项目未纳入转换中枢
+- **Mermaid 渲染**：`mermaid` 围栏代码块原样保留（`language-mermaid`），由前端/客户端渲染，服务端不内置 JS 引擎

@@ -18,6 +18,9 @@ public sealed class HtmlToMarkdownConverter
     private String _html = String.Empty;
     private Int32 _pos;
     private readonly HashSet<String> _allowedSchemes = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>待输出块队列（details 容器解析出多个内部块时使用）</summary>
+    private List<MarkdownBlock>? _pendingBlocks;
     #endregion
 
     #region 构造
@@ -44,16 +47,17 @@ public sealed class HtmlToMarkdownConverter
 
         _html = html;
         _pos = 0;
+        _pendingBlocks = null;
 
         var doc = new MarkdownDocument();
         SkipWhitespaceAndNewlines();
 
-        while (_pos < _html.Length)
+        while (_pos < _html.Length || _pendingBlocks is { Count: > 0 })
         {
-            var block = ParseBlockElement();
+            var block = _pendingBlocks is { Count: > 0 } ? DrainPendingBlock() : ParseBlockElement();
             if (block != null)
                 doc.Blocks.Add(block);
-            SkipWhitespaceAndNewlines();
+            if (_pos < _html.Length) SkipWhitespaceAndNewlines();
         }
 
         return doc;
@@ -140,6 +144,9 @@ public sealed class HtmlToMarkdownConverter
             case "ul": return ParseList(false);
             case "ol": return ParseList(true);
             case "table": return ParseTable();
+            case "dl": return ParseDefinitionList();
+            case "details": return ParseDetailsContainer();
+            case "summary": return ParseSummary();
             case "hr": return ParseHr(tag);
             case "br": return ParseBr();
             // 行内标签：退回到段落解析（由 ParseParagraph 内部处理行内元素）
@@ -396,6 +403,31 @@ public sealed class HtmlToMarkdownConverter
     private MarkdownBlock? ParseListItem()
     {
         var inlines = new List<MarkdownInline>();
+        var isTask = false;
+        var isChecked = false;
+
+        // GFM 任务列表：<li> [空白] <input type="checkbox" [checked]> 文本
+        var savedInputPos = _pos;
+        SkipWhitespaceAndNewlines();
+        if (IsAt("<input", StringComparison.OrdinalIgnoreCase))
+        {
+            var inputTag = ParseTag();
+            if (inputTag != null && !inputTag.IsClosing &&
+                inputTag.GetAttribute("type").Equals("checkbox", StringComparison.OrdinalIgnoreCase))
+            {
+                isTask = true;
+                isChecked = inputTag.Attributes.ContainsKey("checked");
+                SkipWhitespaceAndNewlines();
+            }
+            else
+            {
+                _pos = savedInputPos;
+            }
+        }
+        else
+        {
+            _pos = savedInputPos;
+        }
 
         while (_pos < _html.Length)
         {
@@ -473,12 +505,77 @@ public sealed class HtmlToMarkdownConverter
 
         if (hasChildren)
         {
-            var item = ListItemBlock.CreateWithBlocks(children);
+            var item = ListItemBlock.CreateWithBlocks(children, isTask, isChecked);
             item.Inlines.AddRange(NormalizeInlines(inlines));
             return item;
         }
 
-        return new ListItemBlock(NormalizeInlines(inlines));
+        return new ListItemBlock(NormalizeInlines(inlines), isTask, isChecked);
+    }
+
+    /// <summary>解析定义列表 dl/dt/dd → DefinitionListBlock（MD05-07）</summary>
+    /// <returns>定义列表块</returns>
+    private MarkdownBlock ParseDefinitionList()
+    {
+        var dl = new DefinitionListBlock();
+        while (_pos < _html.Length)
+        {
+            SkipWhitespaceAndNewlines();
+            if (_pos >= _html.Length) break;
+            if (IsAt("</dl>") || IsAt("</DL>"))
+            {
+                _pos += 5;
+                break;
+            }
+            if (_html[_pos] == '<')
+            {
+                var tag = ParseTag();
+                if (tag == null) { _pos++; continue; }
+                if (tag.IsClosing) continue;
+                if (tag.Name == "dt" || tag.Name == "DT")
+                {
+                    dl.Children.Add(new DefinitionTermBlock(ParseInlineUntilClose("dt")));
+                    continue;
+                }
+                if (tag.Name == "dd" || tag.Name == "DD")
+                {
+                    dl.Children.Add(new DefinitionDescriptionBlock(ParseInlineUntilClose("dd")));
+                    continue;
+                }
+                // 未知标签跳过
+                continue;
+            }
+            _pos++;
+        }
+        return dl;
+    }
+
+    /// <summary>解析 details 折叠容器：内部内容作为普通块解析（Drop 折叠语义，保留内容）</summary>
+    /// <returns>首个内部块，其余经待输出队列返回</returns>
+    private MarkdownBlock? ParseDetailsContainer()
+    {
+        var inner = ReadUntilCloseTag("details");
+        _pendingBlocks = new HtmlToMarkdownConverter(_options).Convert(inner).Blocks;
+        return DrainPendingBlock();
+    }
+
+    /// <summary>解析 summary 折叠标题 → 粗体段落</summary>
+    /// <returns>段落块</returns>
+    private MarkdownBlock ParseSummary()
+    {
+        var inlines = ParseInlineUntilClose("summary");
+        if (inlines.Count == 0) return new ParagraphBlock([]);
+        return new ParagraphBlock([MarkdownInline.CreateStrong(inlines)]);
+    }
+
+    /// <summary>取出待输出队列中的下一个块</summary>
+    /// <returns>块，队列空返回 null</returns>
+    private MarkdownBlock? DrainPendingBlock()
+    {
+        if (_pendingBlocks == null || _pendingBlocks.Count == 0) return null;
+        var block = _pendingBlocks[0];
+        _pendingBlocks.RemoveAt(0);
+        return block;
     }
     #endregion
 
@@ -1001,6 +1098,7 @@ public sealed class HtmlToMarkdownConverter
             "form" => true,
             "fieldset" => true,
             "dl" or "dt" or "dd" => true,
+            "details" or "summary" => true,
             _ => false,
         };
     }
@@ -1115,34 +1213,35 @@ public sealed class HtmlToMarkdownConverter
             .Replace("\"", "&quot;");
     }
 
-    /// <summary>解码常见 HTML 实体</summary>
+    /// <summary>解码 HTML 实体（具名 + 数字字符引用）</summary>
     /// <param name="text">HTML 文本</param>
     /// <returns>解码后文本</returns>
+    /// <remarks>与 <see cref="MarkdownParser"/> 共享 <see cref="EntityDecoder"/>，行为一致（HTML5 实体全表 + 代理对）</remarks>
     public static String DecodeHtmlEntities(String text)
     {
-        if (String.IsNullOrEmpty(text) || !text.Contains('&')) return text;
+        if (String.IsNullOrEmpty(text) || text.IndexOf('&') < 0) return text;
 
-        return text
-            .Replace("&amp;", "&")
-            .Replace("&lt;", "<")
-            .Replace("&gt;", ">")
-            .Replace("&quot;", "\"")
-            .Replace("&apos;", "'")
-            .Replace("&#39;", "'")
-            .Replace("&nbsp;", " ")
-            .Replace("&#160;", " ")
-            .Replace("&copy;", "©")
-            .Replace("&reg;", "®")
-            .Replace("&trade;", "™")
-            .Replace("&mdash;", "—")
-            .Replace("&ndash;", "–")
-            .Replace("&hellip;", "…")
-            .Replace("&lsquo;", "'")
-            .Replace("&rsquo;", "'")
-            .Replace("&ldquo;", "\"")
-            .Replace("&rdquo;", "\"")
-            .Replace("&laquo;", "«")
-            .Replace("&raquo;", "»");
+        var sb = new StringBuilder(text.Length);
+        for (var i = 0; i < text.Length; i++)
+        {
+            var c = text[i];
+            if (c != '&') { sb.Append(c); continue; }
+
+            var semi = text.IndexOf(';', i + 1);
+            if (semi > i + 1 && semi - i <= 32)
+            {
+                var entity = text.Substring(i + 1, semi - i - 1);
+                var decoded = EntityDecoder.Decode(entity);
+                if (decoded != null)
+                {
+                    sb.Append(decoded);
+                    i = semi;
+                    continue;
+                }
+            }
+            sb.Append(c);
+        }
+        return sb.ToString();
     }
 
     /// <summary>规范化行内元素列表，合并相邻文本节点</summary>
