@@ -39,5 +39,8 @@ public class Chart
 
     /// <summary>数值轴最大值（仅数值轴，分类轴无效），null 表示自动</summary>
     public Double? AxisMaxValue { get; set; }
+
+    /// <summary>图表样式索引（1-48，null 不写 c:style，S19）</summary>
+    public Int32? StyleIndex { get; set; }
     #endregion
 }

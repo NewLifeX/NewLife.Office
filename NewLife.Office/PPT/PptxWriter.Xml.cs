@@ -1,4 +1,5 @@
 ﻿using System.IO.Compression;
+using NewLife.Office.Word;
 using System.Text;
 
 namespace NewLife.Office.Ppt;
@@ -91,6 +92,19 @@ partial class PptxWriter
         WriteTheme(za);
         WriteDocProps(za);
         WriteComments(za);
+    }
+
+    /// <summary>保存为打开密码加密的 pptx（S17，OOXML Agile Encryption，对标 Aspose.Slides）</summary>
+    /// <param name="path">输出文件路径</param>
+    /// <param name="password">打开密码</param>
+    /// <exception cref="ArgumentNullException">password 为空</exception>
+    public void SaveEncrypted(String path, String password)
+    {
+        if (password == null) throw new ArgumentNullException(nameof(password));
+        using var ms = new MemoryStream();
+        Save(ms);
+        var encrypted = WordEncryptor.Encrypt(ms.ToArray(), password);
+        File.WriteAllBytes(path.GetFullPath(), encrypted);
     }
     #endregion
 
@@ -525,7 +539,7 @@ partial class PptxWriter
                 sb.Append($"<a:prstDash val=\"{sp.DashStyle}\"/>");
             sb.Append("</a:ln>");
             sb.Append("</p:spPr>");
-            if (sp.Text != null)
+            if (!String.IsNullOrEmpty(sp.Text))
             {
                 // bodyPr with text direction, autofit, and insets
                 var vertAttr = sp.TextDirection != null ? $" vert=\"{sp.TextDirection}\"" : "";
@@ -803,6 +817,15 @@ partial class PptxWriter
         {
             relsSb.Append($"<Relationship Id=\"rBg{idx + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/bg{idx + 1}.{slide.BackgroundImage.Extension}\"/>");
         }
+        // 形状图片填充关系（S18）
+        foreach (var shp in slide.Shapes)
+        {
+            if (shp.FillImage is { Length: > 0 })
+            {
+                shp.ShapeImageRelId = $"rImgFill{_mediaGlobal++}";
+                relsSb.Append($"<Relationship Id=\"{shp.ShapeImageRelId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/{shp.ShapeImageRelId}.{shp.FillImageExt}\"/>");
+            }
+        }
         relsSb.Append("</Relationships>");
         WriteEntry(za, $"ppt/slides/_rels/slide{idx + 1}.xml.rels", relsSb.ToString());
 
@@ -833,6 +856,16 @@ partial class PptxWriter
         {
             using var entry = za.CreateEntry($"ppt/media/bg{idx + 1}.{slide.BackgroundImage.Extension}").Open();
             entry.Write(slide.BackgroundImage.Data, 0, slide.BackgroundImage.Data.Length);
+        }
+
+        // write shape fill image media（S18）
+        foreach (var shp in slide.Shapes)
+        {
+            if (shp.FillImage is { Length: > 0 } && shp.ShapeImageRelId != null)
+            {
+                using var entry = za.CreateEntry($"ppt/media/{shp.ShapeImageRelId}.{shp.FillImageExt}").Open();
+                entry.Write(shp.FillImage, 0, shp.FillImage.Length);
+            }
         }
 
         // write chart XMLs
@@ -1005,7 +1038,7 @@ partial class PptxWriter
         for (var si = 0; si < chart.Series.Count; si++)
         {
             var ser = chart.Series[si];
-            var color = serColors[si % serColors.Length];
+            var color = ser.Color ?? serColors[si % serColors.Length];
             sb.Append("<c:ser>");
             sb.Append($"<c:idx val=\"{si}\"/><c:order val=\"{si}\"/>");
             sb.Append($"<c:tx><c:strRef><c:f/><c:strCache><c:ptCount val=\"1\"/><c:pt idx=\"0\"><c:v>{EscXml(ser.Name)}</c:v></c:pt></c:strCache></c:strRef></c:tx>");
@@ -1061,6 +1094,9 @@ partial class PptxWriter
         }
         sb.Append("</c:plotArea>");
         sb.Append("<c:legend><c:legendPos val=\"b\"/></c:legend>");
+        // 图表样式（S19）：1-48 预定义样式索引
+        if (chart.StyleIndex != null)
+            sb.Append($"<c:style val=\"{chart.StyleIndex}\"/>");
         sb.Append("</c:chart></c:chartSpace>");
         WriteEntry(za, $"ppt/charts/chart{chart.ChartNumber}.xml", sb.ToString());
     }
@@ -1069,10 +1105,12 @@ partial class PptxWriter
     private void WriteTextRun(StringBuilder sb, Run run, TextBox tb, ref Int32 hlinkGlobal, Dictionary<String, String> hlinkMap)
     {
         String? runHlRelId = null;
-        if (run.HyperlinkUrl != null)
+        // 优先 run 级超链接，其次 TextBox 整体超链接（S20，跳转 URL 或文件）
+        var linkUrl = run.HyperlinkUrl ?? tb.HyperlinkUrl;
+        if (linkUrl != null)
         {
             runHlRelId = $"rHlk{hlinkGlobal++}";
-            hlinkMap[runHlRelId] = run.HyperlinkUrl;
+            hlinkMap[runHlRelId] = linkUrl;
         }
         var runSz = run.FontSize > 0 ? run.FontSize : tb.FontSize;
         var runFc = run.FontColor ?? tb.FontColor;

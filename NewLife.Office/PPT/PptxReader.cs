@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Xml;
 using NewLife.Office.Markdown;
+using NewLife.Office.Word;
 
 namespace NewLife.Office.Ppt;
 
@@ -42,14 +43,56 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     public PptxReader(String path)
     {
         FilePath = path.GetFullPath();
-        _zip = ZipFile.OpenRead(FilePath);
+        _zip = OpenZip(File.ReadAllBytes(FilePath), null);
+    }
+
+    /// <summary>从文件路径打开（支持打开密码加密的 pptx，S17）</summary>
+    /// <param name="path">pptx 文件路径</param>
+    /// <param name="password">打开密码（加密文件必填）</param>
+    /// <exception cref="InvalidOperationException">加密文件未提供密码或密码错误</exception>
+    public PptxReader(String path, String password)
+    {
+        if (password == null) throw new ArgumentNullException(nameof(password));
+        FilePath = path.GetFullPath();
+        _zip = OpenZip(File.ReadAllBytes(FilePath), password);
     }
 
     /// <summary>从流打开</summary>
     /// <param name="stream">包含 pptx 内容的流</param>
     public PptxReader(Stream stream)
     {
-        _zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        _zip = OpenZip(ms.ToArray(), null);
+    }
+
+    /// <summary>从流打开（支持打开密码加密的 pptx，S17）</summary>
+    /// <param name="stream">包含 pptx 内容的流</param>
+    /// <param name="password">打开密码（加密文件必填）</param>
+    /// <exception cref="InvalidOperationException">加密文件未提供密码或密码错误</exception>
+    public PptxReader(Stream stream, String password)
+    {
+        if (password == null) throw new ArgumentNullException(nameof(password));
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        _zip = OpenZip(ms.ToArray(), password);
+    }
+
+    /// <summary>打开 ZIP，检测 OLE2 加密容器并解密（S17）</summary>
+    /// <param name="data">文件字节</param>
+    /// <param name="password">密码（null 表示无密码）</param>
+    /// <returns>ZipArchive（内存流持有）</returns>
+    private static ZipArchive OpenZip(Byte[] data, String? password)
+    {
+        // OLE2 CFB 魔数：D0 CF 11 E0 A1 B1 1A E1
+        if (data.Length > 8 && data[0] == 0xD0 && data[1] == 0xCF && data[2] == 0x11 && data[3] == 0xE0)
+        {
+            if (password == null)
+                throw new InvalidOperationException("加密的 PPTX 需要提供打开密码");
+            data = WordEncryptor.Decrypt(data, password);
+        }
+        var ms = new MemoryStream(data);
+        return new ZipArchive(ms, ZipArchiveMode.Read, leaveOpen: false);
     }
 
     /// <summary>释放资源</summary>
@@ -750,6 +793,16 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             var tb = new TextBox { Left = left, Top = top, Width = width, Height = height, Rotation = rotation, AltText = altText };
             if (fillColor != null) tb.BackgroundColor = fillColor;
 
+            // TextBox 整体超链接（S20，跳转 URL 或文件）
+            var tbHlink = sp.SelectSingleNode(".//*[local-name()='cNvPr']/*[local-name()='hlinkClick']") as XmlElement
+                ?? sp.SelectSingleNode(".//*[local-name()='spPr']/*[local-name()='hlinkClick']") as XmlElement;
+            if (tbHlink != null)
+            {
+                var rid = tbHlink.GetAttribute("r:id");
+                if (rid.Length > 0 && rels.TryGetValue(rid, out var rel))
+                    tb.HyperlinkUrl = rel.Target;
+            }
+
             var txBody = sp.SelectSingleNode(".//*[local-name()='txBody']") as XmlElement;
             if (txBody == null) { slide.TextBoxes.Add(tb); return; }
 
@@ -882,6 +935,9 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 tb.EastAsianFontName = fr.EastAsianFontName;
                 tb.ComplexScriptFontName = fr.ComplexScriptFontName;
                 tb.SymbolFontName = fr.SymbolFontName;
+                // TextBox 整体超链接（S20）：cNvPr/spPr 未命中时从首 run 提取
+                if (tb.HyperlinkUrl.IsNullOrEmpty() && !fr.HyperlinkUrl.IsNullOrEmpty())
+                    tb.HyperlinkUrl = fr.HyperlinkUrl;
             }
             // 向后兼容：从首段提取 TextBox 级段落属性
             if (tb.Paragraphs.Count > 0)
@@ -897,13 +953,52 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         }
         else
         {
+            var fillImage = ParseFillImage(spPr, rels);
             slide.Shapes.Add(new Shape
             {
                 ShapeType = shapeType, Left = left, Top = top, Width = width, Height = height,
                 FillColor = fillColor, LineColor = lineColor, LineWidth = (Int32)lineWidth,
                 AltText = altText, CornerRadius = cornerRadius,
+                FillImage = fillImage,
+                FillImageExt = fillImage != null ? GetFillImageExt(spPr, rels) : "png",
             });
         }
+    }
+
+    /// <summary>解析形状图片填充（S18，blipFill）</summary>
+    /// <param name="spPr">形状属性元素</param>
+    /// <param name="rels">关系映射</param>
+    /// <returns>图片字节，无图片填充返回 null</returns>
+    private Byte[]? ParseFillImage(XmlElement? spPr, Dictionary<String, (String Target, String Type)> rels)
+    {
+        var blip = spPr?.SelectSingleNode(".//*[local-name()='blipFill']/*[local-name()='blip']") as XmlElement;
+        if (blip == null) return null;
+        var rId = blip.GetAttribute("r:embed");
+        if (rId.IsNullOrEmpty()) return null;
+        if (!rels.TryGetValue(rId, out var rel)) return null;
+        var entry = _zip.GetEntry("ppt/media/" + Path.GetFileName(rel.Target));
+        if (entry == null) return null;
+        using var ms = new MemoryStream();
+        using (var es = entry.Open())
+        {
+            es.CopyTo(ms);
+        }
+        return ms.ToArray();
+    }
+
+    /// <summary>获取图片填充扩展名（S18）</summary>
+    private static String GetFillImageExt(XmlElement? spPr, Dictionary<String, (String Target, String Type)> rels)
+    {
+        var blip = spPr?.SelectSingleNode(".//*[local-name()='blipFill']/*[local-name()='blip']") as XmlElement;
+        if (blip == null) return "png";
+        var rId = blip.GetAttribute("r:embed");
+        if (rId.IsNullOrEmpty()) return "png";
+        if (rels.TryGetValue(rId, out var rel))
+        {
+            var ext = Path.GetExtension(rel.Target).TrimStart('.');
+            if (!ext.IsNullOrEmpty()) return ext;
+        }
+        return "png";
     }
 
     /// <summary>解析单个文本片段（a:r），可接收段落级默认值</summary>
