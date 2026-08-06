@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO.Compression;
 using System.Text;
 using NewLife.Office.Excel;
@@ -347,6 +348,54 @@ public class ExcelReaderRobustnessTests
         Assert.True(cm.Visible);
         Assert.True(Math.Abs(cm.Width - 180) < 0.5);
         Assert.True(Math.Abs(cm.Height - 90) < 0.5);
+    }
+    #endregion
+
+    #region 大文件流式性能
+    [Fact]
+    [DisplayName("Excel性能—10万行流式读取时间")]
+    public void Performance_100kRows()
+    {
+        // 构造 10万行 × 8 列的 xlsx（共享字符串池化，避免写放大）
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        var pool = new String[8];
+        for (var i = 0; i < pool.Length; i++) pool[i] = "类别" + i;
+
+        var swWrite = Stopwatch.StartNew();
+        using (var w = new ExcelWriter(path))
+        {
+            w.AutoFitColumnWidth = false;
+            w.WriteHeader("Sheet1", new[] { "编号", "比率", "类别A", "类别B", "类别C", "类别D", "类别E", "类别F" });
+            for (var r = 0; r < 100_000; r++)
+            {
+                var row = new Object?[8];
+                row[0] = r + 1;
+                row[1] = r * 0.5;
+                for (var c = 2; c < 8; c++) row[c] = pool[(r + c) % pool.Length];
+                w.WriteRow("Sheet1", row);
+            }
+            w.Save();
+        }
+        swWrite.Stop();
+
+        // 流式读取
+        var swRead = Stopwatch.StartNew();
+        var count = 0;
+        using (var reader = new ExcelReader(path))
+        {
+            foreach (var row in reader.ReadRows("Sheet1"))
+            {
+                Assert.Equal(8, row.Length);
+                count++;
+            }
+        }
+        swRead.Stop();
+
+        Assert.Equal(100_001, count); // 表头 + 10万数据行
+        Console.WriteLine($"10万行 xlsx：写入 {swWrite.ElapsedMilliseconds}ms，流式读取 {swRead.ElapsedMilliseconds}ms，共 {count} 行");
+
+        // 读取时间宽松阈值（避免 CI 抖动）：10万行 × 8 列应 < 5 秒
+        Assert.True(swRead.ElapsedMilliseconds < 5000, $"10万行流式读取耗时 {swRead.ElapsedMilliseconds}ms 超过 5 秒阈值");
     }
     #endregion
 

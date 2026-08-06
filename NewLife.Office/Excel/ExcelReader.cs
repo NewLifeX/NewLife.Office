@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Reflection;
 using System.Text;
+using System.Xml;
 using System.Xml.Linq;
 using NewLife.Office.Markdown;
 
@@ -205,6 +206,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     /// <summary>逐行读取数据，第一行通常是表头。支持超过26列（AA/AB等）以及缺失列自动补 null。</summary>
     /// <param name="sheet">工作表名。默认 null 取第一个数据表</param>
     /// <returns>按行返回对象数组。根据样式尝试转换为 DateTime / TimeSpan / 数值 / 布尔，否则为字符串</returns>
+    /// <remarks>基于 XmlReader 流式解析，大文件（10万行+）内存占用远低于 DOM 全量加载。</remarks>
     public IEnumerable<Object?[]> ReadRows(String? sheet = null)
     {
         ThrowIfDisposed();
@@ -216,118 +218,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
 
         if (!_entries.TryGetValue(sheet, out var entry)) throw new ArgumentOutOfRangeException(nameof(sheet), "Unable to find worksheet");
 
-        using var esheet = entry.Open(); // 及时释放单个 sheet 流
-        var doc = XDocument.Load(esheet);
-        if (doc.Root == null) yield break;
-
-        var data = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sheetData"));
-        if (data == null) yield break;
-
-        // 加快样式判断速度
-        var styles = _styles;
-        if (styles != null && styles.Length == 0) styles = null;
-
-        var headerColumnCount = -1; // 记录首行列数，用于补齐后续行尾部缺失列
-
-        foreach (var row in data.Elements())
+        foreach (var (_, row) in ReadRowsCore(sheet))
         {
-            var vs = new List<Object?>();
-            var curIndex = 0; // 当前列（0基）
-            foreach (var col in row.Elements())
-            {
-                // 单元格引用。例如 A1 / AB23
-                var r = col.Attribute("r")?.Value;
-                if (!r.IsNullOrEmpty())
-                {
-                    var targetIndex = GetColumnIndex(r!); // 0基
-                    // 补齐缺失列
-                    while (curIndex < targetIndex)
-                    {
-                        vs.Add(null);
-                        curIndex++;
-                    }
-                }
-
-                // 默认原始值。优先取 <v> 子节点（统一行为），否则使用节点聚合值
-                Object? val = null;
-                var vNode = col.Elements().FirstOrDefault(e => e.Name.LocalName == "v");
-                if (vNode != null)
-                    val = vNode.Value;
-                else
-                    val = col.Value; // inlineStr 等情况会走这里
-
-                // t=DataType: s=SharedString, b=Boolean, n=Number(默认), d=ISO日期, e=错误, str=公式结果文本, inlineStr=内联字符串
-                var t = col.Attribute("t")?.Value;
-                if (t == "s")
-                {
-                    // 共享字符串
-                    if (val is String s2 && Int32.TryParse(s2, out var sharedIndex)) val = _sharedStrings != null && sharedIndex >= 0 && sharedIndex < _sharedStrings.Length ? _sharedStrings[sharedIndex] : null;
-                }
-                else if (t == "b")
-                {
-                    // 布尔：0 / 1 以及 true / false
-                    if (val is String sb) val = sb == "1" || sb.EqualIgnoreCase("true");
-                }
-                else if (t == "e")
-                {
-                    // 错误单元格（#DIV/0! 等），保持错误字符串，不做数字转换
-                }
-                else if (t == "d")
-                {
-                    // ISO 8601 日期（如 2020-01-15T00:00:00）
-                    if (val is String sd && DateTime.TryParse(sd, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)) val = dt;
-                }
-                else if (t == "inlineStr")
-                {
-                    // 已经在 col.Value 中
-                }
-                else if (t == "str")
-                {
-                    // 公式结果文本，不再特别处理
-                }
-
-                // 样式转换（日期 / 时间 / 数字）。仅当未被布尔/共享字符串提前转换；错误/日期单元格跳过
-                if (val is String && t is not "e" and not "d")
-                {
-                    var sAttr = col.Attribute("s"); // StyleIndex
-                    if (sAttr != null && styles != null)
-                    {
-                        var si = sAttr.Value.ToInt();
-                        if (si >= 0 && si < styles.Length)
-                        {
-                            // 按引用格式转换数值，没有引用格式时不转换
-                            var st = styles[si];
-                            if (st != null) val = ChangeType(val, st);
-                        }
-                    }
-                    else if (t.IsNullOrEmpty())
-                    {
-                        // OOXML 规定：无 t 属性且无 s 属性时，<v> 值默认为数字（General 格式）；无 styles 部件时同样适用
-                        if (val is String rawStr)
-                        {
-                            if (Int32.TryParse(rawStr, out var ni)) val = ni;
-                            else if (Int64.TryParse(rawStr, out var nl)) val = nl;
-                            else if (Double.TryParse(rawStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var nd)) val = nd;
-                        }
-                    }
-                }
-
-                vs.Add(val);
-                curIndex++; // 移动到下一列
-            }
-
-            // 记录首行列数
-            if (headerColumnCount == -1)
-            {
-                headerColumnCount = vs.Count;
-            }
-            else if (headerColumnCount > 0 && vs.Count < headerColumnCount)
-            {
-                // 补齐尾部缺失列（例如数据行末尾空值未写入单元格）
-                while (vs.Count < headerColumnCount) vs.Add(null);
-            }
-
-            yield return vs.ToArray();
+            yield return row;
         }
     }
 
@@ -343,94 +236,196 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
 
         if (!_entries.TryGetValue(sheet, out var entry)) yield break;
 
-        using var esheet = entry.Open();
-        var doc = XDocument.Load(esheet);
-        if (doc.Root == null) yield break;
+        foreach (var item in ReadRowsCore(sheet))
+        {
+            yield return item;
+        }
+    }
 
-        var dataEl = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sheetData"));
-        if (dataEl == null) yield break;
+    /// <summary>流式逐行读取工作表数据（XmlReader 流式解析，避免大文件 DOM 全量加载）</summary>
+    /// <param name="sheet">工作表名（必须存在）</param>
+    private IEnumerable<(Int32 RowIdx, Object?[] Row)> ReadRowsCore(String sheet)
+    {
+        if (_entries == null || !_entries.TryGetValue(sheet, out var entry)) yield break;
 
+        using var esheet = entry.Open(); // 及时释放单个 sheet 流
+        var settings = new XmlReaderSettings { IgnoreWhitespace = true, IgnoreComments = true };
+        using var reader = XmlReader.Create(esheet, settings);
+
+        // 定位到 sheetData
+        while (reader.Read())
+        {
+            if (reader.NodeType == XmlNodeType.Element && reader.LocalName == "sheetData") break;
+        }
+        if (reader.EOF || reader.NodeType != XmlNodeType.Element || reader.LocalName != "sheetData") yield break;
+        if (reader.IsEmptyElement) yield break;
+
+        // 加快样式判断速度
         var styles = _styles;
         if (styles != null && styles.Length == 0) styles = null;
-        var headerColumnCount = -1;
 
-        foreach (var row in dataEl.Elements())
+        var headerColumnCount = -1; // 记录首行列数，用于补齐后续行尾部缺失列
+        var dataDepth = reader.Depth;
+
+        while (reader.Read())
         {
-            var rAttr = row.Attribute("r");
-            if (rAttr == null) continue;
-            var rowIdx = rAttr.Value.ToInt(-1) - 1; // 转为 0 基
+            if (reader.NodeType == XmlNodeType.EndElement && reader.LocalName == "sheetData" && reader.Depth == dataDepth) break;
+            if (reader.NodeType != XmlNodeType.Element || reader.LocalName != "row") continue;
+
+            // 无行号属性或行号非法时跳过（畸形数据）
+            var rAttr = reader.GetAttribute("r");
+            if (rAttr.IsNullOrEmpty()) continue;
+            var rowIdx = rAttr!.ToInt(-1) - 1;
             if (rowIdx < 0) continue;
 
             var vs = new List<Object?>();
-            var curIndex = 0;
-            foreach (var col in row.Elements())
+            var curIndex = 0; // 当前列（0基）
+
+            if (!reader.IsEmptyElement)
             {
-                var r = col.Attribute("r")?.Value;
-                if (!r.IsNullOrEmpty())
+                var rowDepth = reader.Depth;
+                while (reader.Read())
                 {
-                    var targetIndex = GetColumnIndex(r!);
-                    while (curIndex < targetIndex) { vs.Add(null); curIndex++; }
-                }
+                    if (reader.NodeType == XmlNodeType.EndElement && reader.LocalName == "row" && reader.Depth == rowDepth) break;
+                    if (reader.NodeType != XmlNodeType.Element || reader.LocalName != "c") continue;
 
-                Object? val = null;
-                var vNode = col.Elements().FirstOrDefault(e => e.Name.LocalName == "v");
-                val = vNode != null ? vNode.Value : col.Value;
-
-                var t = col.Attribute("t")?.Value;
-                if (t == "s")
-                {
-                    if (val is String s2 && Int32.TryParse(s2, out var sharedIndex))
-                        val = _sharedStrings != null && sharedIndex >= 0 && sharedIndex < _sharedStrings.Length ? _sharedStrings[sharedIndex] : null;
-                }
-                else if (t == "b")
-                {
-                    if (val is String sb) val = sb == "1" || sb.EqualIgnoreCase("true");
-                }
-                else if (t == "e")
-                {
-                    // 错误单元格（#DIV/0! 等），保持错误字符串
-                }
-                else if (t == "d")
-                {
-                    // ISO 8601 日期
-                    if (val is String sd && DateTime.TryParse(sd, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)) val = dt;
-                }
-
-                if (val is String && t is not "e" and not "d")
-                {
-                    var sAttr = col.Attribute("s");
-                    if (sAttr != null && styles != null)
+                    // 单元格引用。例如 A1 / AB23
+                    var refAttr = reader.GetAttribute("r");
+                    if (!refAttr.IsNullOrEmpty())
                     {
-                        var si = sAttr.Value.ToInt();
-                        if (si >= 0 && si < styles.Length)
+                        var targetIndex = GetColumnIndex(refAttr!); // 0基
+                        // 补齐缺失列
+                        while (curIndex < targetIndex)
                         {
-                            var st = styles[si];
-                            if (st != null) val = ChangeType(val, st);
+                            vs.Add(null);
+                            curIndex++;
                         }
                     }
-                    else if (t.IsNullOrEmpty())
+
+                    Object? val = null;
+                    var t = reader.GetAttribute("t");
+                    var s = reader.GetAttribute("s");
+
+                    if (!reader.IsEmptyElement)
                     {
-                        // OOXML 规定：无 t 属性时 <v> 值默认为数字（General 格式）；无 styles 部件时同样适用
-                        if (val is String rawStr)
+                        var cDepth = reader.Depth;
+                        while (reader.Read())
                         {
-                            if (Int32.TryParse(rawStr, out var ni)) val = ni;
-                            else if (Int64.TryParse(rawStr, out var nl)) val = nl;
-                            else if (Double.TryParse(rawStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var nd)) val = nd;
+                            if (reader.NodeType == XmlNodeType.EndElement && reader.LocalName == "c" && reader.Depth == cDepth) break;
+                            if (reader.NodeType != XmlNodeType.Element) continue;
+                            if (reader.LocalName == "v")
+                            {
+                                // 数值/文本原始值
+                                val = reader.IsEmptyElement ? String.Empty : ReadElementText(reader);
+                            }
+                            else if (reader.LocalName == "is")
+                            {
+                                // 内联字符串：聚合所有 <t> 文本
+                                val = ReadInlineString(reader);
+                            }
                         }
                     }
-                }
 
-                vs.Add(val);
-                curIndex++;
+                    // t=DataType: s=SharedString, b=Boolean, n=Number(默认), d=ISO日期, e=错误, str=公式结果文本, inlineStr=内联字符串
+                    if (t == "s")
+                    {
+                        // 共享字符串
+                        if (val is String s2 && Int32.TryParse(s2, out var sharedIndex)) val = _sharedStrings != null && sharedIndex >= 0 && sharedIndex < _sharedStrings.Length ? _sharedStrings[sharedIndex] : null;
+                    }
+                    else if (t == "b")
+                    {
+                        // 布尔：0 / 1 以及 true / false
+                        if (val is String sb) val = sb == "1" || sb.EqualIgnoreCase("true");
+                    }
+                    else if (t == "e")
+                    {
+                        // 错误单元格（#DIV/0! 等），保持错误字符串，不做数字转换
+                    }
+                    else if (t == "d")
+                    {
+                        // ISO 8601 日期（如 2020-01-15T00:00:00）
+                        if (val is String sd && DateTime.TryParse(sd, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)) val = dt;
+                    }
+                    else if (t == "inlineStr")
+                    {
+                        // 已在 <is> 读取
+                    }
+                    else if (t == "str")
+                    {
+                        // 公式结果文本，不再特别处理
+                    }
+
+                    // 样式转换（日期 / 时间 / 数字）。仅当未被布尔/共享字符串提前转换；错误/日期单元格跳过
+                    if (val is String && t is not "e" and not "d")
+                    {
+                        if (s != null && styles != null)
+                        {
+                            var si = s.ToInt();
+                            if (si >= 0 && si < styles.Length)
+                            {
+                                // 按引用格式转换数值，没有引用格式时不转换
+                                var st = styles[si];
+                                if (st != null) val = ChangeType(val, st);
+                            }
+                        }
+                        else if (t.IsNullOrEmpty())
+                        {
+                            // OOXML 规定：无 t 属性且无 s 属性时，<v> 值默认为数字（General 格式）；无 styles 部件时同样适用
+                            if (val is String rawStr)
+                            {
+                                if (Int32.TryParse(rawStr, out var ni)) val = ni;
+                                else if (Int64.TryParse(rawStr, out var nl)) val = nl;
+                                else if (Double.TryParse(rawStr, NumberStyles.Float, CultureInfo.InvariantCulture, out var nd)) val = nd;
+                            }
+                        }
+                    }
+
+                    vs.Add(val);
+                    curIndex++; // 移动到下一列
+                }
             }
 
+            // 记录首行列数
             if (headerColumnCount == -1)
+            {
                 headerColumnCount = vs.Count;
+            }
             else if (headerColumnCount > 0 && vs.Count < headerColumnCount)
+            {
+                // 补齐尾部缺失列（例如数据行末尾空值未写入单元格）
                 while (vs.Count < headerColumnCount) vs.Add(null);
+            }
 
             yield return (rowIdx, vs.ToArray());
         }
+    }
+
+    /// <summary>读取当前元素（位于 StartElement）的文本内容，返回后 reader 位于该元素的 EndElement 上</summary>
+    private static String ReadElementText(XmlReader reader)
+    {
+        var sb = new StringBuilder();
+        var depth = reader.Depth;
+        while (reader.Read())
+        {
+            if (reader.NodeType == XmlNodeType.EndElement && reader.Depth == depth) break;
+            if (reader.NodeType is XmlNodeType.Text or XmlNodeType.CDATA)
+                sb.Append(reader.Value);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>读取内联字符串 &lt;is&gt; 子树，聚合所有 &lt;t&gt; 文本</summary>
+    private static String ReadInlineString(XmlReader reader)
+    {
+        var sb = new StringBuilder();
+        var depth = reader.Depth; // <is> 元素深度
+        while (reader.Read())
+        {
+            if (reader.NodeType == XmlNodeType.EndElement && reader.LocalName == "is" && reader.Depth == depth) break;
+            if (reader.NodeType != XmlNodeType.Element || reader.LocalName != "t") continue;
+            if (!reader.IsEmptyElement) sb.Append(ReadElementText(reader));
+        }
+        return sb.ToString();
     }
 
     /// <summary>按 Excel 数字格式尝试转换值</summary>
