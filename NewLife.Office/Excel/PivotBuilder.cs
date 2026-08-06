@@ -29,6 +29,9 @@ public class PivotBuilder
     /// <summary>字段配置列表</summary>
     public List<PivotField> Fields { get; } = [];
 
+    /// <summary>切片器列表（M28，关联透视表字段的快速筛选组件）</summary>
+    public List<ExcelSlicer> Slicers { get; } = [];
+
     /// <summary>文本编码</summary>
     public Encoding Encoding { get; set; } = Encoding.UTF8;
     #endregion
@@ -87,6 +90,33 @@ public class PivotBuilder
         return this;
     }
 
+    /// <summary>为透视表字段添加切片器（M28，Excel 2010+ 快速筛选）</summary>
+    /// <param name="fieldName">筛选字段名（透视表源数据列）</param>
+    /// <param name="caption">切片器显示标题（默认取字段名）</param>
+    /// <param name="style">切片器样式（默认 SlicerStyleLight1）</param>
+    /// <returns>切片器对象（含自动生成的名称）</returns>
+    /// <exception cref="ArgumentNullException">fieldName 为空</exception>
+    public ExcelSlicer AddSlicer(String fieldName, String? caption = null, String? style = null)
+    {
+        if (fieldName.IsNullOrEmpty()) throw new ArgumentNullException(nameof(fieldName));
+
+        var slicer = new ExcelSlicer
+        {
+            ColumnName = fieldName,
+            Caption = caption ?? fieldName,
+            Style = style ?? "SlicerStyleLight1",
+            Name = $"切片器_{fieldName}",
+        };
+        // 名称去重
+        var idx = 2;
+        var baseName = slicer.Name;
+        while (Slicers.Any(s => s.Name == slicer.Name))
+            slicer.Name = $"{baseName}{idx++}";
+
+        Slicers.Add(slicer);
+        return slicer;
+    }
+
     /// <summary>生成包含数据源和透视表的 xlsx 文件</summary>
     /// <param name="outputPath">输出文件路径</param>
     public void Save(String outputPath)
@@ -116,8 +146,7 @@ public class PivotBuilder
             "</Relationships>");
 
         // [Content_Types].xml
-        WriteEntry(za, "[Content_Types].xml",
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+        var ctXml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
             "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">" +
             "<Default Extension=\"xml\" ContentType=\"application/xml\"/>" +
             "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>" +
@@ -127,8 +156,14 @@ public class PivotBuilder
             $"<Override PartName=\"/xl/pivotCache/pivotCacheDefinition{cacheId}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml\"/>" +
             $"<Override PartName=\"/xl/pivotCache/pivotCacheRecords{cacheId}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml\"/>" +
             $"<Override PartName=\"/xl/pivotTables/pivotTable{cacheId}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml\"/>" +
-            "<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>" +
-            "</Types>");
+            "<Override PartName=\"/xl/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml\"/>";
+        for (var si = 0; si < Slicers.Count; si++)
+        {
+            ctXml += $"<Override PartName=\"/xl/slicers/slicer{si + 1}.xml\" ContentType=\"application/vnd.ms-excel.slicer+xml\"/>" +
+                     $"<Override PartName=\"/xl/slicerCaches/slicerCache{si + 1}.xml\" ContentType=\"application/vnd.ms-excel.slicerCache+xml\"/>";
+        }
+        ctXml += "</Types>";
+        WriteEntry(za, "[Content_Types].xml", ctXml);
 
         // workbook.xml
         WriteEntry(za, "xl/workbook.xml",
@@ -140,14 +175,18 @@ public class PivotBuilder
             "</sheets></workbook>");
 
         // workbook rels
-        WriteEntry(za, "xl/_rels/workbook.xml.rels",
-            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+        var wbRels = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
             "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
             $"<Relationship Id=\"rId{dataSheetIdx + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet{dataSheetIdx + 1}.xml\"/>" +
             $"<Relationship Id=\"rId{pivotSheetIdx + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet\" Target=\"worksheets/sheet{pivotSheetIdx + 1}.xml\"/>" +
             $"<Relationship Id=\"rId3\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>" +
-            $"<Relationship Id=\"rId4\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition\" Target=\"pivotCache/pivotCacheDefinition{cacheId}.xml\"/>" +
-            "</Relationships>");
+            $"<Relationship Id=\"rId4\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition\" Target=\"pivotCache/pivotCacheDefinition{cacheId}.xml\"/>";
+        for (var si = 0; si < Slicers.Count; si++)
+        {
+            wbRels += $"<Relationship Id=\"rId{5 + si}\" Type=\"http://schemas.microsoft.com/office/2007/relationships/slicerCache\" Target=\"slicerCaches/slicerCache{si + 1}.xml\"/>";
+        }
+        wbRels += "</Relationships>";
+        WriteEntry(za, "xl/_rels/workbook.xml.rels", wbRels);
 
         // styles.xml（最小化）
         WriteEntry(za, "xl/styles.xml",
@@ -163,17 +202,31 @@ public class PivotBuilder
         WriteDataSheet(za, dataSheetIdx);
 
         // 透视表工作表（空白，透视表叠加在上）
-        WriteEntry(za, $"xl/worksheets/sheet{pivotSheetIdx + 1}.xml",
-            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+        var pivotSheetXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
             "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">" +
-            "<sheetData/></worksheet>");
+            "<sheetData/>";
+        if (Slicers.Count > 0)
+        {
+            pivotSheetXml += "<extLst><ext uri=\"{A8765BA9-456A-4DAB-B4F3-ACF838C121DE}\">" +
+                "<x14:slicerList xmlns:x14=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\">";
+            for (var si = 0; si < Slicers.Count; si++)
+                pivotSheetXml += $"<x14:slicer r:id=\"rSlc{si + 1}\"/>";
+            pivotSheetXml += "</x14:slicerList></ext></extLst>";
+        }
+        pivotSheetXml += "</worksheet>";
+        WriteEntry(za, $"xl/worksheets/sheet{pivotSheetIdx + 1}.xml", pivotSheetXml);
 
         // pivot sheet rels
-        WriteEntry(za, $"xl/worksheets/_rels/sheet{pivotSheetIdx + 1}.xml.rels",
-            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+        var pivotSheetRels = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
             "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
-            $"<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable\" Target=\"../pivotTables/pivotTable{cacheId}.xml\"/>" +
-            "</Relationships>");
+            $"<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable\" Target=\"../pivotTables/pivotTable{cacheId}.xml\"/>";
+        for (var si = 0; si < Slicers.Count; si++)
+        {
+            pivotSheetRels += $"<Relationship Id=\"rSlc{si + 1}\" Type=\"http://schemas.microsoft.com/office/2007/relationships/slicer\" Target=\"../slicers/slicer{si + 1}.xml\"/>" +
+                              $"<Relationship Id=\"rSlcC{si + 1}\" Type=\"http://schemas.microsoft.com/office/2007/relationships/slicerCache\" Target=\"../slicerCaches/slicerCache{si + 1}.xml\"/>";
+        }
+        pivotSheetRels += "</Relationships>";
+        WriteEntry(za, $"xl/worksheets/_rels/sheet{pivotSheetIdx + 1}.xml.rels", pivotSheetRels);
 
         // pivotCacheDefinition
         WritePivotCacheDefinition(za, dataSheetIdx, cacheId);
@@ -183,6 +236,78 @@ public class PivotBuilder
 
         // pivotTable
         WritePivotTable(za, cacheId);
+
+        // 切片器部件（M28 透视表关联）：slicerCacheN.xml + slicerN.xml + slicer 关系
+        WriteSlicers(za, pivotSheetIdx, cacheId);
+    }
+
+    /// <summary>生成透视表切片器部件（slicerCache/slicer/关系）</summary>
+    /// <param name="za">ZIP 归档</param>
+    /// <param name="pivotSheetIdx">透视表工作表索引（0 基）</param>
+    /// <param name="cacheId">透视表缓存编号</param>
+    private void WriteSlicers(ZipArchive za, Int32 pivotSheetIdx, Int32 cacheId)
+    {
+        if (Slicers.Count == 0) return;
+
+        for (var si = 0; si < Slicers.Count; si++)
+        {
+            var slicer = Slicers[si];
+            var cacheName = $"Slicer_{slicer.Name}";
+            slicer.CacheName = cacheName;
+
+            // 从源数据提取字段唯一值（用于 slicerCache items）
+            var items = new List<String>();
+            var fieldIdx = -1;
+            for (var h = 0; h < _headers!.Length; h++)
+            {
+                if (String.Equals(_headers[h], slicer.ColumnName, StringComparison.OrdinalIgnoreCase))
+                {
+                    fieldIdx = h;
+                    break;
+                }
+            }
+            if (fieldIdx >= 0)
+            {
+                foreach (var row in _rows!)
+                {
+                    if (row.Length <= fieldIdx || row[fieldIdx] == null) continue;
+                    var text = Convert.ToString(row[fieldIdx], CultureInfo.InvariantCulture)!;
+                    if (!text.IsNullOrEmpty() && !items.Contains(text)) items.Add(text);
+                }
+            }
+            if (items.Count == 0) items.Add("(空白)"); // 兜底占位
+
+            // slicerCacheN.xml（透视表模式：pivotTables 引用 + data pivot="1"）
+            var sc = new StringBuilder();
+            sc.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            sc.Append($"<slicerCacheDefinition xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\" name=\"{Escape(cacheName)}\">");
+            sc.Append($"<pivotTables><pivotTable tabId=\"{pivotSheetIdx + 1}\" name=\"{Escape(Name)}\"/></pivotTables>");
+            sc.Append($"<data pivot=\"1\" cacheName=\"{Escape(Name)}\" sourceName=\"{Escape(Name)}\">");
+            sc.Append($"<columns count=\"1\"><column dataType=\"string\" name=\"{Escape(slicer.ColumnName)}\" uniqueCount=\"{items.Count}\"/></columns>");
+            sc.Append($"<items count=\"{items.Count}\">");
+            for (var x = 0; x < items.Count; x++) sc.Append($"<i x=\"{x}\" s=\"0\" d=\"0\"/>");
+            sc.Append("</items></data>");
+            sc.Append("<sortOrder>0</sortOrder>");
+            sc.Append("</slicerCacheDefinition>");
+            WriteEntry(za, $"xl/slicerCaches/slicerCache{si + 1}.xml", sc.ToString());
+
+            // slicerN.xml
+            var sn = new StringBuilder();
+            sn.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            sn.Append($"<slicer xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\" name=\"{Escape(slicer.Name)}\" cache=\"{Escape(cacheName)}\" caption=\"{Escape(slicer.Caption)}\" uiLevel=\"2\" style=\"{Escape(slicer.Style)}\" rowHeight=\"138\" columnCount=\"1\" showCaption=\"1\">");
+            sn.Append("<columns><column w=\"72\"/></columns>");
+            sn.Append("<data>");
+            for (var x = 0; x < items.Count; x++) sn.Append($"<dataItem x=\"{x}\" s=\"0\"/>");
+            sn.Append("</data></slicer>");
+            WriteEntry(za, $"xl/slicers/slicer{si + 1}.xml", sn.ToString());
+
+            // slicerN.xml.rels（关联 slicerCache）
+            WriteEntry(za, $"xl/slicers/_rels/slicer{si + 1}.xml.rels",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                $"<Relationship Id=\"rId1\" Type=\"http://schemas.microsoft.com/office/2007/relationships/slicerCache\" Target=\"../slicerCaches/slicerCache{si + 1}.xml\"/>" +
+                "</Relationships>");
+        }
     }
 
     private void WriteDataSheet(ZipArchive za, Int32 sheetIdx)
