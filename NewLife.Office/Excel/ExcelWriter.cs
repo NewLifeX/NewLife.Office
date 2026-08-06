@@ -190,6 +190,12 @@ public partial class ExcelWriter : DisposeBase
     private readonly Dictionary<String, (Int32 Rows, Int32 Cols)> _sheetFreezes = new(StringComparer.OrdinalIgnoreCase);
     // 自动筛选：sheet -> ref ("A1:F1")
     private readonly Dictionary<String, String> _sheetAutoFilters = new(StringComparer.OrdinalIgnoreCase);
+    // 是否显示网格线：sheet -> 是否显示（仅存隐藏状态）
+    private readonly Dictionary<String, Boolean> _sheetGridlines = new(StringComparer.OrdinalIgnoreCase);
+    // 视图缩放：sheet -> 缩放比例（百分比）
+    private readonly Dictionary<String, Int32> _sheetZooms = new(StringComparer.OrdinalIgnoreCase);
+    // 默认行高：sheet -> 磅值
+    private readonly Dictionary<String, Double> _sheetDefaultRowHeights = new(StringComparer.OrdinalIgnoreCase);
     // 行高：sheet -> { rowIndex(1基) -> height }
     private readonly Dictionary<String, Dictionary<Int32, Double>> _sheetRowHeights = new(StringComparer.OrdinalIgnoreCase);
     // 列大纲：sheet -> { colIndex(0基) -> (level, collapsed) }
@@ -445,6 +451,38 @@ public partial class ExcelWriter : DisposeBase
         if (sheet.IsNullOrEmpty()) sheet = SheetName;
         EnsureSheet(sheet);
         _sheetAutoFilters[sheet] = range;
+    }
+
+    /// <summary>设置是否显示网格线（默认显示）</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="show">是否显示网格线</param>
+    public void SetGridlines(String? sheet, Boolean show)
+    {
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        _sheetGridlines[sheet] = show;
+    }
+
+    /// <summary>设置视图缩放比例（百分比，10-400）</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="zoom">缩放比例（如 150 表示 150%）</param>
+    public void SetZoomScale(String? sheet, Int32 zoom)
+    {
+        if (zoom is < 10 or > 400) throw new ArgumentOutOfRangeException(nameof(zoom));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        _sheetZooms[sheet] = zoom;
+    }
+
+    /// <summary>设置默认行高（磅值，影响未指定行高的行）</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="height">默认行高（磅值）</param>
+    public void SetDefaultRowHeight(String? sheet, Double height)
+    {
+        if (height <= 0) throw new ArgumentOutOfRangeException(nameof(height));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        _sheetDefaultRowHeights[sheet] = height;
     }
 
     /// <summary>设置行高</summary>
@@ -1332,6 +1370,14 @@ public partial class ExcelWriter : DisposeBase
                 // 自动筛选
                 if (!sd.AutoFilter.IsNullOrEmpty())
                     SetAutoFilter(sheet, sd.AutoFilter!);
+
+                // 显示设置（网格线/缩放/默认行高）
+                if (!sd.Gridlines)
+                    SetGridlines(sheet, false);
+                if (sd.ZoomScale != 100)
+                    SetZoomScale(sheet, sd.ZoomScale);
+                if (sd.DefaultRowHeight is > 0)
+                    SetDefaultRowHeight(sheet, sd.DefaultRowHeight.Value);
 
                 // 行高（0基→1基）
                 foreach (var kv in sd.RowHeights)

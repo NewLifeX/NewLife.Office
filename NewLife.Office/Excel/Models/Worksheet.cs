@@ -34,6 +34,15 @@ public class Worksheet
     /// <summary>自动筛选范围（如 "A1:F1"）</summary>
     public String? AutoFilter { get; set; }
 
+    /// <summary>是否显示网格线（默认 true）</summary>
+    public Boolean Gridlines { get; set; } = true;
+
+    /// <summary>视图缩放比例（百分比，默认 100）</summary>
+    public Int32 ZoomScale { get; set; } = 100;
+
+    /// <summary>默认行高（磅值），null 表示使用 Excel 默认</summary>
+    public Double? DefaultRowHeight { get; set; }
+
     /// <summary>行高（0基行号 → 磅值）</summary>
     public Dictionary<Int32, Double> RowHeights { get; set; } = [];
 

@@ -441,6 +441,46 @@ public class ExcelReaderRobustnessTests
     }
     #endregion
 
+    #region 显示设置往返
+    [Fact]
+    [DisplayName("Excel往返—网格线/缩放/默认行高WriteExcel回写")]
+    public void DisplaySettings_Roundtrip()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w = new ExcelWriter(path))
+        {
+            w.WriteRow("Sheet1", new Object?[] { "A", "B" });
+            w.SetGridlines("Sheet1", false);
+            w.SetZoomScale("Sheet1", 150);
+            w.SetDefaultRowHeight("Sheet1", 18);
+            w.Save();
+        }
+
+        ExcelDocument data;
+        using (var reader = new ExcelReader(path))
+        {
+            data = reader.ReadExcel();
+        }
+        var sd = data.Worksheets[0];
+        Assert.False(sd.Gridlines);
+        Assert.Equal(150, sd.ZoomScale);
+        Assert.Equal(18, sd.DefaultRowHeight);
+
+        var path2 = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w2 = new ExcelWriter(path2))
+        {
+            w2.WriteExcel(data);
+            w2.Save();
+        }
+
+        using var reader2 = new ExcelReader(path2);
+        var sd2 = reader2.ReadWorksheet("Sheet1");
+        Assert.False(sd2.Gridlines);
+        Assert.Equal(150, sd2.ZoomScale);
+        Assert.Equal(18, sd2.DefaultRowHeight);
+    }
+    #endregion
+
     #region 缺失部件容错
     [Fact]
     [DisplayName("Excel读—无sharedStrings/styles部件仍可读取")]

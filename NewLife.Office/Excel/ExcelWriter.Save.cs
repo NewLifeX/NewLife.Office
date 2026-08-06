@@ -692,22 +692,37 @@ partial class ExcelWriter
                 sw.Write("</sheetPr>");
             }
 
-            // sheetViews（冻结窗格）
-            if (_sheetFreezes.TryGetValue(sheet, out var freeze) && (freeze.Rows > 0 || freeze.Cols > 0))
+            // sheetFormatPr（默认行高）
+            if (_sheetDefaultRowHeights.TryGetValue(sheet, out var defRowH))
             {
-                sw.Write("<sheetViews><sheetView tabSelected=\"1\" workbookViewId=\"0\">");
-                var topLeft = MakeCellRef(freeze.Rows, freeze.Cols);
-                if (freeze.Rows > 0 && freeze.Cols > 0)
+                sw.Write($"<sheetFormatPr defaultRowHeight=\"{defRowH:0.##}\"/>");
+            }
+
+            // sheetViews（冻结窗格 + 网格线 + 缩放）
+            var hasFreeze = _sheetFreezes.TryGetValue(sheet, out var freeze) && (freeze.Rows > 0 || freeze.Cols > 0);
+            var hasHiddenGrid = _sheetGridlines.TryGetValue(sheet, out var gridlines) && !gridlines;
+            var hasZoom = _sheetZooms.TryGetValue(sheet, out var zoom) && zoom != 100;
+            if (hasFreeze || hasHiddenGrid || hasZoom)
+            {
+                sw.Write("<sheetViews><sheetView tabSelected=\"1\" workbookViewId=\"0\"");
+                if (hasHiddenGrid) sw.Write(" showGridLines=\"0\"");
+                if (hasZoom) sw.Write($" zoomScale=\"{zoom}\"");
+                sw.Write(">");
+                if (hasFreeze)
                 {
-                    sw.Write($"<pane xSplit=\"{freeze.Cols}\" ySplit=\"{freeze.Rows}\" topLeftCell=\"{topLeft}\" activePane=\"bottomRight\" state=\"frozen\"/>");
-                }
-                else if (freeze.Rows > 0)
-                {
-                    sw.Write($"<pane ySplit=\"{freeze.Rows}\" topLeftCell=\"{topLeft}\" activePane=\"bottomLeft\" state=\"frozen\"/>");
-                }
-                else
-                {
-                    sw.Write($"<pane xSplit=\"{freeze.Cols}\" topLeftCell=\"{topLeft}\" activePane=\"topRight\" state=\"frozen\"/>");
+                    var topLeft = MakeCellRef(freeze.Rows, freeze.Cols);
+                    if (freeze.Rows > 0 && freeze.Cols > 0)
+                    {
+                        sw.Write($"<pane xSplit=\"{freeze.Cols}\" ySplit=\"{freeze.Rows}\" topLeftCell=\"{topLeft}\" activePane=\"bottomRight\" state=\"frozen\"/>");
+                    }
+                    else if (freeze.Rows > 0)
+                    {
+                        sw.Write($"<pane ySplit=\"{freeze.Rows}\" topLeftCell=\"{topLeft}\" activePane=\"bottomLeft\" state=\"frozen\"/>");
+                    }
+                    else
+                    {
+                        sw.Write($"<pane xSplit=\"{freeze.Cols}\" topLeftCell=\"{topLeft}\" activePane=\"topRight\" state=\"frozen\"/>");
+                    }
                 }
                 sw.Write("</sheetView></sheetViews>");
             }

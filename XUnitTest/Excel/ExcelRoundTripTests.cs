@@ -206,6 +206,11 @@ public class ExcelRoundTripTests
             // 自动筛选
             Assert.Equal(src.AutoFilter, dst.AutoFilter);
 
+            // 显示设置
+            Assert.Equal(src.Gridlines, dst.Gridlines);
+            Assert.Equal(src.ZoomScale, dst.ZoomScale);
+            Assert.Equal(src.DefaultRowHeight, dst.DefaultRowHeight);
+
             // 行高
             Assert.Equal(src.RowHeights.Count, dst.RowHeights.Count);
             foreach (var kv in src.RowHeights)

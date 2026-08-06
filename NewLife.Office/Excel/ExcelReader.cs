@@ -1314,6 +1314,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         // 冻结窗格
         sd.FreezePane = ReadFreezePanes(sheet);
 
+        // 显示设置（网格线/缩放）与默认行高
+        ReadSheetView(sheet, sd);
+
         // 自动筛选
         sd.AutoFilter = ReadAutoFilter(sheet);
 
@@ -1593,6 +1596,37 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         var ySplit = pane.Attribute("ySplit")?.Value.ToInt() ?? 0;
         var xSplit = pane.Attribute("xSplit")?.Value.ToInt() ?? 0;
         return (ySplit, xSplit);
+    }
+
+    /// <summary>读取工作表显示设置（网格线/缩放/默认行高）</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <param name="sd">目标快照对象（就地填充）</param>
+    private void ReadSheetView(String sheet, Worksheet sd)
+    {
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return;
+
+        // sheetView：showGridLines / zoomScale
+        var sheetViews = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sheetViews"));
+        if (sheetViews != null)
+        {
+            var view = sheetViews.Elements().FirstOrDefault(e => e.Name.LocalName == "sheetView");
+            if (view != null)
+            {
+                var gl = view.Attribute("showGridLines")?.Value;
+                if (gl != null) sd.Gridlines = gl == "1" || gl.EqualIgnoreCase("true");
+                var zoom = view.Attribute("zoomScale")?.Value;
+                if (zoom != null) sd.ZoomScale = zoom.ToInt(100);
+            }
+        }
+
+        // sheetFormatPr：defaultRowHeight（磅值）
+        var sfp = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "sheetFormatPr");
+        if (sfp != null)
+        {
+            var drh = sfp.Attribute("defaultRowHeight")?.Value.ToDouble();
+            if (drh is > 0) sd.DefaultRowHeight = drh;
+        }
     }
 
     /// <summary>读取指定工作表的自动筛选范围</summary>
