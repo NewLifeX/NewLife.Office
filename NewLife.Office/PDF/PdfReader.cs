@@ -346,22 +346,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
         if (XRefTable == null || !XRefTable.Trailer.TryGetValue("Root", out var rv) || rv is not Ref)
         {
             // 回退到字符串扫描
-            var pdf = _latin1.GetString(_data);
-            var pos = 0;
-            while (pos < pdf.Length)
-            {
-                var streamStart = pdf.IndexOf("stream", pos, StringComparison.Ordinal);
-                if (streamStart < 0) break;
-                var contentStart = streamStart + 6;
-                if (contentStart < pdf.Length && pdf[contentStart] == '\r') contentStart++;
-                if (contentStart < pdf.Length && pdf[contentStart] == '\n') contentStart++;
-                var streamEnd = pdf.IndexOf("endstream", contentStart, StringComparison.Ordinal);
-                if (streamEnd < 0) break;
-                var content = pdf[contentStart..streamEnd];
-                ExtractPositionedText(content, results);
-                pos = streamEnd + 9;
-            }
-            return results;
+            return ScanPositionedText(results);
         }
 
         var pageObjNums = GetPageObjectNumbers();
@@ -386,6 +371,34 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
                 var contentText = _latin1.GetString(decompressed);
                 ExtractPositionedText(contentText, results);
             }
+        }
+
+        // xref 路径未提取到任何文本时回退到字符串扫描（兼容 xref offset 不可靠的生成器）
+        if (results.Count == 0)
+            return ScanPositionedText(results);
+
+        return results;
+    }
+
+    /// <summary>字符串扫描回退：提取所有 stream 块中的带位置文本</summary>
+    /// <param name="results">输出列表（原地追加）</param>
+    /// <returns>文本项列表</returns>
+    private IEnumerable<PdfText> ScanPositionedText(List<PdfText> results)
+    {
+        var pdf = _latin1.GetString(_data);
+        var pos = 0;
+        while (pos < pdf.Length)
+        {
+            var streamStart = pdf.IndexOf("stream", pos, StringComparison.Ordinal);
+            if (streamStart < 0) break;
+            var contentStart = streamStart + 6;
+            if (contentStart < pdf.Length && pdf[contentStart] == '\r') contentStart++;
+            if (contentStart < pdf.Length && pdf[contentStart] == '\n') contentStart++;
+            var streamEnd = pdf.IndexOf("endstream", contentStart, StringComparison.Ordinal);
+            if (streamEnd < 0) break;
+            var content = pdf[contentStart..streamEnd];
+            ExtractPositionedText(content, results);
+            pos = streamEnd + 9;
         }
         return results;
     }
