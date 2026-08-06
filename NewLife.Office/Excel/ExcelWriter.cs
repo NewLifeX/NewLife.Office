@@ -108,6 +108,21 @@ public partial class ExcelWriter : DisposeBase
 
         /// <summary>富文本段（非空时优先于 Text 输出）</summary>
         public List<CommentSegment>? Segments { get; set; }
+
+        /// <summary>批注框宽度（磅）</summary>
+        public Double Width { get; set; } = 108;
+
+        /// <summary>批注框高度（磅）</summary>
+        public Double Height { get; set; } = 59.25;
+
+        /// <summary>是否可见（默认隐藏）</summary>
+        public Boolean Visible { get; set; }
+
+        /// <summary>批注框左边距（磅）</summary>
+        public Double Left { get; set; } = 59.25;
+
+        /// <summary>批注框上边距（磅）</summary>
+        public Double Top { get; set; } = 1.5;
     }
 
     /// <summary>Excel 文档属性（写入 docProps/core.xml）</summary>
@@ -181,6 +196,10 @@ public partial class ExcelWriter : DisposeBase
     private readonly Dictionary<String, Dictionary<Int32, (Int32 Level, Boolean Collapsed)>> _sheetColOutlines = new(StringComparer.OrdinalIgnoreCase);
     // 行大纲：sheet -> { rowIndex(1基) -> (level, collapsed) }
     private readonly Dictionary<String, Dictionary<Int32, (Int32 Level, Boolean Collapsed)>> _sheetRowOutlines = new(StringComparer.OrdinalIgnoreCase);
+    // 隐藏行：sheet -> 行号集合（1基）
+    private readonly Dictionary<String, HashSet<Int32>> _sheetHiddenRows = new(StringComparer.OrdinalIgnoreCase);
+    // 隐藏列：sheet -> 列号集合（0基）
+    private readonly Dictionary<String, HashSet<Int32>> _sheetHiddenCols = new(StringComparer.OrdinalIgnoreCase);
     // 工作表标签颜色：sheet -> RGB六位十六进制
     private readonly Dictionary<String, String> _sheetTabColors = new(StringComparer.OrdinalIgnoreCase);
     // 工作簿保护密码哈希（null 表示不保护）
@@ -444,6 +463,38 @@ public partial class ExcelWriter : DisposeBase
             _sheetRowHeights[sheet] = dict;
         }
         dict[row] = height;
+    }
+
+    /// <summary>隐藏指定行（1基行号，与 Excel 一致）。需在 Save 之前调用。</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="row">行号（1基）</param>
+    public void SetRowHidden(String? sheet, Int32 row)
+    {
+        if (row < 1) throw new ArgumentOutOfRangeException(nameof(row));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        if (!_sheetHiddenRows.TryGetValue(sheet, out var set))
+        {
+            set = [];
+            _sheetHiddenRows[sheet] = set;
+        }
+        set.Add(row);
+    }
+
+    /// <summary>隐藏指定列（0基列号）。需在 Save 之前调用。</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="columnIndex">列号（0基）</param>
+    public void SetColumnHidden(String? sheet, Int32 columnIndex)
+    {
+        if (columnIndex < 0) throw new ArgumentOutOfRangeException(nameof(columnIndex));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+        if (!_sheetHiddenCols.TryGetValue(sheet, out var set))
+        {
+            set = [];
+            _sheetHiddenCols[sheet] = set;
+        }
+        set.Add(columnIndex);
     }
 
     /// <summary>设置列大纲/分组级别（用于折叠展开列）</summary>
@@ -971,7 +1022,10 @@ public partial class ExcelWriter : DisposeBase
     /// <param name="col">列号（0基）</param>
     /// <param name="text">批注文本</param>
     /// <param name="author">批注作者（可空）</param>
-    public void AddComment(String? sheet, Int32 row, Int32 col, String text, String? author = null)
+    /// <param name="width">批注框宽度（磅，默认 108）</param>
+    /// <param name="height">批注框高度（磅，默认 59.25）</param>
+    /// <param name="visible">是否可见（默认隐藏）</param>
+    public void AddComment(String? sheet, Int32 row, Int32 col, String text, String? author = null, Double width = 108, Double height = 59.25, Boolean visible = false)
     {
         if (text.IsNullOrEmpty()) throw new ArgumentNullException(nameof(text));
         if (row < 1) throw new ArgumentOutOfRangeException(nameof(row));
@@ -983,7 +1037,7 @@ public partial class ExcelWriter : DisposeBase
             list = [];
             _sheetComments[sheet] = list;
         }
-        list.Add(new SheetComment { Row = row, Col = col, Text = text, Author = author ?? String.Empty });
+        list.Add(new SheetComment { Row = row, Col = col, Text = text, Author = author ?? String.Empty, Width = width, Height = height, Visible = visible });
     }
 
     /// <summary>为指定单元格添加富文本批注（M26）</summary>
@@ -1291,6 +1345,16 @@ public partial class ExcelWriter : DisposeBase
                     SetColumnWidth(sheet, kv.Key, kv.Value);
                 }
 
+                // 隐藏行列（行 0基→1基，列 0基）
+                foreach (var r in sd.HiddenRows)
+                {
+                    SetRowHidden(sheet, r + 1);
+                }
+                foreach (var c in sd.HiddenColumns)
+                {
+                    SetColumnHidden(sheet, c);
+                }
+
                 // 超链接（0基行列→1基行）
                 foreach (var kv in sd.Hyperlinks)
                 {
@@ -1328,7 +1392,8 @@ public partial class ExcelWriter : DisposeBase
                 foreach (var kv in sd.Comments)
                 {
                     var (r, c) = kv.Key;
-                    AddComment(sheet, r + 1, c, kv.Value.Text, kv.Value.Author);
+                    var cm = kv.Value;
+                    AddComment(sheet, r + 1, c, cm.Text, cm.Author, cm.Width, cm.Height, cm.Visible);
                 }
 
                 // 数据验证

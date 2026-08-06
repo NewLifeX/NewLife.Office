@@ -712,9 +712,10 @@ partial class ExcelWriter
                 sw.Write("</sheetView></sheetViews>");
             }
 
-            // cols（列宽 + 列大纲级别）——有自定义列宽或列分组时始终写入
+            // cols（列宽 + 列大纲级别 + 隐藏列）——有自定义列宽、列分组或隐藏列时始终写入
             var hasColOutlines = _sheetColOutlines.TryGetValue(sheet, out var colOutlines) && colOutlines.Count > 0;
-            if ((_sheetColWidths.TryGetValue(sheet, out var widths) && widths.Any(e => e > 0)) || hasColOutlines)
+            var hasHiddenCols = _sheetHiddenCols.TryGetValue(sheet, out var hiddenCols) && hiddenCols.Count > 0;
+            if ((_sheetColWidths.TryGetValue(sheet, out var widths) && widths.Any(e => e > 0)) || hasColOutlines || hasHiddenCols)
             {
                 // 收集所有需要输出的列索引
                 var colSet = new SortedSet<Int32>();
@@ -722,6 +723,8 @@ partial class ExcelWriter
                     for (var c = 0; c < widths.Count; c++) if (widths[c] > 0) colSet.Add(c);
                 if (hasColOutlines)
                     foreach (var c in colOutlines!.Keys) colSet.Add(c);
+                if (hasHiddenCols)
+                    foreach (var c in hiddenCols!) colSet.Add(c);
 
                 if (colSet.Count > 0)
                 {
@@ -734,6 +737,7 @@ partial class ExcelWriter
                         if (w > 0) sw.Write($" width=\"{w:0.##}\" customWidth=\"1\"");
                         if (outline.Level > 0) sw.Write($" outlineLevel=\"{outline.Level}\"");
                         if (outline.Collapsed) sw.Write(" collapsed=\"1\"");
+                        if (hasHiddenCols && hiddenCols!.Contains(c)) sw.Write(" hidden=\"1\"");
                         sw.Write("/>");
                     }
                     sw.Write("</cols>");
@@ -746,6 +750,7 @@ partial class ExcelWriter
             {
                 var hasHeights = _sheetRowHeights.TryGetValue(sheet, out var heights) && heights.Count > 0;
                 var hasRowOutlines = _sheetRowOutlines.TryGetValue(sheet, out var rowOutlines) && rowOutlines.Count > 0;
+                var hasHiddenRows = _sheetHiddenRows.TryGetValue(sheet, out var hiddenRows) && hiddenRows.Count > 0;
                 var rowNum = 1;
                 foreach (var r in list)
                 {
@@ -759,6 +764,13 @@ partial class ExcelWriter
                             ? $"<row r=\"{rowNum}\""
                             : replacement.TrimEnd('"');
                         replacement = tag + $" outlineLevel=\"{ro.Level}\"" + (ro.Collapsed ? " collapsed=\"1\"" : "") + (replacement == rowTag ? "" : "\"");
+                    }
+                    if (hasHiddenRows && hiddenRows!.Contains(rowNum))
+                    {
+                        var tag = replacement == rowTag
+                            ? $"<row r=\"{rowNum}\""
+                            : replacement.TrimEnd('"');
+                        replacement = tag + " hidden=\"1\"" + (replacement == rowTag ? "" : "\"");
                     }
                     sw.Write(r.Replace(rowTag, replacement));
                     rowNum++;
@@ -1235,8 +1247,9 @@ partial class ExcelWriter
                 for (var j = 0; j < comments.Count; j++)
                 {
                     var c = comments[j];
+                    var vis = c.Visible ? "visible" : "hidden";
                     vsw.Write($"<v:shape id=\"_x0000_s{1025 + j}\" type=\"#_x0000_t202\" " +
-                              "style=\"position:absolute;margin-left:59.25pt;margin-top:1.5pt;width:108pt;height:59.25pt;z-index:1;visibility:hidden\" " +
+                              $"style=\"position:absolute;margin-left:{c.Left:0.##}pt;margin-top:{c.Top:0.##}pt;width:{c.Width:0.##}pt;height:{c.Height:0.##}pt;z-index:1;visibility:{vis}\" " +
                               "fillcolor=\"#ffffe1\" o:insetmode=\"auto\">");
                     vsw.Write("<v:fill color2=\"#ffffe1\"/><v:shadow on=\"t\" color=\"black\" obscured=\"t\"/>");
                     vsw.Write("<v:path o:connecttype=\"none\"/><v:textbox style=\"mso-direction-alt:auto\"><div style=\"text-align:left\"/></v:textbox>");

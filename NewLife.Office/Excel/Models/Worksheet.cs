@@ -88,8 +88,8 @@ public class Worksheet
     /// <summary>条件格式集合</summary>
     public List<ConditionalFormatting> ConditionalFormats { get; set; } = [];
 
-    /// <summary>批注（0基行, 0基列）→ (文本, 作者)</summary>
-    public Dictionary<(Int32 Row, Int32 Col), (String Text, String Author)> Comments { get; set; } = [];
+    /// <summary>批注（0基行, 0基列）→ 批注模型（含尺寸/可见性）</summary>
+    public Dictionary<(Int32 Row, Int32 Col), Comment> Comments { get; set; } = [];
 
     /// <summary>数据验证集合</summary>
     public List<DataValidation> Validations { get; set; } = [];

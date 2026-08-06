@@ -282,12 +282,16 @@ public class ExcelRoundTripTests
                 Assert.Equal(scf.Formula ?? "", dcf.Formula ?? "");
             }
 
-            // 批注
+            // 批注（含尺寸/可见性）
             Assert.Equal(src.Comments.Count, dst.Comments.Count);
             foreach (var kv in src.Comments)
             {
                 Assert.True(dst.Comments.TryGetValue(kv.Key, out var dc), $"{sp}: 缺失批注 ({kv.Key})");
                 Assert.Equal(kv.Value.Text, dc.Text);
+                Assert.Equal(kv.Value.Author, dc.Author);
+                Assert.True(Math.Abs(kv.Value.Width - dc.Width) < 0.5, $"{sp}: 批注宽度 ({kv.Key}) src={kv.Value.Width} dst={dc.Width}");
+                Assert.True(Math.Abs(kv.Value.Height - dc.Height) < 0.5, $"{sp}: 批注高度 ({kv.Key}) src={kv.Value.Height} dst={dc.Height}");
+                Assert.Equal(kv.Value.Visible, dc.Visible);
             }
 
             // 公式（双方都有数据时比较）

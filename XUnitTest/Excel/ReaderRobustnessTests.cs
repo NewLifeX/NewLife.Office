@@ -225,6 +225,131 @@ public class ExcelReaderRobustnessTests
     }
     #endregion
 
+    #region 隐藏行列写入与往返
+    [Fact]
+    [DisplayName("Excel写—SetRowHidden/SetColumnHidden生成hidden属性")]
+    public void Write_HiddenRowsAndCols()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w = new ExcelWriter(path))
+        {
+            w.WriteRow("Sheet1", new Object?[] { "A", "B", "C" });
+            w.WriteRow("Sheet1", new Object?[] { "D", "E", "F" });
+            w.SetRowHidden("Sheet1", 2);
+            w.SetColumnHidden("Sheet1", 1);
+            w.Save();
+        }
+
+        using var reader = new ExcelReader(path);
+        var hiddenRows = reader.ReadHiddenRows("Sheet1");
+        var hiddenCols = reader.ReadHiddenColumns("Sheet1");
+        Assert.Equal(new[] { 1 }, hiddenRows); // 0基行1 = 第2行
+        Assert.Equal(new[] { 1 }, hiddenCols); // 0基列1 = B列
+    }
+
+    [Fact]
+    [DisplayName("Excel往返—隐藏行列WriteExcel回写")]
+    public void RoundTrip_HiddenRowsAndCols()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w = new ExcelWriter(path))
+        {
+            w.WriteRow("Sheet1", new Object?[] { "A", "B", "C" });
+            w.WriteRow("Sheet1", new Object?[] { "D", "E", "F" });
+            w.SetRowHidden("Sheet1", 2);
+            w.SetColumnHidden("Sheet1", 1);
+            w.Save();
+        }
+
+        // 读快照 → 写回 → 再读
+        ExcelDocument data;
+        using (var reader = new ExcelReader(path))
+        {
+            data = reader.ReadExcel();
+        }
+        Assert.Contains(1, data.Worksheets[0].HiddenRows);
+        Assert.Contains(1, data.Worksheets[0].HiddenColumns);
+
+        var path2 = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w2 = new ExcelWriter(path2))
+        {
+            w2.WriteExcel(data);
+            w2.Save();
+        }
+
+        using var reader2 = new ExcelReader(path2);
+        var sd = reader2.ReadWorksheet("Sheet1");
+        Assert.Equal(new[] { 1 }, sd.HiddenRows);
+        Assert.Equal(new[] { 1 }, sd.HiddenColumns);
+    }
+    #endregion
+
+    #region 批注增强
+    [Fact]
+    [DisplayName("Excel批注—尺寸与可见性写入读取")]
+    public void Comment_SizeVisibility()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w = new ExcelWriter(path))
+        {
+            w.WriteRow("Sheet1", new Object?[] { "A", "B" });
+            w.AddComment("Sheet1", 1, 0, "隐藏批注", "作者A", 200, 80, false);
+            w.AddComment("Sheet1", 1, 1, "可见批注", "作者B", 150, 100, true);
+            w.Save();
+        }
+
+        using var reader = new ExcelReader(path);
+        var comments = reader.ReadComments("Sheet1");
+        Assert.Equal(2, comments.Count);
+
+        var c1 = comments[(0, 0)];
+        Assert.Equal("隐藏批注", c1.Text);
+        Assert.Equal("作者A", c1.Author);
+        Assert.False(c1.Visible);
+        Assert.True(Math.Abs(c1.Width - 200) < 0.5, $"宽度={c1.Width}");
+        Assert.True(Math.Abs(c1.Height - 80) < 0.5, $"高度={c1.Height}");
+
+        var c2 = comments[(0, 1)];
+        Assert.True(c2.Visible);
+        Assert.True(Math.Abs(c2.Width - 150) < 0.5, $"宽度={c2.Width}");
+        Assert.True(Math.Abs(c2.Height - 100) < 0.5, $"高度={c2.Height}");
+    }
+
+    [Fact]
+    [DisplayName("Excel往返—批注尺寸可见性WriteExcel回写")]
+    public void Comment_RoundtripWriteExcel()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w = new ExcelWriter(path))
+        {
+            w.WriteRow("Sheet1", new Object?[] { "A" });
+            w.AddComment("Sheet1", 1, 0, "测试批注", "作者", 180, 90, true);
+            w.Save();
+        }
+
+        ExcelDocument data;
+        using (var reader = new ExcelReader(path))
+        {
+            data = reader.ReadExcel();
+        }
+        Assert.True(data.Worksheets[0].Comments[(0, 0)].Visible);
+
+        var path2 = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w2 = new ExcelWriter(path2))
+        {
+            w2.WriteExcel(data);
+            w2.Save();
+        }
+
+        using var reader2 = new ExcelReader(path2);
+        var cm = reader2.ReadComments("Sheet1")[(0, 0)];
+        Assert.Equal("测试批注", cm.Text);
+        Assert.True(cm.Visible);
+        Assert.True(Math.Abs(cm.Width - 180) < 0.5);
+        Assert.True(Math.Abs(cm.Height - 90) < 0.5);
+    }
+    #endregion
+
     #region 缺失部件容错
     [Fact]
     [DisplayName("Excel读—无sharedStrings/styles部件仍可读取")]

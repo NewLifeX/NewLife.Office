@@ -2060,9 +2060,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     /// <summary>读取批注</summary>
     /// <param name="sheet">工作表名称</param>
     /// <returns>(行, 列) → (文本, 作者)，行列均为0基</returns>
-    public Dictionary<(Int32 Row, Int32 Col), (String Text, String Author)> ReadComments(String sheet)
+    public Dictionary<(Int32 Row, Int32 Col), Comment> ReadComments(String sheet)
     {
-        var result = new Dictionary<(Int32, Int32), (String, String)>();
+        var result = new Dictionary<(Int32, Int32), Comment>();
         if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry)) return result;
 
         var n = sheetEntry.Name.TrimEnd(".xml");
@@ -2112,11 +2112,63 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                     }
                 }
 
-                result[(row, col)] = (text, author);
+                result[(row, col)] = new Comment { Text = text, Author = author };
+            }
+        }
+
+        // 解析 vmlDrawingN.vml 获取批注框尺寸/位置/可见性
+        var vmlPath = $"xl/drawings/vmlDrawing{sheetIdx}.vml";
+        var vmlEntry = _zip.GetEntry(vmlPath);
+        if (vmlEntry != null)
+        {
+            using var vs = vmlEntry.Open();
+            var vdoc = XDocument.Load(vs);
+            if (vdoc?.Root != null)
+            {
+                foreach (var shape in vdoc.Root.Descendants().Where(e => e.Name.LocalName == "shape"))
+                {
+                    var row = -1;
+                    var col = -1;
+                    foreach (var cd in shape.Descendants())
+                    {
+                        if (cd.Name.LocalName == "Row") row = cd.Value.ToInt(-1);
+                        else if (cd.Name.LocalName == "Column") col = cd.Value.ToInt(-1);
+                    }
+                    if (row < 0 || col < 0) continue;
+
+                    if (!result.TryGetValue((row, col), out var comment)) continue;
+
+                    // 解析 style 属性：width/height/visibility/margin-left/margin-top
+                    var style = shape.Attribute("style")?.Value;
+                    if (!style.IsNullOrEmpty())
+                    {
+                        foreach (var part in style.Split(';'))
+                        {
+                            var kv = part.Split(':');
+                            if (kv.Length != 2) continue;
+                            switch (kv[0].Trim())
+                            {
+                                case "width": comment.Width = ParsePoint(kv[1]); break;
+                                case "height": comment.Height = ParsePoint(kv[1]); break;
+                                case "visibility": comment.Visible = kv[1].Trim().EqualIgnoreCase("visible"); break;
+                                case "margin-left": comment.Left = ParsePoint(kv[1]); break;
+                                case "margin-top": comment.Top = ParsePoint(kv[1]); break;
+                            }
+                        }
+                    }
+                }
             }
         }
 
         return result;
+    }
+
+    /// <summary>解析 "108pt" 形式的磅值；无法解析返回 0</summary>
+    private static Double ParsePoint(String value)
+    {
+        var str = value.Trim();
+        if (str.EndsWith("pt", StringComparison.OrdinalIgnoreCase)) str = str.Substring(0, str.Length - 2);
+        return str.Trim().ToDouble();
     }
 
     /// <summary>读取批注富文本段（M26）</summary>
