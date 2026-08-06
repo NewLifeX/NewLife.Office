@@ -126,4 +126,46 @@ public class BiffEnhancementTests
         Assert.Equal(String.Empty, header);
         Assert.Equal(String.Empty, footer);
     }
+
+    [Fact]
+    [DisplayName("xls—单元格样式写入与读取往返")]
+    public void CellFormats_Roundtrip()
+    {
+        var bytes = Build(w =>
+        {
+            w.WriteHeader(new[] { "名称", "金额" });
+            var style = new CellFormat { Bold = true, FontSize = 12, FontColor = "FF0000" };
+            w.WriteRow(new Object?[] { "苹果", 3.5 }, style);
+        });
+
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        var formats = reader.ReadCellFormats();
+
+        // 数据行（第2行）应有字体样式
+        Assert.True(formats.TryGetValue((1, 0), out var cf0), "A2 应有样式");
+        Assert.True(cf0.Bold, "应识别粗体");
+        Assert.True(Math.Abs(cf0.FontSize - 12) < 0.5, $"FontSize={cf0.FontSize}");
+        Assert.Equal("FF0000", cf0.FontColor);
+
+        Assert.True(formats.TryGetValue((1, 1), out var cf1), "B2 应有样式");
+        Assert.True(cf1.Bold);
+
+        // 表头行（默认样式）不应有样式条目
+        Assert.False(formats.ContainsKey((0, 0)));
+        Assert.False(formats.ContainsKey((0, 1)));
+    }
+
+    [Fact]
+    [DisplayName("xls—未设置样式时ReadCellFormats为空")]
+    public void CellFormats_None()
+    {
+        var bytes = Build(w =>
+        {
+            w.WriteHeader(new[] { "A", "B" });
+            w.WriteRow(new Object?[] { 1, 2 });
+        });
+
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        Assert.Empty(reader.ReadCellFormats());
+    }
 }

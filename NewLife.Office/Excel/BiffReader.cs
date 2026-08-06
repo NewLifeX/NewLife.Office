@@ -548,6 +548,335 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     }
     #endregion
 
+    #region 样式与命名范围读取
+    /// <summary>读取指定工作表的单元格样式（FONT/FORMAT/XF 记录解析）</summary>
+    /// <param name="sheet">工作表名称，null 取第一个</param>
+    /// <returns>(行, 列) → CellFormat（0基），仅包含应用了非默认样式的单元格</returns>
+    public Dictionary<(Int32 Row, Int32 Col), CellFormat> ReadCellFormats(String? sheet = null)
+    {
+        var result = new Dictionary<(Int32, Int32), CellFormat>();
+        var idx = ResolveSheetIndex(sheet);
+        if (idx < 0) return result;
+
+        // 1. 解析 Globals 段样式表（FONT/FORMAT/XF）
+        var fonts = new List<CellFormat>();
+        var formats = new Dictionary<Int32, String>(); // formatIndex → 格式码
+        var xfs = new List<XfEntry>();                 // xfIndex → 解析信息
+        ParseGlobalStyles(fonts, formats, xfs);
+        if (xfs.Count == 0) return result;
+
+        // 2. 解析工作表单元格的 xfIndex
+        var sheetReader = new SpanReader(_workbook, 0, _workbook.Length);
+        var sheetRecords = ReadSheetRecords(ref sheetReader, _sheetBofOffsets[idx]);
+        var cells = new Dictionary<(Int32, Int32), Int32>();
+        foreach (var (type, data) in sheetRecords)
+        {
+            ParseCellXf(type, data, cells);
+        }
+
+        // 3. 组装 CellFormat
+        foreach (var kv in cells)
+        {
+            var xf = kv.Value;
+            if (xf <= 0 || xf >= xfs.Count) continue; // 0 = 默认样式，跳过
+            var cf = BuildCellFormat(xfs[xf], fonts, formats);
+            if (cf != null) result[kv.Key] = cf;
+        }
+        return result;
+    }
+
+    /// <summary>读取工作簿中所有命名范围（NAME 记录，不含系统 _xlnm.*）</summary>
+    /// <returns>名称 → 范围引用（如 "Sheet1!$A$1:$B$10"）</returns>
+    public Dictionary<String, String> GetDefinedNames()
+    {
+        var result = new Dictionary<String, String>();
+        var reader = new SpanReader(_workbook, 0, _workbook.Length);
+        var records = ReadAllRecords(ref reader);
+
+        var globalsStart = FindGlobalsBof(records);
+        if (globalsStart < 0) return result;
+
+        var sheetNames = _sheetNames.Count > 0 ? _sheetNames[0] : "Sheet1";
+        var pos = globalsStart;
+        while (pos < records.Count)
+        {
+            var (type, data) = records[pos];
+            pos++;
+            if (type == RecEof) break;
+            if (type == RecName && data.Length >= 14)
+            {
+                var (name, range) = ParseNameRecord(data, sheetNames);
+                if (!name.IsNullOrEmpty() && !name!.StartsWith("_xlnm.", StringComparison.OrdinalIgnoreCase) && !range.IsNullOrEmpty())
+                    result[name!] = range!;
+            }
+        }
+        return result;
+    }
+
+    /// <summary>读取第一个工作表的打印区域（_xlnm.Print_Area）</summary>
+    /// <returns>范围（如 "A1:F20"），未设置返回 null</returns>
+    public String? GetPrintArea()
+    {
+        var reader = new SpanReader(_workbook, 0, _workbook.Length);
+        var records = ReadAllRecords(ref reader);
+        var globalsStart = FindGlobalsBof(records);
+        if (globalsStart < 0) return null;
+
+        var sheetNames = _sheetNames.Count > 0 ? _sheetNames[0] : "Sheet1";
+        var pos = globalsStart;
+        while (pos < records.Count)
+        {
+            var (type, data) = records[pos];
+            pos++;
+            if (type == RecEof) break;
+            if (type == RecName && data.Length >= 14)
+            {
+                var (name, range) = ParseNameRecord(data, sheetNames);
+                if (name == "_xlnm.Print_Area") return range;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>解析 NAME 记录，返回（名称, 范围引用）</summary>
+    private static (String? Name, String? Range) ParseNameRecord(Byte[] data, String defaultSheet)
+    {
+        // NAME 记录：option(2)+keyboard(1)+cch(1)+cce(2)+ixals(2)+reserved(2)+cce2(2)+cceFormula(1)+name+formula
+        if (data.Length < 14) return (null, null);
+
+        var option = ReadUInt16(data, 0);
+        var cch = data[3];          // 名称字符数
+        var cceFormula = data[12];  // 公式长度
+        var namePos = 14;
+        if (namePos + cch > data.Length) return (null, null);
+
+        // 名称（Latin-1 或 UTF-16，取决于 option bit0）
+        String name;
+        if ((option & 0x01) != 0)
+            name = Encoding.Unicode.GetString(data, namePos, cch * 2);
+        else
+            name = DecodeLatin1(data, namePos, cch);
+        namePos += (option & 0x01) != 0 ? cch * 2 : cch;
+
+        if (cceFormula <= 0 || namePos + cceFormula > data.Length) return (name, null);
+
+        // 解析公式 Rgce：grbit(2) + ptgArea3d(1) + ixti(2) + r1(2)+c1(2)+r2(2)+c2(2)
+        var fpos = namePos;
+        var grbit = ReadUInt16(data, fpos);
+        fpos += 2;
+        if (fpos + 1 > data.Length) return (name, null);
+        var ptg = data[fpos];
+        fpos += 1;
+        if (ptg is 0x3A or 0x3B) // ptgRef3d / ptgArea3d
+        {
+            fpos += 2; // skip ixti
+            if (ptg == 0x3A)
+            {
+                if (fpos + 4 > data.Length) return (name, null);
+                var r = ReadUInt16(data, fpos);
+                var c = ReadUInt16(data, fpos + 2);
+                return (name, $"{defaultSheet}!{ColumnName(c)}{r + 1}");
+            }
+            else
+            {
+                if (fpos + 8 > data.Length) return (name, null);
+                var r1 = ReadUInt16(data, fpos);
+                var c1 = ReadUInt16(data, fpos + 2);
+                var r2 = ReadUInt16(data, fpos + 4);
+                var c2 = ReadUInt16(data, fpos + 6);
+                return (name, $"{defaultSheet}!{ColumnName(c1)}{r1 + 1}:{ColumnName(c2)}{r2 + 1}");
+            }
+        }
+        return (name, null);
+    }
+
+    /// <summary>解析 Globals 段的 FONT/FORMAT/XF 记录</summary>
+    private void ParseGlobalStyles(List<CellFormat> fonts, Dictionary<Int32, String> formats, List<XfEntry> xfs)
+    {
+        var reader = new SpanReader(_workbook, 0, _workbook.Length);
+        var records = ReadAllRecords(ref reader);
+        var globalsStart = FindGlobalsBof(records);
+        if (globalsStart < 0) return;
+
+        var pos = globalsStart;
+        while (pos < records.Count)
+        {
+            var (type, data) = records[pos];
+            pos++;
+            if (type == RecEof) break;
+
+            if (type == RecFont)
+                fonts.Add(ParseFont(data));
+            else if (type == RecFormat && data.Length >= 5)
+            {
+                var ifmt = ReadUInt16(data, 0);
+                var cch = ReadUInt16(data, 2);
+                var fHighByte = data[4];
+                var code = (fHighByte & 0x01) != 0
+                    ? Encoding.Unicode.GetString(data, 5, Math.Min(cch * 2, data.Length - 5))
+                    : DecodeLatin1(data, 5, Math.Min(cch, data.Length - 5));
+                formats[ifmt] = code;
+            }
+            else if (type == RecXf && data.Length >= 20)
+                xfs.Add(ParseXf(data));
+        }
+    }
+
+    /// <summary>解析 FONT 记录为字体近似样式</summary>
+    private static CellFormat ParseFont(Byte[] data)
+    {
+        var cf = new CellFormat();
+        if (data.Length < 16) return cf;
+
+        var height = ReadUInt16(data, 0); // twips
+        cf.FontSize = height / 20.0;
+        var grbit = ReadUInt16(data, 2);
+        cf.Italic = (grbit & 0x02) != 0;
+        cf.Underline = (grbit & 0x0C) != 0;
+        var weight = ReadUInt16(data, 6);
+        cf.Bold = weight >= 600;
+        var colorIdx = ReadUInt16(data, 4);
+        cf.FontColor = MapColorIndexToRgb(colorIdx);
+
+        var nameLen = data[14];
+        var fHighByte = data[15];
+        if (nameLen > 0 && 16 + nameLen * (fHighByte == 1 ? 2 : 1) <= data.Length)
+        {
+            cf.FontName = fHighByte == 1
+                ? Encoding.Unicode.GetString(data, 16, nameLen * 2)
+                : DecodeLatin1(data, 16, nameLen);
+        }
+        return cf;
+    }
+
+    /// <summary>解析 XF 记录（兼容标准 20 字节与本库 22 字节布局）</summary>
+    private static XfEntry ParseXf(Byte[] data)
+    {
+        var xf = new XfEntry();
+        xf.FontId = ReadUInt16(data, 0);
+        xf.FormatId = ReadUInt16(data, 2);
+
+        // fAlign（标准 20 字节布局与 22 字节布局均在偏移 6）
+        var fAlign = ReadUInt16(data, 6);
+        xf.Wrap = (fAlign & 0x01) != 0;
+        xf.HAlign = (HorizontalAlignment)((fAlign >> 3) & 0x07);
+        xf.VAlign = (VerticalAlignment)((fAlign >> 9) & 0x03);
+
+        // 边框样式 nibble：标准布局在偏移 10，本库 22 字节布局在偏移 14
+        var borderPos = data.Length == 22 ? 14 : 10;
+        if (borderPos + 4 <= data.Length)
+        {
+            xf.LeftBorder = (BorderStyle)(data[borderPos] & 0x0F);
+            xf.RightBorder = (BorderStyle)((data[borderPos] >> 4) & 0x0F);
+            xf.TopBorder = (BorderStyle)(data[borderPos + 1] & 0x0F);
+            xf.BottomBorder = (BorderStyle)((data[borderPos + 1] >> 4) & 0x0F);
+        }
+
+        // 填充图案：标准布局在偏移 18；本库 22 字节布局末字节为 0x40/0
+        if (data.Length == 22)
+        {
+            xf.FillPattern = (UInt32)data[21];
+        }
+        else if (data.Length >= 20)
+        {
+            xf.FillPattern = data[18];
+            // 标准布局填充色：16-17 前景，18 图案（颜色索引在 palette，best-effort）
+            xf.FgColor = ReadUInt16(data, 16);
+        }
+        return xf;
+    }
+
+    /// <summary>从单元格记录提取 (行, 列) → xfIndex</summary>
+    private static void ParseCellXf(UInt16 type, Byte[] data, Dictionary<(Int32, Int32), Int32> cells)
+    {
+        if (data.Length < 6) return;
+        var row = (Int32)ReadUInt16(data, 0);
+        var col = (Int32)ReadUInt16(data, 2);
+        var xf = (Int32)ReadUInt16(data, 4);
+
+        // MULRK 的 xf 在每条记录内；LABELSST/NUMBER/RK/BOOLERR/LABEL/FORMULA/BLANK 的 xf 在偏移 4
+        if (type == RecMulRk)
+        {
+            var firstCol = col;
+            var lastCol = (Int32)ReadUInt16(data, data.Length - 2);
+            var p = 6;
+            for (var c = firstCol; c <= lastCol; c++)
+            {
+                if (p + 6 > data.Length - 2) break;
+                var cx = (Int32)ReadUInt16(data, p);
+                cells[(row, c)] = cx;
+                p += 6;
+            }
+        }
+        else
+        {
+            cells[(row, col)] = xf;
+        }
+    }
+
+    /// <summary>组装 CellFormat（跳过与默认样式无差异的项）</summary>
+    private static CellFormat? BuildCellFormat(XfEntry xf, List<CellFormat> fonts, Dictionary<Int32, String> formats)
+    {
+        var cf = new CellFormat();
+        var changed = false;
+
+        if (xf.FontId > 0 && xf.FontId < fonts.Count) // 字体 0 为默认字体，不构成自定义样式
+        {
+            var f = fonts[xf.FontId];
+            if (!f.FontName.IsNullOrEmpty()) { cf.FontName = f.FontName; changed = true; }
+            if (f.FontSize > 0) { cf.FontSize = f.FontSize; changed = true; }
+            if (f.Bold) { cf.Bold = true; changed = true; }
+            if (f.Italic) { cf.Italic = true; changed = true; }
+            if (!f.FontColor.IsNullOrEmpty()) { cf.FontColor = f.FontColor; changed = true; }
+        }
+
+        if (formats.TryGetValue(xf.FormatId, out var fmt) && !fmt.IsNullOrEmpty())
+        {
+            cf.NumberFormat = fmt;
+            changed = true;
+        }
+
+        if (xf.Wrap) { cf.WrapText = true; changed = true; }
+        if (xf.HAlign != HorizontalAlignment.General) { cf.HAlign = xf.HAlign; changed = true; }
+        if (xf.VAlign != VerticalAlignment.Top) { cf.VAlign = xf.VAlign; changed = true; }
+        if (xf.LeftBorder != BorderStyle.None) { cf.LeftBorder = xf.LeftBorder; changed = true; }
+        if (xf.RightBorder != BorderStyle.None) { cf.RightBorder = xf.RightBorder; changed = true; }
+        if (xf.TopBorder != BorderStyle.None) { cf.TopBorder = xf.TopBorder; changed = true; }
+        if (xf.BottomBorder != BorderStyle.None) { cf.BottomBorder = xf.BottomBorder; changed = true; }
+        if (xf.FillPattern is > 0 and not 0x40) { cf.BackgroundColor = MapColorIndexToRgb(xf.FgColor); changed = true; }
+
+        return changed ? cf : null;
+    }
+
+    /// <summary>BIFF8 常用颜色索引 → RGB（调色板近似）</summary>
+    private static String? MapColorIndexToRgb(UInt16 idx)
+    {
+        if (idx == 0x7FFF || idx == 64) return null; // 自动/系统
+        var palette = new[] { "000000", "FFFFFF", "FF0000", "00FF00", "0000FF", "FFFF00", "FF00FF", "00FFFF",
+            "000000", "FFFFFF", "FF0000", "00FF00", "0000FF", "FFFF00", "FF00FF", "00FFFF",
+            "800000", "008000", "000080", "808000", "800080", "008080", "C0C0C0", "808080",
+            "9999FF", "993366", "FFFFCC", "CCFFFF", "660066", "FF8080", "0066CC", "CCCCFF" };
+        if (idx < palette.Length) return palette[idx];
+        return null;
+    }
+
+    /// <summary>XF 记录解析结果</summary>
+    private sealed class XfEntry
+    {
+        public Int32 FontId;
+        public Int32 FormatId;
+        public Boolean Wrap;
+        public HorizontalAlignment HAlign;
+        public VerticalAlignment VAlign;
+        public BorderStyle LeftBorder;
+        public BorderStyle RightBorder;
+        public BorderStyle TopBorder;
+        public BorderStyle BottomBorder;
+        public UInt32 FillPattern;
+        public UInt16 FgColor;
+    }
+    #endregion
+
     #region 单元格解析辅助
     private void ParseLabelSst(Byte[] data, SortedDictionary<Int32, SortedDictionary<Int32, Object?>> cells, ref Int32 maxCol)
     {
@@ -840,6 +1169,10 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     private const UInt16 RecFooter = 0x0015;
     private const UInt16 RecProtect = 0x0012;
     private const UInt16 RecDv = 0x01BE;
+    private const UInt16 RecFont = 0x0031;
+    private const UInt16 RecFormat = 0x041E;
+    private const UInt16 RecXf = 0x00E0;
+    private const UInt16 RecName = 0x0018;
     #endregion
 
     #region 文本提取
