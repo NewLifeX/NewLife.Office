@@ -1378,6 +1378,20 @@ public partial class ExcelWriter : DisposeBase
                 if (sd.PrintTitleStartRow > 0)
                     SetPrintTitleRows(sheet, sd.PrintTitleStartRow, sd.PrintTitleEndRow);
 
+                // 打印区域
+                if (!sd.PrintArea.IsNullOrEmpty())
+                    SetPrintArea(sheet, sd.PrintArea!);
+
+                // 分页符（1基）
+                foreach (var r in sd.RowPageBreaks)
+                {
+                    SetPageBreak(sheet, r);
+                }
+                foreach (var c in sd.ColumnPageBreaks)
+                {
+                    SetColumnPageBreak(sheet, c);
+                }
+
                 // 工作表保护
                 if (sd.ProtectionPassword != null)
                     ProtectSheet(sheet, sd.ProtectionPassword);

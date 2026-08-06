@@ -399,6 +399,48 @@ public class ExcelReaderRobustnessTests
     }
     #endregion
 
+    #region 打印区域与分页符
+    [Fact]
+    [DisplayName("Excel往返—打印区域与分页符WriteExcel回写")]
+    public void PrintArea_PageBreaks_Roundtrip()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w = new ExcelWriter(path))
+        {
+            w.WriteRow("Sheet1", new Object?[] { "A", "B", "C" });
+            w.WriteRow("Sheet1", new Object?[] { "D", "E", "F" });
+            w.WriteRow("Sheet1", new Object?[] { "G", "H", "I" });
+            w.SetPrintArea("Sheet1", "A1:C3");
+            w.SetPageBreak("Sheet1", 2);
+            w.SetColumnPageBreak("Sheet1", 2);
+            w.Save();
+        }
+
+        ExcelDocument data;
+        using (var reader = new ExcelReader(path))
+        {
+            data = reader.ReadExcel();
+        }
+        var sd = data.Worksheets[0];
+        Assert.NotNull(sd.PrintArea);
+        Assert.Contains(2, sd.RowPageBreaks);
+        Assert.Contains(2, sd.ColumnPageBreaks);
+
+        var path2 = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w2 = new ExcelWriter(path2))
+        {
+            w2.WriteExcel(data);
+            w2.Save();
+        }
+
+        using var reader2 = new ExcelReader(path2);
+        var sd2 = reader2.ReadWorksheet("Sheet1");
+        Assert.Equal(sd.PrintArea, sd2.PrintArea);
+        Assert.Equal(sd.RowPageBreaks, sd2.RowPageBreaks);
+        Assert.Equal(sd.ColumnPageBreaks, sd2.ColumnPageBreaks);
+    }
+    #endregion
+
     #region 缺失部件容错
     [Fact]
     [DisplayName("Excel读—无sharedStrings/styles部件仍可读取")]

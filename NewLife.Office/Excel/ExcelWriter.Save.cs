@@ -817,13 +817,13 @@ partial class ExcelWriter
                 sw.Write("</rowBreaks>");
             }
 
-            // colBreaks（垂直分页符）
+            // colBreaks（垂直分页符）——OOXML 规范 id 为 0基列号，与 rowBreaks 保持一致（2026-08-07 修复 off-by-one）
             if (_sheetColPageBreaks.TryGetValue(sheet, out var colBreaks) && colBreaks.Count > 0)
             {
                 colBreaks.Sort();
                 sw.Write($"<colBreaks count=\"{colBreaks.Count}\" manualBreakCount=\"{colBreaks.Count}\">");
                 foreach (var c in colBreaks)
-                    sw.Write($"<brk id=\"{c}\" max=\"1048575\" man=\"1\"/>");
+                    sw.Write($"<brk id=\"{c - 1}\" max=\"1048575\" man=\"1\"/>");
                 sw.Write("</colBreaks>");
             }
 

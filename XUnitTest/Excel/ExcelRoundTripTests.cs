@@ -222,6 +222,10 @@ public class ExcelRoundTripTests
                 Assert.True(Math.Abs(kv.Value - dw) < 1.0, $"{sp}: 列宽 col={kv.Key} src={kv.Value} dst={dw}");
             }
 
+            // 隐藏行列
+            Assert.True(src.HiddenRows.SetEquals(dst.HiddenRows), $"{sp}: 隐藏行 src={String.Join(",", src.HiddenRows)} dst={String.Join(",", dst.HiddenRows)}");
+            Assert.True(src.HiddenColumns.SetEquals(dst.HiddenColumns), $"{sp}: 隐藏列 src={String.Join(",", src.HiddenColumns)} dst={String.Join(",", dst.HiddenColumns)}");
+
             // 超链接
             Assert.Equal(src.Hyperlinks.Count, dst.Hyperlinks.Count);
             foreach (var kv in src.Hyperlinks)
@@ -263,6 +267,11 @@ public class ExcelRoundTripTests
             Assert.Equal(src.FooterText, dst.FooterText);
             Assert.Equal(src.PrintTitleStartRow, dst.PrintTitleStartRow);
             Assert.Equal(src.PrintTitleEndRow, dst.PrintTitleEndRow);
+
+            // 打印区域与分页符
+            Assert.Equal(src.PrintArea, dst.PrintArea);
+            Assert.Equal(src.RowPageBreaks, dst.RowPageBreaks);
+            Assert.Equal(src.ColumnPageBreaks, dst.ColumnPageBreaks);
 
             // 保护
             Assert.Equal(src.ProtectionPassword, dst.ProtectionPassword);

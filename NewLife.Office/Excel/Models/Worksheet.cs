@@ -82,6 +82,15 @@ public class Worksheet
     /// <summary>打印标题结束行（1基），0 表示未设置</summary>
     public Int32 PrintTitleEndRow { get; set; }
 
+    /// <summary>打印区域（如 "$A$1:$F$20"），null 表示未设置</summary>
+    public String? PrintArea { get; set; }
+
+    /// <summary>水平分页符行号（1基），此行开始新页</summary>
+    public List<Int32> RowPageBreaks { get; set; } = [];
+
+    /// <summary>垂直分页符列号（1基），此列开始新页</summary>
+    public List<Int32> ColumnPageBreaks { get; set; } = [];
+
     /// <summary>工作表保护密码哈希，null 表示未保护</summary>
     public String? ProtectionPassword { get; set; }
 

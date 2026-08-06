@@ -1344,6 +1344,11 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         // 工作表保护
         sd.ProtectionPassword = ReadSheetProtection(sheet);
 
+        // 分页符（水平 rowBreaks / 垂直 colBreaks）
+        var (rowPageBreaks, colPageBreaks) = ReadPageBreaks(sheet);
+        sd.RowPageBreaks = rowPageBreaks;
+        sd.ColumnPageBreaks = colPageBreaks;
+
         // 条件格式
         sd.ConditionalFormats = ReadConditionalFormats(sheet).ToList();
 
@@ -1830,15 +1835,27 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                     {
                         foreach (var dn in definedNames.Elements())
                         {
-                            if (dn.Attribute("name")?.Value != "_xlnm.Print_Titles") continue;
-                            var text = dn.Value;
-                            // 格式: 'SheetName'!$1:$1
-                            var parts = text.Split('!');
-                            if (parts.Length == 2)
+                            var dnName = dn.Attribute("name")?.Value;
+                            if (dnName == "_xlnm.Print_Area")
                             {
-                                var sn = parts[0].Trim('\'');
-                                if (!sn.EqualIgnoreCase(sheet)) continue;
-                                var range = parts[1].Trim('$').Split(':');
+                                // 打印区域：'SheetName'!$A$1:$F$20
+                                var text = dn.Value;
+                                var parts = text.Split('!');
+                                if (parts.Length == 2)
+                                {
+                                    var sn = parts[0].Trim('\'');
+                                    if (sn.EqualIgnoreCase(sheet)) sd.PrintArea = parts[1];
+                                }
+                            }
+                            else if (dnName != "_xlnm.Print_Titles") continue;
+                            var t = dn.Value;
+                            // 格式: 'SheetName'!$1:$1
+                            var pp = t.Split('!');
+                            if (pp.Length == 2)
+                            {
+                                var sn2 = pp[0].Trim('\'');
+                                if (!sn2.EqualIgnoreCase(sheet)) continue;
+                                var range = pp[1].Trim('$').Split(':');
                                 if (range.Length == 2)
                                 {
                                     sd.PrintTitleStartRow = range[0].ToInt();
@@ -1863,6 +1880,42 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
 
         var sp = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sheetProtection"));
         return sp?.Attribute("password")?.Value;
+    }
+
+    /// <summary>读取指定工作表的分页符（rowBreaks/colBreaks）</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>(水平分页符 1基行号, 垂直分页符 1基列号)</returns>
+    public (List<Int32> Rows, List<Int32> Cols) ReadPageBreaks(String sheet)
+    {
+        var rows = new List<Int32>();
+        var cols = new List<Int32>();
+        var doc = OpenSheetXml(sheet);
+        if (doc.Root == null) return (rows, cols);
+
+        // 水平分页符：<brk id="0基" max="16383" man="1"/>
+        var rb = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "rowBreaks");
+        if (rb != null)
+        {
+            foreach (var brk in rb.Elements())
+            {
+                if (brk.Name.LocalName != "brk") continue;
+                var id = brk.Attribute("id")?.Value.ToInt(-1) ?? -1;
+                if (id >= 0) rows.Add(id + 1); // 0基 → 1基
+            }
+        }
+
+        // 垂直分页符
+        var cb = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "colBreaks");
+        if (cb != null)
+        {
+            foreach (var brk in cb.Elements())
+            {
+                if (brk.Name.LocalName != "brk") continue;
+                var id = brk.Attribute("id")?.Value.ToInt(-1) ?? -1;
+                if (id >= 0) cols.Add(id + 1); // 0基 → 1基
+            }
+        }
+        return (rows, cols);
     }
 
     /// <summary>读取工作表列大纲级别</summary>
