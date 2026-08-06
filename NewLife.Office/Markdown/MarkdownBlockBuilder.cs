@@ -44,8 +44,8 @@ public static class MarkdownBlockBuilder
             for (var c = 0; c < row.Length; c++)
             {
                 var isHeader = firstRowHeader && r == 0;
-                // GFM 表格单元格内 | 需转义，避免破坏表格结构
-                var cellText = MarkdownTextCleaner.CleanCell(row[c]).Replace("|", "\\|");
+                // GFM 表格单元格文本（管道符由写入器在序列化时统一转义，避免双重转义）
+                var cellText = MarkdownTextCleaner.CleanCell(row[c]);
                 var cell = new TableCellBlock([MarkdownInline.CreateText(cellText)], isHeader);
                 rowBlock.Children.Add(cell);
             }

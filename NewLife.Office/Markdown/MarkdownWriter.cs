@@ -8,6 +8,12 @@ internal sealed class MarkdownWriter
 {
     #region 属性
     private readonly String _bulletChar;
+
+    /// <summary>是否正在写入表格单元格（用于转义管道符）</summary>
+    private Boolean _inTable;
+
+    /// <summary>下一个行内元素是否处于行首（用于保护列表/标题等起始标记）</summary>
+    private Boolean _atLineStart;
     #endregion
 
     #region 构造
@@ -30,18 +36,50 @@ internal sealed class MarkdownWriter
         for (var i = 0; i < doc.Blocks.Count; i++)
         {
             var block = doc.Blocks[i];
-            // 往返模式：若块有原始文本且未修改，直接原样输出
-            if (roundtrip && block.SourceText != null)
+            // 往返模式：若块有原始源码且内容未被修改，原样输出以保留原始格式；已修改则重新序列化
+            if (roundtrip && block.SourceText != null && !IsModified(block))
             {
                 sb.Append(block.SourceText);
-                if (i < doc.Blocks.Count - 1) sb.AppendLine();
+                if (i < doc.Blocks.Count - 1 && !block.SourceText.EndsWith("\n")) sb.AppendLine();
                 continue;
             }
             WriteBlock(sb, block, 0);
             if (i < doc.Blocks.Count - 1) sb.AppendLine();
         }
+
+        // 引用链接定义（[id]: url），保证序列化/往返不丢失
+        if (doc.References.Count > 0)
+        {
+            sb.AppendLine();
+            foreach (var kv in doc.References)
+            {
+                sb.Append('[').Append(kv.Key).Append("]: ").AppendLine(kv.Value);
+            }
+        }
+
         return sb.ToString().TrimEnd() + "\n";
     }
+
+    /// <summary>判断块是否被修改：当前规范序列化与解析时快照比较（MD06-03 往返渲染）</summary>
+    /// <param name="block">块节点</param>
+    /// <returns>内容与解析时是否不一致</returns>
+    private Boolean IsModified(MarkdownBlock block)
+        => block.SourceSnapshot == null || SerializeBlock(block) != block.SourceSnapshot;
+
+    /// <summary>将块序列化为字符串（供修改检测使用）</summary>
+    /// <param name="block">块节点</param>
+    /// <returns>序列化文本</returns>
+    private String SerializeBlock(MarkdownBlock block)
+    {
+        var sb = new StringBuilder();
+        WriteBlock(sb, block, 0);
+        return sb.ToString();
+    }
+
+    /// <summary>生成块的规范序列化快照（供解析器在往返渲染时记录，MD06-03）</summary>
+    /// <param name="block">块节点</param>
+    /// <returns>规范序列化文本</returns>
+    internal static String SerializeSnapshot(MarkdownBlock block) => new MarkdownWriter().SerializeBlock(block);
     #endregion
 
     #region 块
@@ -60,7 +98,9 @@ internal sealed class MarkdownWriter
 
             case MarkdownBlockType.Paragraph:
                 sb.Append(pad);
+                _atLineStart = true;
                 WriteInlines(sb, block.Inlines);
+                _atLineStart = false;
                 sb.AppendLine();
                 sb.AppendLine();
                 break;
@@ -180,7 +220,9 @@ internal sealed class MarkdownWriter
 
         if (item.Inlines.Count > 0)
         {
+            _atLineStart = true;
             WriteInlines(sb, item.Inlines);
+            _atLineStart = false;
             sb.AppendLine();
 
             // 如果有子块（嵌套列表等），继续输出子块
@@ -198,7 +240,9 @@ internal sealed class MarkdownWriter
             var firstBlock = item.Children[0];
             if (firstBlock.Type == MarkdownBlockType.Paragraph && firstBlock.Inlines.Count > 0)
             {
+                _atLineStart = true;
                 WriteInlines(sb, firstBlock.Inlines);
+                _atLineStart = false;
                 sb.AppendLine();
             }
             else
@@ -222,39 +266,48 @@ internal sealed class MarkdownWriter
         if (table.Children.Count == 0) return;
         var headerRow = table.Children[0];
 
-        // Header
-        sb.Append('|');
-        foreach (var cell in headerRow.Children)
+        // 表格单元格内转义管道符，避免破坏列结构
+        _inTable = true;
+        try
         {
-            sb.Append(' ');
-            WriteInlines(sb, cell.Inlines);
-            sb.Append(" |");
-        }
-        sb.AppendLine();
-
-        // Separator
-        sb.Append('|');
-        foreach (var cell in headerRow.Children)
-        {
-            var tc = cell as TableCellBlock;
-            var align = tc?.Alignment ?? "";
-            sb.Append(align == "center" ? " :---: " : align == "right" ? " ---: " : align == "left" ? " :--- " : " --- ");
+            // Header
             sb.Append('|');
-        }
-        sb.AppendLine();
-
-        // Data rows
-        for (var r = 1; r < table.Children.Count; r++)
-        {
-            var row = table.Children[r];
-            sb.Append('|');
-            foreach (var cell in row.Children)
+            foreach (var cell in headerRow.Children)
             {
                 sb.Append(' ');
                 WriteInlines(sb, cell.Inlines);
                 sb.Append(" |");
             }
             sb.AppendLine();
+
+            // Separator
+            sb.Append('|');
+            foreach (var cell in headerRow.Children)
+            {
+                var tc = cell as TableCellBlock;
+                var align = tc?.Alignment ?? "";
+                sb.Append(align == "center" ? " :---: " : align == "right" ? " ---: " : align == "left" ? " :--- " : " --- ");
+                sb.Append('|');
+            }
+            sb.AppendLine();
+
+            // Data rows
+            for (var r = 1; r < table.Children.Count; r++)
+            {
+                var row = table.Children[r];
+                sb.Append('|');
+                foreach (var cell in row.Children)
+                {
+                    sb.Append(' ');
+                    WriteInlines(sb, cell.Inlines);
+                    sb.Append(" |");
+                }
+                sb.AppendLine();
+            }
+        }
+        finally
+        {
+            _inTable = false;
         }
     }
     #endregion
@@ -262,9 +315,19 @@ internal sealed class MarkdownWriter
     #region 行内
     private void WriteInlines(StringBuilder sb, List<MarkdownInline> inlines)
     {
-        foreach (var inline in inlines)
+        var saved = _atLineStart;
+        try
         {
-            WriteInline(sb, inline);
+            for (var i = 0; i < inlines.Count; i++)
+            {
+                // 仅第一个行内元素处于行首，避免嵌套内容误转义
+                if (i > 0) _atLineStart = false;
+                WriteInline(sb, inlines[i]);
+            }
+        }
+        finally
+        {
+            _atLineStart = saved;
         }
     }
 
@@ -273,10 +336,10 @@ internal sealed class MarkdownWriter
         switch (inline.Type)
         {
             case MarkdownInlineType.Text:
-                sb.Append(inline.Text);
+                WriteText(sb, inline.Text ?? "", _inTable);
                 break;
             case MarkdownInlineType.Code:
-                sb.Append('`').Append(inline.Text).Append('`');
+                WriteCode(sb, inline.Text ?? "");
                 break;
             case MarkdownInlineType.Strong:
                 sb.Append("**");
@@ -301,15 +364,15 @@ internal sealed class MarkdownWriter
             case MarkdownInlineType.Link:
                 sb.Append('[');
                 WriteInlines(sb, inline.Children);
-                sb.Append("](").Append(inline.Href);
+                sb.Append("](").Append(WriteDestination(inline.Href));
                 if (!String.IsNullOrEmpty(inline.Title))
-                    sb.Append(" \"").Append(inline.Title).Append('"');
+                    sb.Append(" \"").Append(EscapeTitle(inline.Title)).Append('"');
                 sb.Append(')');
                 break;
             case MarkdownInlineType.Image:
-                sb.Append("![").Append(inline.Alt).Append("](").Append(inline.Href);
+                sb.Append("![").Append(inline.Alt).Append("](").Append(WriteDestination(inline.Href));
                 if (!String.IsNullOrEmpty(inline.Title))
-                    sb.Append(" \"").Append(inline.Title).Append('"');
+                    sb.Append(" \"").Append(EscapeTitle(inline.Title)).Append('"');
                 sb.Append(')');
                 break;
             case MarkdownInlineType.HardBreak:
@@ -332,5 +395,107 @@ internal sealed class MarkdownWriter
                 break;
         }
     }
+
+    /// <summary>写入文本内容并做上下文相关转义，避免特殊字符破坏 Markdown 结构</summary>
+    /// <param name="sb">输出</param>
+    /// <param name="text">文本</param>
+    /// <param name="inTable">是否在表格单元格内（转义管道符）</param>
+    private void WriteText(StringBuilder sb, String text, Boolean inTable)
+    {
+        if (String.IsNullOrEmpty(text)) return;
+
+        for (var i = 0; i < text.Length; i++)
+        {
+            var ch = text[i];
+            var next = i + 1 < text.Length ? text[i + 1] : '\0';
+            switch (ch)
+            {
+                case '\\': sb.Append("\\\\"); break;
+                case '`': sb.Append("\\`"); break;
+                case '*': sb.Append("\\*"); break;
+                case '_': sb.Append("\\_"); break;
+                case '[': sb.Append("\\["); break;
+                case ']': sb.Append("\\]"); break;
+                case '|':
+                    sb.Append(inTable ? "\\|" : "|");
+                    break;
+                case '<':
+                    // 仅当可能构成 HTML 标签/自动链接/注释时转义
+                    if (IsAsciiLetter(next) || next is '/' or '!' or '?' or '>')
+                        sb.Append("\\<");
+                    else
+                        sb.Append(ch);
+                    break;
+                case '~':
+                    // 双波浪线可能构成删除线
+                    if (next == '~') sb.Append("\\~");
+                    else sb.Append('~');
+                    break;
+                case '-':
+                case '+':
+                    // 行首的列表/分隔线标记需转义
+                    if (_atLineStart && i == 0 && (next == ' ' || next == '\t' || next == ch))
+                        sb.Append('\\').Append(ch);
+                    else
+                        sb.Append(ch);
+                    break;
+                case '#':
+                    // 行首的标题标记需转义
+                    if (_atLineStart && i == 0 && (next == ' ' || next == '\t' || next == '#'))
+                        sb.Append("\\#");
+                    else
+                        sb.Append(ch);
+                    break;
+                case '>':
+                    // 行首的引用标记需转义
+                    if (_atLineStart && i == 0 && (next == ' ' || next == '\t'))
+                        sb.Append("\\>");
+                    else
+                        sb.Append(ch);
+                    break;
+                default:
+                    sb.Append(ch);
+                    break;
+            }
+        }
+    }
+
+    /// <summary>写入行内代码，含反引号或首尾空格时用双反引号包裹（CommonMark 兼容）</summary>
+    /// <param name="sb">输出</param>
+    /// <param name="code">代码文本</param>
+    private static void WriteCode(StringBuilder sb, String code)
+    {
+        if (code.Contains('`') || code.StartsWith(" ") || code.EndsWith(" "))
+        {
+            var ticks = "``";
+            while (code.Contains(ticks)) ticks += "`";
+            sb.Append(ticks).Append(' ').Append(code).Append(' ').Append(ticks);
+        }
+        else
+        {
+            sb.Append('`').Append(code).Append('`');
+        }
+    }
+
+    /// <summary>写入链接目标：含空格或括号时用尖括号包裹，避免解析失败</summary>
+    /// <param name="href">目标 URL</param>
+    /// <returns>可安全输出的目标文本</returns>
+    private static String WriteDestination(String href)
+    {
+        if (String.IsNullOrEmpty(href)) return "";
+        if (href.Contains(' ') || href.Contains('(') || href.Contains(')'))
+            return "<" + href.Replace("<", "\\<").Replace(">", "\\>") + ">";
+        return href;
+    }
+
+    /// <summary>转义链接标题中的引号与反斜杠</summary>
+    /// <param name="title">标题</param>
+    /// <returns>转义后文本</returns>
+    private static String EscapeTitle(String title) =>
+        title.Replace("\\", "\\\\").Replace("\"", "\\\"");
+
+    /// <summary>ASCII 字母判断（兼容低版本框架，不使用 Char.IsAsciiLetter）</summary>
+    private static Boolean IsAsciiLetter(Char ch) =>
+        ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z';
     #endregion
 }

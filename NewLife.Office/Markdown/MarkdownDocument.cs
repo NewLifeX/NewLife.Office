@@ -30,6 +30,9 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
     /// <summary>缩写映射表（MD05-08），键为缩写文本，值为全称</summary>
     public Dictionary<String, String> Abbreviations { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>引用链接定义（[id]: url），键为引用标识（CommonMark 引用链接）</summary>
+    public Dictionary<String, String> References { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>是否启用往返渲染模式（MD06-03），解析→修改→序列化时保留未修改块的原始格式</summary>
     public Boolean Roundtrip { get; set; }
     #endregion
@@ -57,21 +60,65 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
     }
 
     /// <summary>从流解析文档</summary>
-    /// <param name="stream">输入流（UTF-8 或带 BOM）</param>
+    /// <param name="stream">输入流（自动检测编码：BOM/UTF-8/GBK）</param>
     /// <returns>已解析的文档对象</returns>
     public static MarkdownDocument Parse(Stream stream)
     {
-        using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
-        return Parse(reader.ReadToEnd());
+        var text = ReadAllText(stream);
+        return Parse(text);
     }
 
     /// <summary>从文件解析文档</summary>
-    /// <param name="path">文件路径</param>
+    /// <param name="path">文件路径（自动检测编码：BOM/UTF-8/GBK）</param>
     /// <returns>已解析的文档对象</returns>
     public static MarkdownDocument ParseFile(String path)
     {
-        var text = File.ReadAllText(path, Encoding.UTF8);
-        return Parse(text);
+        var bytes = File.ReadAllBytes(path);
+        return Parse(DecodeText(bytes));
+    }
+
+    /// <summary>读取流文本，自动检测编码（BOM/严格 UTF-8/GBK 兜底）</summary>
+    /// <param name="stream">输入流</param>
+    /// <returns>解码后文本</returns>
+    private static String ReadAllText(Stream stream)
+    {
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        return DecodeText(ms.ToArray());
+    }
+
+    /// <summary>字节数组解码：BOM → 严格 UTF-8 → GBK 兜底（中文环境）</summary>
+    /// <param name="bytes">字节数组</param>
+    /// <returns>解码后文本</returns>
+    private static String DecodeText(Byte[] bytes)
+    {
+        if (bytes == null || bytes.Length == 0) return "";
+
+        // BOM 检测（UTF-8 / UTF-16 LE / UTF-16 BE）
+        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+            return Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
+        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+            return Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);
+        if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
+            return Encoding.BigEndianUnicode.GetString(bytes, 2, bytes.Length - 2);
+
+        // 严格 UTF-8 校验，避免乱码
+        try
+        {
+            return new UTF8Encoding(false, true).GetString(bytes);
+        }
+        catch (DecoderFallbackException)
+        {
+            // 非 UTF-8：尝试 GBK（net45 原生支持；netstandard 无提供程序时回退 UTF-8）
+            try
+            {
+                return Encoding.GetEncoding(936).GetString(bytes);
+            }
+            catch
+            {
+                return Encoding.UTF8.GetString(bytes);
+            }
+        }
     }
 
     /// <summary>从 HTML 字符串解析文档（反向转换，MD04）</summary>

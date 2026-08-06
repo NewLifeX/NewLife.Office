@@ -33,6 +33,9 @@ public abstract class MarkdownBlock
 
     /// <summary>原始源码文本（MD06-03 往返渲染），非 null 时表示该块未修改可原样输出</summary>
     public String? SourceText { get; set; }
+
+    /// <summary>解析时的规范序列化快照（MD06-03 往返渲染），用于检测块是否被修改</summary>
+    internal String? SourceSnapshot { get; set; }
     #endregion
 
     #region 工厂方法（向后兼容）

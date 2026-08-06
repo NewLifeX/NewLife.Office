@@ -429,8 +429,13 @@ public class MarkdownTests
     public void ToHtml_HtmlEncoding()
     {
         var html = MarkdownDocument.Parse("Use <script> & \"quotes\"").ToHtml();
-        Assert.Contains("&lt;script&gt;", html);
+        // <script> 是合法标签 → 按 CommonMark 原样透传（行内 HTML）
+        Assert.Contains("<script>", html);
         Assert.Contains("&amp;", html);
+
+        // 非标签的 < 仍转义
+        var html2 = MarkdownDocument.Parse("a < b").ToHtml();
+        Assert.Contains("&lt;", html2);
     }
 
     [Fact]
