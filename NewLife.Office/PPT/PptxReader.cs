@@ -1671,43 +1671,39 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     {
         var timing = sldDoc.SelectSingleNode("//*[local-name()='timing']") as XmlElement;
         if (timing == null) return;
-        // 遍历 <p:par>（顺序容器）下的动画节点
+        // 遍历所有动画节点（animEffect/animEmph/animMotion），宽容嵌套位置（par/cTn/childTnLst）
         var order = 0;
-        foreach (XmlElement par in timing.SelectNodes(".//*[local-name()='par']")!)
+        foreach (XmlElement el in timing.SelectNodes(".//*[local-name()='animEffect' or local-name()='animEmph' or local-name()='animMotion']")!)
         {
-            foreach (XmlNode child in par.ChildNodes)
+            var localName = el.LocalName;
+            // 识别动画类型：animEffect(进入)/animEmph(强调)/animMotion(路径)
+            var category = localName switch
             {
-                if (child is not XmlElement el) continue;
-                var localName = el.LocalName;
-                // 识别动画类型：animEffect(进入)/animEmph(强调)/animMotion(路径)
-                var category = localName switch
-                {
-                    "animEffect" => AnimationCategory.Entrance,
-                    "animEmph" => AnimationCategory.Emphasis,
-                    "animMotion" => AnimationCategory.MotionPath,
-                    _ => AnimationCategory.Entrance,
-                };
-                var cBhvr = el.SelectSingleNode("*[local-name()='cBhvr']") as XmlElement;
-                if (cBhvr == null) continue;
-                var anim = new Animation
-                {
-                    Order = order++,
-                    Category = category,
-                    Effect = el.GetAttribute("filter") ?? el.LocalName,
-                };
-                // 目标形状
-                var tgt = cBhvr.SelectSingleNode("*[local-name()='tgtEl']/*[local-name()='spTgt']") as XmlElement;
-                if (tgt != null && Int32.TryParse(tgt.GetAttribute("spid"), out var spid))
-                    anim.TargetIndex = spid;
-                // 时长
-                var durEl = cBhvr.SelectSingleNode("*[local-name()='cTn']") as XmlElement;
-                if (durEl != null)
-                {
-                    var durVal = durEl.GetAttribute("dur");
-                    if (durVal.Length > 0) anim.DurationMs = (Int32)(ParseDuration(durVal) / 1000);
-                }
-                slide.Animations.Add(anim);
+                "animEffect" => AnimationCategory.Entrance,
+                "animEmph" => AnimationCategory.Emphasis,
+                "animMotion" => AnimationCategory.MotionPath,
+                _ => AnimationCategory.Entrance,
+            };
+            var cBhvr = el.SelectSingleNode("*[local-name()='cBhvr']") as XmlElement;
+            if (cBhvr == null) continue;
+            var anim = new Animation
+            {
+                Order = order++,
+                Category = category,
+                Effect = el.GetAttribute("filter") ?? el.LocalName,
+            };
+            // 目标形状
+            var tgt = cBhvr.SelectSingleNode("*[local-name()='tgtEl']/*[local-name()='spTgt']") as XmlElement;
+            if (tgt != null && Int32.TryParse(tgt.GetAttribute("spid"), out var spid))
+                anim.TargetIndex = spid;
+            // 时长
+            var durEl = cBhvr.SelectSingleNode("*[local-name()='cTn']") as XmlElement;
+            if (durEl != null)
+            {
+                var durVal = durEl.GetAttribute("dur");
+                if (durVal.Length > 0) anim.DurationMs = (Int32)(ParseDuration(durVal) / 1000);
             }
+            slide.Animations.Add(anim);
         }
     }
 

@@ -782,7 +782,7 @@ partial class PptxWriter
                 sb.Append($"<p:{spTargetType} spid=\"{targetId}\"/>");
                 sb.Append("</p:tgtEl>");
                 sb.Append($"<p:attrNameLst><p:attrName>style.{animType}Effect</p:attrName></p:attrNameLst>");
-                sb.Append("</p:cBhvr></p:animEffect>");
+                sb.Append($"</p:cBhvr></p:{nodeName}>");
                 sb.Append("</p:childTnLst></p:par>");
             }
             sb.Append("</p:childTnLst></p:par></p:tnLst></p:timing>");
