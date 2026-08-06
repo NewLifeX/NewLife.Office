@@ -50,6 +50,10 @@ public sealed class BiffWriter : IDisposable
     private const UInt16 RecHeader = 0x0014;
     private const UInt16 RecFooter = 0x0015;
     private const UInt16 RecDefColWidth = 0x0055;
+    private const UInt16 RecProtect = 0x0012;
+    private const UInt16 RecPassword = 0x0013;
+    private const UInt16 RecDv = 0x01BE;
+    private const UInt16 RecDval = 0x02B2;
     private const Int32 MaxRecordDataSize = 8224;
 
     // BIFF8 日期纪元：1900-01-01（含 1900 闰年兼容性偏移 +1）
@@ -115,6 +119,12 @@ public sealed class BiffWriter : IDisposable
 
     // 默认列宽：Key = sheetName, Value = width（1/256 字符宽度单位）
     private readonly Dictionary<String, UInt16> _sheetDefColWidths = new(StringComparer.Ordinal);
+
+    // 工作表保护：Key = sheetName, Value = 密码（null = 无密码保护）
+    private readonly Dictionary<String, String?> _sheetProtection = new(StringComparer.Ordinal);
+
+    // 数据验证（下拉列表）：Key = sheetName, Value = (range, items)
+    private readonly Dictionary<String, List<(String Range, String[] Items)>> _sheetValidations = new(StringComparer.Ordinal);
 
     private String _currentSheet = "Sheet1";
     private Boolean _disposed;
@@ -315,6 +325,28 @@ public sealed class BiffWriter : IDisposable
     public void SetDefaultColumnWidth(Int32 width = 2048)
     {
         _sheetDefColWidths[_currentSheet] = (UInt16)width;
+    }
+
+    /// <summary>保护当前工作表（可选密码，Excel 97-2003 采用 15 位 XOR 哈希）</summary>
+    /// <param name="password">保护密码（可空，null 时仅启用保护无密码）</param>
+    public void ProtectSheet(String? password = null)
+    {
+        _sheetProtection[_currentSheet] = password;
+    }
+
+    /// <summary>为当前工作表指定区域添加下拉列表数据验证</summary>
+    /// <param name="cellRange">应用范围（如 "A2:A100"）</param>
+    /// <param name="items">下拉选项列表</param>
+    public void AddDropdownValidation(String cellRange, String[] items)
+    {
+        if (cellRange.IsNullOrEmpty()) throw new ArgumentNullException(nameof(cellRange));
+        if (items == null || items.Length == 0) throw new ArgumentNullException(nameof(items));
+        if (!_sheetValidations.TryGetValue(_currentSheet, out var list))
+        {
+            list = [];
+            _sheetValidations[_currentSheet] = list;
+        }
+        list.Add((cellRange, items));
     }
 
     #endregion
@@ -613,6 +645,22 @@ public sealed class BiffWriter : IDisposable
             WriteRecord(stream, RecDefColWidth, BuildDefColWidthData(defColWidth));
         }
 
+        // PROTECT / PASSWORD — 工作表保护
+        if (_sheetProtection.TryGetValue(sheetName, out var pwd))
+        {
+            WriteRecord(stream, RecProtect, BuildProtectData());
+            if (!pwd.IsNullOrEmpty())
+                WriteRecord(stream, RecPassword, BuildPasswordData(HashPassword(pwd!)));
+        }
+
+        // DV + DVAL — 数据验证（下拉列表）
+        if (_sheetValidations.TryGetValue(sheetName, out var validations) && validations.Count > 0)
+        {
+            foreach (var (range, items) in validations)
+                WriteRecord(stream, RecDv, BuildDvData(range, items));
+            WriteRecord(stream, RecDval, BuildDvalData(validations.Count));
+        }
+
         // Sheet EOF
         WriteRecord(stream, RecEof, []);
     }
@@ -896,6 +944,103 @@ public sealed class BiffWriter : IDisposable
         var writer = new SpanWriter(buf, 0, 2);
         writer.Write(width);
         return buf;
+    }
+
+    /// <summary>构建 PROTECT 记录（fLock=1 表示受保护）</summary>
+    private static Byte[] BuildProtectData()
+    {
+        var buf = new Byte[2];
+        var writer = new SpanWriter(buf, 0, 2);
+        writer.Write((UInt16)1);
+        return buf;
+    }
+
+    /// <summary>构建 PASSWORD 记录（15 位密码哈希）</summary>
+    private static Byte[] BuildPasswordData(UInt16 hash)
+    {
+        var buf = new Byte[2];
+        var writer = new SpanWriter(buf, 0, 2);
+        writer.Write(hash);
+        return buf;
+    }
+
+    /// <summary>构建 DV 记录（数据验证，当前支持 list 下拉列表）</summary>
+    private static Byte[] BuildDvData(String range, String[] items)
+    {
+        var (r1, c1, r2, c2) = ParseRange(range);
+        // formula1 = "item1,item2"（带引号，UTF-16LE），与 xlsx 约定一致
+        var formula = "\"" + String.Join(",", items) + "\"";
+        var formulaBytes = Encoding.Unicode.GetBytes(formula);
+
+        var buf = new Byte[22 + formulaBytes.Length];
+        var writer = new SpanWriter(buf, 0, buf.Length);
+        writer.Write((UInt16)0x0000);                        // fOption1: type=0(list), operator=0
+        writer.Write((UInt16)0x0000);                        // fOption2
+        writer.Write((UInt16)0);                             // ixfe
+        writer.Write((UInt16)r1);
+        writer.Write((UInt16)c1);
+        writer.Write((UInt16)r2);
+        writer.Write((UInt16)c2);
+        writer.Write((UInt16)0);                             // titleCch
+        writer.Write((UInt16)0);                             // promptCch
+        writer.Write((UInt16)formulaBytes.Length);           // cch1（公式1字节长度）
+        writer.Write((UInt16)0);                             // cch2
+        Array.Copy(formulaBytes, 0, buf, 22, formulaBytes.Length);
+        return buf;
+    }
+
+    /// <summary>构建 DVAL 记录（引用数据验证范围）</summary>
+    private static Byte[] BuildDvalData(Int32 count)
+    {
+        var buf = new Byte[10];
+        var writer = new SpanWriter(buf, 0, 10);
+        writer.Write((UInt16)0);                             // fOption
+        writer.Write((UInt16)count);                         // cDv
+        writer.Write((UInt16)(count > 0 ? 0 : 0xFFFF));      // dvFirst（首个 DV 索引，无则为 -1）
+        writer.Write(0u);                                    // reserved
+        return buf;
+    }
+
+    /// <summary>BIFF8 密码哈希（15 位 XOR 算法）</summary>
+    private static UInt16 HashPassword(String password)
+    {
+        UInt16 hash = 0;
+        for (var i = password.Length - 1; i >= 0; i--)
+        {
+            hash = (UInt16)((hash >> 14) & 0x01);
+            hash = (UInt16)((hash << 1) & 0x7FFF);
+            hash ^= password[i];
+        }
+        hash = (UInt16)((((hash >> 14) & 0x01) | ((hash << 1) & 0x7FFF)) ^ (UInt16)(password.Length ^ 0xCE4B));
+        return hash;
+    }
+
+    /// <summary>解析单元格范围（如 "A1:F5"）为 (r1, c1, r2, c2)，均 0 基</summary>
+    private static (Int32 R1, Int32 C1, Int32 R2, Int32 C2) ParseRange(String range)
+    {
+        var parts = range.Split(':');
+        var (r1, c1) = ParseCellRef(parts[0]);
+        if (parts.Length > 1)
+        {
+            var (r2, c2) = ParseCellRef(parts[1]);
+            return (r1, c1, r2, c2);
+        }
+        return (r1, c1, r1, c1);
+    }
+
+    /// <summary>解析单元格引用（如 "A1"）为 (行, 列)，均 0 基</summary>
+    private static (Int32 Row, Int32 Col) ParseCellRef(String cellRef)
+    {
+        var col = 0;
+        var row = 0;
+        foreach (var ch in cellRef)
+        {
+            if (ch is >= 'A' and <= 'Z' or >= 'a' and <= 'z')
+                col = col * 26 + (Char.ToUpper(ch) - 'A' + 1);
+            else if (ch is >= '0' and <= '9')
+                row = row * 10 + (ch - '0');
+        }
+        return (row - 1, col - 1);
     }
 
     private static Byte[] BuildFontRecord(CellFormat? style = null)

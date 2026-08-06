@@ -356,6 +356,198 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     }
     #endregion
 
+    #region 增强读取（合并/页面设置/保护/验证）
+    /// <summary>读取指定工作表的合并单元格区域</summary>
+    /// <param name="sheet">工作表名称，null 取第一个</param>
+    /// <returns>合并区域列表（R1, C1, R2, C2，均 0 基）</returns>
+    public List<(Int32 R1, Int32 C1, Int32 R2, Int32 C2)> GetMerges(String? sheet = null)
+    {
+        var result = new List<(Int32, Int32, Int32, Int32)>();
+        foreach (var (type, data) in ReadSheetRecords(sheet))
+        {
+            if (type != RecMergedCells || data.Length < 2) continue;
+
+            var count = ReadUInt16(data, 0);
+            for (var i = 0; i < count; i++)
+            {
+                var pos = 2 + i * 8;
+                if (pos + 8 > data.Length) break;
+                // 字节序：r1(2) r2(2) c1(2) c2(2)
+                var r1 = ReadUInt16(data, pos);
+                var r2 = ReadUInt16(data, pos + 2);
+                var c1 = ReadUInt16(data, pos + 4);
+                var c2 = ReadUInt16(data, pos + 6);
+                result.Add((r1, c1, r2, c2));
+            }
+        }
+        return result;
+    }
+
+    /// <summary>读取指定工作表的页面设置（SETUP + HEADER + FOOTER）</summary>
+    /// <param name="sheet">工作表名称，null 取第一个</param>
+    /// <returns>(横向, 纸张大小, 页眉边距英寸, 页脚边距英寸, 页眉, 页脚)</returns>
+    public (Boolean Landscape, Int32 PaperSize, Double HeaderMargin, Double FooterMargin, String Header, String Footer) GetPageSetup(String? sheet = null)
+    {
+        var landscape = false;
+        var paperSize = 0;
+        var headerMargin = 0.0;
+        var footerMargin = 0.0;
+        var header = String.Empty;
+        var footer = String.Empty;
+
+        foreach (var (type, data) in ReadSheetRecords(sheet))
+        {
+            if (type == RecSetup && data.Length >= 22)
+            {
+                paperSize = ReadUInt16(data, 0);
+                landscape = (ReadUInt16(data, 10) & 0x01) != 0;
+                headerMargin = ReadUInt16(data, 16) / 100.0;
+                footerMargin = ReadUInt16(data, 20) / 100.0;
+            }
+            else if (type == RecHeader && data.Length >= 2)
+            {
+                header = ReadHeaderFooterString(data);
+            }
+            else if (type == RecFooter && data.Length >= 2)
+            {
+                footer = ReadHeaderFooterString(data);
+            }
+        }
+        return (landscape, paperSize, headerMargin, footerMargin, header, footer);
+    }
+
+    /// <summary>读取指定工作表是否受保护（PROTECT 记录）</summary>
+    /// <param name="sheet">工作表名称，null 取第一个</param>
+    /// <returns>是否受保护</returns>
+    public Boolean GetProtection(String? sheet = null)
+    {
+        foreach (var (type, data) in ReadSheetRecords(sheet))
+        {
+            if (type == RecProtect && data.Length >= 2)
+                return ReadUInt16(data, 0) != 0;
+        }
+        return false;
+    }
+
+    /// <summary>读取指定工作表的数据验证（DV 记录，支持下拉列表）</summary>
+    /// <param name="sheet">工作表名称，null 取第一个</param>
+    /// <returns>数据验证列表</returns>
+    public List<DataValidation> GetValidations(String? sheet = null)
+    {
+        var result = new List<DataValidation>();
+        foreach (var (type, data) in ReadSheetRecords(sheet))
+        {
+            if (type == RecDv) ParseDv(data, result);
+        }
+        return result;
+    }
+
+    /// <summary>读取指定工作表的所有记录（不解析单元格）</summary>
+    /// <param name="sheet">工作表名称，null 取第一个</param>
+    private List<(UInt16, Byte[])> ReadSheetRecords(String? sheet)
+    {
+        var idx = ResolveSheetIndex(sheet);
+        if (idx < 0) return [];
+        var sheetReader = new SpanReader(_workbook, 0, _workbook.Length);
+        return ReadSheetRecords(ref sheetReader, _sheetBofOffsets[idx]);
+    }
+
+    private static void ParseDv(Byte[] data, List<DataValidation> result)
+    {
+        // DV 记录：fOption1(2)+fOption2(2)+ixfe(2)+r1(2)+c1(2)+r2(2)+c2(2)+titleCch(2)+promptCch(2)+title+prompt+cch1(2)+cch2(2)+formula1+formula2
+        if (data.Length < 18) return;
+
+        var option1 = ReadUInt16(data, 0);
+        var type = option1 & 0x0F;
+        var op = (option1 >> 4) & 0x0F;
+        var r1 = ReadUInt16(data, 6);
+        var c1 = ReadUInt16(data, 8);
+        var r2 = ReadUInt16(data, 10);
+        var c2 = ReadUInt16(data, 12);
+        var titleCch = ReadUInt16(data, 14);
+        var promptCch = ReadUInt16(data, 16);
+        var pos = 18;
+
+        // title / prompt（UnicodeStringNoCch：1 字节 fHighByte + 字符）
+        pos = SkipDvString(data, pos, titleCch);
+        pos = SkipDvString(data, pos, promptCch);
+        if (pos + 4 > data.Length) return;
+
+        var cch1 = ReadUInt16(data, pos);
+        var cch2 = ReadUInt16(data, pos + 2);
+        pos += 4;
+
+        var dv = new DataValidation
+        {
+            CellRange = $"{ColumnName(c1)}{r1 + 1}:{ColumnName(c2)}{r2 + 1}",
+            ValidationType = type switch { 1 => "whole", 2 => "decimal", 3 => "range", 4 => "date", 5 => "time", 6 => "textLength", _ => "list" },
+            Operator = op switch { 1 => "notBetween", 2 => "equal", 3 => "notEqual", 4 => "greaterThan", 5 => "lessThan", 6 => "greaterThanOrEqual", 7 => "lessThanOrEqual", _ => "between" },
+        };
+
+        if (cch1 > 0 && pos + cch1 <= data.Length)
+        {
+            // 公式1：list 类型为带引号的逗号分隔 UTF-16LE 字符串
+            var formula1 = Encoding.Unicode.GetString(data, pos, cch1);
+            dv.Formula1 = formula1;
+            if (type == 0)
+            {
+                var items = formula1.Trim('"').Split(',').Select(e => e.Trim()).Where(e => e.Length > 0).ToArray();
+                if (items.Length > 0) dv.Items = items;
+            }
+        }
+        pos += cch1;
+        if (cch2 > 0 && pos + cch2 <= data.Length)
+        {
+            dv.Formula2 = Encoding.Unicode.GetString(data, pos, cch2);
+        }
+
+        result.Add(dv);
+    }
+
+    /// <summary>跳过 DV 记录中的 UnicodeStringNoCch 字符串，返回新的偏移</summary>
+    private static Int32 SkipDvString(Byte[] data, Int32 pos, Int32 cch)
+    {
+        if (cch <= 0) return pos;
+        if (pos >= data.Length) return pos;
+        var fHighByte = (data[pos] & 0x01) != 0;
+        return pos + 1 + cch * (fHighByte ? 2 : 1);
+    }
+
+    /// <summary>解析 HEADER/FOOTER 记录字符串（兼容本库写入格式与标准格式）</summary>
+    private static String ReadHeaderFooterString(Byte[] data)
+    {
+        if (data.Length < 2) return String.Empty;
+
+        // 本库写入格式：cch(2) + UTF-16LE（无标志字节）
+        var cch2 = ReadUInt16(data, 0);
+        if (data.Length == 2 + cch2 * 2)
+            return Encoding.Unicode.GetString(data, 2, cch2 * 2);
+
+        // 标准格式：cch(1) + grbit(1) + 字符
+        var cch = data[0];
+        var grbit = data.Length > 1 ? data[1] : (Byte)0;
+        var pos = 2;
+        if (cch == 0 || data.Length <= pos) return String.Empty;
+        if ((grbit & 0x01) != 0)
+            return Encoding.Unicode.GetString(data, pos, Math.Min(cch * 2, data.Length - pos));
+        return DecodeLatin1(data, pos, Math.Min(cch, data.Length - pos));
+    }
+
+    /// <summary>列索引（0基）转列名（A/AA/AB）</summary>
+    private static String ColumnName(Int32 col)
+    {
+        var name = String.Empty;
+        var c = col + 1;
+        while (c > 0)
+        {
+            c--;
+            name = (Char)('A' + c % 26) + name;
+            c /= 26;
+        }
+        return name;
+    }
+    #endregion
+
     #region 单元格解析辅助
     private void ParseLabelSst(Byte[] data, SortedDictionary<Int32, SortedDictionary<Int32, Object?>> cells, ref Int32 maxCol)
     {
@@ -642,6 +834,12 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     private const UInt16 RecFormula = 0x0006;
     private const UInt16 RecMulBlank = 0x00BF;
     private const UInt16 RecColInfo = 0x007D;
+    private const UInt16 RecMergedCells = 0x00E5;
+    private const UInt16 RecSetup = 0x00A1;
+    private const UInt16 RecHeader = 0x0014;
+    private const UInt16 RecFooter = 0x0015;
+    private const UInt16 RecProtect = 0x0012;
+    private const UInt16 RecDv = 0x01BE;
     #endregion
 
     #region 文本提取
