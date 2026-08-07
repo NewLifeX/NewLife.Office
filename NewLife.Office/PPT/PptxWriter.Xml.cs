@@ -1237,7 +1237,9 @@ partial class PptxWriter
             sb.Append($"</c:{chartElem}>");
         }
         sb.Append("</c:plotArea>");
-        sb.Append("<c:legend><c:legendPos val=\"b\"/></c:legend>");
+        // 图例位置（null 默认底部）
+        var legendPos = chart.LegendPosition ?? "b";
+        sb.Append($"<c:legend><c:legendPos val=\"{legendPos}\"/></c:legend>");
         // 图表样式（S19）：1-48 预定义样式索引
         if (chart.StyleIndex != null)
             sb.Append($"<c:style val=\"{chart.StyleIndex}\"/>");

@@ -42,5 +42,8 @@ public class Chart
 
     /// <summary>图表样式索引（1-48，null 不写 c:style，S19）</summary>
     public Int32? StyleIndex { get; set; }
+
+    /// <summary>图例位置（b/r/l/t，null 默认底部）</summary>
+    public String? LegendPosition { get; set; }
     #endregion
 }

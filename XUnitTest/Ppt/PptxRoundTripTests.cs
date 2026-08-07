@@ -332,7 +332,21 @@ public class PptxRoundTripTests : IntegrationTestBase
         {
             Assert.Equal(src.Series[i].Name, dst.Series[i].Name);
             Assert.Equal(src.Series[i].Values, dst.Series[i].Values);
+            // 系列颜色与 X 值（Reader 已支持回读，严格比较）
+            Assert.Equal(src.Series[i].Color ?? "", dst.Series[i].Color ?? "");
+            var sx = src.Series[i].XValues;
+            var dx = dst.Series[i].XValues;
+            Assert.Equal(sx?.Length ?? 0, dx?.Length ?? 0);
+            if (sx != null && dx != null)
+            {
+                for (var xi = 0; xi < sx.Length; xi++)
+                    Assert.Equal(sx[xi], dx[xi]);
+            }
         }
+        // 数值轴范围与图例位置（Reader 已支持回读）
+        Assert.Equal(src.AxisMinValue ?? Double.MinValue, dst.AxisMinValue ?? Double.MinValue);
+        Assert.Equal(src.AxisMaxValue ?? Double.MinValue, dst.AxisMaxValue ?? Double.MinValue);
+        Assert.Equal(src.LegendPosition ?? "", dst.LegendPosition ?? "");
     }
 
     /// <summary>验证形状组</summary>

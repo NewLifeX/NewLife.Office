@@ -384,6 +384,18 @@ public partial class PptxWriter : IDisposable
         Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
         => AddChart(slideIndex, "line", categories, leftCm, topCm, widthCm, heightCm);
 
+    /// <summary>向幻灯片添加面积图</summary>
+    /// <param name="slideIndex">幻灯片索引</param>
+    /// <param name="categories">分类轴标签</param>
+    /// <param name="leftCm">左边距（厘米）</param>
+    /// <param name="topCm">上边距（厘米）</param>
+    /// <param name="widthCm">宽度（厘米）</param>
+    /// <param name="heightCm">高度（厘米）</param>
+    /// <returns>图表对象</returns>
+    public Chart AddAreaChart(Int32 slideIndex, String[] categories,
+        Double leftCm = 2, Double topCm = 2, Double widthCm = 18, Double heightCm = 12)
+        => AddChart(slideIndex, "area", categories, leftCm, topCm, widthCm, heightCm);
+
     /// <summary>向幻灯片添加饼图</summary>
     /// <param name="slideIndex">幻灯片索引</param>
     /// <param name="categories">分类标签</param>

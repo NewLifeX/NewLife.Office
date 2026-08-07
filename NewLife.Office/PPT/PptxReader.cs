@@ -1470,7 +1470,8 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         cns.AddNamespace("c", C);
         cns.AddNamespace("a", A);
         var chart = new Chart { Left = left, Top = top, Width = width, Height = height };
-        var ctn = cd.SelectSingleNode("//*[substring(local-name(), string-length(local-name())-4) = 'Chart'][@*]", null);
+        // 图表类型元素（barChart/areaChart 等）是 plotArea 的直接子元素；原 [@*] 谓词会漏匹配无属性的图表元素
+        var ctn = cd.SelectSingleNode("//c:plotArea/*[substring(local-name(), string-length(local-name())-4) = 'Chart']", cns) as XmlElement;
         chart.ChartType = ctn?.LocalName?.Replace("Chart", String.Empty) ?? "bar";
         var tn = cd.SelectSingleNode("//c:title//c:rich//a:t", cns) as XmlElement;
         chart.Title = tn?.InnerText;
@@ -1487,7 +1488,37 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             var vals = new List<Double>();
             foreach (XmlElement v in ser.SelectNodes(".//c:val//c:numCache/c:pt/c:v", cns)!)
             { if (Double.TryParse(v.InnerText, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) vals.Add(d); }
-            chart.Series.Add(new ChartSeries { Name = sn, Values = vals.ToArray() });
+            // X 值（散点图/气泡图，S19 Reader 侧）
+            Double[]? xvals = null;
+            var xNodes = ser.SelectNodes(".//c:xVal//c:numCache/c:pt/c:v", cns);
+            if (xNodes != null && xNodes.Count > 0)
+            {
+                var xl = new List<Double>();
+                foreach (XmlElement v in xNodes) 
+                { if (Double.TryParse(v.InnerText, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) xl.Add(d); }
+                if (xl.Count > 0) xvals = xl.ToArray();
+            }
+            // 系列填充色（S19 Reader 侧）
+            String? color = null;
+            var sclr = ser.SelectSingleNode(".//c:spPr//a:solidFill//a:srgbClr", cns) as XmlElement;
+            if (sclr != null) color = sclr.GetAttribute("val");
+            chart.Series.Add(new ChartSeries { Name = sn, Values = vals.ToArray(), XValues = xvals, Color = color });
+        }
+        // 数值轴最小值/最大值（S19 Reader 侧）
+        var axScaling = cd.SelectSingleNode("//c:valAx//c:scaling", cns) as XmlElement;
+        if (axScaling != null)
+        {
+            var minEl = axScaling.SelectSingleNode("c:min", cns) as XmlElement;
+            var maxEl = axScaling.SelectSingleNode("c:max", cns) as XmlElement;
+            if (minEl != null && Double.TryParse(minEl.GetAttribute("val"), NumberStyles.Float, CultureInfo.InvariantCulture, out var minv)) chart.AxisMinValue = minv;
+            if (maxEl != null && Double.TryParse(maxEl.GetAttribute("val"), NumberStyles.Float, CultureInfo.InvariantCulture, out var maxv)) chart.AxisMaxValue = maxv;
+        }
+        // 图例位置（S19 Reader 侧）
+        var lgp = cd.SelectSingleNode("//c:legend//c:legendPos", cns) as XmlElement;
+        if (lgp != null)
+        {
+            var lv = lgp.GetAttribute("val");
+            if (lv.Length > 0) chart.LegendPosition = lv;
         }
         slide.Charts.Add(chart);
     }

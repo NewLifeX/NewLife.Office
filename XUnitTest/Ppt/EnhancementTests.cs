@@ -504,4 +504,98 @@ public class PptxEnhancementTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
     #endregion
+
+    #region 图表增强 (S19 / Phase4)
+    [Fact(DisplayName = "PPT—面积图创建+读取")]
+    public void AreaChart_CreateAndRead()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            var chart = writer.AddAreaChart(0, ["一月", "二月", "三月"]);
+            chart.Series.Add(new ChartSeries { Name = "收入", Values = [100, 150, 200] });
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            var c = doc.Slides[0].Charts[0];
+            Assert.Equal("area", c.ChartType);
+            Assert.Equal("收入", c.Series[0].Name);
+            Assert.Equal([100d, 150d, 200d], c.Series[0].Values);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "PPT—图表系列颜色往返")]
+    public void Chart_SeriesColor_RoundTrip()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            var chart = writer.AddBarChart(0, ["A", "B"]);
+            chart.Series.Add(new ChartSeries { Name = "S1", Values = [1, 2], Color = "FF8800" });
+            chart.Series.Add(new ChartSeries { Name = "S2", Values = [3, 4] }); // 无颜色→默认配色
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            var cs = doc.Slides[0].Charts[0].Series;
+            Assert.Equal("FF8800", cs[0].Color);
+            Assert.Equal("C0504D", cs[1].Color); // 默认配色第 2 个（无自定义色时按系列索引取默认）
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "PPT—散点图XValues往返")]
+    public void ScatterChart_XValues_RoundTrip()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            var chart = writer.AddScatterChart(0, ["A", "B", "C"]);
+            chart.Series.Add(new ChartSeries { Name = "散点", Values = [10, 20, 30], XValues = [0.5, 1.5, 2.5] });
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            var ser = doc.Slides[0].Charts[0].Series[0];
+            Assert.NotNull(ser.XValues);
+            Assert.Equal(3, ser.XValues!.Length);
+            Assert.Equal(0.5, ser.XValues![0]);
+            Assert.Equal(2.5, ser.XValues![2]);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "PPT—图表数值轴范围与图例位置往返")]
+    public void Chart_AxisRangeAndLegend_RoundTrip()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            var chart = writer.AddLineChart(0, ["A", "B"]);
+            chart.Series.Add(new ChartSeries { Name = "S", Values = [1, 2] });
+            chart.AxisMinValue = 0;
+            chart.AxisMaxValue = 100;
+            chart.LegendPosition = "r";
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            var c = doc.Slides[0].Charts[0];
+            Assert.Equal(0d, c.AxisMinValue);
+            Assert.Equal(100d, c.AxisMaxValue);
+            Assert.Equal("r", c.LegendPosition);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
 }
