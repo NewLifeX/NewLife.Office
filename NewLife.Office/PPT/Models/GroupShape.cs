@@ -22,5 +22,8 @@ public class GroupShape
 
     /// <summary>组内文本框</summary>
     public List<TextBox> TextBoxes { get; } = [];
+
+    /// <summary>组内图片（S07-02）</summary>
+    public List<Picture> Images { get; } = [];
     #endregion
 }

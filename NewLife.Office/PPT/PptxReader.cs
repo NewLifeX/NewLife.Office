@@ -781,14 +781,25 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 var fmla = gd.GetAttribute("fmla") ?? "";
                 var valStr = fmla.StartsWith("val ") ? fmla[4..] : fmla;
                 if (Int64.TryParse(valStr, out var adjVal) && adjVal > 0)
-                    cornerRadius = adjVal * width / 50000; // reverse the adj value back to EMU
+                    cornerRadius = (Int64)Math.Round(adjVal * (Double)width / 50000); // 逆向 adj→EMU（四舍五入，与 Writer 一致保证往返）
             }
         }
         var spPr = sp.SelectSingleNode(".//*[local-name()='spPr']") as XmlElement;
         var fillColor = ParseFillColor(spPr);
         var (lineColor, lineWidth) = ParseLine(spPr);
+        // 渐变填充（S16-03 Reader 侧）
+        var (gradType, gradC1, gradC2, gradAngle) = ParseShapeGradient(spPr);
+        // 虚线样式（S16-05 Reader 侧）
+        var dashStyle = ParseDashStyle(spPr);
+        // 翻转（S16-04 Reader 侧）
+        var xfrmEl = sp.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement;
+        var flipH = xfrmEl?.GetAttribute("flipH") == "1";
+        var flipV = xfrmEl?.GetAttribute("flipV") == "1";
 
-        if (hasTxBody)
+        // 文本框判定：cNvSpPr txBox="1" 或 prstGeom="textBox"；带文本的基本形状应读为 Shape 而非文本框
+        var isTextBox = hasTxBody && (shapeType == "textBox" || IsTxBox(sp));
+
+        if (isTextBox)
         {
             var tb = new TextBox { Left = left, Top = top, Width = width, Height = height, Rotation = rotation, AltText = altText };
             if (fillColor != null) tb.BackgroundColor = fillColor;
@@ -951,6 +962,40 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             tb.AltText = altText;
             slide.TextBoxes.Add(tb);
         }
+        else if (hasTxBody)
+        {
+            // 带文本的基本形状：读为 Shape + 文本 + 字体属性
+            var (text, fontSize, bold, fontColor, latinFn, eaFn, csFn, symFn) = ParseShapeText(sp);
+            if (text.Length == 0)
+            {
+                // 空文本的形状（仅有空 txBody 的格式骨架）：按普通形状处理，
+                // 避免重建时 Writer 因空文本省略 txBody 导致 FontSize 等格式属性不一致
+                slide.Shapes.Add(new Shape
+                {
+                    ShapeType = shapeType, Left = left, Top = top, Width = width, Height = height,
+                    FillColor = fillColor, LineColor = lineColor, LineWidth = (Int32)lineWidth,
+                    AltText = altText, CornerRadius = cornerRadius,
+                    Rotation = rotation, FlipHorizontal = flipH, FlipVertical = flipV,
+                    GradientType = gradType, GradientColor1 = gradC1, GradientColor2 = gradC2, GradientAngle = gradAngle,
+                    DashStyle = dashStyle,
+                });
+            }
+            else
+            {
+                slide.Shapes.Add(new Shape
+                {
+                    ShapeType = shapeType, Left = left, Top = top, Width = width, Height = height,
+                    FillColor = fillColor, LineColor = lineColor, LineWidth = (Int32)lineWidth,
+                    AltText = altText, CornerRadius = cornerRadius,
+                    Rotation = rotation, FlipHorizontal = flipH, FlipVertical = flipV,
+                    GradientType = gradType, GradientColor1 = gradC1, GradientColor2 = gradC2, GradientAngle = gradAngle,
+                    DashStyle = dashStyle,
+                    Text = text, FontSize = fontSize > 0 ? fontSize : 14, Bold = bold, FontColor = fontColor,
+                    LatinFontName = latinFn, EastAsianFontName = eaFn,
+                    ComplexScriptFontName = csFn, SymbolFontName = symFn,
+                });
+            }
+        }
         else
         {
             var fillImage = ParseFillImage(spPr, rels);
@@ -959,6 +1004,9 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 ShapeType = shapeType, Left = left, Top = top, Width = width, Height = height,
                 FillColor = fillColor, LineColor = lineColor, LineWidth = (Int32)lineWidth,
                 AltText = altText, CornerRadius = cornerRadius,
+                Rotation = rotation, FlipHorizontal = flipH, FlipVertical = flipV,
+                GradientType = gradType, GradientColor1 = gradC1, GradientColor2 = gradC2, GradientAngle = gradAngle,
+                DashStyle = dashStyle,
                 FillImage = fillImage,
                 FillImageExt = fillImage != null ? GetFillImageExt(spPr, rels) : "png",
             });
@@ -1466,11 +1514,31 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         Dictionary<String, DefaultRunProps>? layoutDefaults = null)
     {
         var isTB = sp.SelectSingleNode(".//*[local-name()='cNvSpPr']")?.Attributes?["txBox"]?.Value == "1";
-        var (l, t, w, h) = ParseXfrm(sp.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement);
+        var xfrmEl = sp.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement;
+        var (l, t, w, h) = ParseXfrm(xfrmEl);
+        var rotation = ParseRotation(xfrmEl);
+        var flipH = xfrmEl?.GetAttribute("flipH") == "1";
+        var flipV = xfrmEl?.GetAttribute("flipV") == "1";
         var st = sp.SelectSingleNode(".//*[local-name()='prstGeom']")?.Attributes?["prst"]?.Value ?? "textBox";
         var spPr = sp.SelectSingleNode(".//*[local-name()='spPr']") as XmlElement;
         var fc = ParseFillColor(spPr);
         var fillImage = ParseFillImage(spPr, rels);
+        // 组内形状也读取渐变/虚线/线宽/圆角（与顶层一致，保证往返）
+        var (gradType, gradC1, gradC2, gradAngle) = ParseShapeGradient(spPr);
+        var dashStyle = ParseDashStyle(spPr);
+        var (lineColor, lineWidth) = ParseLine(spPr);
+        Int64 cornerRadius = 0;
+        if (st == "roundRect")
+        {
+            var gd = sp.SelectSingleNode(".//*[local-name()='prstGeom']/*[local-name()='avLst']/*[local-name()='gd']") as XmlElement;
+            if (gd != null)
+            {
+                var fmla = gd.GetAttribute("fmla") ?? "";
+                var valStr = fmla.StartsWith("val ") ? fmla[4..] : fmla;
+                if (Int64.TryParse(valStr, out var adjVal) && adjVal > 0)
+                    cornerRadius = (Int64)Math.Round(adjVal * (Double)w / 50000);
+            }
+        }
         var txt = new StringBuilder();
         foreach (XmlElement tt in sp.SelectNodes(".//*[local-name()='t']")!) txt.Append(tt.InnerText);
         var text = txt.ToString();
@@ -1542,13 +1610,52 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 ComplexScriptFontName = csFn, SymbolFontName = symFn,
                 FillImage = fillImage,
                 FillImageExt = fillImage != null ? GetFillImageExt(spPr, rels) : "png",
+                Rotation = rotation, FlipHorizontal = flipH, FlipVertical = flipV,
+                GradientType = gradType, GradientColor1 = gradC1, GradientColor2 = gradC2, GradientAngle = gradAngle,
+                DashStyle = dashStyle, LineColor = lineColor, LineWidth = (Int32)lineWidth, CornerRadius = cornerRadius,
             });
     }
 
     private void ParsePictureInGroup(XmlElement pic, GroupShape g, Dictionary<String, (String Target, String Type)> rels)
     {
         var (l, t, w, h) = ParseXfrm(pic.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement);
-        g.Shapes.Add(new Shape { Left = l, Top = t, Width = w, Height = h, ShapeType = "rect", Text = "[图片]" });
+        var rotation = ParseRotation(pic.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement);
+
+        // 组内图片（S07-02）：读取真实图片数据，而非占位形状
+        var blip = pic.SelectSingleNode(".//*[local-name()='blip']") as XmlElement;
+        var embedId = blip?.GetAttribute("r:embed") ?? blip?.GetAttribute("embed");
+        if (embedId == null || !rels.TryGetValue(embedId, out var rel)) return;
+        var iname = Path.GetFileName(rel.Target);
+        var ientry = _zip.GetEntry($"ppt/media/{iname}");
+        if (ientry == null) return;
+        var iext = Path.GetExtension(iname).TrimStart('.').ToLowerInvariant();
+        Byte[] idata;
+        using (var ms = new MemoryStream())
+        using (var es = ientry.Open()) { es.CopyTo(ms); idata = ms.ToArray(); }
+
+        var isSvg = iext == "svg";
+        // 检测 asvg:svgBlip（SVG 标准格式），用 SVG 数据覆盖 PNG 缩略图
+        var svgBlip = blip!.SelectSingleNode("*[local-name()='svgBlip']") as XmlElement;
+        if (svgBlip != null)
+        {
+            var svgEmbedId = svgBlip.GetAttribute("r:embed") ?? svgBlip.GetAttribute("embed");
+            if (svgEmbedId != null && rels.TryGetValue(svgEmbedId, out var svgRel))
+            {
+                var svgName = Path.GetFileName(svgRel.Target);
+                var svgEntry = _zip.GetEntry($"ppt/media/{svgName}");
+                if (svgEntry != null)
+                {
+                    using var svgMs = new MemoryStream();
+                    using var svgEs = svgEntry.Open();
+                    svgEs.CopyTo(svgMs);
+                    idata = svgMs.ToArray();
+                    iext = "svg";
+                    isSvg = true;
+                }
+            }
+        }
+
+        g.Images.Add(new Picture { Data = idata, Extension = iext, Left = l, Top = t, Width = w, Height = h, IsSvg = isSvg, Rotation = rotation });
     }
 
     private void ParseGroupInGroup(XmlElement inner, GroupShape pg, Dictionary<String, (String Target, String Type)> rels,
@@ -1778,6 +1885,83 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var width = w.Length > 0 && Int64.TryParse(w, out var wv) ? wv : 0L;
         var clr = ln.SelectSingleNode(".//*[local-name()='srgbClr']") as XmlElement;
         return (clr?.GetAttribute("val"), width);
+    }
+
+    /// <summary>判断是否为显式文本框（cNvSpPr txBox="1"）</summary>
+    /// <param name="sp">形状元素</param>
+    /// <returns>是文本框</returns>
+    private static Boolean IsTxBox(XmlElement sp)
+    {
+        var cNvSpPr = sp.SelectSingleNode(".//*[local-name()='cNvSpPr']") as XmlElement;
+        return cNvSpPr?.GetAttribute("txBox") == "1";
+    }
+
+    /// <summary>解析形状渐变填充（S16-03 Reader 侧）</summary>
+    /// <param name="spPr">形状属性元素</param>
+    /// <returns>（渐变类型，起始色，结束色，角度）</returns>
+    private static (String? Type, String? Color1, String? Color2, Int32 Angle) ParseShapeGradient(XmlElement? spPr)
+    {
+        if (spPr == null) return (null, null, null, 0);
+        var grad = spPr.SelectSingleNode("*[local-name()='gradFill']") as XmlElement;
+        if (grad == null) return (null, null, null, 0);
+        var stops = grad.SelectNodes(".//*[local-name()='gs']");
+        String? c1 = null, c2 = null;
+        if (stops != null && stops.Count >= 2)
+        {
+            var e1 = (stops[0] as XmlElement)?.SelectSingleNode(".//*[local-name()='srgbClr']") as XmlElement;
+            var e2 = (stops[1] as XmlElement)?.SelectSingleNode(".//*[local-name()='srgbClr']") as XmlElement;
+            if (e1 != null) c1 = e1.GetAttribute("val");
+            if (e2 != null) c2 = e2.GetAttribute("val");
+        }
+        var lin = grad.SelectSingleNode(".//*[local-name()='lin']") as XmlElement;
+        var rad = grad.SelectSingleNode(".//*[local-name()='rad']") as XmlElement;
+        var angle = 0;
+        var angAttr = lin?.GetAttribute("ang");
+        if (angAttr != null && Int32.TryParse(angAttr, out var av)) angle = av / 60000; // 1/60000 度 → 度
+        return (rad != null ? "radial" : "linear", c1, c2, angle);
+    }
+
+    /// <summary>解析线条虚线样式（S16-05 Reader 侧）</summary>
+    /// <param name="spPr">形状属性元素</param>
+    /// <returns>虚线样式值（如 dash/dot），实线返回 null</returns>
+    private static String? ParseDashStyle(XmlElement? spPr)
+    {
+        if (spPr == null) return null;
+        var ln = spPr.SelectSingleNode("*[local-name()='ln']") as XmlElement;
+        return (ln?.SelectSingleNode("*[local-name()='prstDash']") as XmlElement)?.GetAttribute("val");
+    }
+
+    /// <summary>解析带文本形状的文本与字体属性（Reader 侧）</summary>
+    /// <param name="sp">形状元素</param>
+    /// <returns>（文本，字号，粗体，颜色，四类字体）</returns>
+    private static (String Text, Int32 FontSize, Boolean Bold, String? FontColor, String? LatinFn, String? EaFn, String? CsFn, String? SymFn) ParseShapeText(XmlElement sp)
+    {
+        var sb = new StringBuilder();
+        foreach (XmlElement t in sp.SelectNodes(".//*[local-name()='t']")!) sb.Append(t.InnerText);
+        var text = sb.ToString();
+
+        var fontSize = 0;
+        var bold = false;
+        String? fontColor = null, latinFn = null, eaFn = null, csFn = null, symFn = null;
+        var firstRPr = sp.SelectSingleNode(".//*[local-name()='rPr']") as XmlElement;
+        if (firstRPr != null)
+        {
+            var sz = firstRPr.GetAttribute("sz");
+            if (sz.Length > 0 && Int32.TryParse(sz, out var sv)) fontSize = sv / 100;
+            bold = firstRPr.GetAttribute("b") == "1";
+            var sf = firstRPr.SelectSingleNode("*[local-name()='solidFill']") as XmlElement;
+            var sfc = sf?.SelectSingleNode("*[local-name()='srgbClr']") as XmlElement;
+            if (sfc != null) fontColor = sfc.GetAttribute("val");
+            var l = firstRPr.SelectSingleNode(".//*[local-name()='latin']") as XmlElement;
+            var e = firstRPr.SelectSingleNode(".//*[local-name()='ea']") as XmlElement;
+            var c = firstRPr.SelectSingleNode(".//*[local-name()='cs']") as XmlElement;
+            var s = firstRPr.SelectSingleNode(".//*[local-name()='sym']") as XmlElement;
+            latinFn = l?.GetAttribute("typeface");
+            eaFn = e?.GetAttribute("typeface");
+            csFn = c?.GetAttribute("typeface");
+            symFn = s?.GetAttribute("typeface");
+        }
+        return (text, fontSize, bold, fontColor, latinFn, eaFn, csFn, symFn);
     }
 
     private static (Int64 Left, Int64 Top, Int64 Width, Int64 Height) ParseXfrm(XmlElement? xfrm)

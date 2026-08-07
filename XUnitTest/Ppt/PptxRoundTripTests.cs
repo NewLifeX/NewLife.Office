@@ -162,13 +162,13 @@ public class PptxRoundTripTests : IntegrationTestBase
     /// <summary>验证文本框段落属性（行距/段前距）</summary>
     private static void AssertTextBoxParagraph(TextBox src, TextBox dst, String tag)
     {
-        Assert.Equal(src.LineSpacingPct, dst.LineSpacingPct);
-        Assert.Equal(src.SpaceBeforePt, dst.SpaceBeforePt);
+        Assert.True(src.LineSpacingPct == dst.LineSpacingPct, $"{tag}.LineSpacingPct: {src.LineSpacingPct} vs {dst.LineSpacingPct}");
+        Assert.True(src.SpaceBeforePt == dst.SpaceBeforePt, $"{tag}.SpaceBeforePt: {src.SpaceBeforePt} vs {dst.SpaceBeforePt}");
         // 内边距
-        Assert.Equal(src.LeftInset, dst.LeftInset);
-        Assert.Equal(src.RightInset, dst.RightInset);
-        Assert.Equal(src.TopInset, dst.TopInset);
-        Assert.Equal(src.BottomInset, dst.BottomInset);
+        Assert.True(src.LeftInset == dst.LeftInset, $"{tag}.LeftInset: {src.LeftInset} vs {dst.LeftInset}");
+        Assert.True(src.RightInset == dst.RightInset, $"{tag}.RightInset: {src.RightInset} vs {dst.RightInset}");
+        Assert.True(src.TopInset == dst.TopInset, $"{tag}.TopInset: {src.TopInset} vs {dst.TopInset}");
+        Assert.True(src.BottomInset == dst.BottomInset, $"{tag}.BottomInset: {src.BottomInset} vs {dst.BottomInset}");
         // 垂直锁定
         Assert.Equal(src.Anchor, dst.Anchor);
         // 多段落对比
@@ -181,11 +181,11 @@ public class PptxRoundTripTests : IntegrationTestBase
     private static void AssertParagraph(String tag, Paragraph src, Paragraph dst)
     {
         Assert.Equal(src.Alignment, dst.Alignment);
-        Assert.Equal(src.Level, dst.Level);
-        Assert.Equal(src.LineSpacingPct, dst.LineSpacingPct);
-        Assert.Equal(src.LineSpacingPts, dst.LineSpacingPts);
-        Assert.Equal(src.SpaceBeforePt, dst.SpaceBeforePt);
-        Assert.Equal(src.SpaceAfterPt, dst.SpaceAfterPt);
+        Assert.True(src.Level == dst.Level, $"{tag}.Level: {src.Level} vs {dst.Level}");
+        Assert.True(src.LineSpacingPct == dst.LineSpacingPct, $"{tag}.LineSpacingPct: {src.LineSpacingPct} vs {dst.LineSpacingPct}");
+        Assert.True(src.LineSpacingPts == dst.LineSpacingPts, $"{tag}.LineSpacingPts: {src.LineSpacingPts} vs {dst.LineSpacingPts}");
+        Assert.True(src.SpaceBeforePt == dst.SpaceBeforePt, $"{tag}.SpaceBeforePt: {src.SpaceBeforePt} vs {dst.SpaceBeforePt}");
+        Assert.True(src.SpaceAfterPt == dst.SpaceAfterPt, $"{tag}.SpaceAfterPt: {src.SpaceAfterPt} vs {dst.SpaceAfterPt}");
         Assert.Equal(src.BulletChar ?? "", dst.BulletChar ?? "");
         Assert.Equal(src.BulletNone, dst.BulletNone);
         Assert.Equal(src.Runs.Count, dst.Runs.Count);
@@ -226,8 +226,8 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.True(EmuClose(src.Height, dst.Height), $"{tag}.Height");
         Assert.Equal(src.FillColor ?? "", dst.FillColor ?? "");
         Assert.Equal(src.LineColor ?? "", dst.LineColor ?? "");
-        Assert.Equal(src.LineWidth, dst.LineWidth);
-        Assert.Equal(src.FontSize, dst.FontSize);
+        Assert.True(src.LineWidth == dst.LineWidth, $"{tag}.LineWidth: {src.LineWidth} vs {dst.LineWidth}");
+        Assert.True(src.FontSize == dst.FontSize, $"{tag}.FontSize: {src.FontSize} vs {dst.FontSize}");
         Assert.Equal(src.Bold, dst.Bold);
         Assert.Equal(src.FontColor ?? "", dst.FontColor ?? "");
         Assert.Equal(src.LatinFontName ?? "", dst.LatinFontName ?? "");
@@ -239,10 +239,11 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.Equal(src.Id, dst.Id);
         if (src.Rotation != 0 && dst.Rotation != 0)
             Assert.Equal(src.Rotation, dst.Rotation);
+        // 圆角以 adj 比率存储，往返存在 ≤2 EMU 的固有精度极限，按位置惯例用容差比较
         if (src.CornerRadius != 0 && dst.CornerRadius != 0)
-            Assert.Equal(src.CornerRadius, dst.CornerRadius);
-        Assert.Equal(src.FlipHorizontal, dst.FlipHorizontal);
-        Assert.Equal(src.FlipVertical, dst.FlipVertical);
+            Assert.True(Math.Abs(src.CornerRadius - dst.CornerRadius) <= 2, $"{tag}.CornerRadius: {src.CornerRadius} vs {dst.CornerRadius}");
+        Assert.True(src.FlipHorizontal == dst.FlipHorizontal, $"{tag}.FlipHorizontal: {src.FlipHorizontal} vs {dst.FlipHorizontal}");
+        Assert.True(src.FlipVertical == dst.FlipVertical, $"{tag}.FlipVertical: {src.FlipVertical} vs {dst.FlipVertical}");
         if (src.FillImage != null && dst.FillImage != null)
         {
             Assert.Equal(src.FillImage.Length, dst.FillImage.Length);
@@ -353,6 +354,10 @@ public class PptxRoundTripTests : IntegrationTestBase
             AssertTextBoxFormat(src.TextBoxes[i], dst.TextBoxes[i], $"{tag}.TB[{i}]");
             AssertTextBoxParagraph(src.TextBoxes[i], dst.TextBoxes[i], $"{tag}.TB[{i}]");
         }
+        // 组内图片（S07-02）
+        Assert.Equal(src.Images.Count, dst.Images.Count);
+        for (var i = 0; i < src.Images.Count; i++)
+            AssertImage(src.Images[i], dst.Images[i], $"{tag}.IMG[{i}]");
     }
 
     /// <summary>验证视频</summary>
@@ -780,6 +785,17 @@ public class PptxRoundTripTests : IntegrationTestBase
                     newSp.LineColor = sp.LineColor; newSp.LineWidth = sp.LineWidth;
                     newSp.LatinFontName = sp.LatinFontName; newSp.EastAsianFontName = sp.EastAsianFontName;
                     newSp.ComplexScriptFontName = sp.ComplexScriptFontName; newSp.SymbolFontName = sp.SymbolFontName;
+                    // 传播扩展属性（S15/S16：旋转/翻转/渐变/虚线/圆角/AltText）
+                    newSp.Rotation = sp.Rotation;
+                    newSp.FlipHorizontal = sp.FlipHorizontal;
+                    newSp.FlipVertical = sp.FlipVertical;
+                    newSp.GradientType = sp.GradientType;
+                    newSp.GradientColor1 = sp.GradientColor1;
+                    newSp.GradientColor2 = sp.GradientColor2;
+                    newSp.GradientAngle = sp.GradientAngle;
+                    newSp.DashStyle = sp.DashStyle;
+                    newSp.CornerRadius = sp.CornerRadius;
+                    newSp.AltText = sp.AltText;
                 }
 
                 foreach (var img in src.Images)

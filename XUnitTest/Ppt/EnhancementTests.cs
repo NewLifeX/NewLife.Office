@@ -415,4 +415,93 @@ public class PptxEnhancementTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
     #endregion
+
+    #region 组内图片与组内形状属性往返 (S07-02)
+    [Fact(DisplayName = "PPT—组内图片写入+读取往返")]
+    public void GroupImage_WriteAndRead()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            var grp = writer.GroupShapes(0, 2, 2, 10, 6);
+            grp.Images.Add(new Picture
+            {
+                Data = [0x89, 0x50, 0x4E, 0x47, 1, 2, 3],
+                Extension = "png",
+                Left = 100000, Top = 200000, Width = 2000000, Height = 1500000,
+                Rotation = 5400000,
+            });
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            var slide = doc.Slides[0];
+            Assert.Single(slide.Groups);
+            Assert.Empty(slide.Groups[0].Shapes);
+            Assert.Single(slide.Groups[0].Images);
+            var img = slide.Groups[0].Images[0];
+            Assert.Equal("png", img.Extension);
+            Assert.Equal(5400000, img.Rotation);
+            Assert.Equal(2000000, img.Width);
+            Assert.Equal(1500000, img.Height);
+            Assert.Equal(7, img.Data.Length);
+            Assert.True(img.Data[0] == 0x89 && img.Data[1] == 0x50);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "PPT—组内形状属性（旋转/翻转/渐变/虚线/文本）往返")]
+    public void GroupShape_RichProperties_WriteAndRead()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            var grp = writer.GroupShapes(0, 2, 2, 12, 8);
+            grp.Shapes.Add(new Shape
+            {
+                ShapeType = "roundRect",
+                Left = 100000, Top = 100000, Width = 4000000, Height = 2000000,
+                Rotation = 1800000,
+                FlipVertical = true,
+                CornerRadius = 400000,
+                LineColor = "#00FF00",
+                LineWidth = 12700,
+                DashStyle = "dash",
+                Text = "组内形状",
+                FontSize = 18,
+                Bold = true,
+                GradientType = "linear",
+                GradientColor1 = "#FF0000",
+                GradientColor2 = "#0000FF",
+                GradientAngle = 45,
+            });
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            var slide = doc.Slides[0];
+            Assert.Single(slide.Groups);
+            var sp = Assert.Single(slide.Groups[0].Shapes);
+            Assert.Equal("roundRect", sp.ShapeType);
+            Assert.Equal("组内形状", sp.Text);
+            Assert.Equal(18, sp.FontSize);
+            Assert.True(sp.Bold);
+            Assert.Equal(1800000, sp.Rotation);
+            Assert.True(sp.FlipVertical);
+            Assert.Equal(12700, sp.LineWidth);
+            Assert.Equal("00FF00", sp.LineColor);
+            Assert.Equal("dash", sp.DashStyle);
+            Assert.Equal("linear", sp.GradientType);
+            Assert.Equal("0000FF", sp.GradientColor2);
+            Assert.Equal(45, sp.GradientAngle);
+            // 圆角按 adj 存储，≤2 EMU 容差
+            Assert.True(Math.Abs(sp.CornerRadius - 400000) <= 2, $"CornerRadius: {sp.CornerRadius}");
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
 }

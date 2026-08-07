@@ -373,6 +373,13 @@ partial class PptxWriter
         {
             if (img.RelId.IsNullOrEmpty()) img.RelId = $"rImg{_imgGlobal++}";
         }
+        foreach (var grp in slide.Groups)
+        {
+            foreach (var img in grp.Images)
+            {
+                if (img.RelId.IsNullOrEmpty()) img.RelId = $"rImg{_imgGlobal++}";
+            }
+        }
         foreach (var vid in slide.Videos)
         {
             if (vid.RelId.IsNullOrEmpty()) vid.RelId = $"rVid{_videoGlobal++}";
@@ -428,9 +435,8 @@ partial class PptxWriter
             var descr = tb.AltText != null ? $" descr=\"{EscXml(tb.AltText)}\"" : "";
             sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"TextBox\"{descr}/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr>");
             sb.Append("<p:spPr>");
-            sb.Append($"<a:xfrm><a:off x=\"{tb.Left}\" y=\"{tb.Top}\"/><a:ext cx=\"{tb.Width}\" cy=\"{tb.Height}\"/>");
-            if (tb.Rotation != 0) sb.Append($" rot=\"{tb.Rotation}\"");
-            sb.Append("</a:xfrm>");
+            var tbRot = tb.Rotation != 0 ? $" rot=\"{tb.Rotation}\"" : "";
+            sb.Append($"<a:xfrm{tbRot}><a:off x=\"{tb.Left}\" y=\"{tb.Top}\"/><a:ext cx=\"{tb.Width}\" cy=\"{tb.Height}\"/></a:xfrm>");
             sb.Append("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>");
             if (tb.BackgroundColor != null)
                 sb.Append($"<a:solidFill><a:srgbClr val=\"{tb.BackgroundColor.TrimStart('#')}\"/></a:solidFill>");
@@ -522,22 +528,22 @@ partial class PptxWriter
             var descr = sp.AltText != null ? $" descr=\"{EscXml(sp.AltText)}\"" : "";
             sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"Shape\"{descr}/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>");
             sb.Append("<p:spPr>");
-            sb.Append($"<a:xfrm><a:off x=\"{sp.Left}\" y=\"{sp.Top}\"/><a:ext cx=\"{sp.Width}\" cy=\"{sp.Height}\"/>");
-            if (sp.Rotation != 0) sb.Append($" rot=\"{sp.Rotation}\"");
-            if (sp.FlipHorizontal) sb.Append(" flipH=\"1\"");
-            if (sp.FlipVertical) sb.Append(" flipV=\"1\"");
-            sb.Append("</a:xfrm>");
-            // 圆角矩形：写入 adj 调整值（CornerRadius=EMU，转换为 OOXML adj 值占宽度百分比*50000）
+            var spXfrmAttrs = "";
+            if (sp.Rotation != 0) spXfrmAttrs += $" rot=\"{sp.Rotation}\"";
+            if (sp.FlipHorizontal) spXfrmAttrs += " flipH=\"1\"";
+            if (sp.FlipVertical) spXfrmAttrs += " flipV=\"1\"";
+            sb.Append($"<a:xfrm{spXfrmAttrs}><a:off x=\"{sp.Left}\" y=\"{sp.Top}\"/><a:ext cx=\"{sp.Width}\" cy=\"{sp.Height}\"/></a:xfrm>");
+            // 圆角矩形：写入 adj 调整值（CornerRadius=EMU，转换为 OOXML adj 值占宽度百分比*50000，四舍五入与 Reader 一致保证往返）
             if (sp.ShapeType == "roundRect" && sp.CornerRadius > 0)
             {
-                var adjVal = sp.CornerRadius * 50000 / sp.Width;
+                var adjVal = (Int32)Math.Round(sp.CornerRadius * 50000.0 / sp.Width);
                 sb.Append($"<a:prstGeom prst=\"roundRect\"><a:avLst><a:gd name=\"adj\" fmla=\"val {adjVal}\"/></a:avLst></a:prstGeom>");
             }
             else
                 sb.Append($"<a:prstGeom prst=\"{sp.ShapeType}\"><a:avLst/></a:prstGeom>");
             if (sp.FillImage != null && sp.FillImage.Length > 0)
             {
-                sp.ShapeImageRelId ??= "rImgFill1";
+                sp.ShapeImageRelId ??= $"rImgFill{_mediaGlobal++}";
                 sb.Append($"<a:blipFill dpi=\"0\" rotWithShape=\"1\">");
                 sb.Append($"<a:blip r:embed=\"{sp.ShapeImageRelId}\"/>");
                 sb.Append("<a:stretch><a:fillRect/></a:stretch></a:blipFill>");
@@ -560,8 +566,14 @@ partial class PptxWriter
                 sb.Append($"<a:solidFill><a:srgbClr val=\"{sp.FillColor.TrimStart('#')}\"/></a:solidFill>");
             else
                 sb.Append("<a:noFill/>");
-            if (sp.LineColor != null)
-                sb.Append($"<a:ln w=\"{sp.LineWidth}\"><a:solidFill><a:srgbClr val=\"{sp.LineColor.TrimStart('#')}\"/></a:solidFill>");
+            if (sp.LineColor != null || sp.LineWidth > 0)
+            {
+                var lnWidth = sp.LineWidth > 0 ? $" w=\"{sp.LineWidth}\"" : "";
+                if (sp.LineColor != null)
+                    sb.Append($"<a:ln{lnWidth}><a:solidFill><a:srgbClr val=\"{sp.LineColor.TrimStart('#')}\"/></a:solidFill>");
+                else
+                    sb.Append($"<a:ln{lnWidth}><a:noFill/>");
+            }
             else
                 sb.Append("<a:ln><a:noFill/>");
             if (sp.DashStyle != null)
@@ -659,26 +671,64 @@ partial class PptxWriter
             sb.Append($"<a:xfrm><a:off x=\"{grp.Left}\" y=\"{grp.Top}\"/><a:ext cx=\"{grp.Width}\" cy=\"{grp.Height}\"/>");
             sb.Append($"<a:chOff x=\"{grp.Left}\" y=\"{grp.Top}\"/><a:chExt cx=\"{grp.Width}\" cy=\"{grp.Height}\"/></a:xfrm>");
             sb.Append("</p:grpSpPr>");
-            // shapes inside group
+            // shapes inside group（S07-02：与顶层形状一致，写全旋转/翻转/渐变/虚线/线宽/圆角）
             foreach (var sp in grp.Shapes)
             {
-                sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"GrpShape\"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>");
+                var descr = sp.AltText != null ? $" descr=\"{EscXml(sp.AltText)}\"" : "";
+                sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"GrpShape\"{descr}/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>");
                 sb.Append("<p:spPr>");
-                sb.Append($"<a:xfrm><a:off x=\"{sp.Left}\" y=\"{sp.Top}\"/><a:ext cx=\"{sp.Width}\" cy=\"{sp.Height}\"/></a:xfrm>");
-                sb.Append($"<a:prstGeom prst=\"{sp.ShapeType}\"><a:avLst/></a:prstGeom>");
+                var spXfrmAttrs = "";
+                if (sp.Rotation != 0) spXfrmAttrs += $" rot=\"{sp.Rotation}\"";
+                if (sp.FlipHorizontal) spXfrmAttrs += " flipH=\"1\"";
+                if (sp.FlipVertical) spXfrmAttrs += " flipV=\"1\"";
+                sb.Append($"<a:xfrm{spXfrmAttrs}><a:off x=\"{sp.Left}\" y=\"{sp.Top}\"/><a:ext cx=\"{sp.Width}\" cy=\"{sp.Height}\"/></a:xfrm>");
+                if (sp.ShapeType == "roundRect" && sp.CornerRadius > 0)
+                {
+                    var adjVal = (Int32)Math.Round(sp.CornerRadius * 50000.0 / sp.Width);
+                    sb.Append($"<a:prstGeom prst=\"roundRect\"><a:avLst><a:gd name=\"adj\" fmla=\"val {adjVal}\"/></a:avLst></a:prstGeom>");
+                }
+                else
+                    sb.Append($"<a:prstGeom prst=\"{sp.ShapeType}\"><a:avLst/></a:prstGeom>");
                 if (sp.FillImage != null && sp.FillImage.Length > 0)
                 {
-                    sp.ShapeImageRelId ??= $"rImgFill{_mediaGlobal}";
+                    sp.ShapeImageRelId ??= $"rImgFill{_mediaGlobal++}";
                     sb.Append($"<a:blipFill dpi=\"0\" rotWithShape=\"1\">");
                     sb.Append($"<a:blip r:embed=\"{sp.ShapeImageRelId}\"/>");
                     sb.Append("<a:stretch><a:fillRect/></a:stretch></a:blipFill>");
+                }
+                else if (sp.GradientType != null && sp.GradientColor1 != null && sp.GradientColor2 != null)
+                {
+                    var angle = sp.GradientAngle * 60000; // 度 → DrawingML 单位（1/60000 度）
+                    var isLinear = sp.GradientType == "linear";
+                    sb.Append($"<a:gradFill rotWithShape=\"1\"><a:gsLst>");
+                    sb.Append($"<a:gs pos=\"0\"><a:srgbClr val=\"{sp.GradientColor1.TrimStart('#')}\"/></a:gs>");
+                    sb.Append($"<a:gs pos=\"100000\"><a:srgbClr val=\"{sp.GradientColor2.TrimStart('#')}\"/></a:gs>");
+                    sb.Append("</a:gsLst>");
+                    if (isLinear)
+                        sb.Append($"<a:lin ang=\"{angle}\" scaled=\"1\"/>");
+                    else
+                        sb.Append("<a:rad sr=\"50000\"/>");
+                    sb.Append("<a:tileRect/></a:gradFill>");
                 }
                 else if (sp.FillColor != null)
                     sb.Append($"<a:solidFill><a:srgbClr val=\"{sp.FillColor.TrimStart('#')}\"/></a:solidFill>");
                 else
                     sb.Append("<a:noFill/>");
+                if (sp.LineColor != null || sp.LineWidth > 0)
+                {
+                    var lnWidth = sp.LineWidth > 0 ? $" w=\"{sp.LineWidth}\"" : "";
+                    if (sp.LineColor != null)
+                        sb.Append($"<a:ln{lnWidth}><a:solidFill><a:srgbClr val=\"{sp.LineColor.TrimStart('#')}\"/></a:solidFill>");
+                    else
+                        sb.Append($"<a:ln{lnWidth}><a:noFill/>");
+                }
+                else
+                    sb.Append("<a:ln><a:noFill/>");
+                if (sp.DashStyle != null)
+                    sb.Append($"<a:prstDash val=\"{sp.DashStyle}\"/>");
+                sb.Append("</a:ln>");
                 sb.Append("</p:spPr>");
-                if (sp.Text != null)
+                if (!String.IsNullOrEmpty(sp.Text))
                 {
                     sb.Append("<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r>");
                     sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{sp.FontSize * 100}\"{(sp.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
@@ -706,6 +756,30 @@ partial class PptxWriter
                 sb.Append("</a:rPr>");
                 sb.Append($"<a:t>{EscXml(tb.Text)}</a:t>");
                 sb.Append("</a:r></a:p></p:txBody></p:sp>");
+            }
+            // images inside group（S07-02：组内图片）
+            foreach (var img in grp.Images)
+            {
+                sb.Append($"<p:pic><p:nvPicPr><p:cNvPr id=\"{shapeId++}\" name=\"GrpImage\"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr>");
+                sb.Append("<p:blipFill>");
+                sb.Append($"<a:blip r:embed=\"{img.RelId}\"");
+                if (img.IsSvg)
+                {
+                    // SVG: 在 <a:blip> 内嵌套 <asvg:svgBlip>
+                    sb.Append($" xmlns:asvg=\"http://schemas.microsoft.com/office/drawing/2016/SVG/main\"><asvg:svgBlip r:embed=\"{img.RelId}\"/></a:blip>");
+                }
+                else
+                {
+                    sb.Append("/>");
+                }
+                sb.Append("<a:stretch><a:fillRect/></a:stretch></p:blipFill>");
+                sb.Append("<p:spPr>");
+                var imgRotAttr = img.Rotation != 0 ? $" rot=\"{img.Rotation}\"" : "";
+                sb.Append($"<a:xfrm{imgRotAttr}><a:off x=\"{img.Left}\" y=\"{img.Top}\"/><a:ext cx=\"{img.Width}\" cy=\"{img.Height}\"/></a:xfrm>");
+                if (img.CornerRadius > 0)
+                    sb.Append($"<a:prstGeom prst=\"roundRect\"><a:avLst><a:gd name=\"adj\" fmla=\"val {img.CornerRadius}\"/></a:avLst></a:prstGeom></p:spPr></p:pic>");
+                else
+                    sb.Append("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></p:spPr></p:pic>");
             }
             sb.Append("</p:grpSp>");
         }
@@ -834,6 +908,14 @@ partial class PptxWriter
         {
             relsSb.Append($"<Relationship Id=\"{img.RelId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/{img.RelId}.{img.Extension}\"/>");
         }
+        // 组内图片关系（S07-02）
+        foreach (var grp in slide.Groups)
+        {
+            foreach (var img in grp.Images)
+            {
+                relsSb.Append($"<Relationship Id=\"{img.RelId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/{img.RelId}.{img.Extension}\"/>");
+            }
+        }
         foreach (var hlEntry in hlinkMap)
         {
             relsSb.Append($"<Relationship Id=\"{hlEntry.Key}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"{EscXml(hlEntry.Value)}\" TargetMode=\"External\"/>");
@@ -863,7 +945,7 @@ partial class PptxWriter
         {
             if (shp.FillImage is { Length: > 0 })
             {
-                shp.ShapeImageRelId = $"rImgFill{_mediaGlobal++}";
+                shp.ShapeImageRelId ??= $"rImgFill{_mediaGlobal++}";
                 relsSb.Append($"<Relationship Id=\"{shp.ShapeImageRelId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/{shp.ShapeImageRelId}.{shp.FillImageExt}\"/>");
             }
         }
@@ -875,6 +957,15 @@ partial class PptxWriter
         {
             using var entry = za.CreateEntry($"ppt/media/{img.RelId}.{img.Extension}").Open();
             entry.Write(img.Data, 0, img.Data.Length);
+        }
+        // write group image media（S07-02）
+        foreach (var grp in slide.Groups)
+        {
+            foreach (var img in grp.Images)
+            {
+                using var entry = za.CreateEntry($"ppt/media/{img.RelId}.{img.Extension}").Open();
+                entry.Write(img.Data, 0, img.Data.Length);
+            }
         }
 
         // write video media
