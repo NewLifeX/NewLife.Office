@@ -13,28 +13,27 @@
 - .NET: .NET 10.0.10 (X64 RyuJIT AVX2)
 - BenchmarkDotNet: v0.14.0（Release 模式，Short 模式运行，`[MemoryDiagnoser]`）
 
-## 测试结果（MD24 优化后）
+## 测试结果（MD25 优化后）
 
 | 方法 | Mean | Error | Median | Gen0 | Gen1 | Gen2 | Allocated |
 |------|-----:|------:|-------:|-----:|-----:|-----:|----------:|
-| Parse | 8,773.2 μs | 167.93 μs | 199.91 μs | 171.88 | 109.38 | - | 1900.54 KB |
-| ParseEnglish | 2,145.7 μs | 15.64 μs | 13.06 μs | 15.63 | 3.91 | - | 193.98 KB |
-| ParseRoundtrip | 9,482.1 μs | 39.04 μs | 36.52 μs | 265.63 | 171.88 | - | 2787.12 KB |
+| Parse | 8,828.0 μs | 147.13 μs | 137.63 μs | 171.88 | 93.75 | - | 1878.18 KB |
+| ParseEnglish | 2,153.8 μs | 17.06 μs | 15.12 μs | 15.63 | 3.91 | - | 193.96 KB |
+| ParseRoundtrip | 9,642.8 μs | 192.26 μs | 287.76 μs | 265.63 | 125.00 | - | 2764.76 KB |
 | Serialize | 713.2 μs | 5.73 μs | 5.08 μs | 124.02 | 124.02 | 124.02 | 611.32 KB |
 | SerializeRoundtrip | 11,395.8 μs | 54.82 μs | 45.78 μs | 343.75 | 234.38 | - | 3671.30 KB |
 | ToHtml | 465.2 μs | 5.22 μs | 4.63 μs | 71.29 | 71.29 | 71.29 | 780.85 KB |
 | ToHtmlPage | 626.2 μs | 7.00 μs | 6.54 μs | 213.87 | 213.87 | 213.87 | 1267.16 KB |
 
-### MD19-24 优化前后对比（9 类优化，MD24 为里程碑）
+### MD19-25 优化前后对比（10 类优化）
 
-| 方法 | MD18 Mean | MD24 Mean | MD18 分配 | MD24 分配 | 耗时降幅 | 分配降幅 |
+| 方法 | MD18 Mean | MD25 Mean | MD18 分配 | MD25 分配 | 耗时降幅 | 分配降幅 |
 |------|-----------:|-----------:|----------:|----------:|--------:|--------:|
-| Parse | 8,962.4 μs | 8,773.2 μs | 2276.33 KB | 1900.54 KB | -2.1%（混合中文） | **-16.5%** |
-| ParseEnglish | 2,729.3 μs | 2,145.7 μs | 442.42 KB | 193.98 KB | **-21.4%**（纯英文） | **-56.1%** |
-| ParseRoundtrip | 9,913.7 μs | 9,482.1 μs | 3162.90 KB | 2787.12 KB | -4.4% | -11.9% |
-| SerializeRoundtrip | 23,730.8 μs | 11,395.8 μs | 5513.23 KB | 3671.30 KB | -52.0%（MD14 起） | -33.4% |
+| Parse | 8,962.4 μs | 8,828.0 μs | 2276.33 KB | 1878.18 KB | -1.5%（混合中文） | **-17.5%** |
+| ParseEnglish | 2,729.3 μs | 2,153.8 μs | 442.42 KB | 193.96 KB | **-21.1%**（纯英文） | **-56.2%** |
+| ParseRoundtrip | 9,913.7 μs | 9,642.8 μs | 3162.90 KB | 2764.76 KB | -2.7% | -12.6% |
 
-> 注：MD18/MD24 同机 Short 模式对比（MD18 为 stash 回退实测；SerializeRoundtrip 为 MD14 起累计）。**MD24 为里程碑**：`ParseInlineWithRefs`/`ParseInlineCore` 返回的 List 原被块/行内节点 `AddRange` 复制（每块/每节点 1 个新 List + 元素复制），改为工厂方法 `List` 重载**直接接管**——块级（Paragraph/Heading/ListItem/TableCell `SetInlines`）+ 行内（Link/Strong/Emphasis/StrongEmphasis/Strikethrough `_children` 直赋）。混合 ~2400 块 + ~800 行内节点，分配 -15.6%（本轮）、Gen0 218→172；ParseEnglish 分配 -55%（300 段落每段省 1 List）；附 `BuildParagraphText` 单行快路径（直接 Trim 免 StringBuilder）。累计 MD14→MD24 混合中文分配 **-49.5%**（3761→1900KB）、耗时 **-58%**（20.9→8.8ms）；英文 Parse 耗时 -21.4%、分配 -56.1%。
+> 注：MD18/MD25 同机 Short 模式对比（MD18 为 stash 回退实测）。十类优化——email run、delims 延迟、IsPlainText 精确化、块调度正则快速失败、emoji 快速失败、ASCII 快速路径、表格 IndexOfAny/实体范围、DelimInfo struct、**List 直接接管（MD24 块/行内 Inlines + MD25 容器块 Children：`SetInlines`/`SetChildren` + 工厂 `List` 重载，省每节点 1 个新 List + AddRange 复制）**、BuildParagraphText 单行快路径——混合中文分配 **-17.5%**、英文 -56.2%。累计 MD14→MD25 混合中文分配 **-50.1%**（3761→1878KB）、耗时 **-58%**（20.9→8.8ms）。
 
 ### MD14 优化前后对比（列表项快速路径）
 
