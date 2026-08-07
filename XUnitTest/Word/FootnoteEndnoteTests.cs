@@ -212,6 +212,43 @@ public class FootnoteEndnoteTests
         Assert.Contains("尾注 2: 这是尾注内容", md);
     }
 
+    [Fact, DisplayName("W22_脚注_模板填充覆盖脚注内占位符")]
+    public void Template_Fill_CoversFootnotes()
+    {
+        var templatePath = Path.Combine(Path.GetTempPath(), $"tpl_{Guid.NewGuid():N}.docx");
+        var outPath = Path.Combine(Path.GetTempPath(), $"out_{Guid.NewGuid():N}.docx");
+        try
+        {
+            // 生成含脚注占位符的模板（脚注正文在独立 footnotes.xml 部件）
+            using (var w = new WordWriter())
+            {
+                w.AppendFootnote("条款", "当事人 {{Name}} 应于 {{Date}} 前履行");
+                w.Save(templatePath);
+            }
+
+            var tpl = new WordTemplate(templatePath);
+            tpl.Fill(outPath, new Dictionary<String, Object?>
+            {
+                ["Name"] = "张三",
+                ["Date"] = "2026-08-07",
+            });
+
+            // 脚注部件中的占位符应被替换（WordTemplate 对所有 .xml 条目做替换）
+            using var za = System.IO.Compression.ZipFile.OpenRead(outPath);
+            var entry = za.GetEntry("word/footnotes.xml");
+            Assert.NotNull(entry);
+            using var sr = new System.IO.StreamReader(entry!.Open(), System.Text.Encoding.UTF8);
+            var xml = sr.ReadToEnd();
+            Assert.Contains("张三", xml);
+            Assert.DoesNotContain("{{Name}}", xml);
+        }
+        finally
+        {
+            if (File.Exists(templatePath)) File.Delete(templatePath);
+            if (File.Exists(outPath)) File.Delete(outPath);
+        }
+    }
+
     #endregion
 
     #region 写入（WordWriter 程序化创建脚注/尾注）
