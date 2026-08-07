@@ -1,4 +1,5 @@
 using System.Text;
+using NewLife.Collections;
 
 namespace NewLife.Office.Markdown;
 
@@ -96,20 +97,27 @@ internal sealed class MarkdownWriter
     private Boolean IsModified(MarkdownBlock block)
         => block.SourceSnapshot == null || SerializeBlock(block) != block.SourceSnapshot;
 
-    /// <summary>将块序列化为字符串（供修改检测使用）</summary>
+    /// <summary>将块序列化为字符串（供修改检测使用；MD26：StringBuilder 池化，往返模式每块 1 次调用）</summary>
     /// <param name="block">块节点</param>
     /// <returns>序列化文本</returns>
     private String SerializeBlock(MarkdownBlock block)
     {
-        var sb = new StringBuilder();
-        WriteBlock(sb, block, 0);
-        return sb.ToString();
+        var sb = Pool.StringBuilder.Get();
+        try
+        {
+            WriteBlock(sb, block, 0);
+            return sb.ToString();
+        }
+        finally
+        {
+            Pool.Put(sb, false);
+        }
     }
 
-    /// <summary>生成块的规范序列化快照（供解析器在往返渲染时记录，MD06-03）</summary>
+    /// <summary>生成块的规范序列化快照（供解析器在往返渲染时记录，MD06-03；MD26：实例方法复用 writer，省每块 new）</summary>
     /// <param name="block">块节点</param>
     /// <returns>规范序列化文本</returns>
-    internal static String SerializeSnapshot(MarkdownBlock block) => new MarkdownWriter().SerializeBlock(block);
+    internal String SerializeSnapshot(MarkdownBlock block) => SerializeBlock(block);
     #endregion
 
     #region 块

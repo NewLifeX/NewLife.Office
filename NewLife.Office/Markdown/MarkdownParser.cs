@@ -27,6 +27,9 @@ internal sealed class MarkdownParser
 
     /// <summary>是否启用往返模式（捕获块原始源码与快照，供 MD06-03 往返渲染；非往返省去捕获开销）</summary>
     internal Boolean Roundtrip;
+
+    /// <summary>往返快照序列化器（MD26：复用实例，省每块 new MarkdownWriter；状态在 finally 中复位，单线程安全）</summary>
+    private MarkdownWriter? _snapshotWriter;
     #endregion
 
     #region 常量（静态缓存，避免热点路径分配，MD19）
@@ -114,13 +117,19 @@ internal sealed class MarkdownParser
                     srcEnd++;
                 if (srcEnd > srcStart)
                 {
-                    var lineCount = srcEnd - srcStart;
-                    var rawLines = new String[lineCount];
-                    Array.Copy(_lines, srcStart, rawLines, 0, lineCount);
-                    // 拼接时补上末尾换行，保留块间空行（含被捕获的尾部空行）
-                    block.SourceText = String.Join("\n", rawLines) + "\n";
+                    // 单行快路径（MD26）：避免 new String[1] + String.Join 的数组与拼接分配，直接拼接单行
+                    if (srcEnd - srcStart == 1)
+                        block.SourceText = _lines[srcStart] + "\n";
+                    else
+                    {
+                        var lineCount = srcEnd - srcStart;
+                        var rawLines = new String[lineCount];
+                        Array.Copy(_lines, srcStart, rawLines, 0, lineCount);
+                        // 拼接时补上末尾换行，保留块间空行（含被捕获的尾部空行）
+                        block.SourceText = String.Join("\n", rawLines) + "\n";
+                    }
                     // 记录规范序列化快照，用于往返渲染时检测块是否被修改
-                    block.SourceSnapshot = MarkdownWriter.SerializeSnapshot(block);
+                    block.SourceSnapshot = (_snapshotWriter ??= new MarkdownWriter()).SerializeSnapshot(block);
                 }
             }
         }

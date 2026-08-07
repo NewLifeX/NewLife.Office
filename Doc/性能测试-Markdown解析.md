@@ -1,6 +1,6 @@
 # 性能测试报告 — Markdown 解析/序列化/HTML 转换
 
-> 日期：2026-08-07 | 项目：NewLife.Office（MD10→MD19）| 基准项目：`Benchmark/MarkdownBenchmark`
+> 日期：2026-08-08 | 项目：NewLife.Office（MD10→MD26）| 基准项目：`Benchmark/MarkdownBenchmark`
 
 ## 测试目标
 
@@ -13,27 +13,39 @@
 - .NET: .NET 10.0.10 (X64 RyuJIT AVX2)
 - BenchmarkDotNet: v0.14.0（Release 模式，Short 模式运行，`[MemoryDiagnoser]`）
 
-## 测试结果（MD25 优化后）
+## 测试结果（MD26 优化后）
 
 | 方法 | Mean | Error | Median | Gen0 | Gen1 | Gen2 | Allocated |
 |------|-----:|------:|-------:|-----:|-----:|-----:|----------:|
-| Parse | 8,828.0 μs | 147.13 μs | 137.63 μs | 171.88 | 93.75 | - | 1878.18 KB |
-| ParseEnglish | 2,153.8 μs | 17.06 μs | 15.12 μs | 15.63 | 3.91 | - | 193.96 KB |
-| ParseRoundtrip | 9,642.8 μs | 192.26 μs | 287.76 μs | 265.63 | 125.00 | - | 2764.76 KB |
-| Serialize | 713.2 μs | 5.73 μs | 5.08 μs | 124.02 | 124.02 | 124.02 | 611.32 KB |
-| SerializeRoundtrip | 11,395.8 μs | 54.82 μs | 45.78 μs | 343.75 | 234.38 | - | 3671.30 KB |
-| ToHtml | 465.2 μs | 5.22 μs | 4.63 μs | 71.29 | 71.29 | 71.29 | 780.85 KB |
-| ToHtmlPage | 626.2 μs | 7.00 μs | 6.54 μs | 213.87 | 213.87 | 213.87 | 1267.16 KB |
+| Parse | 8,647.6 μs | 72.96 μs | 56.96 μs | 171.88 | 93.75 | - | 1878.19 KB |
+| ParseEnglish | 2,186.3 μs | 15.53 μs | 12.12 μs | 15.63 | 3.91 | - | 193.96 KB |
+| ParseRoundtrip | 9,454.8 μs | 38.55 μs | 36.06 μs | 234.38 | 171.88 | - | 2405.42 KB |
+| Serialize | 735.8 μs | 14.51 μs | 13.57 μs | 124.02 | 124.02 | 124.02 | 603.50 KB |
+| SerializeRoundtrip | 11,004.6 μs | 26.30 μs | 23.32 μs | 281.25 | 171.88 | - | 2967.72 KB |
+| ToHtml | 505.1 μs | 10.07 μs | 24.12 μs | 71.29 | 71.29 | 71.29 | 780.85 KB |
+| ToHtmlPage | 646.9 μs | 12.91 μs | 21.21 μs | 213.87 | 213.87 | 213.87 | 1267.16 KB |
 
-### MD19-25 优化前后对比（10 类优化）
+### MD25→MD26 优化前后对比（Roundtrip 快照池化）
 
-| 方法 | MD18 Mean | MD25 Mean | MD18 分配 | MD25 分配 | 耗时降幅 | 分配降幅 |
+| 方法 | MD25 Mean | MD26 Mean | MD25 分配 | MD26 分配 | 耗时降幅 | 分配降幅 |
 |------|-----------:|-----------:|----------:|----------:|--------:|--------:|
-| Parse | 8,962.4 μs | 8,828.0 μs | 2276.33 KB | 1878.18 KB | -1.5%（混合中文） | **-17.5%** |
-| ParseEnglish | 2,729.3 μs | 2,153.8 μs | 442.42 KB | 193.96 KB | **-21.1%**（纯英文） | **-56.2%** |
-| ParseRoundtrip | 9,913.7 μs | 9,642.8 μs | 3162.90 KB | 2764.76 KB | -2.7% | -12.6% |
+| Parse | 8,828.0 μs | 8,647.6 μs | 1878.18 KB | 1878.19 KB | -2.0%（噪声） | ≈0 |
+| ParseEnglish | 2,153.8 μs | 2,186.3 μs | 193.96 KB | 193.96 KB | +1.5%（噪声） | ≈0 |
+| ParseRoundtrip | 9,642.8 μs | 9,454.8 μs | 2764.76 KB | 2405.42 KB | -2.0% | **-13.0%** |
+| SerializeRoundtrip | 11,395.8 μs | 11,004.6 μs | 3671.30 KB | 2967.72 KB | -3.4% | **-19.2%** |
 
-> 注：MD18/MD25 同机 Short 模式对比（MD18 为 stash 回退实测）。十类优化——email run、delims 延迟、IsPlainText 精确化、块调度正则快速失败、emoji 快速失败、ASCII 快速路径、表格 IndexOfAny/实体范围、DelimInfo struct、**List 直接接管（MD24 块/行内 Inlines + MD25 容器块 Children：`SetInlines`/`SetChildren` + 工厂 `List` 重载，省每节点 1 个新 List + AddRange 复制）**、BuildParagraphText 单行快路径——混合中文分配 **-17.5%**、英文 -56.2%。累计 MD14→MD25 混合中文分配 **-50.1%**（3761→1878KB）、耗时 **-58%**（20.9→8.8ms）。
+> 注：MD26 为 Roundtrip 场景里程碑——往返模式每块生成规范快照时 `new MarkdownWriter()` + `new StringBuilder()` + 完整序列化（~2000 块），改为 **writer 实例复用（状态在 finally 复位，单线程安全）+ `Pool.StringBuilder` 池化**；另单行块 `SourceText` 捕获免 `new String[1]` + `String.Join`。Parse/ParseEnglish（非往返）分配不变，佐证改动精准；`SerializeRoundtrip` 收益更大（IsModified 修改检测同样每块序列化，池化同样生效）。
+
+### MD19-26 优化前后对比（11 类优化）
+
+| 方法 | MD18 Mean | MD26 Mean | MD18 分配 | MD26 分配 | 耗时降幅 | 分配降幅 |
+|------|-----------:|-----------:|----------:|----------:|--------:|--------:|
+| Parse | 8,962.4 μs | 8,647.6 μs | 2276.33 KB | 1878.19 KB | -3.5%（混合中文） | **-17.5%** |
+| ParseEnglish | 2,729.3 μs | 2,186.3 μs | 442.42 KB | 193.96 KB | **-19.9%**（纯英文） | **-56.2%** |
+| ParseRoundtrip | 9,913.7 μs | 9,454.8 μs | 3162.90 KB | 2405.42 KB | -4.6% | **-23.9%** |
+| SerializeRoundtrip | - | 11,004.6 μs | 5513.23 KB（MD14） | 2967.72 KB | -53.6%（MD14 起） | **-46.2%**（MD14 起） |
+
+> 注：MD18/MD26 同机 Short 模式对比（MD18 为 stash 回退实测；SerializeRoundtrip 为 MD14 起累计）。十一类优化——email run、delims 延迟、IsPlainText 精确化、块调度正则快速失败、emoji 快速失败、ASCII 快速路径、表格 IndexOfAny/实体范围、DelimInfo struct、**List 直接接管（MD24 块/行内 Inlines + MD25 容器块 Children）**、**Roundtrip 快照池化（MD26：writer 实例复用 + StringBuilder 池化 + 单行 SourceText）**、BuildParagraphText 单行快路径——混合中文分配 **-17.5%**、英文 -56.2%。累计 MD14→MD26 混合中文分配 **-50.1%**（3761→1878KB）、耗时 **-58%**（20.9→8.8ms）；Roundtrip 解析分配 **-23.9%**（MD18 起）、往返序列化分配 **-46.2%**（MD14 起）。
 
 ### MD14 优化前后对比（列表项快速路径）
 
