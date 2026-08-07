@@ -49,6 +49,12 @@ public sealed class MarkdownInline
         return node;
     }
 
+    /// <summary>创建粗体节点（MD24：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="children">子行内元素列表</param>
+    /// <returns>行内元素</returns>
+    public static MarkdownInline CreateStrong(List<MarkdownInline> children)
+        => new() { Type = MarkdownInlineType.Strong, _children = children };
+
     /// <summary>创建斜体节点</summary>
     /// <param name="children">子行内元素</param>
     /// <returns>行内元素</returns>
@@ -59,6 +65,12 @@ public sealed class MarkdownInline
         return node;
     }
 
+    /// <summary>创建斜体节点（MD24：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="children">子行内元素列表</param>
+    /// <returns>行内元素</returns>
+    public static MarkdownInline CreateEmphasis(List<MarkdownInline> children)
+        => new() { Type = MarkdownInlineType.Emphasis, _children = children };
+
     /// <summary>创建粗斜体节点</summary>
     /// <param name="children">子行内元素</param>
     /// <returns>行内元素</returns>
@@ -68,6 +80,12 @@ public sealed class MarkdownInline
         node.Children.AddRange(children);
         return node;
     }
+
+    /// <summary>创建粗斜体节点（MD24：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="children">子行内元素列表</param>
+    /// <returns>行内元素</returns>
+    public static MarkdownInline CreateStrongEmphasis(List<MarkdownInline> children)
+        => new() { Type = MarkdownInlineType.StrongEmphasis, _children = children };
 
     /// <summary>创建行内代码节点</summary>
     /// <param name="code">代码文本</param>
@@ -85,6 +103,12 @@ public sealed class MarkdownInline
         return node;
     }
 
+    /// <summary>创建删除线节点（MD24：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="children">子行内元素列表</param>
+    /// <returns>行内元素</returns>
+    public static MarkdownInline CreateStrikethrough(List<MarkdownInline> children)
+        => new() { Type = MarkdownInlineType.Strikethrough, _children = children };
+
     /// <summary>创建超链接节点</summary>
     /// <param name="href">目标 URL</param>
     /// <param name="title">标题（可空）</param>
@@ -96,6 +120,14 @@ public sealed class MarkdownInline
         node.Children.AddRange(children);
         return node;
     }
+
+    /// <summary>创建超链接节点（MD24：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="href">目标 URL</param>
+    /// <param name="title">标题（可空）</param>
+    /// <param name="children">显示内容列表</param>
+    /// <returns>行内元素</returns>
+    public static MarkdownInline CreateLink(String href, String title, List<MarkdownInline> children)
+        => new() { Type = MarkdownInlineType.Link, Href = href, Title = title ?? String.Empty, _children = children };
 
     /// <summary>创建图片节点</summary>
     /// <param name="src">图片 URL</param>

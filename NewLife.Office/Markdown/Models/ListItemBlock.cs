@@ -21,6 +21,18 @@ public sealed class ListItemBlock : MarkdownBlock
         Inlines.AddRange(inlines);
     }
 
+    /// <summary>创建列表项（MD24：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="inlines">行内列表</param>
+    /// <param name="isTaskItem">是否任务项</param>
+    /// <param name="isChecked">是否已勾选</param>
+    internal ListItemBlock(List<MarkdownInline> inlines, Boolean isTaskItem = false, Boolean isChecked = false)
+    {
+        Type = MarkdownBlockType.ListItem;
+        IsTaskItem = isTaskItem;
+        IsChecked = isChecked;
+        SetInlines(inlines);
+    }
+
     /// <summary>创建列表项（嵌套块内容）</summary>
     /// <param name="children">子块</param>
     /// <param name="isTaskItem">是否任务项</param>

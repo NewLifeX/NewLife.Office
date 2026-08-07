@@ -933,6 +933,9 @@ internal sealed class MarkdownParser
 
     private static String BuildParagraphText(List<String> lines)
     {
+        // 单行快路径（MD24）：绝大多数段落为单行，直接 Trim 返回，避免 StringBuilder + ToString 分配
+        if (lines.Count == 1) return lines[0].Trim();
+
         var sb = new System.Text.StringBuilder();
         for (var i = 0; i < lines.Count; i++)
         {

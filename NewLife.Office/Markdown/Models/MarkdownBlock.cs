@@ -28,6 +28,10 @@ public abstract class MarkdownBlock
     /// <summary>行内元素列表（叶子块使用：段落/标题/列表项文本/单元格；容器块延迟创建，MD17）</summary>
     public List<MarkdownInline> Inlines => _inlines ??= [];
 
+    /// <summary>直接接管行内列表（MD24：Parse 内部 List 直接归属块，避免 IEnumerable AddRange 复制一个新 List）</summary>
+    /// <param name="inlines">行内列表</param>
+    protected void SetInlines(List<MarkdownInline> inlines) => _inlines = inlines;
+
     /// <summary>自定义属性（MD05-06），如 "class1 class2" 或 "id1" 或 "key=value"</summary>
     public String? Attributes { get; set; }
 
@@ -52,10 +56,23 @@ public abstract class MarkdownBlock
     public static MarkdownBlock CreateHeading(Int32 level, IEnumerable<MarkdownInline> inlines)
         => new HeadingBlock(level, inlines);
 
+    /// <summary>创建标题块（MD24：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="level">等级（1-6）</param>
+    /// <param name="inlines">行内列表</param>
+    /// <returns>标题块</returns>
+    public static MarkdownBlock CreateHeading(Int32 level, List<MarkdownInline> inlines)
+        => new HeadingBlock(level, inlines);
+
     /// <summary>创建段落块</summary>
     /// <param name="inlines">行内内容</param>
     /// <returns>块</returns>
     public static MarkdownBlock CreateParagraph(IEnumerable<MarkdownInline> inlines)
+        => new ParagraphBlock(inlines);
+
+    /// <summary>创建段落块（MD24：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="inlines">行内列表</param>
+    /// <returns>块</returns>
+    public static MarkdownBlock CreateParagraph(List<MarkdownInline> inlines)
         => new ParagraphBlock(inlines);
 
     /// <summary>创建代码块</summary>
@@ -94,6 +111,15 @@ public abstract class MarkdownBlock
     /// <param name="isChecked">是否已勾选</param>
     /// <returns>块</returns>
     public static MarkdownBlock CreateListItem(IEnumerable<MarkdownInline> inlines,
+        Boolean isTaskItem = false, Boolean isChecked = false)
+        => new ListItemBlock(inlines, isTaskItem, isChecked);
+
+    /// <summary>创建列表项（MD24：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="inlines">行内列表</param>
+    /// <param name="isTaskItem">是否任务项</param>
+    /// <param name="isChecked">是否已勾选</param>
+    /// <returns>块</returns>
+    public static MarkdownBlock CreateListItem(List<MarkdownInline> inlines,
         Boolean isTaskItem = false, Boolean isChecked = false)
         => new ListItemBlock(inlines, isTaskItem, isChecked);
 
