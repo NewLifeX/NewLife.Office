@@ -220,5 +220,43 @@ public static class WordDocumentExtensions
                         yield return p;
         }
     }
+
+    /// <summary>
+    /// 清空所有元素的 RawXml（含嵌套表格与页眉页脚元素），
+    /// 配合 <c>doc.DocumentXml = null</c> 使用，强制 Writer 以模型输出——
+    /// 解决"读入→通过模型修改→写回"时 RawXml 兜底覆盖模型修改的问题。
+    /// </summary>
+    /// <param name="doc">文档</param>
+    /// <example>
+    /// <code>
+    /// var doc = reader.ReadDocument();
+    /// doc.DocumentXml = null;      // 关闭 document.xml 原样透传
+    /// doc.ClearRawXml();           // 关闭元素级 RawXml 兜底
+    /// doc.Elements[0].Paragraph.Runs[0].Text = "新标题";
+    /// writer.Save("output.docx", doc);
+    /// </code>
+    /// </example>
+    public static void ClearRawXml(this Document doc)
+    {
+        void Clear(List<Element> list)
+        {
+            foreach (var el in list)
+            {
+                el.RawXml = null;
+                if (el.Table != null)
+                {
+                    el.Table.RawXml = null;
+                    foreach (var row in el.Table.Rows)
+                        foreach (var cell in row.Cells)
+                            foreach (var nested in cell.NestedTables)
+                                nested.RawXml = null;
+                }
+                if (el.Sdt != null) el.Sdt.RawXml = null;
+            }
+        }
+        Clear(doc.Elements);
+        foreach (var h in doc.Headers) Clear(h.Elements);
+        foreach (var f in doc.Footers) Clear(f.Elements);
+    }
     #endregion
 }

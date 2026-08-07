@@ -199,4 +199,81 @@ public class EditApiTests
         Assert.Equal("A1", table.Rows[0].Cells[0].Paragraphs[0].Runs[0].Text);
     }
     #endregion
+
+    #region 表格单元格便利 API
+    [Fact(DisplayName = "单元格API—GetCell/GetCellText")]
+    public void TableCell_Get()
+    {
+        var table = new Table();
+        table.AddRow().Cells.Add(new Cell { Paragraphs = { new Paragraph { Runs = { new Run { Text = "产品" } } } } });
+        table.AddRow().Cells.Add(new Cell { Paragraphs = { new Paragraph { Runs = { new Run { Text = "笔记本" } } } } });
+
+        Assert.NotNull(table.GetCell(0, 0));
+        Assert.Equal("产品", table.GetCellText(0, 0));
+        Assert.Equal("笔记本", table.GetCellText(1, 0));
+        Assert.Equal(String.Empty, table.GetCellText(0, 5)); // 越界返回空
+        Assert.Null(table.GetCell(9, 0));
+    }
+
+    [Fact(DisplayName = "单元格API—SetCellText 修改后写回")]
+    public void TableCell_SetCellText()
+    {
+        var table = new Table();
+        table.AddRow().Cells.Add(new Cell { Paragraphs = { new Paragraph { Runs = { new Run { Text = "旧值" } } } } });
+
+        table.SetCellText(0, 0, "新值");
+        Assert.Equal("新值", table.GetCellText(0, 0));
+
+        // 越界自动补齐行列
+        table.SetCellText(2, 3, "补值");
+        Assert.Equal(3, table.Rows.Count);
+        Assert.Equal("补值", table.GetCellText(2, 3));
+    }
+
+    [Fact(DisplayName = "单元格API—读入表格改值后写回往返")]
+    public void TableCell_ReadModifyWriteBack()
+    {
+        var body = "<w:tbl><w:tr>"
+            + "<w:tc><w:p><w:r><w:t>旧产品名</w:t></w:r></w:p></w:tc>"
+            + "<w:tc><w:p><w:r><w:t>旧价格</w:t></w:r></w:p></w:tc>"
+            + "</w:tr></w:tbl>";
+        var doc = Read(body);
+        var el = Assert.Single(doc.Elements, e => e.Type == ElementType.Table);
+        var table = el.Table!;
+        Assert.Equal("旧产品名", table.GetCellText(0, 0));
+
+        // 通过模型修改内容需显式重建：关闭 document.xml 透传 + 清空 RawXml 兜底
+        doc.DocumentXml = null;
+        doc.ClearRawXml();
+        table.SetCellText(0, 0, "新产品名");
+        table.SetCellText(0, 1, "新价格");
+
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
+        try
+        {
+            using (var w = new WordWriter()) w.Save(path, doc);
+            using var reader = new WordReader(path);
+            var doc2 = reader.ReadDocument();
+            var table2 = Assert.Single(doc2.Elements, e => e.Type == ElementType.Table).Table!;
+            Assert.Equal("新产品名", table2.GetCellText(0, 0));
+            Assert.Equal("新价格", table2.GetCellText(0, 1));
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact(DisplayName = "GetText—模型全文提取（段落+表格）")]
+    public void Document_GetText()
+    {
+        var body = "<w:p><w:r><w:t>标题行</w:t></w:r></w:p>"
+            + "<w:tbl><w:tr>"
+            + "<w:tc><w:p><w:r><w:t>列A</w:t></w:r></w:p></w:tc>"
+            + "<w:tc><w:p><w:r><w:t>列B</w:t></w:r></w:p></w:tc>"
+            + "</w:tr></w:tbl>";
+        var doc = Read(body);
+        var text = doc.GetText();
+        Assert.Contains("标题行", text);
+        Assert.Contains("列A", text);
+        Assert.Contains("列B", text);
+    }
+    #endregion
 }

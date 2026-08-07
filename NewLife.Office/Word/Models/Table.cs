@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace NewLife.Office.Word;
 
 /// <summary>Word 表格独立模型</summary>
@@ -108,6 +110,63 @@ public class Table
         {
             if (index >= 0 && index < row.Cells.Count) row.Cells.RemoveAt(index);
         }
+    }
+    #endregion
+
+    #region 单元格访问
+    /// <summary>获取单元格（行/列越界返回 null）</summary>
+    /// <param name="row">行索引</param>
+    /// <param name="col">列索引</param>
+    /// <returns>单元格，越界为 null</returns>
+    public Cell? GetCell(Int32 row, Int32 col)
+    {
+        if (row < 0 || row >= Rows.Count) return null;
+        var cells = Rows[row].Cells;
+        if (col < 0 || col >= cells.Count) return null;
+        return cells[col];
+    }
+
+    /// <summary>获取单元格文本（拼接段落与 Run，单元格间无分隔）</summary>
+    /// <param name="row">行索引</param>
+    /// <param name="col">列索引</param>
+    /// <returns>单元格纯文本，越界或空为 String.Empty</returns>
+    public String GetCellText(Int32 row, Int32 col)
+    {
+        var cell = GetCell(row, col);
+        if (cell == null) return String.Empty;
+        var sb = new StringBuilder();
+        foreach (var p in cell.Paragraphs)
+            foreach (var r in p.Runs)
+                sb.Append(r.Text);
+        return sb.ToString();
+    }
+
+    /// <summary>设置单元格文本（复用首个 Run 保留格式；单元格不存在时自动补齐行/列）</summary>
+    /// <param name="row">行索引（超出时追加空行）</param>
+    /// <param name="col">列索引（超出时追加空单元格）</param>
+    /// <param name="text">文本内容</param>
+    /// <returns>目标单元格</returns>
+    public Cell SetCellText(Int32 row, Int32 col, String text)
+    {
+        // 补齐行
+        while (Rows.Count <= row) Rows.Add(new TableRow());
+        var cells = Rows[row].Cells;
+        // 补齐列
+        while (cells.Count <= col)
+            cells.Add(new Cell { Paragraphs = { new Paragraph() } });
+        var cell = cells[col];
+
+        // 设置文本：复用首个 Run（保留其格式），无 Run 则新建
+        if (cell.Paragraphs.Count == 0)
+            cell.Paragraphs.Add(new Paragraph());
+        var para = cell.Paragraphs[0];
+        if (para.Runs.Count == 0)
+            para.Runs.Add(new Run());
+        para.Runs[0].Text = text;
+        // 清空其余 Run（避免旧文本残留）
+        for (var i = 1; i < para.Runs.Count; i++)
+            para.Runs[i].Text = String.Empty;
+        return cell;
     }
     #endregion
 }

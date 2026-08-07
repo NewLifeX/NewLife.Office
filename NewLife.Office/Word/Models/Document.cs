@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace NewLife.Office.Word;
 
 /// <summary>Word 文档完整模型，承载读写往返所需全部信息</summary>
@@ -109,5 +111,90 @@ public class Document
 
     /// <summary>文档变量（settings.xml w:docVars），Key=变量名 Value=变量值，用于企业模板元数据驱动</summary>
     public Dictionary<String, String> DocumentVariables { get; set; } = [];
+    #endregion
+
+    #region 方法
+    /// <summary>
+    /// 获取全文纯文本（段落以换行分隔，表格单元格以制表符分隔，含嵌套表格与页眉页脚文本）。
+    /// 与 <see cref="WordReader.ReadFullText"/> 不同：本方法基于当前模型（<see cref="Elements"/>），
+    /// 适合读入→修改→提取的场景。
+    /// </summary>
+    /// <returns>全文纯文本</returns>
+    public String GetText()
+    {
+        var sb = new StringBuilder();
+        foreach (var el in Elements)
+            AppendElementText(sb, el);
+        foreach (var hdr in Headers)
+        {
+            foreach (var el in hdr.Elements)
+                AppendElementText(sb, el);
+        }
+        foreach (var ftr in Footers)
+        {
+            foreach (var el in ftr.Elements)
+                AppendElementText(sb, el);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>将元素文本追加到 StringBuilder</summary>
+    private static void AppendElementText(StringBuilder sb, Element el)
+    {
+        if (el.Paragraph != null)
+        {
+            foreach (var r in el.Paragraph.Runs) sb.Append(r.Text);
+            sb.AppendLine();
+        }
+        else if (el.Table != null)
+        {
+            foreach (var row in el.Table.Rows)
+            {
+                for (var i = 0; i < row.Cells.Count; i++)
+                {
+                    if (i > 0) sb.Append('\t');
+                    AppendCellText(sb, row.Cells[i]);
+                }
+                sb.AppendLine();
+            }
+        }
+        else if (el.TableRows != null)
+        {
+            foreach (var row in el.TableRows)
+            {
+                for (var i = 0; i < row.Count; i++)
+                {
+                    if (i > 0) sb.Append('\t');
+                    AppendCellText(sb, row[i]);
+                }
+                sb.AppendLine();
+            }
+        }
+        else if (el.Sdt?.Content != null)
+        {
+            sb.Append(el.Sdt.Content);
+        }
+    }
+
+    /// <summary>将单元格文本（含嵌套表格）追加到 StringBuilder</summary>
+    private static void AppendCellText(StringBuilder sb, Cell cell)
+    {
+        foreach (var nested in cell.NestedTables)
+        {
+            foreach (var row in nested.Rows)
+            {
+                for (var i = 0; i < row.Cells.Count; i++)
+                {
+                    if (i > 0) sb.Append('\t');
+                    AppendCellText(sb, row.Cells[i]);
+                }
+                sb.AppendLine();
+            }
+        }
+        foreach (var p in cell.Paragraphs)
+        {
+            foreach (var r in p.Runs) sb.Append(r.Text);
+        }
+    }
     #endregion
 }
