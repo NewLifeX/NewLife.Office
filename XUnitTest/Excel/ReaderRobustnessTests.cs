@@ -535,7 +535,7 @@ public class ExcelReaderRobustnessTests
 
     #region 条件格式 dxf 字体样式往返
     [Fact]
-    [DisplayName("Excel往返—条件格式dxf字体颜色/加粗写入读取")]
+    [DisplayName("Excel往返—条件格式dxf字体颜色/加粗/边框写入读取")]
     public void ConditionalFormat_Font_Roundtrip()
     {
         var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
@@ -543,7 +543,7 @@ public class ExcelReaderRobustnessTests
         {
             w.WriteRow("Sheet1", new Object?[] { 100 });
             w.WriteRow("Sheet1", new Object?[] { 0 });
-            w.AddConditionalFormat("Sheet1", "A1:A2", ConditionalFormatValues.GreaterThan, "0", "92D050", null, "FF0000", true);
+            w.AddConditionalFormat("Sheet1", "A1:A2", ConditionalFormatValues.GreaterThan, "0", "92D050", null, "FF0000", true, "000000");
             w.AddConditionalFormat("Sheet1", "A1:A2", ConditionalFormatValues.LessThan, "50", "FF0000", null, "0000FF", false);
             w.AddExpressionConditionalFormat("Sheet1", "A1:A2", "A1>200", "FFFF00");
             w.Save();
@@ -557,10 +557,12 @@ public class ExcelReaderRobustnessTests
             var gt = cfs.First(c => c.Type == ConditionalFormatValues.GreaterThan);
             Assert.Equal("92D050", gt.Color);
             Assert.Equal("FF0000", gt.FontColor);
+            Assert.Equal("000000", gt.BorderColor);
             Assert.True(gt.IsBold);
             var lt = cfs.First(c => c.Type == ConditionalFormatValues.LessThan);
             Assert.Equal("FF0000", lt.Color);
             Assert.Equal("0000FF", lt.FontColor);
+            Assert.Null(lt.BorderColor);
             Assert.False(lt.IsBold);
             var ex = cfs.First(c => c.Type == ConditionalFormatValues.Expression);
             Assert.Equal("FFFF00", ex.Color);
@@ -584,10 +586,12 @@ public class ExcelReaderRobustnessTests
         var gt2 = cfs2.First(c => c.Type == ConditionalFormatValues.GreaterThan);
         Assert.Equal("92D050", gt2.Color);
         Assert.Equal("FF0000", gt2.FontColor);
+        Assert.Equal("000000", gt2.BorderColor);
         Assert.True(gt2.IsBold);
         var lt2 = cfs2.First(c => c.Type == ConditionalFormatValues.LessThan);
         Assert.Equal("FF0000", lt2.Color);
         Assert.Equal("0000FF", lt2.FontColor);
+        Assert.Null(lt2.BorderColor);
         Assert.False(lt2.IsBold);
         var ex2 = cfs2.First(c => c.Type == ConditionalFormatValues.Expression);
         Assert.Equal("FFFF00", ex2.Color);

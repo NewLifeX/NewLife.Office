@@ -795,4 +795,54 @@ public class BiffWriterTests
     }
 
     #endregion
+
+    #region 命名范围与打印区域
+
+    [Fact]
+    [DisplayName("写入命名范围后 GetDefinedNames 读回")]
+    public void DefinedNames_Roundtrip()
+    {
+        using var writer = new BiffWriter();
+        writer.WriteHeader(["A", "B"]);
+        writer.WriteRow(["1", "2"]);
+        writer.AddDefinedName("MyRange", "Sheet1!A1:B10");
+        writer.AddDefinedName("数据区", "Sheet1!C1:D5");
+
+        var bytes = writer.ToBytes();
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        var names = reader.GetDefinedNames();
+        Assert.Equal(2, names.Count);
+        Assert.Equal("Sheet1!A1:B10", names["MyRange"]);
+        Assert.Equal("Sheet1!C1:D5", names["数据区"]);
+    }
+
+    [Fact]
+    [DisplayName("写入打印区域后 GetPrintArea 读回")]
+    public void PrintArea_Roundtrip()
+    {
+        using var writer = new BiffWriter();
+        writer.WriteHeader(["A", "B"]);
+        writer.WriteRow(["1", "2"]);
+        writer.SetPrintArea("A1:F50");
+
+        var bytes = writer.ToBytes();
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        var area = reader.GetPrintArea();
+        Assert.NotNull(area);
+        Assert.Equal("Sheet1!A1:F50", area);
+    }
+
+    [Fact]
+    [DisplayName("无命名范围时 GetDefinedNames 返回空")]
+    public void DefinedNames_None()
+    {
+        using var writer = new BiffWriter();
+        writer.WriteRow(["1"]);
+        var bytes = writer.ToBytes();
+        using var reader = new BiffReader(new MemoryStream(bytes));
+        Assert.Empty(reader.GetDefinedNames());
+        Assert.Null(reader.GetPrintArea());
+    }
+
+    #endregion
 }

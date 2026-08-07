@@ -45,8 +45,8 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     private List<XfInfo>? _xfInfos;
     private List<String>? _dxfColors; // 条件格式 dxf 填充背景色（styles.xml dxfs）
 
-    /// <summary>条件格式 dxf 差异样式（styles.xml dxfs）：填充背景色 + 字体颜色/加粗</summary>
-    private record DxfStyle(String? Color, String? FontColor, Boolean IsBold);
+    /// <summary>条件格式 dxf 差异样式（styles.xml dxfs）：填充背景色 + 字体颜色/加粗 + 边框色</summary>
+    private record DxfStyle(String? Color, String? FontColor, Boolean IsBold, String? BorderColor);
 
     private List<DxfStyle>? _dxfStyles;
     private Dictionary<Int32, String>? _numFmtCodes;
@@ -859,6 +859,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                 var color = (String?)null;
                 var fontColor = (String?)null;
                 var isBold = false;
+                var borderColor = (String?)null;
 
                 var fill = dxf.Elements().FirstOrDefault(e => e.Name.LocalName == "fill");
                 var patternFill = fill?.Elements().FirstOrDefault(e => e.Name.LocalName == "patternFill");
@@ -875,7 +876,23 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                     isBold = font.Elements().Any(e => e.Name.LocalName == "b");
                 }
 
-                _dxfStyles.Add(new DxfStyle(color, fontColor, isBold));
+                // 边框：取第一个带颜色的方向（left/right/top/bottom）
+                var border = dxf.Elements().FirstOrDefault(e => e.Name.LocalName == "border");
+                if (border != null)
+                {
+                    foreach (var side in border.Elements())
+                    {
+                        var scolor = side.Elements().FirstOrDefault(e => e.Name.LocalName == "color");
+                        var srgb = scolor?.Attribute("rgb")?.Value;
+                        if (!srgb.IsNullOrEmpty())
+                        {
+                            borderColor = NormalizeRgb(srgb);
+                            break;
+                        }
+                    }
+                }
+
+                _dxfStyles.Add(new DxfStyle(color, fontColor, isBold, borderColor));
             }
         }
     }
@@ -2146,6 +2163,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                         var ds = _dxfStyles[dxfId];
                         if (!ds.Color.IsNullOrEmpty()) info.Color = ds.Color;
                         if (!ds.FontColor.IsNullOrEmpty()) info.FontColor = ds.FontColor;
+                        if (!ds.BorderColor.IsNullOrEmpty()) info.BorderColor = ds.BorderColor;
                         info.IsBold = ds.IsBold;
                     }
                 }
@@ -2179,6 +2197,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                         var ds = _dxfStyles[dxfId];
                         if (!ds.Color.IsNullOrEmpty()) info.Color = ds.Color;
                         if (!ds.FontColor.IsNullOrEmpty()) info.FontColor = ds.FontColor;
+                        if (!ds.BorderColor.IsNullOrEmpty()) info.BorderColor = ds.BorderColor;
                         info.IsBold = ds.IsBold;
                     }
                 }

@@ -283,9 +283,9 @@ partial class ExcelWriter
         cf.Type < ConditionalFormatValues.DataBar ||
         (cf.Type == ConditionalFormatValues.Expression && HasDxfStyle(cf));
 
-    /// <summary>条件格式是否携带 dxf 样式（填充色/字体颜色/加粗）</summary>
+    /// <summary>条件格式是否携带 dxf 样式（填充色/字体颜色/加粗/边框色）</summary>
     private static Boolean HasDxfStyle(ConditionalFormatEntry cf) =>
-        !cf.Color.IsNullOrEmpty() || !cf.FontColor.IsNullOrEmpty() || cf.IsBold;
+        !cf.Color.IsNullOrEmpty() || !cf.FontColor.IsNullOrEmpty() || !cf.BorderColor.IsNullOrEmpty() || cf.IsBold;
 
     /// <summary>计算指定工作表的 dxf 起始索引（全局顺序：按工作表顺序累计之前所有符合条件的槽位）</summary>
     private Int32 GetDxfBase(String sheet)
@@ -1653,6 +1653,8 @@ partial class ExcelWriter
                     }
                     if (!cf.Color.IsNullOrEmpty())
                         sw.Write($"<fill><patternFill><bgColor rgb=\"FF{cf.Color}\"/></patternFill></fill>");
+                    if (!cf.BorderColor.IsNullOrEmpty())
+                        sw.Write($"<border><left style=\"thin\"><color rgb=\"FF{cf.BorderColor}\"/></left><right style=\"thin\"><color rgb=\"FF{cf.BorderColor}\"/></right><top style=\"thin\"><color rgb=\"FF{cf.BorderColor}\"/></top><bottom style=\"thin\"><color rgb=\"FF{cf.BorderColor}\"/></bottom></border>");
                     sw.Write("</dxf>");
                 }
             }

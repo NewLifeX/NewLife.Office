@@ -22,6 +22,9 @@ public class ConditionalFormatting
     /// <summary>字体颜色（RGB十六进制，dxf 字体样式）</summary>
     public String? FontColor { get; set; }
 
+    /// <summary>边框颜色（RGB十六进制，dxf 边框样式）</summary>
+    public String? BorderColor { get; set; }
+
     /// <summary>是否加粗（dxf 字体样式）</summary>
     public Boolean IsBold { get; set; }
 

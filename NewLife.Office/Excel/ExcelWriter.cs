@@ -95,6 +95,8 @@ public partial class ExcelWriter : DisposeBase
         public String? Color { get; set; }
         /// <summary>字体颜色（RGB十六进制，dxf 字体样式）</summary>
         public String? FontColor { get; set; }
+        /// <summary>边框颜色（RGB十六进制，dxf 边框样式）</summary>
+        public String? BorderColor { get; set; }
         /// <summary>是否加粗（dxf 字体样式）</summary>
         public Boolean IsBold { get; set; }
         /// <summary>图标集类型名（如 "3Arrows"、"3Flags"、"5Rating"），仅 IconSet 使用</summary>
@@ -1211,7 +1213,8 @@ public partial class ExcelWriter : DisposeBase
     /// <param name="value2">第二个条件值（仅 Between 类型使用）</param>
     /// <param name="fontColor">满足条件时的字体颜色（RGB十六进制，可空）</param>
     /// <param name="bold">满足条件时是否加粗</param>
-    public void AddConditionalFormat(String? sheet, String range, ConditionalFormatValues type, String? value, String? color, String? value2, String? fontColor, Boolean bold = false)
+    /// <param name="borderColor">满足条件时的边框颜色（RGB十六进制，可空）</param>
+    public void AddConditionalFormat(String? sheet, String range, ConditionalFormatValues type, String? value, String? color, String? value2, String? fontColor, Boolean bold = false, String? borderColor = null)
     {
         if (range.IsNullOrEmpty()) throw new ArgumentNullException(nameof(range));
         if (sheet.IsNullOrEmpty()) sheet = SheetName;
@@ -1222,7 +1225,7 @@ public partial class ExcelWriter : DisposeBase
             list = [];
             _sheetCondFormats[sheet] = list;
         }
-        list.Add(new ConditionalFormatEntry { Range = range, Type = type, Value = value, Value2 = value2, Color = color, FontColor = fontColor, IsBold = bold });
+        list.Add(new ConditionalFormatEntry { Range = range, Type = type, Value = value, Value2 = value2, Color = color, FontColor = fontColor, IsBold = bold, BorderColor = borderColor });
     }
 
     /// <summary>添加图标集条件格式</summary>
@@ -1472,7 +1475,7 @@ public partial class ExcelWriter : DisposeBase
                 // 条件格式
                 foreach (var cf in sd.ConditionalFormats)
                 {
-                    AddConditionalFormat(sheet, cf.Range, cf.Type, cf.Value, cf.Color, cf.Value2, cf.FontColor, cf.IsBold);
+                    AddConditionalFormat(sheet, cf.Range, cf.Type, cf.Value, cf.Color, cf.Value2, cf.FontColor, cf.IsBold, cf.BorderColor);
                 }
 
                 // 批注（0基→1基行）

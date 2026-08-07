@@ -54,6 +54,9 @@ public sealed class BiffWriter : IDisposable
     private const UInt16 RecPassword = 0x0013;
     private const UInt16 RecDv = 0x01BE;
     private const UInt16 RecDval = 0x02B2;
+    private const UInt16 RecSupBook = 0x01AE;
+    private const UInt16 RecExternSheet = 0x0017;
+    private const UInt16 RecName = 0x0018;
     private const Int32 MaxRecordDataSize = 8224;
 
     // BIFF8 日期纪元：1900-01-01（含 1900 闰年兼容性偏移 +1）
@@ -125,6 +128,9 @@ public sealed class BiffWriter : IDisposable
 
     // 数据验证（下拉列表）：Key = sheetName, Value = (range, items)
     private readonly Dictionary<String, List<(String Range, String[] Items)>> _sheetValidations = new(StringComparer.Ordinal);
+
+    // 命名范围/打印区域：工作簿级，(名称, 公式如 Sheet1!A1:B2)
+    private readonly List<(String Name, String Formula)> _definedNames = [];
 
     private String _currentSheet = "Sheet1";
     private Boolean _disposed;
@@ -349,6 +355,27 @@ public sealed class BiffWriter : IDisposable
         list.Add((cellRange, items));
     }
 
+    /// <summary>添加用户自定义命名范围</summary>
+    /// <param name="name">名称（须符合 Excel 命名规则，不可以 _xlnm. 开头）</param>
+    /// <param name="formula">公式或范围引用（如 "Sheet1!$A$1:$B$10" 或 "'数据'!$C:$C"）</param>
+    public void AddDefinedName(String name, String formula)
+    {
+        if (name.IsNullOrEmpty()) throw new ArgumentNullException(nameof(name));
+        if (formula.IsNullOrEmpty()) throw new ArgumentNullException(nameof(formula));
+        _definedNames.Add((name, formula));
+    }
+
+    /// <summary>设置当前工作表的打印区域</summary>
+    /// <param name="range">区域引用（如 "A1:F50"，不含工作表名）</param>
+    public void SetPrintArea(String range)
+    {
+        if (range.IsNullOrEmpty()) throw new ArgumentNullException(nameof(range));
+        if (!range.Contains('!'))
+            range = $"'{_currentSheet}'!{range}";
+        _definedNames.RemoveAll(dn => dn.Name.EqualIgnoreCase("_xlnm.Print_Area") && dn.Formula.Contains($"'{_currentSheet}'!"));
+        AddDefinedName("_xlnm.Print_Area", range);
+    }
+
     #endregion
 
     #region 保存
@@ -478,7 +505,16 @@ public sealed class BiffWriter : IDisposable
         // 4. XF 记录：21 条内置 + N 条自定义样式
         WriteXfRecords(ms, styleMap, nextFontIndex, formatXfIndex);
 
-        // 5. BoundSheet
+        // 5. 命名范围：SUPBOOK + EXTERNSHEET + NAME（位于 Globals 段）
+        if (_definedNames.Count > 0)
+        {
+            WriteRecord(ms, RecSupBook, BuildSupBookData());
+            WriteRecord(ms, RecExternSheet, BuildExternSheetData());
+            foreach (var (name, formula) in _definedNames)
+                WriteRecord(ms, RecName, BuildNameData(name, formula));
+        }
+
+        // 6. BoundSheet
         var boundSheetPositions = new List<Int64>();
         foreach (var sheetName in _sheetNames)
         {
@@ -486,10 +522,10 @@ public sealed class BiffWriter : IDisposable
             WriteRecord(ms, RecBoundSheet, BuildBoundSheetData(sheetName, 0));
         }
 
-        // 6. SST
+        // 7. SST
         WriteRecord(ms, RecSst, BuildSstRecord());
 
-        // 7. Globals EOF
+        // 8. Globals EOF
         WriteRecord(ms, RecEof, []);
 
         // 8. 写入各工作表
@@ -508,6 +544,93 @@ public sealed class BiffWriter : IDisposable
         }
 
         return ms.ToArray();
+    }
+
+    /// <summary>构建内部引用 SUPBOOK 记录（cSheets + grbit=0x0101）</summary>
+    private Byte[] BuildSupBookData()
+    {
+        using var ms = new MemoryStream();
+        WriteLE2(ms, (UInt16)_sheetNames.Count);
+        WriteLE2(ms, 0x0101);
+        return ms.ToArray();
+    }
+
+    /// <summary>构建 EXTERNSHEET 记录：每个内部工作表一个 XTI（cTab=1, iSupBook=0）</summary>
+    private Byte[] BuildExternSheetData()
+    {
+        using var ms = new MemoryStream();
+        WriteLE2(ms, (UInt16)_sheetNames.Count); // cXTI
+        for (var i = 0; i < _sheetNames.Count; i++)
+        {
+            WriteLE2(ms, 1);        // cTab
+            WriteLE2(ms, 0);        // iSupBook = 0（第一个 SUPBOOK 为内部引用）
+            WriteLE2(ms, (UInt16)i); // itabFirst
+            WriteLE2(ms, (UInt16)i); // itabLast
+        }
+        return ms.ToArray();
+    }
+
+    /// <summary>构建 NAME 记录（命名范围/打印区域），公式为 RgceArea3d</summary>
+    private Byte[] BuildNameData(String name, String formula)
+    {
+        var (sheetName, range) = ParseFormulaRef(formula);
+        var itab = 0;
+        if (sheetName != null)
+        {
+            var idx = _sheetNames.IndexOf(sheetName);
+            if (idx >= 0) itab = idx;
+        }
+
+        var (r1, c1, r2, c2) = ParseRange(range);
+
+        // option bit0：名称编码（1=UTF-16）；bit5：常量/区域引用
+        var isUtf16 = name.Any(ch => ch > 0x7F);
+        var option = (UInt16)(0x0020 | (isUtf16 ? 0x01 : 0x00));
+        var nameBytes = isUtf16 ? Encoding.Unicode.GetBytes(name) : Encoding.ASCII.GetBytes(name);
+
+        // 公式：grbit(2) + ptgArea3d(1=0x3B) + ixti(2) + r1(2)+c1(2)+r2(2)+c2(2)，行列 0 基无绝对标志（与读取端一致）
+        using var fms = new MemoryStream();
+        WriteLE2(fms, 0);
+        fms.WriteByte(0x3B);
+        WriteLE2(fms, (UInt16)itab);
+        WriteLE2(fms, (UInt16)r1);
+        WriteLE2(fms, (UInt16)c1);
+        WriteLE2(fms, (UInt16)r2);
+        WriteLE2(fms, (UInt16)c2);
+        var formulaBytes = fms.ToArray();
+
+        using var ms = new MemoryStream();
+        WriteLE2(ms, option);
+        ms.WriteByte(0);                    // keyboard
+        ms.WriteByte((Byte)name.Length);    // cch
+        WriteLE2(ms, (UInt16)formulaBytes.Length); // cce
+        WriteLE2(ms, 0);                    // ixals
+        WriteLE2(ms, 0);                    // reserved
+        WriteLE2(ms, 0);                    // cce2
+        ms.WriteByte((Byte)formulaBytes.Length); // cceFormula
+        ms.WriteByte(0);                    // padding（读取端 namePos=14）
+        ms.Write(nameBytes, 0, nameBytes.Length);
+        ms.Write(formulaBytes, 0, formulaBytes.Length);
+        return ms.ToArray();
+    }
+
+    /// <summary>解析公式引用（"Sheet1!A1:B2" 或 "'My Sheet'!A1:B2"）为工作表名与范围</summary>
+    private static (String? Sheet, String Range) ParseFormulaRef(String formula)
+    {
+        var idx = formula.IndexOf('!');
+        if (idx < 0) return (null, formula);
+        var sheet = formula[..idx];
+        if (sheet.Length >= 2 && sheet[0] == '\'' && sheet[^1] == '\'')
+            sheet = sheet[1..^1];
+        var range = formula[(idx + 1)..];
+        return (sheet, range);
+    }
+
+    /// <summary>写入小端 UInt16</summary>
+    private static void WriteLE2(Stream stream, UInt16 value)
+    {
+        stream.WriteByte((Byte)(value & 0xFF));
+        stream.WriteByte((Byte)(value >> 8));
     }
 
     private void WriteSheetStream(Stream stream, String sheetName, Dictionary<CellFormat, Int32> styleMap,
