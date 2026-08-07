@@ -241,7 +241,7 @@ public class ReaderFidelityTests
         var doc = reader.ReadDocument();
         Assert.Equal(3, doc.Elements.Count);
         Assert.Equal(ElementType.Paragraph, doc.Elements[1].Type);
-        Assert.Equal(0, doc.Elements[1].Paragraph!.Runs.Count);
+        Assert.Empty(doc.Elements[1].Paragraph!.Runs);
     }
 
     [Fact(DisplayName = "保真—含书签的空段落保留")]

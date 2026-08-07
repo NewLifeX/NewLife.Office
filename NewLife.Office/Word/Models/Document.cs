@@ -26,6 +26,12 @@ public class Document
     /// <summary>文档元素列表（段落/表格/图片），按文档顺序排列</summary>
     public List<Element> Elements { get; set; } = [];
 
+    /// <summary>
+    /// 节列表（多节文档按 <c>w:sectPr</c> 切分）。为空时表示单节（使用 <see cref="PageSettings"/>）。
+    /// 非空时 Writer 优先按节输出；<see cref="Elements"/> 仍为全文档平铺视图（向后兼容）。
+    /// </summary>
+    public List<Section> Sections { get; set; } = [];
+
     /// <summary>修订追踪记录（Track Changes，W11），读取自 w:ins/w:del</summary>
     public List<TrackChange> TrackChanges { get; set; } = [];
 

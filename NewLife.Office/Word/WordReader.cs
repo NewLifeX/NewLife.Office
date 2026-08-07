@@ -266,11 +266,42 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var body = xml.SelectSingleNode("//w:body", ns);
         if (body != null)
         {
+            // 按 w:sectPr 切分节：段内嵌 sectPr 结束当前节（该段是本节最后一段），body 级 sectPr 属于最后一节
+            var currentSection = new Section();
             foreach (XmlNode child in body.ChildNodes)
             {
                 if (child is not XmlElement el) continue;
+
+                var embeddedSectPr = el.LocalName == "p"
+                    ? (el.SelectSingleNode("w:pPr/w:sectPr", ns) as XmlElement)
+                    : null;
+
+                var before = doc.Elements.Count;
                 ProcessBodyElement(el, ns, rels, styleMap, numIdFormats, doc);
+
+                // 将新增元素同步到当前节（doc.Elements 保持全文档平铺视图）
+                if (doc.Elements.Count > before)
+                    currentSection.Elements.AddRange(doc.Elements.GetRange(before, doc.Elements.Count - before));
+
+                // 段内嵌 sectPr：解析本节属性并提交
+                if (embeddedSectPr != null)
+                {
+                    ParseSectPr(embeddedSectPr, ns, currentSection.PageSettings);
+                    currentSection.SectPrXml = embeddedSectPr.OuterXml;
+                    doc.Sections.Add(currentSection);
+                    currentSection = new Section();
+                }
             }
+
+            // body 级 sectPr（最后一节属性，ProcessBodyElement 已设置 doc.SectPrXml/doc.PageSettings）
+            var finalSectPr = body.SelectSingleNode("w:sectPr", ns) as XmlElement;
+            if (finalSectPr != null)
+            {
+                ParseSectPr(finalSectPr, ns, currentSection.PageSettings);
+                currentSection.SectPrXml = finalSectPr.OuterXml;
+            }
+            if (currentSection.Elements.Count > 0 || doc.Sections.Count == 0)
+                doc.Sections.Add(currentSection);
         }
 
         // 修订追踪（W11）：收集全文 w:ins/w:del 记录
@@ -318,7 +349,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             ParseDocumentVariables(doc.SettingsXml, doc.DocumentVariables);
         doc.DocumentXml = ReadZipEntryText("word/document.xml");
 
-        LoadHdrFtr(rels, doc);
+        LoadHdrFtr(rels, styleMap, numIdFormats, doc);
 
         // 收集所有 ZIP 部件（除 document.xml 外全部透传）
         CollectOtherParts(doc);
@@ -407,7 +438,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         }
         else if (el.LocalName == "tbl")
         {
-            var te = ParseTable(el, ns, rels, styleMap);
+            var te = ParseTable(el, ns, rels, styleMap, numIdFormats, doc);
             te.RawXml = el.OuterXml; // 保存表格原始 XML
             doc.Elements.Add(te);
         }
@@ -423,7 +454,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         }
         else if (el.LocalName == "sectPr")
         {
-            ParseSectPr(el, ns, doc);
+            ParseSectPr(el, ns, doc.PageSettings);
             doc.SectPrXml = el.OuterXml; // 保存页面设置原始 XML
         }
         else if (el.LocalName is "ins" or "del")
@@ -482,6 +513,8 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         ns.AddNamespace("r", Rns);
         ns.AddNamespace("wp", WPns);
         ns.AddNamespace("a", Ans);
+        ns.AddNamespace("v", "urn:schemas-microsoft-com:vml");
+        ns.AddNamespace("asvg", "http://schemas.microsoft.com/office/drawing/2016/SVG/main");
         return ns;
     }
 
@@ -1065,7 +1098,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     #endregion
 
     #region 表格/图片/节属性
-    private Element ParseTable(XmlElement tblEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, RunProperties> styleMap)
+    private Element ParseTable(XmlElement tblEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, RunProperties> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
     {
         var rows = new List<List<Cell>>();
         var firstRowHeader = false;
@@ -1099,16 +1132,49 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             if (colWidths.Count > 0) style.ColumnWidths = colWidths.ToArray();
         }
 
+        // 同时构建 Table 富模型（行高/行级表头/行背景/禁止跨页），与 TableRows 并存
+        var tableModel = new Table { FirstRowHeader = firstRowHeader };
+        if (style.ColumnWidths != null) tableModel.ColumnWidths = style.ColumnWidths;
+        var modelRows = new List<TableRow>();
+
         foreach (XmlElement tr in tblEl.SelectNodes("w:tr", ns)!)
         {
             var cells = new List<Cell>();
-            var trPr = tr.SelectSingleNode("w:trPr", ns);
-            if (trPr != null && trPr.SelectSingleNode("w:tblHeader", ns) != null)
-                firstRowHeader = true;
+            var trPr = tr.SelectSingleNode("w:trPr", ns) as XmlElement;
+            var isHeader = false;
+            Int32? trHeight = null;
+            var cantSplit = false;
+            String? rowBg = null;
+            if (trPr != null)
+            {
+                if (trPr.SelectSingleNode("w:tblHeader", ns) != null) { firstRowHeader = true; isHeader = true; }
+                var trHeightEl = trPr.SelectSingleNode("w:trHeight", ns) as XmlElement;
+                if (trHeightEl != null)
+                {
+                    var hv = trHeightEl.GetAttribute("w:val") ?? trHeightEl.GetAttribute("val");
+                    if (Int32.TryParse(hv, out var th)) trHeight = th;
+                }
+                cantSplit = trPr.SelectSingleNode("w:cantSplit", ns) != null;
+                var trShd = trPr.SelectSingleNode("w:shd", ns) as XmlElement;
+                if (trShd != null) rowBg = trShd.GetAttribute("w:fill") ?? trShd.GetAttribute("fill");
+            }
             foreach (XmlElement tc in tr.SelectNodes("w:tc", ns)!)
-                cells.Add(ParseCell(tc, ns));
-            if (cells.Count > 0) rows.Add(cells);
+                cells.Add(ParseCell(tc, ns, rels, styleMap, numIdFormats, doc));
+            if (cells.Count > 0)
+            {
+                rows.Add(cells);
+                modelRows.Add(new TableRow
+                {
+                    Cells = cells,
+                    IsHeader = isHeader,
+                    Height = trHeight,
+                    CantSplit = cantSplit,
+                    BackgroundColor = rowBg,
+                });
+            }
         }
+        tableModel.Rows = modelRows;
+        tableModel.FirstRowHeader = firstRowHeader;
 
         return new Element
         {
@@ -1116,10 +1182,12 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             TableRows = rows,
             TableFirstRowHeader = firstRowHeader,
             TableStyle = style,
+            Table = tableModel,
         };
     }
 
-    private static Cell ParseCell(XmlElement tcEl, XmlNamespaceManager ns)
+    private Cell ParseCell(XmlElement tcEl, XmlNamespaceManager ns, Dictionary<String, String> rels,
+        Dictionary<String, RunProperties> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
     {
         var cell = new Cell();
         var tcPr = tcEl.SelectSingleNode("w:tcPr", ns) as XmlElement;
@@ -1134,25 +1202,36 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 var val = gridSpan.GetAttribute("w:val") ?? gridSpan.GetAttribute("val");
                 if (Int32.TryParse(val, out var gs)) cell.ColSpan = gs;
             }
-            if (tcPr.SelectSingleNode("w:vMerge", ns) != null) cell.RowSpan = 0;
+            // 垂直合并：w:vMerge 无 val = 继续合并；w:val="restart" = 合并起点
+            var vMerge = tcPr.SelectSingleNode("w:vMerge", ns) as XmlElement;
+            if (vMerge != null)
+            {
+                var val = vMerge.GetAttribute("w:val") ?? vMerge.GetAttribute("val");
+                cell.RowSpan = val == "restart" ? -1 : 0;
+            }
+            // 单元格宽度 w:tcW
+            var tcW = tcPr.SelectSingleNode("w:tcW", ns) as XmlElement;
+            if (tcW != null)
+            {
+                var wVal = tcW.GetAttribute("w:w") ?? tcW.GetAttribute("w");
+                if (Int32.TryParse(wVal, out var tw)) cell.Width = tw;
+            }
+            // 垂直对齐 w:vAlign
+            var vAlign = tcPr.SelectSingleNode("w:vAlign", ns) as XmlElement;
+            if (vAlign != null)
+                cell.VerticalAlignment = vAlign.GetAttribute("w:val") ?? vAlign.GetAttribute("val");
         }
 
         foreach (XmlElement pEl in tcEl.SelectNodes("w:p", ns)!)
         {
-            var para = new Paragraph();
-            foreach (XmlNode child in pEl.ChildNodes)
-            {
-                if (child is XmlElement el && el.LocalName == "r")
-                    para.Runs.Add(ParseRun(el, ns, null));
-            }
-            var pPr = pEl.SelectSingleNode("w:pPr", ns) as XmlElement;
-            if (pPr != null)
-            {
-                var jc = pPr.SelectSingleNode("w:jc", ns) as XmlElement;
-                if (jc != null) para.Alignment = jc.GetAttribute("w:val") ?? jc.GetAttribute("val");
-            }
-            cell.Paragraphs.Add(para);
+            var pe = ParsePara(pEl, ns, rels, styleMap, numIdFormats);
+            if (pe.Paragraph != null) cell.Paragraphs.Add(pe.Paragraph);
         }
+
+        // 单元格内嵌图片：提取图片数据到 doc.Images（RawXml 已保留原 XML）
+        foreach (XmlElement drawing in tcEl.SelectNodes(".//w:drawing", ns)!)
+            ParseDrawing(drawing, ns, rels, doc);
+
         return cell;
     }
 
@@ -1171,8 +1250,28 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             Int64.TryParse(extent.GetAttribute("cy"), out cy);
         }
 
-        var blip = drawing.SelectSingleNode(".//a:blip", ns) as XmlElement;
-        var rId = blip?.GetAttribute("r:embed");
+        // SVG 矢量图片：<asvg:svgBlip r:embed="..."/>
+        var isSvg = false;
+        var svgBlip = drawing.SelectSingleNode(".//asvg:svgBlip", ns) as XmlElement;
+        var rId = svgBlip?.GetAttribute("r:embed");
+        if (rId == null)
+        {
+            var blip = drawing.SelectSingleNode(".//a:blip", ns) as XmlElement;
+            rId = blip?.GetAttribute("r:embed");
+        }
+        else
+        {
+            isSvg = true;
+        }
+
+        // VML 图片：<w:pict><v:shape><v:imagedata r:id="..."/></v:shape></w:pict>
+        if (rId == null)
+        {
+            var vmlData = drawing.SelectSingleNode(".//v:imagedata", ns) as XmlElement
+                ?? drawing.ParentNode?.SelectSingleNode(".//v:imagedata", ns) as XmlElement;
+            rId = vmlData?.GetAttribute("r:id") ?? vmlData?.GetAttribute("id");
+        }
+
         if (rId == null) return null;
 
         if (!doc.Images.ContainsKey(rId) && rels.TryGetValue(rId, out var target))
@@ -1181,6 +1280,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             if (entry != null)
             {
                 var ext = Path.GetExtension(target).TrimStart('.').ToLowerInvariant();
+                if (isSvg) ext = "svg";
                 using var ms = new MemoryStream();
                 using var es = entry.Open();
                 es.CopyTo(ms);
@@ -1188,22 +1288,64 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             }
         }
 
-        return new Element
+        var img = new Image
         {
-            Type = ElementType.Image,
-            Image = new Image
-            {
-                RelId = rId,
-                WidthEmu = cx > 0 ? cx : 3600000,
-                HeightEmu = cy > 0 ? cy : 2700000,
-                Extension = doc.Images.TryGetValue(rId, out var img) ? img.Extension : "png",
-            },
+            RelId = rId,
+            WidthEmu = cx > 0 ? cx : 3600000,
+            HeightEmu = cy > 0 ? cy : 2700000,
+            IsSvg = isSvg,
+            Extension = doc.Images.TryGetValue(rId, out var imgData) ? imgData.Extension : (isSvg ? "svg" : "png"),
         };
+
+        // wp:anchor 浮动定位与环绕
+        if (inline.LocalName == "anchor")
+        {
+            img.AnchorType = "anchor";
+            var posH = inline.SelectSingleNode("wp:positionH", ns) as XmlElement;
+            if (posH != null)
+            {
+                var align = posH.SelectSingleNode("wp:align", ns);
+                var offset = posH.SelectSingleNode("wp:posOffset", ns);
+                if (align != null) img.AnchorPosH = align.InnerText;
+                if (offset != null && Int64.TryParse(offset.InnerText, out var ox)) img.AnchorOffsetX = ox;
+            }
+            var posV = inline.SelectSingleNode("wp:positionV", ns) as XmlElement;
+            if (posV != null)
+            {
+                var align = posV.SelectSingleNode("wp:align", ns);
+                var offset = posV.SelectSingleNode("wp:posOffset", ns);
+                if (align != null) img.AnchorPosV = align.InnerText;
+                if (offset != null && Int64.TryParse(offset.InnerText, out var oy)) img.AnchorOffsetY = oy;
+            }
+            // 环绕方式：wrapSquare/wrapTight/wrapThrough/wrapTopAndBottom/wrapNone
+            var wrap = inline.SelectSingleNode("wp:wrapSquare", ns) ?? inline.SelectSingleNode("wp:wrapTight", ns)
+                ?? inline.SelectSingleNode("wp:wrapThrough", ns) ?? inline.SelectSingleNode("wp:wrapTopAndBottom", ns)
+                ?? inline.SelectSingleNode("wp:wrapNone", ns);
+            if (wrap != null)
+                img.Wrap = wrap.LocalName switch
+                {
+                    "wrapSquare" => "square",
+                    "wrapTight" => "tight",
+                    "wrapThrough" => "through",
+                    "wrapTopAndBottom" => "topAndBottom",
+                    "wrapNone" => "none",
+                    _ => null,
+                };
+        }
+
+        // 替代文本（wp:docPr descr）
+        var docPr = inline.SelectSingleNode("wp:docPr", ns) as XmlElement;
+        if (docPr != null)
+        {
+            var descr = docPr.GetAttribute("descr");
+            if (!String.IsNullOrEmpty(descr)) img.AltText = descr;
+        }
+
+        return new Element { Type = ElementType.Image, Image = img };
     }
 
-    private static void ParseSectPr(XmlElement sectPr, XmlNamespaceManager ns, Document doc)
+    private static void ParseSectPr(XmlElement sectPr, XmlNamespaceManager ns, PageSettings ps)
     {
-        var ps = doc.PageSettings;
         var pgSz = sectPr.SelectSingleNode("w:pgSz", ns) as XmlElement;
         if (pgSz != null)
         {
@@ -1265,11 +1407,29 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             ps.LineNumber = ln;
         }
 
-        var hdrRef = sectPr.SelectSingleNode("w:headerReference", ns) as XmlElement;
-        if (hdrRef != null) { var rId = hdrRef.GetAttribute("r:id"); if (rId != null) ps.HeaderText = rId; }
-
-        var ftrRef = sectPr.SelectSingleNode("w:footerReference", ns) as XmlElement;
-        if (ftrRef != null) { var rId = ftrRef.GetAttribute("r:id"); if (rId != null) ps.FooterText = rId; }
+        // 页眉/页脚引用（default/first/even 三种类型全部捕获）
+        ps.HeaderRefs.Clear();
+        foreach (XmlElement hdrRef in sectPr.SelectNodes("w:headerReference", ns)!)
+        {
+            var type = hdrRef.GetAttribute("w:type") ?? hdrRef.GetAttribute("type") ?? "default";
+            var rId = hdrRef.GetAttribute("r:id");
+            if (rId != null)
+            {
+                ps.HeaderRefs[type] = rId;
+                if (type == "default") ps.HeaderText = rId;
+            }
+        }
+        ps.FooterRefs.Clear();
+        foreach (XmlElement ftrRef in sectPr.SelectNodes("w:footerReference", ns)!)
+        {
+            var type = ftrRef.GetAttribute("w:type") ?? ftrRef.GetAttribute("type") ?? "default";
+            var rId = ftrRef.GetAttribute("r:id");
+            if (rId != null)
+            {
+                ps.FooterRefs[type] = rId;
+                if (type == "default") ps.FooterText = rId;
+            }
+        }
     }
 
     private static void ParsePgBorderAttrs(XmlElement el, PageBorder pb)
@@ -1441,24 +1601,97 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         return sdt;
     }
 
-    private void LoadHdrFtr(Dictionary<String, String> rels, Document doc)
+    private void LoadHdrFtr(Dictionary<String, String> rels, Dictionary<String, RunProperties> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
     {
-        var headerRId = doc.PageSettings.HeaderText;
-        if (headerRId != null && rels.TryGetValue(headerRId, out var headerTarget))
+        var ps = doc.PageSettings;
+
+        // 富文本页眉（default/first/even 三种类型）
+        doc.Headers.Clear();
+        foreach (var kv in ps.HeaderRefs)
         {
-            var text = LoadHdrFtrText(headerTarget, doc);
-            if (text != null) doc.HeaderText = text;
+            if (!rels.TryGetValue(kv.Value, out var target)) continue;
+            var elements = LoadHdrFtrElements(target, rels, styleMap, numIdFormats, doc);
+            if (elements.Count == 0) continue;
+            doc.Headers.Add(new Header { Type = kv.Key, Elements = elements });
+            if (kv.Key == "default")
+            {
+                var text = LoadHdrFtrText(target, doc);
+                if (text != null) doc.HeaderText = text;
+            }
         }
 
-        var footerRId = doc.PageSettings.FooterText;
-        if (footerRId != null && rels.TryGetValue(footerRId, out var footerTarget))
+        // 富文本页脚（default/first/even 三种类型）
+        doc.Footers.Clear();
+        foreach (var kv in ps.FooterRefs)
         {
-            var text = LoadHdrFtrText(footerTarget, doc);
+            if (!rels.TryGetValue(kv.Value, out var target)) continue;
+            var elements = LoadHdrFtrElements(target, rels, styleMap, numIdFormats, doc);
+            if (elements.Count == 0) continue;
+            doc.Footers.Add(new Footer { Type = kv.Key, Elements = elements });
+            if (kv.Key == "default")
+            {
+                var text = LoadHdrFtrText(target, doc);
+                if (text != null) doc.FooterText = text;
+            }
+        }
+
+        // 无富文本引用时回退到纯文本（HeaderText 此时仍是 relId）
+        if (doc.Headers.Count == 0 && ps.HeaderText != null && rels.TryGetValue(ps.HeaderText, out var hTarget))
+        {
+            var text = LoadHdrFtrText(hTarget, doc);
+            if (text != null) doc.HeaderText = text;
+        }
+        if (doc.Footers.Count == 0 && ps.FooterText != null && rels.TryGetValue(ps.FooterText, out var fTarget))
+        {
+            var text = LoadHdrFtrText(fTarget, doc);
             if (text != null) doc.FooterText = text;
         }
 
-        doc.PageSettings.HeaderText = doc.HeaderText;
-        doc.PageSettings.FooterText = doc.FooterText;
+        ps.HeaderText = doc.HeaderText;
+        ps.FooterText = doc.FooterText;
+    }
+
+    /// <summary>解析页眉/页脚部件内容为元素列表（段落/表格/内容控件 + 图片提取）</summary>
+    private List<Element> LoadHdrFtrElements(String target, Dictionary<String, String> rels,
+        Dictionary<String, RunProperties> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
+    {
+        var elements = new List<Element>();
+        var entry = _zip.GetEntry($"word/{target}");
+        if (entry == null) return elements;
+
+        var xml = new XmlDocument();
+        using (var s = entry.Open()) xml.Load(s);
+        var ns = WmlNs(xml);
+        var root = xml.SelectSingleNode("//*[local-name()='hdr' or local-name()='ftr']", ns) as XmlElement;
+        if (root == null) return elements;
+
+        foreach (XmlNode child in root.ChildNodes)
+        {
+            if (child is not XmlElement el) continue;
+            if (el.LocalName == "p")
+            {
+                var pe = ParsePara(el, ns, rels, styleMap, numIdFormats);
+                pe.RawXml = el.OuterXml;
+                elements.Add(pe);
+            }
+            else if (el.LocalName == "tbl")
+            {
+                var te = ParseTable(el, ns, rels, styleMap, numIdFormats, doc);
+                te.RawXml = el.OuterXml;
+                elements.Add(te);
+            }
+            else if (el.LocalName == "sdt")
+            {
+                var se = ParseSdt(el, ns);
+                if (se != null) elements.Add(new Element { Type = ElementType.Sdt, Sdt = se, RawXml = el.OuterXml });
+            }
+        }
+
+        // 页眉/页脚中的图片提取到 doc.Images
+        foreach (XmlElement drawing in root.SelectNodes(".//w:drawing", ns)!)
+            ParseDrawing(drawing, ns, rels, doc);
+
+        return elements;
     }
 
     private String? LoadHdrFtrText(String target, Document doc)

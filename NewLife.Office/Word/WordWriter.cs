@@ -47,6 +47,13 @@ public class WordWriter : IDisposable
     // 原样透传的所有 ZIP 部件（除 word/document.xml 外）
     private Dictionary<String, Byte[]> _otherParts = [];
 
+    // 富文本页眉/页脚（default/first/even），由 Document.Headers/Footers 导入，非空时覆盖简单文本页眉页脚
+    private List<Header> _headers = [];
+    private List<Footer> _footers = [];
+
+    // 多节模型（程序化创建时由 Document.Sections 导入，Count>1 时按节输出）
+    private List<Section> _sections = [];
+
     /// <summary>是否启用只读保护</summary>
     public Boolean ProtectionReadOnly { get; set; }
 
@@ -490,9 +497,13 @@ public class WordWriter : IDisposable
         var psave = PageSettings;
         var hdrInOther = _otherParts.ContainsKey("word/header1.xml");
         var ftrInOther = _otherParts.ContainsKey("word/footer1.xml");
-        if ((psave.HeaderText != null || psave.WatermarkText != null) && !hdrInOther)
+        if (_headers.Count > 0)
+            WriteHeaderParts(za);
+        else if ((psave.HeaderText != null || psave.WatermarkText != null) && !hdrInOther)
             WriteHeaderXml(za);
-        if (psave.FooterText != null && !ftrInOther)
+        if (_footers.Count > 0)
+            WriteFooterParts(za);
+        else if (psave.FooterText != null && !ftrInOther)
             WriteFooterXml(za);
         if (DocumentProperties.Title != null || DocumentProperties.Author != null)
             WriteCoreProperties(za);
@@ -529,6 +540,9 @@ public class WordWriter : IDisposable
         _documentXmlNsDecls = document.DocumentXmlNsDecls;
         _documentXml = document.DocumentXml;
         _otherParts = document.OtherParts.Count > 0 ? new Dictionary<String, Byte[]>(document.OtherParts) : [];
+        _headers = document.Headers;
+        _footers = document.Footers;
+        _sections = document.Sections;
         // 自定义 XML 部件写入 OtherParts 以便原样透传
         foreach (var kv in document.CustomXmlParts)
             _otherParts[$"customXml/{kv.Key}"] = kv.Value;
@@ -624,10 +638,24 @@ public class WordWriter : IDisposable
         if (_numberingXml != null || _elements.Any(e => e.Type == ElementType.Paragraph && e.Paragraph?.IsBullet == true))
             sb.Append("<Override PartName=\"/word/numbering.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml\"/>");
         var ps = PageSettings;
-        if (ps.HeaderText != null || ps.WatermarkText != null)
+        if (_headers.Count > 0)
+        {
+            for (var i = 0; i < _headers.Count; i++)
+                sb.Append($"<Override PartName=\"/word/header{i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml\"/>");
+        }
+        else if (ps.HeaderText != null || ps.WatermarkText != null)
+        {
             sb.Append("<Override PartName=\"/word/header1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml\"/>");
-        if (ps.FooterText != null)
+        }
+        if (_footers.Count > 0)
+        {
+            for (var i = 0; i < _footers.Count; i++)
+                sb.Append($"<Override PartName=\"/word/footer{i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml\"/>");
+        }
+        else if (ps.FooterText != null)
+        {
             sb.Append("<Override PartName=\"/word/footer1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml\"/>");
+        }
         if (DocumentProperties.Title != null || DocumentProperties.Author != null)
             sb.Append("<Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/>");
         if (DocumentProperties.CustomProperties.Count > 0)
@@ -679,10 +707,24 @@ public class WordWriter : IDisposable
         sb.Append("<Relationship Id=\"rStyles\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>");
         sb.Append("<Relationship Id=\"rSettings\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings\" Target=\"settings.xml\"/>");
         var psRels = PageSettings;
-        if (psRels.HeaderText != null || psRels.WatermarkText != null)
+        if (_headers.Count > 0)
+        {
+            for (var i = 0; i < _headers.Count; i++)
+                sb.Append($"<Relationship Id=\"rHdr{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header\" Target=\"header{i + 1}.xml\"/>");
+        }
+        else if (psRels.HeaderText != null || psRels.WatermarkText != null)
+        {
             sb.Append("<Relationship Id=\"rHdr1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header\" Target=\"header1.xml\"/>");
-        if (psRels.FooterText != null)
+        }
+        if (_footers.Count > 0)
+        {
+            for (var i = 0; i < _footers.Count; i++)
+                sb.Append($"<Relationship Id=\"rFtr{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer\" Target=\"footer{i + 1}.xml\"/>");
+        }
+        else if (psRels.FooterText != null)
+        {
             sb.Append("<Relationship Id=\"rFtr1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer\" Target=\"footer1.xml\"/>");
+        }
         foreach (var (relId, url) in _hyperlinkRels)
         {
             sb.Append($"<Relationship Id=\"{relId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"{Esc(url)}\" TargetMode=\"External\"/>");
@@ -1162,87 +1204,108 @@ public class WordWriter : IDisposable
         sb.Append($"<w:document{nsSb}>");
         sb.Append("<w:body>");
 
-        var chartCounter = 0; // 图表编号（W13）
-        foreach (var el in _elements)
+        // 多节程序化创建：Sections.Count>1 且无原始 document.xml 时按节输出
+        if (_sections.Count > 1 && _documentXml == null)
         {
-            if (el.RawXml != null)
+            // 逐节输出：内容 + 节分隔 sectPr（前 n-1 节），最后一节 body 级 sectPr
+            sb.Clear();
+            sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            sb.Append($"<w:document{nsSb}>");
+            sb.Append("<w:body>");
+            for (var si = 0; si < _sections.Count; si++)
             {
-                // 有原始 XML：直接写入，100% 保留所有格式
-                sb.Append(el.RawXml);
-            }
-            else
-            {
-                switch (el.Type)
+                var sec = _sections[si];
+                var secChart = 0;
+                foreach (var el in sec.Elements)
+                    AppendElementXml(sb, el, ref secChart);
+                if (si < _sections.Count - 1)
                 {
-                    case ElementType.Paragraph when el.Paragraph != null:
-                        BuildParagraphXml(sb, el.Paragraph);
-                        break;
-                    case ElementType.Table when el.TableRows != null:
-                        BuildTableXml(sb, el.TableRows, el.TableFirstRowHeader, el.TableStyle);
-                        break;
-                    case ElementType.Image when el.Image != null:
-                        BuildImageXml(sb, el.Image);
-                        break;
-                    case ElementType.Shape when el.Shape != null:
-                        BuildShapeXml(sb, el.Shape);
-                        break;
-                    case ElementType.Chart when el.Chart != null:
-                        BuildChartXml(sb, el.Chart, ++chartCounter);
-                        break;
-                    case ElementType.Sdt:
-                        if (el.RawXml != null)
-                            sb.Append(el.RawXml);
-                        else if (el.Sdt != null)
-                            BuildSdtXml(sb, el.Sdt);
-                        break;
+                    // 节分隔：空段落携带本节 sectPr（定义已结束的节）
+                    sb.Append("<w:p><w:pPr>");
+                    sb.Append(sec.SectPrXml ?? BuildSectPrXml(sec.PageSettings));
+                    sb.Append("</w:pPr></w:p>");
                 }
             }
-        }
-
-        // 节属性（页面尺寸/页眉页脚引用）
-        if (_sectPrXml != null)
-        {
-            sb.Append(_sectPrXml);
+            // 最后一节的 sectPr 在 body 级
+            var lastSec = _sections[^1];
+            sb.Append(lastSec.SectPrXml ?? BuildSectPrXml(lastSec.PageSettings));
         }
         else
         {
-            var ps = PageSettings;
-            var pgW = ps.Landscape ? ps.PageHeight : ps.PageWidth;
-            var pgH = ps.Landscape ? ps.PageWidth : ps.PageHeight;
-            sb.Append("<w:sectPr>");
-            if (ps.TitlePage) sb.Append("<w:titlePg/>");
-            if (ps.EvenAndOddHeaders) sb.Append("<w:evenAndOddHeaders/>");
-            if (ps.HeaderText != null || ps.WatermarkText != null)
-                sb.Append("<w:headerReference w:type=\"default\" r:id=\"rHdr1\"/>");
-            if (ps.FooterText != null)
-                sb.Append("<w:footerReference w:type=\"default\" r:id=\"rFtr1\"/>");
-            // 分栏设置
-            if (ps.ColumnCount > 1)
-                sb.Append($"<w:cols w:num=\"{ps.ColumnCount}\" w:space=\"{ps.ColumnSpacing}\"/>");
-            // 页面边框
-            var pb = ps.PageBorder;
-            if (pb != null)
+            var chartCounter = 0; // 图表编号（W13）
+            foreach (var el in _elements)
+                AppendElementXml(sb, el, ref chartCounter);
+
+            if (_sectPrXml != null)
             {
-                var offset = pb.OffsetFrom == 0 ? "text" : "page";
-                sb.Append($"<w:pgBorders w:offsetFrom=\"{offset}\">");
-                AppendPgBorderXml(sb, "top", pb.Top, pb);
-                AppendPgBorderXml(sb, "bottom", pb.Bottom, pb);
-                AppendPgBorderXml(sb, "left", pb.Left, pb);
-                AppendPgBorderXml(sb, "right", pb.Right, pb);
-                sb.Append("</w:pgBorders>");
+                // 单节透传：保留原始节属性 XML
+                sb.Append(_sectPrXml);
             }
-            var orientAttr = ps.Landscape ? " w:orient=\"landscape\"" : String.Empty;
-            sb.Append($"<w:pgSz w:w=\"{pgW}\" w:h=\"{pgH}\"{orientAttr}/>");
-            sb.Append($"<w:pgMar w:top=\"{ps.MarginTop}\" w:right=\"{ps.MarginRight}\" w:bottom=\"{ps.MarginBottom}\" w:left=\"{ps.MarginLeft}\" w:header=\"720\" w:footer=\"720\"/>");
-            // 行号
-            var ln = ps.LineNumber;
-            if (ln != null)
-                sb.Append($"<w:lnNumType w:countBy=\"{ln.CountBy}\" w:start=\"{ln.Start}\" w:distance=\"{ln.Distance}\" w:restart=\"{ln.Restart}\"/>");
-            sb.Append("</w:sectPr>");
+            else
+            {
+                // 单节程序化：从 PageSettings 生成节属性
+                sb.Append(BuildSectPrXml(PageSettings));
+            }
         }
 
         sb.Append("</w:body></w:document>");
         WriteEntry(za, "word/document.xml", sb.ToString());
+    }
+
+    /// <summary>从 PageSettings 生成 <c>w:sectPr</c> 节属性 XML</summary>
+    /// <param name="ps">页面设置</param>
+    /// <returns>完整的 w:sectPr XML 字符串</returns>
+    private String BuildSectPrXml(PageSettings ps)
+    {
+        var sb = new StringBuilder();
+        var pgW = ps.Landscape ? ps.PageHeight : ps.PageWidth;
+        var pgH = ps.Landscape ? ps.PageWidth : ps.PageHeight;
+        sb.Append("<w:sectPr>");
+        if (ps.TitlePage) sb.Append("<w:titlePg/>");
+        if (ps.EvenAndOddHeaders) sb.Append("<w:evenAndOddHeaders/>");
+        // 富文本页眉页脚（按类型引用），否则回退简单文本页眉页脚
+        if (_headers.Count > 0)
+        {
+            for (var i = 0; i < _headers.Count; i++)
+                sb.Append($"<w:headerReference w:type=\"{_headers[i].Type}\" r:id=\"rHdr{i + 1}\"/>");
+        }
+        else if (ps.HeaderText != null || ps.WatermarkText != null)
+        {
+            sb.Append("<w:headerReference w:type=\"default\" r:id=\"rHdr1\"/>");
+        }
+        if (_footers.Count > 0)
+        {
+            for (var i = 0; i < _footers.Count; i++)
+                sb.Append($"<w:footerReference w:type=\"{_footers[i].Type}\" r:id=\"rFtr{i + 1}\"/>");
+        }
+        else if (ps.FooterText != null)
+        {
+            sb.Append("<w:footerReference w:type=\"default\" r:id=\"rFtr1\"/>");
+        }
+        // 分栏设置
+        if (ps.ColumnCount > 1)
+            sb.Append($"<w:cols w:num=\"{ps.ColumnCount}\" w:space=\"{ps.ColumnSpacing}\"/>");
+        // 页面边框
+        var pb = ps.PageBorder;
+        if (pb != null)
+        {
+            var offset = pb.OffsetFrom == 0 ? "text" : "page";
+            sb.Append($"<w:pgBorders w:offsetFrom=\"{offset}\">");
+            AppendPgBorderXml(sb, "top", pb.Top, pb);
+            AppendPgBorderXml(sb, "bottom", pb.Bottom, pb);
+            AppendPgBorderXml(sb, "left", pb.Left, pb);
+            AppendPgBorderXml(sb, "right", pb.Right, pb);
+            sb.Append("</w:pgBorders>");
+        }
+        var orientAttr = ps.Landscape ? " w:orient=\"landscape\"" : String.Empty;
+        sb.Append($"<w:pgSz w:w=\"{pgW}\" w:h=\"{pgH}\"{orientAttr}/>");
+        sb.Append($"<w:pgMar w:top=\"{ps.MarginTop}\" w:right=\"{ps.MarginRight}\" w:bottom=\"{ps.MarginBottom}\" w:left=\"{ps.MarginLeft}\" w:header=\"720\" w:footer=\"720\"/>");
+        // 行号
+        var ln = ps.LineNumber;
+        if (ln != null)
+            sb.Append($"<w:lnNumType w:countBy=\"{ln.CountBy}\" w:start=\"{ln.Start}\" w:distance=\"{ln.Distance}\" w:restart=\"{ln.Restart}\"/>");
+        sb.Append("</w:sectPr>");
+        return sb.ToString();
     }
 
     private void WriteHeaderXml(ZipArchive za)
@@ -1296,6 +1359,93 @@ public class WordWriter : IDisposable
         sb.Append("<w:fldSimple w:instr=\" PAGE \"><w:r><w:t>1</w:t></w:r></w:fldSimple>");
         sb.Append("</w:p></w:ftr>");
         WriteEntry(za, "word/footer1.xml", sb.ToString());
+    }
+
+    /// <summary>渲染单个文档元素（段落/表格/图片/形状/图表/内容控件），优先 RawXml 透传</summary>
+    /// <param name="sb">目标 StringBuilder</param>
+    /// <param name="el">元素</param>
+    /// <param name="chartCounter">图表计数器（引用传递，保证跨调用递增）</param>
+    private void AppendElementXml(StringBuilder sb, Element el, ref Int32 chartCounter)
+    {
+        if (el.RawXml != null)
+        {
+            // 有原始 XML：直接写入，100% 保留所有格式
+            sb.Append(el.RawXml);
+            return;
+        }
+
+        switch (el.Type)
+        {
+            case ElementType.Paragraph when el.Paragraph != null:
+                BuildParagraphXml(sb, el.Paragraph);
+                break;
+            case ElementType.Table:
+                // 优先使用 Table 富模型（支持行高/行级表头/单元格宽度/四边边框），否则回退 TableRows
+                if (el.Table != null)
+                    BuildTableModelXml(sb, el.Table);
+                else if (el.TableRows != null)
+                    BuildTableXml(sb, el.TableRows, el.TableFirstRowHeader, el.TableStyle);
+                break;
+            case ElementType.Image when el.Image != null:
+                BuildImageXml(sb, el.Image);
+                break;
+            case ElementType.Shape when el.Shape != null:
+                BuildShapeXml(sb, el.Shape);
+                break;
+            case ElementType.Chart when el.Chart != null:
+                BuildChartXml(sb, el.Chart, ++chartCounter);
+                break;
+            case ElementType.Sdt:
+                if (el.RawXml != null)
+                    sb.Append(el.RawXml);
+                else if (el.Sdt != null)
+                    BuildSdtXml(sb, el.Sdt);
+                break;
+        }
+    }
+
+    /// <summary>写入富文本页眉部件（每个 Header 生成 header{N}.xml）</summary>
+    private void WriteHeaderParts(ZipArchive za)
+    {
+        for (var i = 0; i < _headers.Count; i++)
+        {
+            var xml = BuildHdrFtrXml("w:hdr", _headers[i].Elements);
+            WriteEntry(za, $"word/header{i + 1}.xml", xml);
+        }
+    }
+
+    /// <summary>写入富文本页脚部件（每个 Footer 生成 footer{N}.xml）</summary>
+    private void WriteFooterParts(ZipArchive za)
+    {
+        for (var i = 0; i < _footers.Count; i++)
+        {
+            var xml = BuildHdrFtrXml("w:ftr", _footers[i].Elements);
+            WriteEntry(za, $"word/footer{i + 1}.xml", xml);
+        }
+    }
+
+    /// <summary>从元素列表构建页眉/页脚 XML（含必要的命名空间声明）</summary>
+    /// <param name="rootTag">根元素（w:hdr / w:ftr）</param>
+    /// <param name="elements">内容元素</param>
+    /// <returns>完整页眉/页脚 XML 字符串</returns>
+    private String BuildHdrFtrXml(String rootTag, List<Element> elements)
+    {
+        var sb = new StringBuilder();
+        sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        sb.Append($"<{rootTag} xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"");
+        sb.Append(" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"");
+        sb.Append(" xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\"");
+        sb.Append(" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"");
+        sb.Append(" xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\"");
+        sb.Append(" xmlns:v=\"urn:schemas-microsoft-com:vml\"");
+        sb.Append(" xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\"");
+        sb.Append(" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\"");
+        sb.Append(">");
+        var chartCounter = 0;
+        foreach (var el in elements)
+            AppendElementXml(sb, el, ref chartCounter);
+        sb.Append($"</{rootTag}>");
+        return sb.ToString();
     }
 
     private void BuildParagraphXml(StringBuilder sb, Paragraph para)
@@ -1655,7 +1805,11 @@ public class WordWriter : IDisposable
                     colW = colCount > 0 ? availW / colCount : availW;
 
                 sb.Append("<w:tc><w:tcPr>");
-                sb.Append($"<w:tcW w:w=\"{colW}\" w:type=\"dxa\"/>");
+                // 列宽：优先单元格自身 tcW，其次 TableStyle.ColumnWidths，最后均分
+                if (cell.Width.HasValue)
+                    sb.Append($"<w:tcW w:w=\"{cell.Width}\" w:type=\"dxa\"/>");
+                else
+                    sb.Append($"<w:tcW w:w=\"{colW}\" w:type=\"dxa\"/>");
                 // 内联边框（自定义样式时）
                 if (style != null)
                 {
@@ -1678,7 +1832,8 @@ public class WordWriter : IDisposable
                     sb.Append($"<w:vAlign w:val=\"{cell.VerticalAlignment}\"/>");
                 if (cell.ColSpan > 1)
                     sb.Append($"<w:gridSpan w:val=\"{cell.ColSpan}\"/>");
-                if (cell.RowSpan > 1)
+                // 垂直合并：RowSpan>1 或 -1（reader 的 restart）= 合并起点；0 = 继续合并
+                if (cell.RowSpan > 1 || cell.RowSpan == -1)
                     sb.Append("<w:vMerge w:val=\"restart\"/>");
                 else if (cell.RowSpan == 0)
                     sb.Append("<w:vMerge/>");
@@ -1704,22 +1859,178 @@ public class WordWriter : IDisposable
         sb.Append("</w:tbl>");
     }
 
+    /// <summary>从 Table 富模型生成表格 XML（支持行高/行级表头/单元格宽度/四边边框/表格对齐/列宽）</summary>
+    /// <param name="sb">目标 StringBuilder</param>
+    /// <param name="table">表格模型</param>
+    private void BuildTableModelXml(StringBuilder sb, Table table)
+    {
+        var ps = PageSettings;
+        var colCount = table.Rows.Count > 0 ? (table.Rows[0].Cells.Count > 0 ? table.Rows[0].Cells.Count : 1) : 1;
+        var availW = ps.PageWidth - ps.MarginLeft - ps.MarginRight;
+
+        sb.Append("<w:tbl><w:tblPr>");
+        // 表格宽度：显式或自适应
+        if (table.Width.HasValue)
+            sb.Append($"<w:tblW w:w=\"{table.Width}\" w:type=\"dxa\"/>");
+        else
+            sb.Append("<w:tblW w:w=\"0\" w:type=\"auto\"/>");
+        // 表格对齐
+        if (table.Alignment != null)
+            sb.Append($"<w:jc w:val=\"{table.Alignment}\"/>");
+        // 表格边框：优先 TableBorders，否则默认黑色单线
+        sb.Append("<w:tblBorders>");
+        if (table.Borders != null)
+        {
+            AppendBorderXml(sb, "top", table.Borders.Top);
+            AppendBorderXml(sb, "left", table.Borders.Left);
+            AppendBorderXml(sb, "bottom", table.Borders.Bottom);
+            AppendBorderXml(sb, "right", table.Borders.Right);
+            AppendBorderXml(sb, "insideH", table.Borders.InsideH);
+            AppendBorderXml(sb, "insideV", table.Borders.InsideV);
+        }
+        else
+        {
+            foreach (var edge in new[] { "top", "left", "bottom", "right", "insideH", "insideV" })
+                sb.Append($"<w:{edge} w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"000000\"/>");
+        }
+        sb.Append("</w:tblBorders>");
+        sb.Append("</w:tblPr>");
+
+        // 列网格：优先 ColumnWidths
+        sb.Append("<w:tblGrid>");
+        if (table.ColumnWidths != null && table.ColumnWidths.Length > 0)
+        {
+            foreach (var w in table.ColumnWidths)
+                sb.Append($"<w:gridCol w:w=\"{w}\"/>");
+        }
+        else
+        {
+            var colW = colCount > 0 ? availW / colCount : availW;
+            for (var c = 0; c < colCount; c++)
+                sb.Append($"<w:gridCol w:w=\"{colW}\"/>");
+        }
+        sb.Append("</w:tblGrid>");
+
+        for (var ri = 0; ri < table.Rows.Count; ri++)
+        {
+            var row = table.Rows[ri];
+            sb.Append("<w:tr>");
+            if (row.Height.HasValue || row.IsHeader || row.CantSplit || row.BackgroundColor != null)
+            {
+                sb.Append("<w:trPr>");
+                if (row.IsHeader) sb.Append("<w:tblHeader/>");
+                if (row.CantSplit) sb.Append("<w:cantSplit/>");
+                if (row.Height.HasValue) sb.Append($"<w:trHeight w:val=\"{row.Height}\" w:hRule=\"atLeast\"/>");
+                if (row.BackgroundColor != null)
+                    sb.Append($"<w:shd w:fill=\"{row.BackgroundColor.TrimStart('#')}\" w:val=\"clear\"/>");
+                sb.Append("</w:trPr>");
+            }
+
+            var cellCount = row.Cells.Count;
+            for (var ci = 0; ci < row.Cells.Count; ci++)
+            {
+                var cell = row.Cells[ci];
+                Int32 colW;
+                if (cell.Width.HasValue)
+                    colW = cell.Width.Value;
+                else if (table.ColumnWidths != null && ci < table.ColumnWidths.Length)
+                    colW = table.ColumnWidths[ci];
+                else
+                    colW = cellCount > 0 ? availW / cellCount : availW;
+
+                sb.Append("<w:tc><w:tcPr>");
+                sb.Append($"<w:tcW w:w=\"{colW}\" w:type=\"dxa\"/>");
+                if (cell.BackgroundColor != null)
+                    sb.Append($"<w:shd w:fill=\"{cell.BackgroundColor.TrimStart('#')}\" w:val=\"clear\"/>");
+                if (cell.VerticalAlignment != null)
+                    sb.Append($"<w:vAlign w:val=\"{cell.VerticalAlignment}\"/>");
+                if (cell.ColSpan > 1)
+                    sb.Append($"<w:gridSpan w:val=\"{cell.ColSpan}\"/>");
+                if (cell.RowSpan > 1 || cell.RowSpan == -1)
+                    sb.Append("<w:vMerge w:val=\"restart\"/>");
+                else if (cell.RowSpan == 0)
+                    sb.Append("<w:vMerge/>");
+                sb.Append("</w:tcPr>");
+
+                foreach (var para in cell.Paragraphs)
+                {
+                    // 表头行加粗
+                    if (row.IsHeader && table.Style is { HeaderBold: true })
+                    {
+                        foreach (var run in para.Runs)
+                        {
+                            run.Properties ??= new RunProperties();
+                            run.Properties.Bold = true;
+                        }
+                    }
+                    BuildParagraphXml(sb, para);
+                }
+                sb.Append("</w:tc>");
+            }
+            sb.Append("</w:tr>");
+        }
+        sb.Append("</w:tbl>");
+    }
+
     private static void BuildImageXml(StringBuilder sb, Image img)
     {
         var id = Math.Abs(img.RelId.GetHashCode());
-        sb.Append("<w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">");
+        sb.Append("<w:p><w:r><w:drawing>");
+
+        // 浮动锚定图片：wp:anchor（含位置/环绕），否则 wp:inline
+        if (img.AnchorType == "anchor")
+        {
+            sb.Append("<wp:anchor distT=\"0\" distB=\"0\" distL=\"114300\" distR=\"114300\" simplePos=\"0\" relativeHeight=\"251658240\" behindDoc=\"0\" locked=\"0\" layoutInCell=\"1\" allowOverlap=\"1\">");
+            sb.Append("<wp:simplePos x=\"0\" y=\"0\"/>");
+            var posH = img.AnchorPosH ?? "offset";
+            var posV = img.AnchorPosV ?? "offset";
+            sb.Append($"<wp:positionH relativeFrom=\"column\">");
+            if (posH == "offset")
+                sb.Append($"<wp:posOffset>{img.AnchorOffsetX ?? 0}</wp:posOffset>");
+            else
+                sb.Append($"<wp:align>{posH}</wp:align>");
+            sb.Append("</wp:positionH>");
+            sb.Append($"<wp:positionV relativeFrom=\"paragraph\">");
+            if (posV == "offset")
+                sb.Append($"<wp:posOffset>{img.AnchorOffsetY ?? 0}</wp:posOffset>");
+            else
+                sb.Append($"<wp:align>{posV}</wp:align>");
+            sb.Append("</wp:positionV>");
+            // 环绕方式
+            sb.Append(img.Wrap switch
+            {
+                "square" => "<wp:wrapSquare wrapText=\"bothSides\"/>",
+                "tight" => "<wp:wrapTight wrapText=\"bothSides\"/>",
+                "through" => "<wp:wrapThrough wrapText=\"bothSides\"/>",
+                "topAndBottom" => "<wp:wrapTopAndBottom/>",
+                "none" => "<wp:wrapNone/>",
+                _ => "<wp:wrapSquare wrapText=\"bothSides\"/>",
+            });
+        }
+        else
+        {
+            sb.Append("<wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">");
+        }
+
         sb.Append($"<wp:extent cx=\"{img.WidthEmu}\" cy=\"{img.HeightEmu}\"/>");
         sb.Append($"<wp:effectExtent l=\"0\" t=\"0\" r=\"0\" b=\"0\"/>");
-        sb.Append($"<wp:docPr id=\"{id}\" name=\"Image{id}\"/>");
+        var descr = String.IsNullOrEmpty(img.AltText) ? "" : $" descr=\"{Esc(img.AltText)}\"";
+        sb.Append($"<wp:docPr id=\"{id}\" name=\"Image{id}\"{descr}/>");
         sb.Append("<wp:cNvGraphicFramePr/>");
         sb.Append("<a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">");
         sb.Append("<pic:pic><pic:nvPicPr><pic:cNvPr id=\"0\" name=\"\"/><pic:cNvPicPr/></pic:nvPicPr>");
-        sb.Append($"<pic:blipFill><a:blip r:embed=\"{img.RelId}\"/>");
+        sb.Append($"<pic:blipFill><a:blip r:embed=\"{img.RelId}\"");
+        // SVG 矢量图片：在 a:blip 内嵌 asvg:svgBlip（Word 2016+ 渲染矢量）
+        if (img.IsSvg)
+            sb.Append($"><asvg:svgBlip xmlns:asvg=\"http://schemas.microsoft.com/office/drawing/2016/SVG/main\" r:embed=\"{img.RelId}\"/></a:blip>");
+        else
+            sb.Append("/>");
         sb.Append("<a:stretch><a:fillRect/></a:stretch></pic:blipFill>");
         sb.Append($"<pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"{img.WidthEmu}\" cy=\"{img.HeightEmu}\"/></a:xfrm>");
         sb.Append("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr>");
         sb.Append("</pic:pic></a:graphicData></a:graphic>");
-        sb.Append("</wp:inline></w:drawing></w:r></w:p>");
+        sb.Append(img.AnchorType == "anchor" ? "</wp:anchor>" : "</wp:inline>");
+        sb.Append("</w:drawing></w:r></w:p>");
     }
 
     private static void BuildShapeXml(StringBuilder sb, WordShape shape)

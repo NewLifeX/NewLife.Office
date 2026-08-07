@@ -51,6 +51,12 @@ public class PageSettings
 
     /// <summary>奇偶页不同页眉页脚（对应 w:evenAndOddHeaders）</summary>
     public Boolean EvenAndOddHeaders { get; set; }
+
+    /// <summary>页眉引用（类型 → 关系ID），类型为 default/first/even，对应 sectPr 中的 w:headerReference</summary>
+    public Dictionary<String, String> HeaderRefs { get; } = [];
+
+    /// <summary>页脚引用（类型 → 关系ID），类型为 default/first/even，对应 sectPr 中的 w:footerReference</summary>
+    public Dictionary<String, String> FooterRefs { get; } = [];
     #endregion
 }
 
