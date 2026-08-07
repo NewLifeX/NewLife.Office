@@ -245,16 +245,71 @@ public class TextBoxFieldTests
         Assert.Single(doc.FindText("控件内容"));
     }
 
+    [Fact, DisplayName("W22_文本框_表格单元格内替换持久化")]
+    public void TextBox_InTableCell_ReplacePersists()
+    {
+        // 表格单元格内嵌含文本框的形状段落
+        var shapePara = "<w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">"
+            + "<wp:extent cx=\"1800000\" cy=\"720000\"/><wp:docPr id=\"1\" name=\"Shape1\"/>"
+            + "<a:graphic><a:graphicData uri=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\">"
+            + "<wps:wsp><wps:cNvSpPr/><wps:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"1800000\" cy=\"720000\"/></a:xfrm>"
+            + "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val=\"336699\"/></a:solidFill></wps:spPr>"
+            + "<wps:txbx><w:txbxContent><w:p><w:r><w:t>CELLTB</w:t></w:r></w:p></w:txbxContent></wps:txbx>"
+            + "<wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>";
+        var bodyInner = "<w:p><w:r><w:t>表格前</w:t></w:r></w:p>"
+            + "<w:tbl><w:tblPr><w:tblStyle w:val=\"TableGrid\"/><w:tblW w:w=\"0\" w:type=\"auto\"/></w:tblPr>"
+            + "<w:tblGrid><w:gridCol w:w=\"5000\"/></w:tblGrid>"
+            + "<w:tr><w:tc><w:tcPr><w:tcW w:w=\"5000\" w:type=\"dxa\"/></w:tcPr>"
+            + shapePara + "</w:tc></w:tr></w:tbl>"
+            + "<w:p><w:r><w:t>表格后</w:t></w:r></w:p>";
+        var bytes = BuildMinimalDocx(bodyInner, fullNs: true);
+        var outPath = Path.Combine(Path.GetTempPath(), $"tbcell_{Guid.NewGuid():N}.docx");
+        try
+        {
+            Document doc;
+            using (var ms = new MemoryStream(bytes))
+            using (var reader = new WordReader(ms))
+                doc = reader.ReadDocument();
+
+            // FindText 可达单元格内文本框
+            Assert.Single(doc.FindText("CELLTB"));
+
+            var count = doc.ReplaceText("CELLTB", "NEWCELL");
+            Assert.Equal(1, count);
+
+            // 持久化：关闭整文透传，表格元素 RawXml 的 txbxContent 已同步
+            doc.DocumentXml = null;
+            using (var writer = new WordWriter())
+                writer.Save(outPath, doc);
+
+            using (var reader = new WordReader(outPath))
+            {
+                var re = reader.ReadDocument();
+                Assert.Single(re.FindText("NEWCELL"));
+                Assert.Empty(re.FindText("CELLTB"));
+            }
+        }
+        finally { if (File.Exists(outPath)) File.Delete(outPath); }
+    }
+
     #endregion
 
     #region 辅助
 
-    /// <summary>构建最小 docx（自定义 body 内容）</summary>
-    private static Byte[] BuildMinimalDocx(String bodyInnerXml)
+    /// <summary>构建最小 docx（自定义 body 内容，可选完整 DrawingML 命名空间）</summary>
+    private static Byte[] BuildMinimalDocx(String bodyInnerXml, Boolean fullNs = false)
     {
         const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+        var nsDecl = $"<w:document xmlns:w=\"{W}\"";
+        if (fullNs)
+        {
+            nsDecl += " xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\""
+                + " xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\""
+                + " xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\""
+                + " xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\"";
+        }
         var documentXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
-            + $"<w:document xmlns:w=\"{W}\"><w:body>{bodyInnerXml}</w:body></w:document>";
+            + nsDecl + $"><w:body>{bodyInnerXml}</w:body></w:document>";
         using var ms = new MemoryStream();
         using (var za = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
         {

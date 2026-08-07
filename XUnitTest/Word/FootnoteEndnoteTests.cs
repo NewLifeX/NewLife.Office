@@ -80,6 +80,8 @@ public class FootnoteEndnoteTests
 
     #endregion
 
+    #region 测试
+
     [Fact, DisplayName("W22_脚注_读取模型且跳过内置分隔符")]
     public void Footnotes_Parsed()
     {
@@ -152,4 +154,51 @@ public class FootnoteEndnoteTests
         }
         finally { if (File.Exists(outPath)) File.Delete(outPath); }
     }
+
+    [Fact, DisplayName("W22_脚注_FindText命中脚注文本")]
+    public void Footnotes_FindText_Hits()
+    {
+        var bytes = BuildDocxWithNotes();
+        using var ms = new MemoryStream(bytes);
+        using var reader = new WordReader(ms);
+        var doc = reader.ReadDocument();
+
+        var matches = doc.FindText("这是脚注内容");
+        Assert.Single(matches);
+
+        var endnoteMatches = doc.FindText("这是尾注内容");
+        Assert.Single(endnoteMatches);
+    }
+
+    [Fact, DisplayName("W22_脚注_ReplaceText替换并持久化")]
+    public void Footnotes_ReplaceText_Persists()
+    {
+        var bytes = BuildDocxWithNotes();
+        var outPath = Path.Combine(Path.GetTempPath(), $"notes_{Guid.NewGuid():N}.docx");
+        try
+        {
+            Document doc;
+            using (var ms = new MemoryStream(bytes))
+            using (var reader = new WordReader(ms))
+                doc = reader.ReadDocument();
+
+            var count = doc.ReplaceText("这是脚注内容", "更新后的脚注");
+            Assert.Equal(1, count);
+
+            // footnotes.xml 部件已同步（无需清 DocumentXml，脚注是独立部件）
+            using (var writer = new WordWriter())
+                writer.Save(outPath, doc);
+
+            using (var reader = new WordReader(outPath))
+            {
+                var re = reader.ReadDocument();
+                Assert.Equal("更新后的脚注", re.Footnotes[0].Text);
+                // 尾注未改动，保持原文
+                Assert.Equal("这是尾注内容", re.Endnotes[0].Text);
+            }
+        }
+        finally { if (File.Exists(outPath)) File.Delete(outPath); }
+    }
+
+    #endregion
 }

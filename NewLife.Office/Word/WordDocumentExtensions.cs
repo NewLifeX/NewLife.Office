@@ -72,8 +72,14 @@ public static class WordDocumentExtensions
         var comparer = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         var count = 0;
         foreach (var para in EnumerateParagraphs(doc))
-            count += ReplaceInParagraph(para, find, replace, comparer, wholeWord);        // 文本框替换后同步外层段落 RawXml（txbxContent 部分），保证保存时修改生效
-        if (count > 0) SyncTextBoxesRawXml(doc);        return count;
+            count += ReplaceInParagraph(para, find, replace, comparer, wholeWord);
+        // 文本框/脚注/尾注替换后同步对应原始 XML 部件，保证保存时修改生效
+        if (count > 0)
+        {
+            SyncTextBoxesRawXml(doc);
+            SyncNotesXml(doc);
+        }
+        return count;
     }
 
     /// <summary>在单个段落中替换（支持跨 Run），返回替换次数</summary>
@@ -169,7 +175,7 @@ public static class WordDocumentExtensions
         return -1;
     }
 
-    /// <summary>枚举文档中所有可替换的段落（正文/表格单元格/页眉页脚/文本框）</summary>
+    /// <summary>枚举文档中所有可替换的段落（正文/表格单元格/页眉页脚/文本框/脚注/尾注）</summary>
     private static IEnumerable<Paragraph> EnumerateParagraphs(Document doc)
     {
         foreach (var el in doc.Elements)
@@ -219,6 +225,13 @@ public static class WordDocumentExtensions
                 }
             }
         }
+        // 脚注/尾注（与 Word 原生查找行为一致）
+        foreach (var fn in doc.Footnotes)
+            foreach (var p in fn.Paragraphs)
+                yield return p;
+        foreach (var en in doc.Endnotes)
+            foreach (var p in en.Paragraphs)
+                yield return p;
     }
 
     /// <summary>递归枚举段落内文本框内容段落（W22）</summary>
@@ -293,7 +306,7 @@ public static class WordDocumentExtensions
         foreach (var f in doc.Footers) Clear(f.Elements);
     }
 
-    /// <summary>文本框替换后同步外层元素 RawXml（重建 txbxContent 部分），保证保存时修改生效</summary>
+    /// <summary>文本框替换后同步外层元素/表格元素 RawXml（重建 txbxContent 部分），保证保存时修改生效</summary>
     private static void SyncTextBoxesRawXml(Document doc)
     {
         void Sync(List<Element> list)
@@ -302,8 +315,8 @@ public static class WordDocumentExtensions
             {
                 if (el.Paragraph != null && el.Paragraph.TextBoxes.Count > 0)
                     SyncTextBoxesRawXml(el);
-                // 表格单元格内文本框：持久化需同步表格元素 RawXml（复杂场景），
-                // 由通用 ClearRawXml 工作流兜底（见 ClearRawXml 文档）
+                if (el.Type == ElementType.Table)
+                    SyncTableTextBoxes(el);
             }
         }
 
@@ -311,6 +324,114 @@ public static class WordDocumentExtensions
         foreach (var h in doc.Headers) Sync(h.Elements);
         foreach (var f in doc.Footers) Sync(f.Elements);
     }
+
+    /// <summary>同步表格元素 RawXml 内所有 txbxContent（单元格内文本框，W22）</summary>
+    private static void SyncTableTextBoxes(Element el)
+    {
+        if (el.RawXml == null) return;
+
+        // 按文档顺序收集表格内所有文本框段落
+        var boxes = new List<Paragraph>();
+        void CollectCell(Cell cell)
+        {
+            foreach (var p in cell.Paragraphs)
+            {
+                foreach (var tb in p.TextBoxes)
+                    boxes.Add(tb);
+            }
+            foreach (var nested in cell.NestedTables)
+                foreach (var row in nested.Rows)
+                    foreach (var c in row.Cells)
+                        CollectCell(c);
+        }
+
+        if (el.Table != null)
+        {
+            foreach (var row in el.Table.Rows)
+                foreach (var cell in row.Cells)
+                    CollectCell(cell);
+        }
+        else if (el.TableRows != null)
+        {
+            foreach (var row in el.TableRows)
+                foreach (var cell in row)
+                    CollectCell(cell);
+        }
+        if (boxes.Count == 0) return;
+
+        var idx = 0;
+        el.RawXml = System.Text.RegularExpressions.Regex.Replace(
+            el.RawXml,
+            "<w:txbxContent>.*?</w:txbxContent>",
+            m =>
+            {
+                var tp = idx < boxes.Count ? boxes[idx] : null;
+                idx++;
+                return tp == null ? m.Value : $"<w:txbxContent>{BuildTextboxParagraphXml(tp)}</w:txbxContent>";
+            },
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+    }
+
+    /// <summary>脚注/尾注替换后同步 footnotes.xml/endnotes.xml 部件，保证保存时修改生效</summary>
+    private static void SyncNotesXml(Document doc)
+    {
+        SyncNotePart(doc, "word/footnotes.xml", "w:footnote", doc.Footnotes);
+        SyncNotePart(doc, "word/endnotes.xml", "w:endnote", doc.Endnotes);
+    }
+
+    /// <summary>同步单个脚注/尾注部件中文本已变化的条目（保留未修改条目的原始 XML）</summary>
+    private static void SyncNotePart(Document doc, String partPath, String elemName, List<Footnote> notes)
+    {
+        if (notes.Count == 0) return;
+        if (!doc.OtherParts.TryGetValue(partPath, out var bytes)) return;
+        var xml = Encoding.UTF8.GetString(bytes);
+        var changed = false;
+
+        foreach (var note in notes)
+        {
+            if (note.Paragraphs.Count == 0) continue;
+
+            // 定位 <elem w:id="N" ...>...</elem>
+            var openMatch = System.Text.RegularExpressions.Regex.Match(xml,
+                $"<{elemName}[^>]*w:id=\"{note.Id}\"[^>]*>");
+            if (!openMatch.Success) continue;
+            var contentStart = openMatch.Index + openMatch.Length;
+            var closeTag = $"</{elemName}>";
+            var closeIdx = xml.IndexOf(closeTag, contentStart, StringComparison.Ordinal);
+            if (closeIdx < 0) continue;
+
+            // 文本未变化则保留原 XML（保真）；变化则从模型重建
+            var oldText = ExtractWtText(xml.Substring(contentStart, closeIdx - contentStart));
+            var modelText = new StringBuilder();
+            foreach (var p in note.Paragraphs)
+                foreach (var r in p.Runs)
+                    modelText.Append(r.Text);
+            if (oldText == modelText.ToString()) continue;
+
+            var sb = new StringBuilder();
+            foreach (var p in note.Paragraphs)
+                sb.Append(BuildTextboxParagraphXml(p));
+            xml = xml[..contentStart] + sb + xml[closeIdx..];
+            changed = true;
+        }
+
+        if (changed)
+            doc.OtherParts[partPath] = Encoding.UTF8.GetBytes(xml);
+    }
+
+    /// <summary>提取 XML 片段内全部 w:t 文本（解码实体）</summary>
+    private static String ExtractWtText(String xml)
+    {
+        var sb = new StringBuilder();
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(xml, "<w:t[^>]*>(.*?)</w:t>"))
+            sb.Append(DecodeXml(m.Groups[1].Value));
+        return sb.ToString();
+    }
+
+    /// <summary>解码 XML 实体</summary>
+    private static String DecodeXml(String s) => s
+        .Replace("&lt;", "<").Replace("&gt;", ">")
+        .Replace("&quot;", "\"").Replace("&apos;", "'").Replace("&amp;", "&");
 
     /// <summary>重建单个段落元素 RawXml 的 txbxContent 部分（从 TextBoxes 模型，文本框按序对应）</summary>
     private static void SyncTextBoxesRawXml(Element el)
