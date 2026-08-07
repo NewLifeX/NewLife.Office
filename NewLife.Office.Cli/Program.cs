@@ -34,6 +34,7 @@ public static class Program
             return args[0].ToLowerInvariant() switch
             {
                 "convert" or "conv" => Convert(args.Skip(1).ToArray()),
+                "doc2docx" or "d2x" => Doc2Docx(args.Skip(1).ToArray()),
                 "info" => Info(args.Skip(1).ToArray()),
                 _ => PrintUsageAndReturn(),
             };
@@ -101,6 +102,29 @@ public static class Program
         return 0;
     }
 
+    /// <summary>doc2docx 命令：doc（97-2003）→ docx（W20）</summary>
+    /// <param name="args">参数（&lt;input.doc&gt; &lt;output.docx&gt;）</param>
+    /// <returns>退出码</returns>
+    private static Int32 Doc2Docx(String[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine("用法: doc2docx <input.doc> <output.docx>");
+            return 1;
+        }
+        var input = args[0];
+        var output = args[1];
+        if (!File.Exists(input))
+        {
+            Console.Error.WriteLine($"文件不存在: {input}");
+            return 1;
+        }
+
+        OfficeFactory.ConvertDocToDocx(input, output);
+        Console.WriteLine($"已转换: {Path.GetFileName(input)} → {output}");
+        return 0;
+    }
+
     /// <summary>info 命令：显示文件格式信息</summary>
     /// <param name="args">参数（&lt;input&gt;）</param>
     /// <returns>退出码</returns>
@@ -133,6 +157,7 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine("用法:");
         Console.WriteLine("  convert <input> [output]   转换办公文档为 Markdown（output 缺省输出到 stdout）");
+        Console.WriteLine("  doc2docx <in.doc> <out.docx>   doc（97-2003）转换为 docx（W20）");
         Console.WriteLine("  info <input>               显示文件格式信息");
         Console.WriteLine();
         Console.WriteLine("支持格式: docx/xlsx/pptx/pdf/md/ods/rtf/epub 等");
