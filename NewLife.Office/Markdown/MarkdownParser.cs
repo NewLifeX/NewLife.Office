@@ -531,6 +531,14 @@ internal sealed class MarkdownParser
                 break;
             _pos++;
         }
+        // 快速路径（MD15）：单行普通内容直接行内解析，避免创建子解析器（引用块分配主成本，与 MD14 列表项同理）
+        // 语义等价：子解析器 BuildParagraphText 对每行 Trim()，单行内容即 Trim() 后行内解析；
+        // IsBlockStart 含 '[' 排除引用定义/脚注定义行，空行走原路径保持原行为
+        if (quotedLines.Count == 1 && !String.IsNullOrWhiteSpace(quotedLines[0]) && !IsBlockStart(quotedLines[0]))
+        {
+            var inlines = ParseInlineWithRefs(quotedLines[0].Trim());
+            return MarkdownBlock.CreateBlockQuote([MarkdownBlock.CreateParagraph(inlines)]);
+        }
         // Re-parse quoted content
         var inner = new MarkdownParser { _refs = _refs, Pipeline = Pipeline };
         var innerDoc = inner.ParseLines(quotedLines);
@@ -2360,9 +2368,17 @@ internal sealed class MarkdownParser
     {
         for (var i = 0; i < _lines.Length; i++)
         {
-            var trimmed = _lines[i].Trim();
+            var line = _lines[i];
+            if (line.Length == 0) continue;
+            // 引用定义必须以 [ 开头（CommonMark 允许最多 3 空格缩进；4+ 缩进是代码块）。
+            // 快速排除其余行，避免逐行 Trim + 正则匹配（普通文档绝大多数行非引用定义）
+            var first = line[0];
+            if (first != '[' && first != ' ' && first != '\t') continue;
+            var indent = GetIndent(line);
+            if (indent >= 4 || indent >= line.Length || line[indent] != '[') continue;
+            var trimmed = line.Trim();
             // 排除脚注定义 [^id]:
-            if (trimmed.StartsWith("[^") || trimmed.StartsWith("[") && trimmed.Length > 1 && trimmed[1] == '^') continue;
+            if (trimmed.StartsWith("[^") || trimmed.Length > 1 && trimmed[1] == '^') continue;
             var match = _referenceDef.Match(trimmed);
             if (!match.Success) continue;
 
