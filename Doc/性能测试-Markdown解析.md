@@ -13,29 +13,29 @@
 - .NET: .NET 10.0.10 (X64 RyuJIT AVX2)
 - BenchmarkDotNet: v0.14.0（Release 模式，Short 模式运行，`[MemoryDiagnoser]`）
 
-## 测试结果（MD19 优化后）
+## 测试结果（MD20 优化后）
 
 | 方法 | Mean | Error | Median | Gen0 | Gen1 | Gen2 | Allocated |
 |------|-----:|------:|-------:|-----:|-----:|-----:|----------:|
-| Parse | 10,060.7 μs | 370.85 μs | 1,008.92 μs | 218.75 | 109.38 | - | 2270.08 KB |
-| ParseEnglish | 2,431.6 μs | 59.27 μs | 168.14 μs | 39.06 | 11.72 | - | 433.04 KB |
-| ParseRoundtrip | 10,196.5 μs | 202.48 μs | 409.01 μs | 296.88 | 218.75 | - | 3156.66 KB |
-| Serialize | 743.1 μs | 14.01 μs | 15.57 μs | 124.02 | 124.02 | 124.02 | 611.21 KB |
-| SerializeRoundtrip | 12,234.8 μs | 243.05 μs | 371.17 μs | 390.63 | 250.00 | - | 4040.84 KB |
-| ToHtml | 469.0 μs | 7.06 μs | 6.61 μs | 71.29 | 71.29 | 71.29 | 780.85 KB |
-| ToHtmlPage | 660.4 μs | 12.93 μs | 18.95 μs | 213.87 | 213.87 | 213.87 | 1267.16 KB |
+| Parse | 9,217.4 μs | 182.03 μs | 367.70 μs | 218.75 | 109.38 | - | 2270.08 KB |
+| ParseEnglish | 2,301.4 μs | 45.16 μs | 75.45 μs | 39.06 | 11.72 | - | 433.04 KB |
+| ParseRoundtrip | 9,701.2 μs | 41.49 μs | 34.65 μs | 296.88 | 218.75 | - | 3156.65 KB |
+| Serialize | 627.4 μs | 7.55 μs | 6.31 μs | 644.53 | 644.53 | 107.42 | 609.45 KB |
+| SerializeRoundtrip | 11,682.3 μs | 56.49 μs | 52.84 μs | 390.63 | 250.00 | - | 4040.83 KB |
+| ToHtml | 547.7 μs | 61.75 μs | 181.11 μs | 201.17 | 201.17 | 57.13 | 780.93 KB |
+| ToHtmlPage | 556.3 μs | 10.67 μs | 19.51 μs | 581.05 | 581.05 | 166.02 | 1267.46 KB |
 
-> 注：`ParseEnglish` 为 MD19 新增纯英文基准（300 组无标记英文段落，约 20KB，含 h/f/w 触发裸 URL/Email 尝试），用于验证 email run 快速跳过与 IsPlainText 精确化在英文场景的效果。本次混合 Parse/ParseRoundtrip 运行后台负载偏高（StdDev 数百 μs），分配数据（BDN 精确）为真实值；ParseEnglish -7.6%（本轮 vs MD19b）为可信趋势（IsPlainText 精确化命中纯英文段落快速路径）。
+> 注：`ParseEnglish` 为纯英文基准（300 组无标记英文段落，约 20KB，含 h/f/w 触发裸 URL/Email 尝试）。本次运行 Serialize/ToHtml/ToHtmlPage 的 Gen0 异常偏高（后台负载干扰），这些方法不含 MD19-20 改动、数据不可比；Parse/ParseRoundtrip/ParseEnglish 为可信数据。
 
-### MD19 优化前后对比（Email run 快速跳过 + URL 前缀静态化 + delims 延迟创建 + IsPlainText 精确化）
+### MD19-20 优化前后对比（email run + delims + IsPlainText + 块调度正则快速失败）
 
-| 方法 | MD18 Mean | MD19 Mean | MD18 分配 | MD19 分配 | 耗时降幅 | 分配降幅 |
+| 方法 | MD18 Mean | MD20 Mean | MD18 分配 | MD20 分配 | 耗时降幅 | 分配降幅 |
 |------|-----------:|-----------:|----------:|----------:|--------:|--------:|
-| Parse | 8,962.4 μs | 8,932.4 μs | 2276.33 KB | 2270.08 KB | ≈0（混合中文） | -0.3% |
-| ParseEnglish | 2,729.3 μs | 2,431.6 μs | 442.42 KB | 433.04 KB | **-10.9%**（纯英文） | **-2.1%** |
-| ParseRoundtrip | 9,913.7 μs | 9,729.8 μs | 3162.90 KB | 3156.66 KB | -1.9% | -0.2% |
+| Parse | 8,962.4 μs | 9,217.4 μs | 2276.33 KB | 2270.08 KB | ≈0（混合中文，负载噪声） | -0.3% |
+| ParseEnglish | 2,729.3 μs | 2,301.4 μs | 442.42 KB | 433.04 KB | **-15.7%**（纯英文） | **-2.1%** |
+| ParseRoundtrip | 9,913.7 μs | 9,701.2 μs | 3162.90 KB | 3156.65 KB | -2.1% | -0.2% |
 
-> 注：MD18/MD19 同机 Short 模式对比（MD18 为 stash 回退实测；耗时含后台负载噪声，分配为 BDN 精确值）。email run 优化消除英文无 @ 文本 O(n²) IndexOf 扫描；delims 延迟创建省无强调行内解析的空 List 分配；IsPlainText 精确化（仅 URL 前缀才排除 h/f/w，非 URL 的纯英文段落命中快速路径单令牌）——三项叠加 ParseEnglish 耗时 -10.9%、分配 -2.1%、Gen0 42.97→39.06。
+> 注：MD18/MD20 同机 Short 模式对比（MD18 为 stash 回退实测）。email run 消除英文无 @ 文本 O(n²) IndexOf 扫描；delims 延迟创建省空 List；IsPlainText 精确化（仅 URL 前缀排除 h/f/w）让纯英文段落命中快速路径；块调度正则快速失败（TryParseAtxHeading/IsOrderedListMarker/TryParseFootnoteDefinition 加前缀字符检查，普通行不再触发正则引擎）——四项叠加 ParseEnglish 耗时 -15.7%、分配 -2.1%。
 
 ### MD14 优化前后对比（列表项快速路径）
 
@@ -102,7 +102,7 @@
 - **块类型分配分布（MD17 probe）**：纯段落 714KB/200 个（最重，行内令牌+自动链接）、纯表格 564KB、纯列表 339KB、纯标题 216KB、纯代码块 181KB、纯引用 142KB——段落行内解析与表格为两大结构性成本（AST 对象+文本子串，难以进一步消除）。
 - **解析 ~9.2ms / 2.3MB（MD18 首次大幅降耗时 13.8%）**：耗时诊断（Stopwatch probe）显示**表格是最高耗时密度块类型**（0.56ms/KB vs 段落 0.23ms/KB），且自动链接/email 尝试各 ~0.15-0.2ms。MD18 实施——①**行内纯文本快速路径**：`ParseInline`/`ParseInlineWithRefs` 入口先 `IsPlainText` 扫描（排除转义/实体/代码/图片/链接/强调/删除线/<>/$/:/@/换行/裸URL前缀 hfw 等触发字符），无标记字符时直接 `CreateText` 单令牌，跳过 TokenizeInline 逐字符全分支检查；表格单元格/列表项/引用等简单文本全部命中。②**SplitTableRow 快速拆分**：行内无反引号/反斜杠时直接按 `|` 切分（省逐字符代码段/转义判断）。Parse 首次突破 10ms 大关，ParseRoundtrip/SerializeRoundtrip 耗时同步降 13-15%。
 - **耗时诊断方法（MD18 probe）**：`Stopwatch` 均值测量 + `MarkdownPipeline` 开关对比（关闭自动链接/删除线识别分支成本）；块类型同字符量对比（表格 0.56ms/KB 最高）。自动链接成本 ~7%、email 尝试成本 ~6%（英文无 @ 文本）。
-- **解析 ~9.0ms / 2.3MB（MD19 英文场景再降耗时 5.4%）**：MD19 修复两个高频路径——①**Email run 快速跳过**：`TokenizeInline` 原对每个字母数字字符调用 `TryParseBareEmail`（内部再 `IndexOf('@')` 全段扫描），英文无 @ 文本呈 O(n²)；改为按连续 email 字符 run（含 `@`）单次 `IndexOf('@')`，无 @ 整段跳过。②**URL 前缀静态化**：`TryParseBareUrl` 原每次调用 `new[] { "https://", ... }` 数组，提为静态 readonly（分配已被 JIT 逃逸优化覆盖，属规范改进）。③**delims 延迟创建**：`ParseInlineCore` 原无条件 `new List<DelimInfo>()`，改为 `TokenizeInline` 仅遇 `*`/`_` 分隔符时才分配并返回（无强调行内解析省一个空 List，ParseEnglish 分配 -2.1%、Gen0 -3.9）。④**IsPlainText 精确化（MD19c）**：原保守排除 h/f/w（防裸 URL），纯英文段落（如 "The quick brown fox..." 含 h/f/w 但非 URL）被误排除快速路径 → 全走完整 TokenizeInline；改为带索引扫描 + `IsUrlPrefixAt`（精确匹配 `https://`/`http://`/`ftp://`/`www.` 前缀，与 `TryParseBareUrl` 前缀集一致），非 URL 的 h/f/w 放行——URL 必以前缀开头故不会漏识别，纯英文段落命中快速路径单令牌直达。**踩坑**：a) email run 界定用了 `IsEmailChar`（含 `_`），会把 `_` 强调标记吞进 run 跳过 → 强调解析失效（3 测试失败）；修复为 run 内含 `_` 时回退原逻辑（逐字符尝试），保证 `john_doe@x.com` 与强调兼容。b) delims 参数按值传递，方法内 `??=` 只改参数副本导致调用方仍为 null（36 测试失败）；改为 `TokenizeInline` 返回列表。混合中文基准英文 run 多被中文/标记打断收益不明显，纯英文长 run 场景 ParseEnglish -10.9%（stash 回退同机对比实测）。
+- **解析 ~9.2ms / 2.3MB（MD19-20 英文场景再降 15.7%）**：MD19 系列四个优化——①**Email run 快速跳过**：`TokenizeInline` 原对每个字母数字字符调用 `TryParseBareEmail`（内部再 `IndexOf('@')` 全段扫描），英文无 @ 文本呈 O(n²)；改为按连续 email 字符 run（含 `@`）单次 `IndexOf('@')`，无 @ 整段跳过。②**delims 延迟创建**：`ParseInlineCore` 原无条件 `new List<DelimInfo>()`，改为 `TokenizeInline` 仅遇 `*`/`_` 分隔符时才分配并返回（无强调行内解析省一个空 List，ParseEnglish 分配 -2.1%、Gen0 -3.9）。③**IsPlainText 精确化（MD19c）**：原保守排除 h/f/w（防裸 URL），纯英文段落（如 "The quick brown fox..." 含 h/f/w 但非 URL）被误排除快速路径 → 全走完整 TokenizeInline；改为带索引扫描 + `IsUrlPrefixAt`（精确匹配 `https://`/`http://`/`ftp://`/`www.` 前缀，与 `TryParseBareUrl` 前缀集一致），非 URL 的 h/f/w 放行——URL 必以前缀开头故不会漏识别，纯英文段落命中快速路径单令牌直达。④**块调度正则快速失败（MD20）**：`TryParseAtxHeading`/`IsOrderedListMarker`/`TryParseFootnoteDefinition` 三个每行调用的正则方法加前缀字符检查（`#`/数字/`[^`，均为正则必然前缀），混合文档普通行不再触发正则引擎，只做一次字符比较。**踩坑**：a) email run 界定用了 `IsEmailChar`（含 `_`），会把 `_` 强调标记吞进 run 跳过 → 强调解析失效（3 测试失败）；修复为 run 内含 `_` 时回退原逻辑（逐字符尝试），保证 `john_doe@x.com` 与强调兼容。b) delims 参数按值传递，方法内 `??=` 只改参数副本导致调用方仍为 null（36 测试失败）；改为 `TokenizeInline` 返回列表。混合中文基准英文 run 多被中文/标记打断收益不明显，纯英文长 run 场景 ParseEnglish -15.7%（stash 回退同机对比实测）。
 - **推翻 MD12 假设**：MD12 报告猜测「AST 字符串复制 ~120x 为主成本」，经 GC 分段实测文本令牌字符串仅占 1.3%（~49KB）；`Memory<Char>` 惰性切片（net45 经 System.Memory 支持）实测无收益且因对象膨胀与惰性转换使 Serialize/ToHtml 略增，**已回滚**。数据驱动决策：真实收益在列表/引用子解析器消除。
 - **Parse 与 ParseRoundtrip 差距 8%**：往返模式多捕获原始源码与快照，代价有限；需要原始格式保真时直接用 `ParseRoundtrip`（MD10-10 公开 API）。
 - **SerializeRoundtrip（14.3ms）**：包含重新解析 + 快照比较，与"解析+序列化"整体成本一致，属预期。
@@ -116,7 +116,7 @@
 3. **表格单元格快速路径（MD16 后续）**：基准 200 表格 × 4 单元格 ≈800 次 `ParseInlineWithRefs`（每次独立 List + Text 对象）。单 token 单元格（如 `A`/`B`）可直达文本构造，但 AST 对象为必需结构，预计收益有限；若需进一步压降可评估。
 4. **DelimInfo class→struct（评估中）**：强调分隔符 run 每项一个引用对象（~48B），改 struct 需处理 `ResolveEmphasis` 的可空 opener 与写回，风险中等、预计收益 ~1-2%，暂缓。
 
-> MD19 已完成：Email run 快速跳过（消除英文无 @ 文本 O(n²) 重复扫描）+ URL 前缀数组静态化 + delims 延迟创建（无强调省空 List，分配 -2.1%）+ IsPlainText 精确化（仅 URL 前缀排除 h/f/w，纯英文段落命中快速路径）——纯英文 Parse 累计 -10.9%、分配 -2.1%。混合中文 Parse 耗时 -57%（20.9→9.0ms）、分配 -39%（累计 MD14→MD19）。
+> MD20 已完成：块调度正则快速失败（TryParseAtxHeading `#` 前缀、IsOrderedListMarker 数字前缀、TryParseFootnoteDefinition `[^` 前缀——前缀为正则必然前缀，普通行不再触发正则引擎）——纯英文 ParseEnglish 累计 -15.7%（2729→2301μs）、分配 -2.1%。混合中文 Parse 耗时 -56%（20.9→9.2ms）、分配 -39%（累计 MD14→MD20）。
 
 ## 运行方式
 

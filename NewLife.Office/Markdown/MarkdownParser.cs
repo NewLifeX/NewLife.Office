@@ -246,6 +246,8 @@ internal sealed class MarkdownParser
 
     private MarkdownBlock? TryParseAtxHeading(String trimmed)
     {
+        // 快速失败（MD20）：ATX 标题必以 # 开头，避免普通行每行跑正则
+        if (trimmed.Length == 0 || trimmed[0] != '#') return null;
         var match = _atxHeading.Match(trimmed);
         if (!match.Success) return null;
         var hashes = match.Groups[1].Value;
@@ -564,6 +566,8 @@ internal sealed class MarkdownParser
     private static Boolean IsOrderedListMarker(String trimmed, out Int32 num, out Char delimiter)
     {
         num = 1; delimiter = '.';
+        // 快速失败（MD20）：有序列表必以数字开头，避免普通行每行跑正则
+        if (trimmed.Length == 0 || !Char.IsDigit(trimmed[0])) return false;
         var match = _orderedList.Match(trimmed);
         if (!match.Success) return false;
         num = Int32.Parse(match.Groups[1].Value);
@@ -1291,6 +1295,9 @@ internal sealed class MarkdownParser
     private Boolean TryParseFootnoteDefinition(String trimmed, out MarkdownBlock? block)
     {
         block = null;
+
+        // 快速失败（MD20）：脚注定义必以 [^ 开头，避免普通行每行跑正则
+        if (trimmed.Length < 3 || trimmed[0] != '[' || trimmed[1] != '^') return false;
 
         // [^id]: text
         var match = _footnoteDef.Match(trimmed);
