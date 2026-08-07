@@ -407,4 +407,32 @@ public class BiffReaderTests
         using var reader = new BiffReader(new MemoryStream(xls));
         Assert.Empty(reader.GetConditionalFormats());
     }
+
+    [Fact, DisplayName("读取条件格式图案前景色（pattern fgColor 调色板还原）")]
+    public void ReadConditionalFormats_Color()
+    {
+        // CONDFMT：count=1, r1=0, r2=0, c1=0, c2=0 → A1:A1 一条规则
+        var condFmtData = Concat(LE2(1), LE2(0), LE2(0), LE2(0), LE2(0), LE2(0));
+        var condFmtRec = Rec(0x01B0, condFmtData);
+
+        // CF：flags=0x41 (cellIs|greaterThan)，f1=100，f2=0
+        // font(4)+border(4)+pattern(4)+temp(2)：pattern 段 pattern=1(solid)+fgColor=2(红)+bgColor=0
+        var cfData = Concat(
+            LE2(0x41), LE8(100.0), LE8(0.0),
+            LE2(0), LE2(0),                       // font(4)
+            LE2(0), LE2(0),                       // border(4)
+            new Byte[] { 0x01, 0x02, 0x00, 0x00 }, // pattern(4): pattern=1, fgColor=2, bgColor=0
+            LE2(0));                              // temp(2)
+        var cfRec = Rec(0x01B1, cfData);
+
+        var sheetBody = Concat(LabelSst(0, 0, 0), condFmtRec, cfRec);
+        var xls = BuildXls(BuildMinimalXls("Sheet1", sheetBody, new[] { "值" }));
+
+        using var reader = new BiffReader(new MemoryStream(xls));
+        var cfs = reader.GetConditionalFormats();
+        Assert.Single(cfs);
+        Assert.Equal(ConditionalFormatValues.GreaterThan, cfs[0].Type);
+        Assert.Equal("100", cfs[0].Value);
+        Assert.Equal("FF0000", cfs[0].Color);
+    }
 }

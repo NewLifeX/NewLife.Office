@@ -953,6 +953,14 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
         }
         else return null; // colorScale/dataBar/iconSet 复杂，跳过
 
+        // 图案样式（offset 26）：pattern(1)+fgColor(2)+bgColor(1)，前景色索引映射调色板还原 Color
+        if (data.Length >= 30)
+        {
+            var fgIdx = ReadUInt16(data, 27);
+            var fgColor = MapColorIndexToRgb(fgIdx);
+            if (!fgColor.IsNullOrEmpty()) info.Color = fgColor;
+        }
+
         return info;
     }
 
