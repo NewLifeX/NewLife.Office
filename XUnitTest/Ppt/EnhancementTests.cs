@@ -598,4 +598,67 @@ public class PptxEnhancementTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
     #endregion
+
+    #region 形状级超链接 (S20 / Phase5)
+    [Fact(DisplayName = "PPT—形状URL超链接往返")]
+    public void Shape_HyperlinkUrl_RoundTrip()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            var sp = writer.AddShape(0, "rect", 2, 2, 10, 5, "FF0000");
+            sp.HyperlinkUrl = "https://newlifex.com";
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            var s = doc.Slides[0].Shapes[0];
+            Assert.Equal("https://newlifex.com", s.HyperlinkUrl);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "PPT—形状文件超链接往返")]
+    public void Shape_HyperlinkFile_RoundTrip()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            var sp = writer.AddShape(0, "rect", 2, 2, 10, 5, "00AA00");
+            sp.HyperlinkUrl = "C:\\report.pdf"; // 文件跳转（TargetMode=External）
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            var s = doc.Slides[0].Shapes[0];
+            Assert.Equal("C:\\report.pdf", s.HyperlinkUrl);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+
+    [Fact(DisplayName = "PPT—组内形状超链接往返")]
+    public void GroupShape_Hyperlink_RoundTrip()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".pptx");
+        try
+        {
+            using var writer = new PptxWriter();
+            writer.AddSlide();
+            var grp = writer.GroupShapes(0, 2, 2, 12, 8);
+            var sp = new Shape { ShapeType = "rect", Left = 100000, Top = 100000, Width = 3000000, Height = 1500000, FillColor = "FF0000", HyperlinkUrl = "https://example.com" };
+            grp.Shapes.Add(sp);
+            writer.Save(tempFile);
+
+            using var reader = new PptxReader(tempFile);
+            var doc = reader.ReadDocument();
+            var s = doc.Slides[0].Groups[0].Shapes[0];
+            Assert.Equal("https://example.com", s.HyperlinkUrl);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }
+    #endregion
 }

@@ -129,6 +129,9 @@ public class Shape
 
     /// <summary>文本下内边距（EMU，bodyPr bIns），null 表示默认</summary>
     public Int32? BottomInset { get; set; }
+
+    /// <summary>形状级超链接（URL 或文件路径，写入 cNvPr hlinkClick，S20）</summary>
+    public String? HyperlinkUrl { get; set; }
     #endregion
 
     #region 方法

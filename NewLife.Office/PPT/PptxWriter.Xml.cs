@@ -525,8 +525,16 @@ partial class PptxWriter
         // shapes（基本图形）
         foreach (var sp in slide.Shapes)
         {
+            // 形状级超链接（S20）：写入 cNvPr hlinkClick
+            var shapeHl = "";
+            if (sp.HyperlinkUrl != null)
+            {
+                var hlRelId = $"rHlk{_hlinkGlobal++}";
+                hlinkMap[hlRelId] = sp.HyperlinkUrl;
+                shapeHl = $"<a:hlinkClick r:id=\"{hlRelId}\"/>";
+            }
             var descr = sp.AltText != null ? $" descr=\"{EscXml(sp.AltText)}\"" : "";
-            sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"Shape\"{descr}/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>");
+            sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"Shape\"{descr}>{shapeHl}</p:cNvPr><p:cNvSpPr/><p:nvPr/></p:nvSpPr>");
             sb.Append("<p:spPr>");
             var spXfrmAttrs = "";
             if (sp.Rotation != 0) spXfrmAttrs += $" rot=\"{sp.Rotation}\"";
@@ -674,8 +682,16 @@ partial class PptxWriter
             // shapes inside group（S07-02：与顶层形状一致，写全旋转/翻转/渐变/虚线/线宽/圆角）
             foreach (var sp in grp.Shapes)
             {
+                // 组内形状级超链接（S20）
+                var grpHl = "";
+                if (sp.HyperlinkUrl != null)
+                {
+                    var hlRelId = $"rHlk{_hlinkGlobal++}";
+                    hlinkMap[hlRelId] = sp.HyperlinkUrl;
+                    grpHl = $"<a:hlinkClick r:id=\"{hlRelId}\"/>";
+                }
                 var descr = sp.AltText != null ? $" descr=\"{EscXml(sp.AltText)}\"" : "";
-                sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"GrpShape\"{descr}/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>");
+                sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"GrpShape\"{descr}>{grpHl}</p:cNvPr><p:cNvSpPr/><p:nvPr/></p:nvSpPr>");
                 sb.Append("<p:spPr>");
                 var spXfrmAttrs = "";
                 if (sp.Rotation != 0) spXfrmAttrs += $" rot=\"{sp.Rotation}\"";

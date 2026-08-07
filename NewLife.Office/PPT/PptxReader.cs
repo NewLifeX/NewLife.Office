@@ -796,6 +796,17 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var flipH = xfrmEl?.GetAttribute("flipH") == "1";
         var flipV = xfrmEl?.GetAttribute("flipV") == "1";
 
+        // 形状级超链接（S20 Reader 侧）
+        String? shapeHyperlink = null;
+        var shHlink = sp.SelectSingleNode(".//*[local-name()='cNvPr']/*[local-name()='hlinkClick']") as XmlElement
+            ?? sp.SelectSingleNode(".//*[local-name()='spPr']/*[local-name()='hlinkClick']") as XmlElement;
+        if (shHlink != null)
+        {
+            var rid = shHlink.GetAttribute("r:id");
+            if (rid.Length > 0 && rels.TryGetValue(rid, out var rel))
+                shapeHyperlink = rel.Target;
+        }
+
         // 文本框判定：cNvSpPr txBox="1" 或 prstGeom="textBox"；带文本的基本形状应读为 Shape 而非文本框
         var isTextBox = hasTxBody && (shapeType == "textBox" || IsTxBox(sp));
 
@@ -977,7 +988,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                     AltText = altText, CornerRadius = cornerRadius,
                     Rotation = rotation, FlipHorizontal = flipH, FlipVertical = flipV,
                     GradientType = gradType, GradientColor1 = gradC1, GradientColor2 = gradC2, GradientAngle = gradAngle,
-                    DashStyle = dashStyle,
+                    DashStyle = dashStyle, HyperlinkUrl = shapeHyperlink,
                 });
             }
             else
@@ -989,7 +1000,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                     AltText = altText, CornerRadius = cornerRadius,
                     Rotation = rotation, FlipHorizontal = flipH, FlipVertical = flipV,
                     GradientType = gradType, GradientColor1 = gradC1, GradientColor2 = gradC2, GradientAngle = gradAngle,
-                    DashStyle = dashStyle,
+                    DashStyle = dashStyle, HyperlinkUrl = shapeHyperlink,
                     Text = text, FontSize = fontSize > 0 ? fontSize : 14, Bold = bold, FontColor = fontColor,
                     LatinFontName = latinFn, EastAsianFontName = eaFn,
                     ComplexScriptFontName = csFn, SymbolFontName = symFn,
@@ -1006,7 +1017,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 AltText = altText, CornerRadius = cornerRadius,
                 Rotation = rotation, FlipHorizontal = flipH, FlipVertical = flipV,
                 GradientType = gradType, GradientColor1 = gradC1, GradientColor2 = gradC2, GradientAngle = gradAngle,
-                DashStyle = dashStyle,
+                DashStyle = dashStyle, HyperlinkUrl = shapeHyperlink,
                 FillImage = fillImage,
                 FillImageExt = fillImage != null ? GetFillImageExt(spPr, rels) : "png",
             });
@@ -1574,6 +1585,17 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         foreach (XmlElement tt in sp.SelectNodes(".//*[local-name()='t']")!) txt.Append(tt.InnerText);
         var text = txt.ToString();
 
+        // 组内形状级超链接（S20 Reader 侧）
+        String? shapeHyperlink = null;
+        var shHlink = sp.SelectSingleNode(".//*[local-name()='cNvPr']/*[local-name()='hlinkClick']") as XmlElement
+            ?? sp.SelectSingleNode(".//*[local-name()='spPr']/*[local-name()='hlinkClick']") as XmlElement;
+        if (shHlink != null)
+        {
+            var rid = shHlink.GetAttribute("r:id");
+            if (rid.Length > 0 && rels.TryGetValue(rid, out var rel))
+                shapeHyperlink = rel.Target;
+        }
+
         // 解析字体属性：从第一个 rPr 提取字号/粗体/颜色/字体名称
         var fontSize = 0;
         var bold = false;
@@ -1644,6 +1666,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 Rotation = rotation, FlipHorizontal = flipH, FlipVertical = flipV,
                 GradientType = gradType, GradientColor1 = gradC1, GradientColor2 = gradC2, GradientAngle = gradAngle,
                 DashStyle = dashStyle, LineColor = lineColor, LineWidth = (Int32)lineWidth, CornerRadius = cornerRadius,
+                HyperlinkUrl = shapeHyperlink,
             });
     }
 
