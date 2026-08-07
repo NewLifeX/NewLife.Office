@@ -1026,19 +1026,42 @@ internal sealed class MarkdownParser
     /// <returns>单元格列表</returns>
     private static List<String> SplitTableRow(String line)
     {
-        // 索引边界剥离首尾空白与管道符，避免 Trim/[1..]/[..^1] 子串分配（MD16）
-        var start = 0;
-        var end = line.Length;
-        while (start < end && Char.IsWhiteSpace(line[start])) start++;
-        while (end > start && Char.IsWhiteSpace(line[end - 1])) end--;
-        if (start < end && line[start] == '|') start++;
-        if (end > start && line[end - 1] == '|') end--;
+        // 快速路径（MD18）：行内无反引号/反斜杠时，| 全为分隔符，直接切分（绝大多数简单表格）
+        if (line.IndexOf('`') < 0 && line.IndexOf('\\') < 0)
+        {
+            var start = 0;
+            var end = line.Length;
+            while (start < end && Char.IsWhiteSpace(line[start])) start++;
+            while (end > start && Char.IsWhiteSpace(line[end - 1])) end--;
+            if (start < end && line[start] == '|') start++;
+            if (end > start && line[end - 1] == '|') end--;
+            var cells = new List<String>();
+            var cs = start;
+            for (var i = start; i <= end; i++)
+            {
+                if (i == end || line[i] == '|')
+                {
+                    cells.Add(line.Substring(cs, i - cs).Trim());
+                    cs = i + 1;
+                }
+            }
+            return cells;
+        }
+        else
+        {
+            // 索引边界剥离首尾空白与管道符，避免 Trim/[1..]/[..^1] 子串分配（MD16）
+            var start = 0;
+            var end = line.Length;
+            while (start < end && Char.IsWhiteSpace(line[start])) start++;
+            while (end > start && Char.IsWhiteSpace(line[end - 1])) end--;
+            if (start < end && line[start] == '|') start++;
+            if (end > start && line[end - 1] == '|') end--;
 
-        var cells = new List<String>();
-        var cellStart = start;
-        var slashCount = 0;
-        var codeTicks = 0; // >0 表示处于代码段内，值为开头反引号个数
-        var i = start;
+            var cells = new List<String>();
+            var cellStart = start;
+            var slashCount = 0;
+            var codeTicks = 0; // >0 表示处于代码段内，值为开头反引号个数
+            var i = start;
         while (i < end)
         {
             var c = line[i];
@@ -1082,8 +1105,9 @@ internal sealed class MarkdownParser
             slashCount = 0;
             i++;
         }
-        cells.Add(ProcessCell(line.Substring(cellStart, end - cellStart)));
-        return cells;
+            cells.Add(ProcessCell(line.Substring(cellStart, end - cellStart)));
+            return cells;
+        }
     }
 
     /// <summary>处理单元格：去首尾空白 + 去转义管道符反斜杠（\| → |）</summary>
@@ -1361,6 +1385,12 @@ internal sealed class MarkdownParser
     {
         var result = new List<MarkdownInline>();
         if (String.IsNullOrEmpty(text)) return result;
+        // 快速路径（MD18）：无行内标记字符时直接单文本令牌，避免 TokenizeInline 逐字符全分支检查
+        if (IsPlainText(text))
+        {
+            result.Add(MarkdownInline.CreateText(text));
+            return result;
+        }
         ParseInlineCore(text, 0, text.Length, result, null, null, false);
         return result;
     }
@@ -1372,8 +1402,34 @@ internal sealed class MarkdownParser
     {
         var result = new List<MarkdownInline>();
         if (String.IsNullOrEmpty(text)) return result;
+        // 快速路径（MD18）：无行内标记字符时直接单文本令牌，避免 TokenizeInline 逐字符全分支检查
+        if (IsPlainText(text))
+        {
+            result.Add(MarkdownInline.CreateText(text));
+            return result;
+        }
         ParseInlineCore(text, 0, text.Length, result, _refs, Pipeline, false);
         return result;
+    }
+
+    /// <summary>判断文本是否为纯文本（无行内标记触发字符），行内快速路径使用（MD18）</summary>
+    /// <param name="text">行内文本</param>
+    /// <returns>纯文本时为 true</returns>
+    private static Boolean IsPlainText(String text)
+    {
+        foreach (var c in text)
+        {
+            // 排除行内标记触发字符：转义/实体/代码/图片/链接/强调/删除线/自动链接(< >)/数学/emoji/email/裸URL(h f w)
+            switch (c)
+            {
+                case '\\': case '&': case '`': case '!': case '[': case ']':
+                case '*': case '_': case '~': case '<': case '>': case '$':
+                case ':': case '@': case '\n': case '\r':
+                case 'h': case 'f': case 'w':
+                    return false;
+            }
+        }
+        return true;
     }
 
     /// <summary>解析行内 Markdown 内容（核心递归实现）</summary>
