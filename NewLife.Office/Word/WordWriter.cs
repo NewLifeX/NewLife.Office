@@ -54,6 +54,13 @@ public class WordWriter : IDisposable
     // 多节模型（程序化创建时由 Document.Sections 导入，Count>1 时按节输出）
     private List<Section> _sections = [];
 
+    // 页眉页脚重建时保存的原始 [Content_Types].xml / document.xml.rels（用于合并新引用）
+    private String? _mergeContentTypes;
+    private String? _mergeDocumentRels;
+
+    /// <summary>是否重建页眉页脚（仅用户显式重建 DocumentXml=null 且设置了富文本页眉页脚时）</summary>
+    private Boolean _rebuildHeaderFooter;
+
     /// <summary>是否启用只读保护</summary>
     public Boolean ProtectionReadOnly { get; set; }
 
@@ -482,6 +489,16 @@ public class WordWriter : IDisposable
                     e.Write(kv.Value, 0, kv.Value.Length);
             if (_documentVariables.Count > 0 && _settingsXml != null && !DocVarsMatch(_settingsXml, _documentVariables))
                 WriteSettings(za);
+            // 富文本页眉页脚（用户显式重建时）：生成新部件 + 合并更新 content types/rels 引用
+            if (_rebuildHeaderFooter)
+            {
+                if (_headers.Count > 0) WriteHeaderParts(za);
+                if (_footers.Count > 0) WriteFooterParts(za);
+                if (_mergeContentTypes != null)
+                    WriteEntry(za, "[Content_Types].xml", InjectContentTypeOverrides(_mergeContentTypes));
+                if (_mergeDocumentRels != null)
+                    WriteEntry(za, "word/_rels/document.xml.rels", InjectHeaderFooterRels(_mergeDocumentRels));
+            }
             WriteDocument(za);
             return;
         }
@@ -532,6 +549,9 @@ public class WordWriter : IDisposable
         _elements.Clear(); _imageRels.Clear(); _hyperlinkRels.Clear();
         _relCounter = 1; _imgCounter = 1; _bookmarkId = 1;
         _orderedStartOverrides.Clear();
+        _rebuildHeaderFooter = false;
+        _mergeContentTypes = null;
+        _mergeDocumentRels = null;
         _stylesXml = document.StylesXml;
         _numberingXml = document.NumberingXml;
         _numbering = document.Numbering;
@@ -558,6 +578,30 @@ public class WordWriter : IDisposable
             PageSettings.HeaderText = document.HeaderText;
         if (document.PageSettings.FooterText == null && document.FooterText != null)
             PageSettings.FooterText = document.FooterText;
+
+        // 用户显式重建（DocumentXml=null）且设置了富文本页眉页脚时：
+        // 从透传中移除旧 header/footer 部件与其引用，改由 Writer 生成新部件并合并更新
+        // [Content_Types].xml 与 word/_rels/document.xml.rels 引用
+        if (document.DocumentXml == null && (_headers.Count > 0 || _footers.Count > 0))
+        {
+            _rebuildHeaderFooter = true;
+            _mergeContentTypes = document.OtherParts.TryGetValue("[Content_Types].xml", out var ct0)
+                ? Encoding.UTF8.GetString(ct0) : null;
+            _mergeDocumentRels = document.OtherParts.TryGetValue("word/_rels/document.xml.rels", out var rl0)
+                ? Encoding.UTF8.GetString(rl0) : null;
+
+            var removeKeys = _otherParts.Keys
+                .Where(k => k.StartsWith("word/header", StringComparison.OrdinalIgnoreCase)
+                    || k.StartsWith("word/footer", StringComparison.OrdinalIgnoreCase)
+                    || k.StartsWith("word/_rels/header", StringComparison.OrdinalIgnoreCase)
+                    || k.StartsWith("word/_rels/footer", StringComparison.OrdinalIgnoreCase)
+                    || k.Equals("[Content_Types].xml", StringComparison.OrdinalIgnoreCase)
+                    || k.Equals("word/_rels/document.xml.rels", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            foreach (var k in removeKeys) _otherParts.Remove(k);
+            _sectPrXml = null; // 重建 sectPr 以生成新的 headerReference/footerReference
+        }
+
         Save(stream);
     }
 
@@ -1412,6 +1456,45 @@ public class WordWriter : IDisposable
             var xml = BuildHdrFtrXml("w:hdr", _headers[i].Elements);
             WriteEntry(za, $"word/header{i + 1}.xml", xml);
         }
+    }
+
+    /// <summary>向 [Content_Types].xml 注入 header/footer Override（去重）</summary>
+    private String InjectContentTypeOverrides(String contentTypes)
+    {
+        for (var i = 0; i < _headers.Count; i++)
+            contentTypes = InjectOneOverride(contentTypes, $"/word/header{i + 1}.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml");
+        for (var i = 0; i < _footers.Count; i++)
+            contentTypes = InjectOneOverride(contentTypes, $"/word/footer{i + 1}.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml");
+        return contentTypes;
+    }
+
+    private static String InjectOneOverride(String contentTypes, String partName, String contentType)
+    {
+        if (contentTypes.Contains($"PartName=\"{partName}\"")) return contentTypes;
+        var idx = contentTypes.LastIndexOf("</Types>", StringComparison.Ordinal);
+        if (idx < 0) return contentTypes;
+        return contentTypes[..idx] + $"<Override PartName=\"{partName}\" ContentType=\"{contentType}\"/>" + contentTypes[idx..];
+    }
+
+    /// <summary>向 document.xml.rels 注入 header/footer Relationship（移除旧 header/footer 关系）</summary>
+    private String InjectHeaderFooterRels(String relsXml)
+    {
+        // 移除旧 header/footer 关系（避免 Id/目标冲突）
+        relsXml = System.Text.RegularExpressions.Regex.Replace(
+            relsXml,
+            "<Relationship[^>]*Type=\"[^\"]*(?:/header|/footer)\"[^>]*/>",
+            "");
+        // 注入新关系
+        var sb = new StringBuilder();
+        for (var i = 0; i < _headers.Count; i++)
+            sb.Append($"<Relationship Id=\"rHdr{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header\" Target=\"header{i + 1}.xml\"/>");
+        for (var i = 0; i < _footers.Count; i++)
+            sb.Append($"<Relationship Id=\"rFtr{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer\" Target=\"footer{i + 1}.xml\"/>");
+        var idx = relsXml.LastIndexOf("</Relationships>", StringComparison.Ordinal);
+        if (idx < 0) return relsXml;
+        return relsXml[..idx] + sb + relsXml[idx..];
     }
 
     /// <summary>写入富文本页脚部件（每个 Footer 生成 footer{N}.xml）</summary>
