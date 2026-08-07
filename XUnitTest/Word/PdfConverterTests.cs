@@ -133,10 +133,33 @@ public class WordPdfConverterTests
         Assert.NotNull(pdfBytes);
     }
 
+    [Fact, System.ComponentModel.DisplayName("文本框内容渲染到 PDF")]
+    public void ConvertToBytes_TextBoxText_Included()
+    {
+        var xml = "<?xml version=\"1.0\"?><w:document xmlns:w=\"" + W + "\""
+            + " xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\""
+            + " xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\""
+            + " xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\"><w:body>"
+            + "<w:p><w:r><w:t>正文</w:t></w:r></w:p>"
+            + "<w:p><w:r><w:drawing><wp:inline><wp:extent cx=\"1800000\" cy=\"720000\"/><wp:docPr id=\"1\" name=\"S1\"/>"
+            + "<a:graphic><a:graphicData uri=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\">"
+            + "<wps:wsp><wps:cNvSpPr/><wps:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></wps:spPr>"
+            + "<wps:txbx><w:txbxContent><w:p><w:r><w:t>PDFBOX</w:t></w:r></w:p></w:txbxContent></wps:txbx>"
+            + "<wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
+            + "</w:body></w:document>";
+        using var docx = BuildDocx(xml);
+        var converter = new WordPdfConverter();
+        var pdfBytes = converter.ConvertToBytes(docx);
+        Assert.NotEmpty(pdfBytes);
+
+        using var pdfReader = new PdfReader(new MemoryStream(pdfBytes));
+        var text = pdfReader.ExtractText();
+        Assert.Contains("PDFBOX", text);
+    }
+
     [Fact, System.ComponentModel.DisplayName("ConvertToFile 输出文件到流")]
     public void ConvertToFile_WritesToPath()
-    {
-        using var docx = BuildDocx(WrapDoc(Para("Test output")));
+    {        using var docx = BuildDocx(WrapDoc(Para("Test output")));
         var tmpPath = Path.Combine(Path.GetTempPath(), $"test_{Guid.NewGuid():N}.pdf");
         try
         {

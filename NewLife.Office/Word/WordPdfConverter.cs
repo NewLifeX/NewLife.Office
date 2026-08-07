@@ -229,6 +229,14 @@ public sealed class WordPdfConverter
                     textBuilder.Append(t.InnerText);
             }
         }
+
+        // 文本框内容并入（wps:txbx/w:txbxContent，W22，与 Word 导出行为一致）
+        foreach (XmlElement txbxContent in para.SelectNodes(".//w:txbxContent", ns)!)
+        {
+            foreach (XmlElement t in txbxContent.SelectNodes(".//w:t", ns)!)
+                textBuilder.Append(t.InnerText);
+        }
+
         var text = textBuilder.ToString();
 
         // 列表前缀
