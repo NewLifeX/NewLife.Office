@@ -710,23 +710,35 @@ public class WordWriter : IDisposable
             sb.Append("<Override PartName=\"/word/charts/chart1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawingml.chart+xml\"/>");
             sb.Append("<Default Extension=\"xlsx\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"/>");
         }
-        // image content types
-        var addedPng = false; var addedJpeg = false;
+        // image content types：为所有实际使用的图片扩展名生成 Default（png/jpg/jpeg/gif/svg/webp 等）
+        var imageExts = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
         foreach (var (_, ext, _) in _imageRels)
-        {
-            if ((ext == "png") && !addedPng)
-            {
-                sb.Append("<Default Extension=\"png\" ContentType=\"image/png\"/>");
-                addedPng = true;
-            }
-            else if ((ext is "jpg" or "jpeg") && !addedJpeg)
-            {
-                sb.Append("<Default Extension=\"jpeg\" ContentType=\"image/jpeg\"/>");
-                addedJpeg = true;
-            }
-        }
+            imageExts.Add(ext.ToLowerInvariant());
+        foreach (var ext in imageExts.OrderBy(e => e))
+            sb.Append($"<Default Extension=\"{ext}\" ContentType=\"{GetImageContentType(ext)}\"/>");
         sb.Append("</Types>");
         WriteEntry(za, "[Content_Types].xml", sb.ToString());
+    }
+
+    /// <summary>根据图片扩展名返回 OOXML content type</summary>
+    /// <param name="ext">扩展名（不含点）</param>
+    /// <returns>MIME 类型</returns>
+    private static String GetImageContentType(String ext)
+    {
+        return ext switch
+        {
+            "png" => "image/png",
+            "jpg" or "jpeg" => "image/jpeg",
+            "gif" => "image/gif",
+            "bmp" => "image/bmp",
+            "svg" => "image/svg+xml",
+            "tif" or "tiff" => "image/tiff",
+            "webp" => "image/webp",
+            "emf" => "image/x-emf",
+            "wmf" => "image/x-wmf",
+            "ico" => "image/x-icon",
+            _ => $"image/{ext}",
+        };
     }
 
     private void WriteRels(ZipArchive za)

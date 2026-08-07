@@ -91,7 +91,8 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var ns = new XmlNamespaceManager(doc.NameTable);
         ns.AddNamespace("w", W);
 
-        foreach (XmlElement tbl in doc.SelectNodes("//w:tbl", ns)!)
+        // 仅提取顶层表格（排除嵌套在 w:tc 内的表格，避免重复）
+        foreach (XmlElement tbl in doc.SelectNodes("//w:tbl[not(ancestor::w:tc)]", ns)!)
         {
             var rows = new List<String[]>();
             foreach (XmlElement tr in tbl.SelectNodes("w:tr", ns)!)
@@ -1038,90 +1039,73 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     private static RunProperties ParseRunPr(XmlElement rPrEl, XmlNamespaceManager ns, Boolean isHyperlink)
     {
         var p = new RunProperties();
-        // 三态解析：<w:b/> = 开启，<w:b w:val="0"/> = 显式关闭（取消样式继承的粗体）
-        p.Bold = ParseSwitch(rPrEl.SelectSingleNode("w:b", ns) as XmlElement);
-        p.Italic = ParseSwitch(rPrEl.SelectSingleNode("w:i", ns) as XmlElement);
-        p.Strikethrough = ParseSwitch(rPrEl.SelectSingleNode("w:strike", ns) as XmlElement)
-            ?? ParseSwitch(rPrEl.SelectSingleNode("w:dstrike", ns) as XmlElement); // 双删除线同归 Strikethrough
-        p.SmallCaps = ParseSwitch(rPrEl.SelectSingleNode("w:smallCaps", ns) as XmlElement);
-        p.AllCaps = ParseSwitch(rPrEl.SelectSingleNode("w:caps", ns) as XmlElement);
-        p.Hidden = ParseSwitch(rPrEl.SelectSingleNode("w:vanish", ns) as XmlElement);
-        var color = rPrEl.SelectSingleNode("w:color", ns) as XmlElement;
-        if (color != null)
+        // 单次遍历子节点解析全部格式（避免逐属性 XPath 查询，显著提升大文档读取性能）
+        foreach (XmlNode child in rPrEl.ChildNodes)
         {
-            var val = color.GetAttribute("w:val") ?? color.GetAttribute("val");
-            if (val != null && val != "auto") p.ForeColor = val;
-        }
-        var sz = rPrEl.SelectSingleNode("w:sz", ns) as XmlElement;
-        if (sz != null)
-        {
-            var val = sz.GetAttribute("w:val") ?? sz.GetAttribute("val");
-            if (Single.TryParse(val, out var sv)) p.FontSize = sv / 2f;
-        }
-        var rFonts = rPrEl.SelectSingleNode("w:rFonts", ns) as XmlElement;
-        if (rFonts != null)
-        {
-            var ascii = rFonts.GetAttribute("w:ascii") ?? rFonts.GetAttribute("ascii")
-                ?? rFonts.GetAttribute("w:hAnsi") ?? rFonts.GetAttribute("hAnsi");
-            if (ascii != null) p.FontName = ascii;
-            var eastAsia = rFonts.GetAttribute("w:eastAsia") ?? rFonts.GetAttribute("eastAsia");
-            if (eastAsia != null) p.EastAsiaFontName = eastAsia;
-        }
-        // 上标/下标：<w:vertAlign w:val="superscript"/> / subscript / baseline
-        var vertAlign = rPrEl.SelectSingleNode("w:vertAlign", ns) as XmlElement;
-        if (vertAlign != null)
-        {
-            var va = vertAlign.GetAttribute("w:val") ?? vertAlign.GetAttribute("val");
-            if (va == "superscript") { p.Superscript = true; p.Subscript = false; }
-            else if (va == "subscript") { p.Superscript = false; p.Subscript = true; }
-            else if (va == "baseline") { p.Superscript = false; p.Subscript = false; }
-        }
-        // 高亮：<w:highlight w:val="yellow"/>
-        var highlight = rPrEl.SelectSingleNode("w:highlight", ns) as XmlElement;
-        if (highlight != null)
-        {
-            var hv = highlight.GetAttribute("w:val") ?? highlight.GetAttribute("val");
-            if (!String.IsNullOrEmpty(hv) && hv != "none") p.HighlightColor = hv;
-        }
-        // 语言：<w:lang w:val="zh-CN"/>
-        var lang = rPrEl.SelectSingleNode("w:lang", ns) as XmlElement;
-        if (lang != null)
-        {
-            var lv = lang.GetAttribute("w:val") ?? lang.GetAttribute("val");
-            if (!String.IsNullOrEmpty(lv)) p.Language = lv;
-        }
-        // 下划线样式：<w:u w:val="..."/>（val=none/nil 表示显式取消）
-        var uEl = rPrEl.SelectSingleNode("w:u", ns) as XmlElement;
-        if (uEl != null)
-        {
-            var uVal = uEl.GetAttribute("w:val") ?? uEl.GetAttribute("val");
-            if (uVal == null || uVal == "single" || uVal == "1" || uVal == "true")
+            if (child is not XmlElement el) continue;
+            switch (el.LocalName)
             {
-                p.Underline = true;
+                case "b": p.Bold = ParseSwitch(el); break;
+                case "i": p.Italic = ParseSwitch(el); break;
+                case "strike":
+                    p.Strikethrough = ParseSwitch(el);
+                    break;
+                case "dstrike": // 双删除线同归 Strikethrough（首个非空生效）
+                    if (p.Strikethrough == null) p.Strikethrough = ParseSwitch(el);
+                    break;
+                case "smallCaps": p.SmallCaps = ParseSwitch(el); break;
+                case "caps": p.AllCaps = ParseSwitch(el); break;
+                case "vanish": p.Hidden = ParseSwitch(el); break;
+                case "color":
+                    var colorVal = el.GetAttribute("w:val") ?? el.GetAttribute("val");
+                    if (colorVal != null && colorVal != "auto") p.ForeColor = colorVal;
+                    break;
+                case "sz":
+                    var szVal = el.GetAttribute("w:val") ?? el.GetAttribute("val");
+                    if (Single.TryParse(szVal, out var sv)) p.FontSize = sv / 2f;
+                    break;
+                case "rFonts":
+                    var ascii = el.GetAttribute("w:ascii") ?? el.GetAttribute("ascii")
+                        ?? el.GetAttribute("w:hAnsi") ?? el.GetAttribute("hAnsi");
+                    if (ascii != null) p.FontName = ascii;
+                    var eastAsia = el.GetAttribute("w:eastAsia") ?? el.GetAttribute("eastAsia");
+                    if (eastAsia != null) p.EastAsiaFontName = eastAsia;
+                    break;
+                case "vertAlign": // 上标/下标/baseline
+                    var va = el.GetAttribute("w:val") ?? el.GetAttribute("val");
+                    if (va == "superscript") { p.Superscript = true; p.Subscript = false; }
+                    else if (va == "subscript") { p.Superscript = false; p.Subscript = true; }
+                    else if (va == "baseline") { p.Superscript = false; p.Subscript = false; }
+                    break;
+                case "highlight":
+                    var hv = el.GetAttribute("w:val") ?? el.GetAttribute("val");
+                    if (!String.IsNullOrEmpty(hv) && hv != "none") p.HighlightColor = hv;
+                    break;
+                case "lang":
+                    var lv = el.GetAttribute("w:val") ?? el.GetAttribute("val");
+                    if (!String.IsNullOrEmpty(lv)) p.Language = lv;
+                    break;
+                case "u": // 下划线样式（val=none/nil 表示显式取消）
+                    var uVal = el.GetAttribute("w:val") ?? el.GetAttribute("val");
+                    if (uVal == null || uVal == "single" || uVal == "1" || uVal == "true")
+                        p.Underline = true;
+                    else if (uVal == "none" || uVal == "nil" || uVal == "0" || uVal == "false")
+                        p.Underline = false;
+                    else
+                    {
+                        p.Underline = true;
+                        p.UnderlineStyle = uVal;
+                    }
+                    break;
+                case "spacing": // 字符间距
+                    var spVal = el.GetAttribute("w:val") ?? el.GetAttribute("val");
+                    if (Single.TryParse(spVal, out var spv)) p.CharacterSpacing = spv;
+                    break;
+                case "w": // 字符缩放 <w:w w:val="..."/>
+                    var wVal = el.GetAttribute("w:val") ?? el.GetAttribute("val");
+                    if (Int32.TryParse(wVal, out var wv)) p.CharacterScaling = wv;
+                    break;
             }
-            else if (uVal == "none" || uVal == "nil" || uVal == "0" || uVal == "false")
-            {
-                p.Underline = false;
-            }
-            else
-            {
-                p.Underline = true;
-                p.UnderlineStyle = uVal;
-            }
-        }
-        // 字符间距：<w:spacing w:val="..."/>
-        var spEl = rPrEl.SelectSingleNode("w:spacing", ns) as XmlElement;
-        if (spEl != null)
-        {
-            var spVal = spEl.GetAttribute("w:val") ?? spEl.GetAttribute("val");
-            if (Single.TryParse(spVal, out var sv)) p.CharacterSpacing = sv;
-        }
-        // 字符缩放：<w:w w:val="..."/>
-        var wScaleEl = rPrEl.SelectSingleNode("w:w", ns) as XmlElement;
-        if (wScaleEl != null)
-        {
-            var wVal = wScaleEl.GetAttribute("w:val") ?? wScaleEl.GetAttribute("val");
-            if (Int32.TryParse(wVal, out var wv)) p.CharacterScaling = wv;
         }
         if (isHyperlink && p.ForeColor == null)
         {
