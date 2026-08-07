@@ -381,6 +381,68 @@ public class WordCrossCompatibilityTests
         }
     }
 
+    [Fact, DisplayName("F2_你写我读_读取合并单元格表格(gridSpan/vMerge)")]
+    public void F2_We_Read_MergedCells()
+    {
+        var path = TempFile("docx");
+        try
+        {
+            // 构造 Word/NPOI 都会写出的规范合并单元格 XML：gridSpan 横向合并 + vMerge 纵向合并
+            const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+            var bodyInner = "<w:tbl><w:tblPr><w:tblStyle w:val=\"TableGrid\"/><w:tblW w:w=\"0\" w:type=\"auto\"/></w:tblPr>"
+                + "<w:tblGrid><w:gridCol w:w=\"2500\"/><w:gridCol w:w=\"2500\"/><w:gridCol w:w=\"2500\"/></w:tblGrid>"
+                + "<w:tr>"
+                + "<w:tc><w:tcPr><w:gridSpan w:val=\"2\"/></w:tcPr><w:p><w:r><w:t>横向合并</w:t></w:r></w:p></w:tc>"
+                + "<w:tc><w:tcPr><w:vMerge w:val=\"restart\"/></w:tcPr><w:p><w:r><w:t>V1</w:t></w:r></w:p></w:tc>"
+                + "</w:tr>"
+                + "<w:tr>"
+                + "<w:tc><w:p><w:r><w:t>R1C1</w:t></w:r></w:p></w:tc>"
+                + "<w:tc><w:p><w:r><w:t>R1C2</w:t></w:r></w:p></w:tc>"
+                + "<w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p><w:r><w:t>续</w:t></w:r></w:p></w:tc>"
+                + "</w:tr>"
+                + "</w:tbl>";
+            var documentXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + $"<w:document xmlns:w=\"{W}\"><w:body>{bodyInner}</w:body></w:document>";
+            using var ms = new MemoryStream();
+            using (var za = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+            {
+                void WriteEntry(String name, String content)
+                {
+                    using var sw = new System.IO.StreamWriter(za.CreateEntry(name).Open(), new System.Text.UTF8Encoding(false));
+                    sw.Write(content);
+                }
+                WriteEntry("[Content_Types].xml",
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                    + "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
+                    + "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
+                    + "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
+                    + "<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/></Types>");
+                WriteEntry("_rels/.rels",
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                    + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                    + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/></Relationships>");
+                WriteEntry("word/document.xml", documentXml);
+                WriteEntry("word/_rels/document.xml.rels",
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                    + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"/>");
+            }
+            File.WriteAllBytes(path, ms.ToArray());
+
+            // 我们读取并识别合并
+            using var reader = new WordReader(path);
+            var model = reader.ReadDocument();
+            var t = Assert.Single(model.Elements.Where(e => e.Type == ElementType.Table)).Table!;
+            Assert.Equal(2, t.Rows.Count);
+
+            // 横向合并 gridSpan → ColSpan
+            Assert.True(t.Rows[0].Cells[0].ColSpan >= 2, "gridSpan 应被读取为 ColSpan");
+            // 纵向合并 vMerge restart/continue → RowSpan -1/0
+            Assert.Equal(-1, t.Rows[0].Cells[1].RowSpan);
+            Assert.Equal(0, t.Rows[1].Cells[2].RowSpan);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
     #endregion
 
     #region Fixtures 真实文件回归（F2 真实 Word 文件 + F3 输出校验）
