@@ -2013,7 +2013,8 @@ internal sealed class MarkdownParser
     }
 
     /// <summary>强调分隔符信息（CommonMark 分隔符栈元素）</summary>
-    private sealed class DelimInfo
+    /// <summary>分隔符信息（MD23：class→struct，省强调分隔符对象分配）</summary>
+    private struct DelimInfo
     {
         /// <summary>分隔符字符（* 或 _）</summary>
         public Char Ch;
@@ -2031,7 +2032,7 @@ internal sealed class MarkdownParser
         public Boolean CanClose;
 
         /// <summary>对应令牌（Text 节点）</summary>
-        public MarkdownInline Token = null!;
+        public MarkdownInline Token;
 
         /// <summary>令牌在 tokens 列表中的当前索引（避免 IndexOf 重复查找）</summary>
         public Int32 Index;
@@ -2102,24 +2103,26 @@ internal sealed class MarkdownParser
                 opener = d;
                 break;
             }
-            if (opener == null)
+            if (!opener.HasValue)
             {
                 ci++;
                 continue;
             }
+            // MD23：struct 副本，所有修改最后统一写回 delims[oi]/delims[ci]
+            var o = opener.Value;
 
             // 使用字符数：两者皆为 3 的倍数用 2，长度和为 3 的倍数用 1，其余用 2
-            var use = (opener.Original % 3 == 0 && closer.Original % 3 == 0)
+            var use = (o.Original % 3 == 0 && closer.Original % 3 == 0)
                 ? 2
-                : (opener.Original + closer.Original) % 3 == 0 ? 1 : 2;
-            use = Math.Min(use, Math.Min(closer.Len, opener.Len));
+                : (o.Original + closer.Original) % 3 == 0 ? 1 : 2;
+            use = Math.Min(use, Math.Min(closer.Len, o.Len));
             if (use <= 0)
             {
                 ci++;
                 continue;
             }
 
-            var oi2 = opener.Index;
+            var oi2 = o.Index;
             var ci2 = closer.Index;
             if (oi2 < 0 || ci2 < 0 || oi2 >= ci2)
             {
@@ -2137,14 +2140,14 @@ internal sealed class MarkdownParser
                 : MarkdownInline.CreateEmphasis(children);
 
             // 重建 [oi2..ci2] 区间：剩余 opener 字符 + 强调节点 + 剩余 closer 字符
-            var openerLeftover = opener.Len - use;
+            var openerLeftover = o.Len - use;
             var closerLeftover = closer.Len - use;
             var newItems = new List<MarkdownInline>();
             if (openerLeftover > 0)
             {
-                var t = MarkdownInline.CreateText(new String(opener.Ch, openerLeftover));
-                opener.Token = t;
-                opener.Index = oi2;
+                var t = MarkdownInline.CreateText(new String(o.Ch, openerLeftover));
+                o.Token = t;
+                o.Index = oi2;
                 newItems.Add(t);
             }
             newItems.Add(emph);
@@ -2157,7 +2160,12 @@ internal sealed class MarkdownParser
             }
 
             // 失活 opener 与 closer 之间的分隔符（进入强调内部，CommonMark 规范不可再参与配对）
-            for (var k = oi + 1; k < ci; k++) delims[k].Len = 0;
+            for (var k = oi + 1; k < ci; k++)
+            {
+                var dk = delims[k];
+                dk.Len = 0;
+                delims[k] = dk;
+            }
 
             // 更新 tokens 并维护索引（oi2 之后的分隔符整体平移 delta）
             var removedCount = ci2 - oi2 + 1;
@@ -2166,11 +2174,15 @@ internal sealed class MarkdownParser
             tokens.InsertRange(oi2, newItems);
             for (var k = ci + 1; k < delims.Count; k++)
             {
-                delims[k].Index += delta;
+                var dk = delims[k];
+                dk.Index += delta;
+                delims[k] = dk;
             }
 
-            opener.Len = openerLeftover;
+            o.Len = openerLeftover;
             closer.Len = closerLeftover;
+            delims[oi] = o;
+            delims[ci] = closer;
 
             // closer 仍有剩余 → 回退一格继续匹配同一 closer（如 ***foo*** 先粗后斜）
             if (closer.Len > 0) ci--;
