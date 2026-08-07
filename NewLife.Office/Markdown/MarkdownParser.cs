@@ -1422,19 +1422,37 @@ internal sealed class MarkdownParser
     /// <returns>纯文本时为 true</returns>
     private static Boolean IsPlainText(String text)
     {
-        foreach (var c in text)
+        for (var i = 0; i < text.Length; i++)
         {
-            // 排除行内标记触发字符：转义/实体/代码/图片/链接/强调/删除线/自动链接(< >)/数学/emoji/email/裸URL(h f w)
+            var c = text[i];
+            // 排除行内标记触发字符：转义/实体/代码/图片/链接/强调/删除线/自动链接(< >)/数学/emoji/email/裸URL
             switch (c)
             {
                 case '\\': case '&': case '`': case '!': case '[': case ']':
                 case '*': case '_': case '~': case '<': case '>': case '$':
                 case ':': case '@': case '\n': case '\r':
-                case 'h': case 'f': case 'w':
                     return false;
+                case 'h': case 'f': case 'w':
+                    // 裸 URL 前缀（MD19c）：仅当构成 URL 前缀（https:// http:// ftp:// www.）才排除，
+                    // 避免含 h/f/w 的纯英文段落（如 "The quick brown fox..."）被误排除快速路径
+                    if (IsUrlPrefixAt(text, i)) return false;
+                    break;
             }
         }
         return true;
+    }
+
+    /// <summary>判断位置是否为裸 URL 前缀（与 TryParseBareUrl 的前缀集一致）</summary>
+    /// <param name="text">文本</param>
+    /// <param name="i">当前位置</param>
+    /// <returns>构成 URL 前缀时为 true</returns>
+    private static Boolean IsUrlPrefixAt(String text, Int32 i)
+    {
+        var c = text[i];
+        if (c == 'w') return i + 4 <= text.Length && text.AsSpan(i, 4).Equals("www.".AsSpan(), StringComparison.Ordinal);
+        if (c == 'f') return i + 6 <= text.Length && text.AsSpan(i, 6).Equals("ftp://".AsSpan(), StringComparison.OrdinalIgnoreCase);
+        if (i + 7 <= text.Length && text.AsSpan(i, 7).Equals("https://".AsSpan(), StringComparison.OrdinalIgnoreCase)) return true;
+        return i + 7 <= text.Length && text.AsSpan(i, 7).Equals("http://".AsSpan(), StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>解析行内 Markdown 内容（核心递归实现）</summary>
