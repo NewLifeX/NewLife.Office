@@ -1097,8 +1097,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         }
 
         // 文本框（W22）：解析 w:drawing 内 wps:txbx/w:txbxContent 的段落到 TextBoxes，
-        // FindText/ReplaceText 可覆盖文本框文本；递归支持文本框嵌套
-        foreach (XmlElement txbxContent in pEl.SelectNodes(".//w:txbxContent", ns)!)
+        // FindText/ReplaceText 可覆盖文本框文本；递归支持文本框嵌套。
+        // 只取最外层 txbxContent，内层由 ParsePara 递归解析，避免嵌套文本框被双重解析
+        foreach (XmlElement txbxContent in pEl.SelectNodes(".//w:txbxContent[not(ancestor::w:txbxContent)]", ns)!)
         {
             foreach (XmlNode txbxChild in txbxContent.ChildNodes)
             {

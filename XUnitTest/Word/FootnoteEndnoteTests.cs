@@ -302,7 +302,7 @@ public class FootnoteEndnoteTests
         finally { if (File.Exists(outPath)) File.Delete(outPath); }
     }
 
-    [Fact, DisplayName("W22_脚注_模型写回保留脚注（读入→写出）")]
+    [Fact, DisplayName("W22_脚注_模型写回保留脚注（读入→写出，无重复 ZIP 条目）")]
     public void Writer_ModelWriteBack_PreservesNotes()
     {
         var bytes = BuildDocxWithNotes();
@@ -319,6 +319,17 @@ public class FootnoteEndnoteTests
             using (var writer = new WordWriter())
                 writer.Save(outPath, doc);
 
+            // 1. ZIP 部件唯一性：脚注/尾注/Content_Types/rels 不得重复条目（回归 #1）
+            using (var za = ZipFile.OpenRead(outPath))
+            {
+                var names = za.Entries.Select(e => e.FullName).ToList();
+                Assert.Single(names.Where(n => n == "word/footnotes.xml"));
+                Assert.Single(names.Where(n => n == "word/endnotes.xml"));
+                Assert.Single(names.Where(n => n == "[Content_Types].xml"));
+                Assert.Single(names.Where(n => n == "word/_rels/document.xml.rels"));
+            }
+
+            // 2. 重读：脚注/尾注模型完整
             using (var reader = new WordReader(outPath))
             {
                 var re = reader.ReadDocument();
@@ -327,6 +338,12 @@ public class FootnoteEndnoteTests
                 Assert.Single(re.Endnotes);
                 Assert.Equal("这是尾注内容", re.Endnotes[0].Text);
             }
+
+            // 3. OpenXmlValidator 校验
+            using var doc2 = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(outPath, false);
+            var validator = new DocumentFormat.OpenXml.Validation.OpenXmlValidator(DocumentFormat.OpenXml.FileFormatVersions.Office2019);
+            var errors = validator.Validate(doc2).ToList();
+            Assert.Empty(errors);
         }
         finally { if (File.Exists(outPath)) File.Delete(outPath); }
     }

@@ -121,6 +121,26 @@ public class ConverterEnhanceTests
         Assert.Contains("<img", html);
     }
 
+    [Fact(DisplayName = "HTML—EmbedImages 内嵌图片 data URI（回归#2）")]
+    public void Html_EmbedImages()
+    {
+        var body = "<w:p><w:r><w:drawing><wp:inline><wp:extent cx=\"3600000\" cy=\"2700000\"/>"
+            + "<a:graphic><a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">"
+            + "<pic:pic><pic:blipFill><a:blip r:embed=\"rIdImg\"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>"
+            + "<pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"3600000\" cy=\"2700000\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr>"
+            + "</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>";
+        var rels = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+            + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+            + "<Relationship Id=\"rIdImg\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/image1.png\"/>"
+            + "</Relationships>";
+        var png = new Byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        // EmbedImages=true：以 rId 为 key 查找媒体（修复前以文件名查找导致内嵌失效）
+        var html = new WordHtmlConverter { FullPage = false, EmbedImages = true }
+            .Convert(new MemoryStream(BuildDocx(Doc(body), null, rels, "image1.png", png)));
+        Assert.Contains("data:image/png;base64,", html);
+        Assert.Contains("<img", html);
+    }
+
     [Fact(DisplayName = "HTML—合并单元格 colspan/rowspan")]
     public void Html_MergedCells()
     {

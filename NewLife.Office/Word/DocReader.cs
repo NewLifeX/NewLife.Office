@@ -199,8 +199,9 @@ public sealed class DocReader : IDisposable, ITextExtractable, IMarkdownExtracta
             yield break;
         }
 
-        // 构建全文（保留段落分隔符）并记录起始 CP
-        var (text, startCp) = BuildTextWithCp();
+        // 构建全文（记录每个字符的真实 CP；域控制符占位不产出，文本索引与 CP 偏移不一致）
+        // 段落起始 CP 用 cps 映射，避免含域/表格的文档段落格式错配
+        var (text, cps) = BuildTextWithCps();
         if (text.Length == 0) yield break;
 
         // 按段落符（0x0D 段落 / 0x0C 分页 / 0x0B 分栏）切分
@@ -211,10 +212,11 @@ public sealed class DocReader : IDisposable, ITextExtractable, IMarkdownExtracta
             if (!isSep) continue;
 
             var len = i - paraStart;
-            var paraText = text.Substring(paraStart, len).TrimEnd('\r', '\n', '\f', '\v');
+            // 去掉表格单元格结束符 0x07（保留 CP 定位，但不进入文本输出）
+            var paraText = text.Substring(paraStart, len).TrimEnd('\r', '\n', '\f', '\v').Replace("\x07", "");
             if (paraText.Length > 0)
             {
-                var cp = startCp + paraStart;
+                var cp = paraStart < cps.Length ? cps[paraStart] : paraStart;
                 yield return BuildDocParagraph(paraText, cp, chpxList!, papxList!);
             }
             paraStart = i + 1;
@@ -494,125 +496,9 @@ public sealed class DocReader : IDisposable, ITextExtractable, IMarkdownExtracta
     private static Int32 ReadInt32(Byte[] buf, Int32 i) =>
         buf[i] | (buf[i + 1] << 8) | (buf[i + 2] << 16) | (buf[i + 3] << 24);
 
-    /// <summary>构建全文（保留段落分隔符 \r）与起始 CP</summary>
-    private (String Text, Int32 StartCp) BuildTextWithCp()
-    {
-        var buf = _wordDoc;
-        if (buf.Length < 300) return (String.Empty, 0);
 
-        // 与 BuildRawText 相同的方式定位 CLX/PlcPcd
-        var reader = new SpanReader(buf, 32, buf.Length - 32);
-        var csw = (Int32)reader.ReadUInt16();
-        if (csw < 1) csw = 14;
-        var cslwOffset = 34 + csw * 2;
-        if (cslwOffset + 2 > buf.Length) return (String.Empty, 0);
-        reader = new SpanReader(buf, cslwOffset, buf.Length - cslwOffset);
-        var cslw = (Int32)reader.ReadUInt16();
-        if (cslw < 1) cslw = 22;
-        var fcLcbStart = cslwOffset + 2 + cslw * 4 + 2;
-        var fcClxPos = fcLcbStart + 13 * 8;
-        if (fcClxPos + 8 > buf.Length) return (String.Empty, 0);
-        reader = new SpanReader(buf, fcClxPos, 8);
-        var fcClx = (Int32)reader.ReadUInt32();
-        var lcbClx = (Int32)reader.ReadUInt32();
-        if (fcClx < 0 || lcbClx <= 0 || (Int64)fcClx + lcbClx > buf.Length) return (String.Empty, 0);
 
-        // 解析 CLX 定位 PlcPcd
-        var clxReader = new SpanReader(buf, fcClx, lcbClx);
-        var lcbPlcPcd = 0;
-        var foundPcdt = false;
-        while (clxReader.Position < clxReader.Capacity)
-        {
-            var clxt = clxReader.ReadByte();
-            if (clxt == 0x01)
-            {
-                if (clxReader.Position + 2 > clxReader.Capacity) break;
-                var cbGrpprl = (Int16)clxReader.ReadUInt16();
-                clxReader.Advance(cbGrpprl);
-            }
-            else if (clxt == 0x02)
-            {
-                if (clxReader.Position + 4 > clxReader.Capacity) return (String.Empty, 0);
-                lcbPlcPcd = (Int32)clxReader.ReadUInt32();
-                foundPcdt = true;
-                break;
-            }
-            else
-            {
-                return (String.Empty, 0);
-            }
-        }
-        if (!foundPcdt) return (String.Empty, 0);
 
-        var plcPcdStart = fcClx + (Int32)clxReader.Position;
-        var plcPcdEnd = plcPcdStart + lcbPlcPcd;
-        if (plcPcdEnd > fcClx + lcbClx) plcPcdEnd = fcClx + lcbClx;
-        var pieceCount = (lcbPlcPcd - 4) / 12;
-        if (pieceCount <= 0) return (String.Empty, 0);
-
-        var cpReader = new SpanReader(buf, plcPcdStart, (pieceCount + 1) * 4);
-        var pcdReader = new SpanReader(buf, plcPcdStart + (pieceCount + 1) * 4, pieceCount * 8);
-
-        var sb = Pool.StringBuilder.Get();
-        var cpStart = (Int32)cpReader.ReadUInt32();
-
-        for (var i = 0; i < pieceCount; i++)
-        {
-            var cpEnd = (Int32)cpReader.ReadUInt32();
-            var charCount = cpEnd - cpStart;
-            pcdReader.Advance(2);
-            var fcCompressed = (Int32)pcdReader.ReadUInt32();
-            pcdReader.Advance(2);
-            cpStart = cpEnd;
-            if (charCount <= 0) continue;
-
-            var fCompressed = ((fcCompressed >> 30) & 1) == 1;
-            var fc = fcCompressed & 0x3FFFFFFF;
-
-            if (fCompressed)
-            {
-                var byteOffset = fc / 2;
-                if (byteOffset < 0 || byteOffset + charCount > buf.Length) continue;
-                for (var c = 0; c < charCount; c++)
-                    AppendDocCharKeepPara(sb, (Char)buf[byteOffset + c]);
-            }
-            else
-            {
-                var byteOffset = fc;
-                if (byteOffset < 0 || byteOffset + charCount * 2 > buf.Length) continue;
-                for (var c = 0; c < charCount; c++)
-                {
-                    var ch = (Char)(buf[byteOffset + c * 2] | (buf[byteOffset + c * 2 + 1] << 8));
-                    AppendDocCharKeepPara(sb, ch);
-                }
-            }
-        }
-
-        return (sb.Return(true), 0);
-    }
-
-    /// <summary>追加文档字符，保留段落分隔符（\r 原样保留），跳过域代码控制符</summary>
-    private static void AppendDocCharKeepPara(StringBuilder sb, Char ch)
-    {
-        switch (ch)
-        {
-            case '\r':   // 段落结束符
-            case '\f':   // 分页符
-            case '\v':   // 分栏符
-                sb.Append(ch);
-                break;
-            case '\x07': // 表格单元格结束符
-                break;
-            case '\x13': // 域开始
-            case '\x14': // 域分隔
-            case '\x15': // 域结束
-                break;
-            default:
-                if (ch >= ' ' || ch == '\t')
-                    sb.Append(ch);
-                break;
-        }
-    }
 
     #endregion
 

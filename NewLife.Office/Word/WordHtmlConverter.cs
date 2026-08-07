@@ -427,8 +427,11 @@ public sealed class WordHtmlConverter
                 sb.Append($"<{cellTag}{attrs}>");
                 foreach (XmlNode pNode in cellEl.ChildNodes)
                 {
-                    if (pNode is XmlElement pEl && pEl.LocalName == "p")
+                    if (pNode is not XmlElement pEl) continue;
+                    if (pEl.LocalName == "p")
                         RenderParagraph(sb, pEl, rels, images, ns);
+                    else if (pEl.LocalName == "tbl")
+                        RenderTable(sb, pEl, rels, images, ns); // 嵌套表格递归渲染
                 }
                 sb.AppendLine($"</{cellTag}>");
             }
@@ -557,11 +560,13 @@ public sealed class WordHtmlConverter
     }
 
     /// <summary>从 word/media/* 加载图片，返回 partName → base64 Data URI 映射</summary>
+    /// <summary>加载媒体图片并建立关系ID → Data URI 映射（EmbedImages 内嵌用）</summary>
     /// <param name="zip">已打开的 docx ZIP 归档</param>
-    /// <returns>图片名称到 Data URI 的字典</returns>
+    /// <returns>关系ID 到 Data URI 的字典（key 为 document.xml.rels 中的 rId）</returns>
     private static Dictionary<String, String> LoadImages(ZipArchive zip)
     {
-        var result = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+        // 1. 媒体文件名 → Data URI
+        var media = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
         foreach (var entry in zip.Entries)
         {
             if (!entry.FullName.StartsWith("word/media/", StringComparison.OrdinalIgnoreCase))
@@ -580,7 +585,29 @@ public sealed class WordHtmlConverter
             using var es = entry.Open();
             es.CopyTo(ms);
             var b64 = System.Convert.ToBase64String(ms.ToArray());
-            result[entry.Name] = $"data:{mime};base64,{b64}";
+            media[entry.Name] = $"data:{mime};base64,{b64}";
+        }
+        if (media.Count == 0) return [];
+
+        // 2. 从 document.xml.rels 建立 rId → 目标文件名 → Data URI
+        var result = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase);
+        var relsEntry = zip.GetEntry("word/_rels/document.xml.rels");
+        if (relsEntry == null) return result;
+        var relsDoc = new XmlDocument();
+        using (var s = relsEntry.Open())
+            relsDoc.Load(s);
+        var ns = new XmlNamespaceManager(relsDoc.NameTable);
+        ns.AddNamespace("rel", "http://schemas.openxmlformats.org/package/2006/relationships");
+        foreach (XmlElement rel in relsDoc.SelectNodes("//rel:Relationship", ns)!)
+        {
+            var type = rel.GetAttribute("Type");
+            if (type == null || !type.EndsWith("/image", StringComparison.Ordinal)) continue;
+            var id = rel.GetAttribute("Id");
+            var target = rel.GetAttribute("Target");
+            if (String.IsNullOrEmpty(id) || String.IsNullOrEmpty(target)) continue;
+            var fileName = Path.GetFileName(target.Replace('\\', '/'));
+            if (media.TryGetValue(fileName, out var uri))
+                result[id] = uri;
         }
         return result;
     }

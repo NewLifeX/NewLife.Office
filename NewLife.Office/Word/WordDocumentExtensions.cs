@@ -25,6 +25,11 @@ public readonly record struct TextMatch(Paragraph Paragraph, Int32 StartOffset, 
 /// // 替换（保留原格式，忽略大小写）
 /// var count = doc.ReplaceText("旧公司名", "新公司名", ignoreCase: true);
 ///
+/// // 重要：真实文档读入后 DocumentXml/RawXml 会兜底输出原 XML，覆盖模型修改。
+/// // 保存前必须关闭两者，否则替换结果被静默丢弃。
+/// doc.DocumentXml = null;   // 关闭 document.xml 原样透传
+/// doc.ClearRawXml();        // 关闭元素级 RawXml 兜底
+///
 /// using var writer = new WordWriter();
 /// writer.Save("output.docx", doc);
 /// </code>
@@ -419,12 +424,20 @@ public static class WordDocumentExtensions
             doc.OtherParts[partPath] = Encoding.UTF8.GetBytes(xml);
     }
 
-    /// <summary>提取 XML 片段内全部 w:t 文本（解码实体）</summary>
+    /// <summary>提取 XML 片段内全部文本（w:t 文本 + w:tab→\t + w:br/w:cr→\n，与 Run.Text 语义一致）</summary>
     private static String ExtractWtText(String xml)
     {
         var sb = new StringBuilder();
-        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(xml, "<w:t[^>]*>(.*?)</w:t>"))
-            sb.Append(DecodeXml(m.Groups[1].Value));
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(
+            xml, "<w:t[^>]*>(?<t>.*?)</w:t>|<w:tab[^>]*/>|<w:br[^>]*/>|<w:cr[^>]*/>"))
+        {
+            if (m.Groups["t"].Success)
+                sb.Append(DecodeXml(m.Groups["t"].Value));
+            else if (m.Value.StartsWith("<w:tab", StringComparison.Ordinal))
+                sb.Append('\t');
+            else
+                sb.Append('\n'); // w:br / w:cr
+        }
         return sb.ToString();
     }
 

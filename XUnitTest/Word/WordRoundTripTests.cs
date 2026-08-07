@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
 using NewLife.Office;
@@ -842,5 +843,42 @@ public class WordRoundTripTests : IntegrationTestBase
 
         // 完整内容对比
         AssertDocumentsEqual(sourceDoc, outputDoc, "hdr_ftr");
+    }
+
+    /// <summary>生成 1x1 红色 PNG（图片去重回归测试用）</summary>
+    private static Byte[] CreatePng()
+    {
+        // 1x1 红色不透明 PNG
+        var b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+        return Convert.FromBase64String(b64);
+    }
+
+    [Fact, DisplayName("Word_相同图片字节重复插入_保存无重复ZIP条目（回归#8）")]
+    public void Word_DuplicateImageBytes_NoDuplicateZipEntries()
+    {
+        var path = Path.Combine(OutputDir, $"dup_img_{Guid.NewGuid():N}.docx");
+        try
+        {
+            var png = CreatePng();
+            using (var w = new WordWriter())
+            {
+                w.InsertImage(png, "png", 5, 3);
+                w.AppendParagraph("分隔段落");
+                w.InsertImage(png, "png", 5, 3); // 相同字节再次插入
+                w.Save(path);
+            }
+
+            using var za = ZipFile.OpenRead(path);
+            var media = za.Entries.Where(e => e.FullName.StartsWith("word/media/", StringComparison.OrdinalIgnoreCase))
+                .Select(e => e.FullName).ToList();
+            Assert.NotEmpty(media);
+            // 每个媒体文件名必须唯一（修复前相同字节会重复 CreateEntry 同一文件名）
+            Assert.Equal(media.Count, media.Distinct().Count());
+            // 重读验证两张图片都存在
+            using var reader = new WordReader(path);
+            var doc = reader.ReadDocument();
+            Assert.Equal(2, doc.Images.Count);
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
     }
 }

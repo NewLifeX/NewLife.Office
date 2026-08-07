@@ -4,13 +4,13 @@ using NewLife.Office.Ole2;
 
 namespace NewLife.Office.Word;
 
-/// <summary>Word 文档加密器，实现 ECMA-376 Agile Encryption（AES + SHA-512）</summary>
+/// <summary>Word 文档加密器（AES-128-CBC + OLE2 CFB 封装）</summary>
 /// <remarks>
-/// 符合 MS-OFFCRYPTO §2.3.4 Agile Encryption 标准：
-/// 1. 使用 SHA-512 派生 128 位 AES 密钥（PBKDF2 等价，100000 次迭代）
-/// 2. AES-128-CBC 加密整个 ZIP 包
-/// 3. 生成 EncryptionInfo 二进制流（VersionInfo + DataIntegrity）
-/// 4. 封装为 OLE2 CFB 容器（EncryptionInfo + EncryptedPackage）
+/// ⚠️ 注意：本实现为库内自洽的简化加密，密钥派生采用 SHA-512 链式迭代，
+/// 并非 ECMA-376 标准的 PBKDF2-HMAC-SHA512，生成的加密文件仅本库可解密，
+/// Microsoft Word / WPS 无法直接打开。若需与 Office 互操作，请改用标准加密工具。
+/// 流程：SHA-512 派生 128 位 AES 密钥 → AES-128-CBC 加密 ZIP 包 →
+/// 生成 EncryptionInfo 二进制流 → 封装为 OLE2 CFB 容器（EncryptionInfo + EncryptedPackage）。
 /// </remarks>
 public static class WordEncryptor
 {
@@ -127,7 +127,7 @@ public static class WordEncryptor
     #endregion
 
     #region 密钥派生
-    /// <summary>SHA-512 迭代派生加密密钥（等价于 PBKDF2-HMAC-SHA512）</summary>
+    /// <summary>SHA-512 链式迭代派生加密密钥（非标准，仅本库自洽）</summary>
     internal static Byte[] DeriveKey(String password, Byte[] salt, Int32 keyBytes)
     {
         var passwordBytes = Encoding.Unicode.GetBytes(password);
@@ -164,25 +164,6 @@ public static class WordEncryptor
         return key;
     }
 
-    /// <summary>派生 HMAC 密钥</summary>
-    internal static Byte[] DeriveHmacKey(String password, Byte[] salt, Byte[] encKey, Int32 keyBytes)
-    {
-        var blockKey = new Byte[] { 0x3c, 0x00, 0x00, 0x00 };
-
-        var input = new Byte[HashSize + blockKey.Length];
-        Array.Copy(encKey, 0, input, 0, encKey.Length);
-        Array.Copy(blockKey, 0, input, HashSize, blockKey.Length);
-
-        Byte[] hash;
-        using (var sha = SHA512.Create())
-        {
-            hash = sha.ComputeHash(input);
-        }
-
-        var hmacKey = new Byte[keyBytes];
-        Array.Copy(hash, 0, hmacKey, 0, keyBytes);
-        return hmacKey;
-    }
     #endregion
 
     #region AES 加解密
@@ -310,35 +291,6 @@ public static class WordEncryptor
 
         var saltBase64 = xml[saltStart..saltEnd];
         return Convert.FromBase64String(saltBase64);
-    }
-
-    /// <summary>从 salt 派生 block zero 密钥（用于加密 HMAC 密钥）</summary>
-    private static Byte[] DeriveBlockZero(Byte[] salt)
-    {
-        // 简化实现：用 salt 做 key
-        var key = new Byte[KeyBits / 8];
-        Array.Copy(salt, 0, key, 0, Math.Min(salt.Length, key.Length));
-        return key;
-    }
-
-    private static Byte[] DecryptHmacKey(Byte[] encKey, Byte[] encryptedHmacKey, Byte[] salt)
-    {
-        var block0Key = DeriveBlockZero(salt);
-        return AesDecrypt(encryptedHmacKey, block0Key, new Byte[16]);
-    }
-
-    private static Byte[] DecryptHmacValue(Byte[] encKey, Byte[] encryptedHmacValue, Byte[] salt)
-    {
-        var block0Key = DeriveBlockZero(salt);
-        return AesDecrypt(encryptedHmacValue, block0Key, new Byte[16]);
-    }
-    #endregion
-
-    #region HMAC
-    private static Byte[] ComputeHmac(Byte[] key, Byte[] data)
-    {
-        using var hmac = new HMACSHA512(key);
-        return hmac.ComputeHash(data);
     }
     #endregion
 

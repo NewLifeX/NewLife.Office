@@ -365,7 +365,6 @@ public class WordTemplate
                 "$1" + escapedValue + "$3");
 
             // 重建完整域块
-            var idx = match.Value.IndexOf("<w:r", match.Groups[2].Index - match.Index - 10);
             var prefix = match.Value[..(match.Groups[2].Index - match.Index)];
             var suffix = match.Value[(match.Groups[2].Index - match.Index + match.Groups[2].Length)..];
             return prefix + newDisplayBlock + suffix;

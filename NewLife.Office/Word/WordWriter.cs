@@ -192,6 +192,7 @@ public class WordWriter : IDisposable
         _elements.Add(new Element { Type = ElementType.Paragraph, RawXml = xml });
         return formula;
     }
+    /// <summary>追加邮件合并域 MERGEFIELD 段落</summary>
     /// <param name="fieldName">合并域名（如 "FirstName"、"Company"）</param>
     /// <remarks>
     /// 生成标准 MERGEFIELD 域代码，Word 打开后可执行邮件合并填充数据源。
@@ -589,11 +590,13 @@ public class WordWriter : IDisposable
             WriteFooterXml(za);
         if (DocumentProperties.Title != null || DocumentProperties.Author != null)
             WriteCoreProperties(za);
-            WriteCustomProperties(za);
+        WriteCustomProperties(za);
         WriteOtherParts(za);
-        foreach (var (_, ext, data) in _imageRels)
+        // 图片媒体写入：按 relId 去重，避免相同字节重复插入时重复 CreateEntry 造成损坏 zip
+        var writtenImages = new HashSet<String>();
+        foreach (var (relId, ext, data) in _imageRels)
         {
-            var relId = _imageRels.First(r => r.Data == data).RelId;
+            if (!writtenImages.Add(relId)) continue;
             using var entry = za.CreateEntry($"word/media/{relId}.{ext}").Open();
             entry.Write(data, 0, data.Length);
         }
@@ -653,10 +656,11 @@ public class WordWriter : IDisposable
         if (document.PageSettings.FooterText == null && document.FooterText != null)
             PageSettings.FooterText = document.FooterText;
 
-        // 用户显式重建（DocumentXml=null）且设置了富文本页眉页脚时：
-        // 从透传中移除旧 header/footer 部件与其引用，改由 Writer 生成新部件并合并更新
-        // [Content_Types].xml 与 word/_rels/document.xml.rels 引用
-        if (document.DocumentXml == null && (_headers.Count > 0 || _footers.Count > 0))
+        // 用户显式重建（DocumentXml=null）且设置了富文本页眉页脚/脚注尾注时：
+        // 从透传中移除旧部件与其引用，改由 Writer 生成新部件并合并更新
+        // [Content_Types].xml 与 word/_rels/document.xml.rels 引用（含脚注/尾注防重复条目）
+        if (document.DocumentXml == null
+            && (_headers.Count > 0 || _footers.Count > 0 || _footnotes.Count > 0 || _endnotes.Count > 0))
         {
             _rebuildHeaderFooter = true;
             _mergeContentTypes = document.OtherParts.TryGetValue("[Content_Types].xml", out var ct0)
@@ -669,6 +673,8 @@ public class WordWriter : IDisposable
                     || k.StartsWith("word/footer", StringComparison.OrdinalIgnoreCase)
                     || k.StartsWith("word/_rels/header", StringComparison.OrdinalIgnoreCase)
                     || k.StartsWith("word/_rels/footer", StringComparison.OrdinalIgnoreCase)
+                    || (_footnotes.Count > 0 && k.Equals("word/footnotes.xml", StringComparison.OrdinalIgnoreCase))
+                    || (_endnotes.Count > 0 && k.Equals("word/endnotes.xml", StringComparison.OrdinalIgnoreCase))
                     || k.Equals("[Content_Types].xml", StringComparison.OrdinalIgnoreCase)
                     || k.Equals("word/_rels/document.xml.rels", StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -1616,7 +1622,7 @@ public class WordWriter : IDisposable
         }
     }
 
-    /// <summary>向 [Content_Types].xml 注入 header/footer Override（去重）</summary>
+    /// <summary>向 [Content_Types].xml 注入 header/footer/脚注/尾注 Override（去重）</summary>
     private String InjectContentTypeOverrides(String contentTypes)
     {
         for (var i = 0; i < _headers.Count; i++)
@@ -1625,6 +1631,12 @@ public class WordWriter : IDisposable
         for (var i = 0; i < _footers.Count; i++)
             contentTypes = InjectOneOverride(contentTypes, $"/word/footer{i + 1}.xml",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml");
+        if (_footnotes.Count > 0)
+            contentTypes = InjectOneOverride(contentTypes, "/word/footnotes.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml");
+        if (_endnotes.Count > 0)
+            contentTypes = InjectOneOverride(contentTypes, "/word/endnotes.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml");
         return contentTypes;
     }
 
@@ -1636,13 +1648,13 @@ public class WordWriter : IDisposable
         return contentTypes[..idx] + $"<Override PartName=\"{partName}\" ContentType=\"{contentType}\"/>" + contentTypes[idx..];
     }
 
-    /// <summary>向 document.xml.rels 注入 header/footer Relationship（移除旧 header/footer 关系）</summary>
+    /// <summary>向 document.xml.rels 注入 header/footer/脚注/尾注 Relationship（移除旧引用）</summary>
     private String InjectHeaderFooterRels(String relsXml)
     {
-        // 移除旧 header/footer 关系（避免 Id/目标冲突）
+        // 移除旧 header/footer/脚注/尾注关系（避免 Id/目标冲突）
         relsXml = System.Text.RegularExpressions.Regex.Replace(
             relsXml,
-            "<Relationship[^>]*Type=\"[^\"]*(?:/header|/footer)\"[^>]*/>",
+            "<Relationship[^>]*Type=\"[^\"]*(?:/header|/footer|/footnotes|/endnotes)\"[^>]*/>",
             "");
         // 注入新关系
         var sb = new StringBuilder();
@@ -1650,6 +1662,10 @@ public class WordWriter : IDisposable
             sb.Append($"<Relationship Id=\"rHdr{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header\" Target=\"header{i + 1}.xml\"/>");
         for (var i = 0; i < _footers.Count; i++)
             sb.Append($"<Relationship Id=\"rFtr{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer\" Target=\"footer{i + 1}.xml\"/>");
+        if (_footnotes.Count > 0)
+            sb.Append("<Relationship Id=\"rFootnotes\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes\" Target=\"footnotes.xml\"/>");
+        if (_endnotes.Count > 0)
+            sb.Append("<Relationship Id=\"rEndnotes\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes\" Target=\"endnotes.xml\"/>");
         var idx = relsXml.LastIndexOf("</Relationships>", StringComparison.Ordinal);
         if (idx < 0) return relsXml;
         return relsXml[..idx] + sb + relsXml[idx..];
@@ -1691,18 +1707,14 @@ public class WordWriter : IDisposable
 
     private void BuildParagraphXml(StringBuilder sb, Paragraph para)
     {
-        // 书签开始标记放在 <w:p> 之前（包住整段）
+        // 书签 start/end 均作为 <w:p> 的直接子元素配对（start 在 pPr 前，end 在 runs 后），
+        // 不能把 bookmarkStart 放在 <w:p> 之外，否则层级非法导致 Word 提示修复
+        var bmId = 0;
         if (para.BookmarkName != null)
-        {
-            var bmId = _bookmarkId++;
+            bmId = _bookmarkId++;
+        sb.Append("<w:p>");
+        if (para.BookmarkName != null)
             sb.Append($"<w:bookmarkStart w:id=\"{bmId}\" w:name=\"{Esc(para.BookmarkName)}\"/>");
-            sb.Append("<w:p>");
-            sb.Append($"<w:bookmarkEnd w:id=\"{bmId}\"/>");
-        }
-        else
-        {
-            sb.Append("<w:p>");
-        }
 
         // paragraph properties
         var hasPPr = para.StyleId != null || para.Style != ParagraphStyle.Normal || para.Alignment != null
@@ -1803,6 +1815,8 @@ public class WordWriter : IDisposable
                 BuildRunXml(sb, run);
             }
         }
+        if (para.BookmarkName != null)
+            sb.Append($"<w:bookmarkEnd w:id=\"{bmId}\"/>");
         sb.Append("</w:p>");
     }
 
@@ -2116,16 +2130,21 @@ public class WordWriter : IDisposable
 
                 foreach (var para in cell.Paragraphs)
                 {
-                    // 表头行加粗
+                    // 表头行加粗：仅在输出时临时生效，构建后恢复原值，避免保存副作用污染模型
+                    var headerBold = new List<(Run Run, Boolean? Old)>();
                     if (ri == 0 && firstRowHeader && style is { HeaderBold: true })
                     {
                         foreach (var run in para.Runs)
                         {
                             run.Properties ??= new RunProperties();
+                            if (run.Properties.Bold != true)
+                                headerBold.Add((run, run.Properties.Bold));
                             run.Properties.Bold = true;
                         }
                     }
                     BuildParagraphXml(sb, para);
+                    foreach (var (run, old) in headerBold)
+                        run.Properties!.Bold = old;
                 }
                 sb.Append("</w:tc>");
             }
@@ -2249,16 +2268,21 @@ public class WordWriter : IDisposable
 
                 foreach (var para in cell.Paragraphs)
                 {
-                    // 表头行加粗
+                    // 表头行加粗：仅在输出时临时生效，构建后恢复原值，避免保存副作用污染模型
+                    var headerBold = new List<(Run Run, Boolean? Old)>();
                     if (row.IsHeader && table.Style is { HeaderBold: true })
                     {
                         foreach (var run in para.Runs)
                         {
                             run.Properties ??= new RunProperties();
+                            if (run.Properties.Bold != true)
+                                headerBold.Add((run, run.Properties.Bold));
                             run.Properties.Bold = true;
                         }
                     }
                     BuildParagraphXml(sb, para);
+                    foreach (var (run, old) in headerBold)
+                        run.Properties!.Bold = old;
                 }
                 sb.Append("</w:tc>");
             }
@@ -2269,7 +2293,8 @@ public class WordWriter : IDisposable
 
     private static void BuildImageXml(StringBuilder sb, Image img)
     {
-        var id = Math.Abs(img.RelId.GetHashCode());
+        // 避免 Math.Abs(int.MinValue) 溢出，用掩码取非负
+        var id = (img.RelId?.GetHashCode() ?? 0) & 0x7FFFFFFF;
         sb.Append("<w:p><w:r><w:drawing>");
 
         // 浮动锚定图片：wp:anchor（含位置/环绕），否则 wp:inline
@@ -2330,7 +2355,8 @@ public class WordWriter : IDisposable
 
     private static void BuildShapeXml(StringBuilder sb, WordShape shape)
     {
-        var id = Math.Abs(shape.GetHashCode()) + 2;
+        // 避免 Math.Abs(int.MinValue) 溢出，用掩码取非负
+        var id = (shape.GetHashCode() & 0x7FFFFFFF) + 2;
         var cx = (Int64)(shape.WidthCm * 360000);
         var cy = (Int64)(shape.HeightCm * 360000);
         sb.Append("<w:p><w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">");
