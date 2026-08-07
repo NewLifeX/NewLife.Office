@@ -802,4 +802,262 @@ public sealed class DocReader : IDisposable, ITextExtractable, IMarkdownExtracta
         return sb.ToString();
     }
     #endregion
+
+    #region doc → docx 转换（W20）
+
+    /// <summary>
+    /// 将 doc 文档转换为 docx 文档模型，配合 <see cref="WordWriter.Save(String, Document)"/> 输出 docx。
+    /// </summary>
+    /// <remarks>
+    /// 保留段落/表格的文档顺序与常用格式（粗体/斜体/删除线/字号/字体/颜色/对齐/缩进/列表级别）。
+    /// 表格单元格以 0x07 标记识别，段落格式基于 CHPX/PAPX 按真实 CP 对齐。
+    /// </remarks>
+    /// <returns>docx 文档模型</returns>
+    public Document ToDocument()
+    {
+        var doc = new Document();
+
+        // 1. 解析 CHPX/PAPX 格式表（与 ReadParagraphsWithFormat 相同定位）
+        List<(Int32 CpStart, Int32 CpEnd, Byte[] Grpprl)>? chpxList = null;
+        List<(Int32 CpStart, Int32 CpEnd, Byte[] Grpprl)>? papxList = null;
+        if (TryGetFcLcb(_wordDoc, 12, out var fcChpx, out var lcbChpx) &&
+            TryGetFcLcb(_wordDoc, 14, out var fcPapx, out var lcbPapx))
+        {
+            chpxList = ParsePlcBte(fcChpx, lcbChpx);
+            papxList = ParsePlcBte(fcPapx, lcbPapx);
+        }
+
+        // 2. 构建保留表格标记（\x07）与段落符（\r）的文本及真实 CP 数组
+        var (text, cps) = BuildTextWithCps();
+        if (text.Length == 0) return doc;
+
+        var currentTable = new List<List<Cell>>();
+        var start = 0;
+
+        // 结束当前表格（遇到非表格行或文档末尾）
+        void FlushTable()
+        {
+            if (currentTable.Count > 0)
+            {
+                // 复制列表再清空，避免引用别名导致已加入元素的 TableRows 被清空
+                doc.Elements.Add(new Element { Type = ElementType.Table, TableRows = new List<List<Cell>>(currentTable) });
+                currentTable.Clear();
+            }
+        }
+
+        for (var i = 0; i <= text.Length; i++)
+        {
+            var isSep = i == text.Length || text[i] == '\r' || text[i] == '\f' || text[i] == '\v';
+            if (!isSep) continue;
+
+            var line = text[start..i];
+            start = i + 1;
+
+            if (line.Contains('\x07'))
+            {
+                // 表格行：以 \x07 为分隔符分割单元格
+                var cells = line.Split('\x07').Select(p => p.Trim()).ToList();
+                while (cells.Count > 0 && cells[^1].Length == 0) cells.RemoveAt(cells.Count - 1);
+                if (cells.Count > 0)
+                {
+                    var row = new List<Cell>();
+                    foreach (var cellText in cells)
+                        row.Add(new Cell { Paragraphs = { new Paragraph { Runs = { new Run { Text = cellText } } } } });
+                    currentTable.Add(row);
+                }
+            }
+            else if (line.Length > 0)
+            {
+                // 普通段落：结束当前表格，按 CP 应用段落/字符格式
+                FlushTable();
+                var lineCp = cps[start - line.Length - 1]; // 行首字符的真实 CP
+                var dp = BuildDocParagraph(line, lineCp, chpxList ?? [], papxList ?? []);
+                doc.Elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = ToWordParagraph(dp) });
+            }
+        }
+        FlushTable();
+
+        return doc;
+    }
+
+    /// <summary>
+    /// 将 doc 文档转换为 docx 文件（W20）。
+    /// </summary>
+    /// <param name="outputPath">输出 docx 文件路径</param>
+    public void SaveAsDocx(String outputPath)
+    {
+        using var writer = new WordWriter();
+        writer.Save(outputPath, ToDocument());
+    }
+
+    /// <summary>
+    /// 将 doc 文档转换为 docx 并写入流（W20）。
+    /// </summary>
+    /// <param name="outputStream">输出流</param>
+    public void SaveAsDocx(Stream outputStream)
+    {
+        using var writer = new WordWriter();
+        writer.Save(outputStream, ToDocument());
+    }
+
+    /// <summary>将 doc 带格式段落映射为 docx 段落模型</summary>
+    private static Paragraph ToWordParagraph(DocParagraph dp)
+    {
+        var para = new Paragraph
+        {
+            Alignment = dp.Alignment,
+            IndentLeft = dp.IndentLeft,
+            FirstLineIndent = dp.FirstLineIndent,
+            SpaceBefore = dp.SpaceBefore,
+            SpaceAfter = dp.SpaceAfter,
+        };
+
+        // 列表：PAPX 列表级别 + 编号定义 ID
+        if (dp.ListLevel >= 0 && dp.NumberingId > 0)
+        {
+            para.IsBullet = true; // doc 编号简化为项目符号（无 numbering.xml 定义）
+            para.ListLevel = dp.ListLevel;
+        }
+
+        var props = new RunProperties
+        {
+            Bold = dp.Bold ? true : null,
+            Italic = dp.Italic ? true : null,
+            Strikethrough = dp.Strikethrough ? true : null,
+            FontSize = dp.FontSize,
+            FontName = dp.FontName,
+            ForeColor = dp.ForeColor,
+        };
+        para.Runs.Add(new Run { Text = dp.Text, Properties = props });
+        return para;
+    }
+
+    /// <summary>
+    /// 构建保留表格单元格标记（\x07）与段落分隔符（\r）的文本，并返回每个字符的真实 CP。
+    /// CP 计数包含 \x07 等控制符，与 CHPX/PAPX 的 PlcBte 表对齐，用于段落格式定位。
+    /// </summary>
+    private (String Text, Int32[] Cps) BuildTextWithCps()
+    {
+        var buf = _wordDoc;
+        if (buf.Length < 300) return (String.Empty, []);
+
+        // ─── 定位 CLX / PlcPcd（与 BuildRawText 相同）────────────────────
+        var reader = new SpanReader(buf, 32, buf.Length - 32);
+        var csw = (Int32)reader.ReadUInt16();
+        if (csw < 1) csw = 14;
+        var cslwOffset = 34 + csw * 2;
+        if (cslwOffset + 2 > buf.Length) return (String.Empty, []);
+        reader = new SpanReader(buf, cslwOffset, buf.Length - cslwOffset);
+        var cslw = (Int32)reader.ReadUInt16();
+        if (cslw < 1) cslw = 22;
+        var fcLcbStart = cslwOffset + 2 + cslw * 4 + 2;
+        var fcClxPos = fcLcbStart + 13 * 8;
+        if (fcClxPos + 8 > buf.Length) return (String.Empty, []);
+        reader = new SpanReader(buf, fcClxPos, 8);
+        var fcClx = (Int32)reader.ReadUInt32();
+        var lcbClx = (Int32)reader.ReadUInt32();
+        if (fcClx < 0 || lcbClx <= 0 || (Int64)fcClx + lcbClx > buf.Length) return (String.Empty, []);
+
+        var clxReader = new SpanReader(buf, fcClx, lcbClx);
+        var lcbPlcPcd = 0;
+        var foundPcdt = false;
+        while (clxReader.Position < clxReader.Capacity)
+        {
+            var clxt = clxReader.ReadByte();
+            if (clxt == 0x01)
+            {
+                if (clxReader.Position + 2 > clxReader.Capacity) break;
+                var cbGrpprl = (Int16)clxReader.ReadUInt16();
+                clxReader.Advance(cbGrpprl);
+            }
+            else if (clxt == 0x02)
+            {
+                if (clxReader.Position + 4 > clxReader.Capacity) return (String.Empty, []);
+                lcbPlcPcd = (Int32)clxReader.ReadUInt32();
+                foundPcdt = true;
+                break;
+            }
+            else return (String.Empty, []);
+        }
+        if (!foundPcdt) return (String.Empty, []);
+
+        var plcPcdStart = fcClx + (Int32)clxReader.Position;
+        var plcPcdEnd = plcPcdStart + lcbPlcPcd;
+        if (plcPcdEnd > fcClx + lcbClx) plcPcdEnd = fcClx + lcbClx;
+        var pieceCount = (lcbPlcPcd - 4) / 12;
+        if (pieceCount <= 0) return (String.Empty, []);
+
+        var cpReader = new SpanReader(buf, plcPcdStart, (pieceCount + 1) * 4);
+        var pcdReader = new SpanReader(buf, plcPcdStart + (pieceCount + 1) * 4, pieceCount * 8);
+
+        var sb = Pool.StringBuilder.Get();
+        var cps = new List<Int32>();
+        var cpStart = (Int32)cpReader.ReadUInt32();
+
+        for (var i = 0; i < pieceCount; i++)
+        {
+            var cpEnd = (Int32)cpReader.ReadUInt32();
+            var charCount = cpEnd - cpStart;
+            pcdReader.Advance(2);
+            var fcCompressed = (Int32)pcdReader.ReadUInt32();
+            pcdReader.Advance(2);
+            cpStart = cpEnd;
+            if (charCount <= 0) continue;
+
+            var fCompressed = ((fcCompressed >> 30) & 1) == 1;
+            var fc = fcCompressed & 0x3FFFFFFF;
+
+            if (fCompressed)
+            {
+                var byteOffset = fc / 2;
+                if (byteOffset < 0 || byteOffset + charCount > buf.Length) continue;
+                for (var c = 0; c < charCount; c++)
+                {
+                    var ch = (Char)buf[byteOffset + c];
+                    if (AppendDocCharKeepCp(sb, ch)) cps.Add(cpStart - charCount + c);
+                }
+            }
+            else
+            {
+                var byteOffset = fc;
+                if (byteOffset < 0 || byteOffset + charCount * 2 > buf.Length) continue;
+                for (var c = 0; c < charCount; c++)
+                {
+                    var ch = (Char)(buf[byteOffset + c * 2] | (buf[byteOffset + c * 2 + 1] << 8));
+                    if (AppendDocCharKeepCp(sb, ch)) cps.Add(cpStart - charCount + c);
+                }
+            }
+        }
+
+        var text = sb.Return(true);
+        return (text, cps.ToArray());
+    }
+
+    /// <summary>追加字符（保留 \x07 表格标记与 \r 段落符），返回是否产出（域控制符不产出）</summary>
+    private static Boolean AppendDocCharKeepCp(StringBuilder sb, Char ch)
+    {
+        switch (ch)
+        {
+            case '\x07': // 表格单元格标记：保留
+            case '\r':   // 段落结束符：保留
+            case '\f':   // 分页符：保留（与 ReadParagraphsWithFormat 一致以 \f 切分）
+            case '\v':   // 分栏符：保留
+            case '\t':
+                sb.Append(ch);
+                return true;
+            case '\x13': // 域开始/分隔/结束：跳过（不产出，但占 CP）
+            case '\x14':
+            case '\x15':
+                return false;
+            default:
+                if (ch >= ' ')
+                {
+                    sb.Append(ch);
+                    return true;
+                }
+                return false;
+        }
+    }
+
+    #endregion
 }
