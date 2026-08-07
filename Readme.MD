@@ -67,6 +67,19 @@ String? text2 = OfficeFactory.ReadText("report.xlsx");
 
 // 提取为 Markdown 格式（保留结构信息）
 String? md = OfficeFactory.ReadMarkdown("slides.pptx");
+
+// doc（97-2003）→ docx 转换
+OfficeFactory.ConvertDocToDocx("legacy.doc", "legacy.docx");
+```
+
+### 命令行工具（NewLife.Office.Cli）
+
+```bash
+# 任意办公文档 → Markdown
+dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
+
+# doc（97-2003）→ docx（历史文档迁移）
+dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
 ```
 
 ### Excel 写入与读取
