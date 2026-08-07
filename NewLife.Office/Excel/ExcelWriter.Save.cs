@@ -321,10 +321,13 @@ partial class ExcelWriter
         {
             "line" => "lineChart",
             "pie"  => "pieChart",
+            "doughnut" => "doughnutChart",
             "area" => "areaChart",
             "scatter" => "scatterChart",
             _ => "barChart",
         };
+        // pie/doughnut 无坐标轴，其余类型带 catAx/valAx
+        var isPieLike = chart.Type is "pie" or "doughnut";
         sw.Write($"<c:{chartElem}>");
         if (chart.Type == "bar") sw.Write("<c:barDir val=\"col\"/><c:grouping val=\"clustered\"/>");
         else if (chart.Type == "line") sw.Write("<c:grouping val=\"standard\"/>");
@@ -355,7 +358,7 @@ partial class ExcelWriter
             sw.Write("</c:numCache></c:numRef></c:val>");
             sw.Write("</c:ser>");
         }
-        if (chart.Type != "pie")
+        if (!isPieLike)
         {
             sw.Write("<c:axId val=\"1\"/><c:axId val=\"2\"/>");
             sw.Write($"</c:{chartElem}>");

@@ -692,5 +692,51 @@ public class ExcelRoundTripTests
         }
     }
 
+    [Fact]
+    [System.ComponentModel.DisplayName("xlsx图表往返：环形图(doughnut)→写入→读回→类型一致")]
+    public void Xlsx_RoundTrip_ChartDoughnut()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), $"xlsx_doughnut_{Guid.NewGuid():N}.xlsx");
+        try
+        {
+            using (var w = new ExcelWriter(tempFile))
+            {
+                w.WriteHeader("Chart", new[] { "产品", "份额" });
+                w.WriteRow("Chart", new Object?[] { "A", 40.0 });
+                w.WriteRow("Chart", new Object?[] { "B", 35.0 });
+                w.WriteRow("Chart", new Object?[] { "C", 25.0 });
+
+                var chart = new ExcelChart
+                {
+                    Type = "doughnut",
+                    Title = "市场份额",
+                    Categories = new[] { "A", "B", "C" },
+                    Series =
+                    [
+                        new ExcelChartSeries { Name = "份额", Data = [40.0, 35.0, 25.0] },
+                    ],
+                    AnchorRow = 5,
+                    AnchorCol = 0,
+                };
+                w.AddChart("Chart", chart);
+                w.Save();
+            }
+
+            using (var reader = new ExcelReader(tempFile))
+            {
+                var readData = reader.ReadExcel();
+                var readChart = readData.Worksheets[0].Charts[0];
+                Assert.Equal("doughnut", readChart.Type);
+                Assert.Equal("市场份额", readChart.Title);
+                Assert.Equal(3, readChart.Categories?.Length ?? 0);
+                Assert.Single(readChart.Series);
+            }
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
     #endregion
 }

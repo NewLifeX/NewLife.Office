@@ -23,7 +23,7 @@ namespace NewLife.Office.Excel;
 public class ExcelChart
 {
     #region 属性
-    /// <summary>图表类型：bar（柱状）/ line（折线）/ pie（饼图）</summary>
+    /// <summary>图表类型：bar（柱状）/ line（折线）/ pie（饼图）/ doughnut（环形图）/ area（面积）/ scatter（散点）</summary>
     public String Type { get; set; } = "bar";
 
     /// <summary>图表标题（可选）</summary>

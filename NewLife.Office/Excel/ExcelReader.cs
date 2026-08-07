@@ -2787,15 +2787,19 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             if (plotArea != null)
             {
                 var chartTypeEl = plotArea.Elements().FirstOrDefault(e =>
-                    e.Name.LocalName is "barChart" or "lineChart" or "pieChart" or "areaChart" or "scatterChart");
+                    e.Name.LocalName is "barChart" or "lineChart" or "pieChart" or "doughnutChart" or "areaChart" or "scatterChart" or "radarChart" or "stockChart" or "surfaceChart");
                 if (chartTypeEl != null)
                 {
                     chart.Type = chartTypeEl.Name.LocalName switch
                     {
                         "lineChart" => "line",
                         "pieChart" => "pie",
+                        "doughnutChart" => "doughnut",
                         "areaChart" => "area",
                         "scatterChart" => "scatter",
+                        "radarChart" => "radar",
+                        "stockChart" => "stock",
+                        "surfaceChart" => "surface",
                         _ => "bar",
                     };
                     // 分类和系列数据
