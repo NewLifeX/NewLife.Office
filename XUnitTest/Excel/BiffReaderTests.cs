@@ -346,4 +346,65 @@ public class BiffReaderTests
         using var reader = new BiffReader(new MemoryStream(xls));
         Assert.Empty(reader.GetComments());
     }
+
+    // ─── 条件格式（CONDFMT + CF）─────────────────────────────────────────
+
+    [Fact, DisplayName("读取条件格式（cellIs 大于/小于 + 多规则）")]
+    public void ReadConditionalFormats_CellIs()
+    {
+        // CONDFMT：count=2, r1=0, r2=1, c1=0, c2=0, flags=0 → A1:A2 两条规则
+        var condFmtData = Concat(LE2(2), LE2(0), LE2(1), LE2(0), LE2(0), LE2(0));
+        var condFmtRec = Rec(0x01B0, condFmtData);
+
+        // CF1：type=1(cellIs)|op=4(greaterThan) → flags=0x41，f1=100
+        var cf1Data = Concat(LE2(0x41), LE8(100.0), LE8(0.0));
+        var cf1Rec = Rec(0x01B1, cf1Data);
+
+        // CF2：type=1(cellIs)|op=5(lessThan) → flags=0x51，f1=50
+        var cf2Data = Concat(LE2(0x51), LE8(50.0), LE8(0.0));
+        var cf2Rec = Rec(0x01B1, cf2Data);
+
+        var sheetBody = Concat(LabelSst(0, 0, 0), condFmtRec, cf1Rec, cf2Rec);
+        var xls = BuildXls(BuildMinimalXls("Sheet1", sheetBody, new[] { "值" }));
+
+        using var reader = new BiffReader(new MemoryStream(xls));
+        var cfs = reader.GetConditionalFormats();
+        Assert.Equal(2, cfs.Count);
+        Assert.Equal("A1:A2", cfs[0].Range);
+        Assert.Equal(ConditionalFormatValues.GreaterThan, cfs[0].Type);
+        Assert.Equal("100", cfs[0].Value);
+        Assert.Equal(ConditionalFormatValues.LessThan, cfs[1].Type);
+        Assert.Equal("50", cfs[1].Value);
+    }
+
+    [Fact, DisplayName("读取条件格式（between 双值）")]
+    public void ReadConditionalFormats_Between()
+    {
+        // CONDFMT：count=1, r1=2, r2=2, c1=3, c2=3 → D3:D3 一条规则
+        var condFmtData = Concat(LE2(1), LE2(2), LE2(2), LE2(3), LE2(3), LE2(0));
+        var condFmtRec = Rec(0x01B0, condFmtData);
+
+        // CF：type=1|op=0(between) → flags=0x01，f1=10，f2=20
+        var cfData = Concat(LE2(0x01), LE8(10.0), LE8(20.0));
+        var cfRec = Rec(0x01B1, cfData);
+
+        var sheetBody = Concat(LabelSst(0, 0, 0), condFmtRec, cfRec);
+        var xls = BuildXls(BuildMinimalXls("Sheet1", sheetBody, new[] { "值" }));
+
+        using var reader = new BiffReader(new MemoryStream(xls));
+        var cfs = reader.GetConditionalFormats();
+        Assert.Single(cfs);
+        Assert.Equal("D3:D3", cfs[0].Range);
+        Assert.Equal(ConditionalFormatValues.Between, cfs[0].Type);
+        Assert.Equal("10", cfs[0].Value);
+        Assert.Equal("20", cfs[0].Value2);
+    }
+
+    [Fact, DisplayName("无条件格式时 GetConditionalFormats 返回空")]
+    public void ReadConditionalFormats_None()
+    {
+        var xls = BuildXls(BuildMinimalXls("Sheet1", LabelSst(0, 0, 0), new[] { "值" }));
+        using var reader = new BiffReader(new MemoryStream(xls));
+        Assert.Empty(reader.GetConditionalFormats());
+    }
 }

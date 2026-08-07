@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Globalization;
+using System.Text;
 using NewLife.Buffers;
 using NewLife.Office.Ole2;
 
@@ -877,6 +878,93 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     }
     #endregion
 
+    #region 条件格式读取
+    /// <summary>读取指定工作表的条件格式（CONDFMT + CF 记录）</summary>
+    /// <param name="sheet">工作表名称，null 取第一个</param>
+    /// <returns>条件格式列表（范围/类型/数值条件）</returns>
+    /// <remarks>当前支持 cellIs（数值比较）与 formula（表达式）类型；colorScale/dataBar/iconSet 复杂格式暂跳过。</remarks>
+    public List<ConditionalFormatting> GetConditionalFormats(String? sheet = null)
+    {
+        var result = new List<ConditionalFormatting>();
+        var idx = ResolveSheetIndex(sheet);
+        if (idx < 0) return result;
+
+        var sheetReader = new SpanReader(_workbook, 0, _workbook.Length);
+        var sheetRecords = ReadSheetRecords(ref sheetReader, _sheetBofOffsets[idx]);
+
+        var pendingCount = 0;
+        var pendingRange = String.Empty;
+
+        foreach (var (type, data) in sheetRecords)
+        {
+            if (type == RecCondFmt && data.Length >= 12)
+            {
+                // CONDFMT：count(2)+r1(2)+r2(2)+c1(2)+c2(2)+flags(2)
+                var count = ReadUInt16(data, 0);
+                var r1 = ReadUInt16(data, 2);
+                var r2 = ReadUInt16(data, 4);
+                var c1 = ReadUInt16(data, 6);
+                var c2 = ReadUInt16(data, 8);
+                pendingCount = count;
+                pendingRange = $"{ColumnName(c1)}{r1 + 1}:{ColumnName(c2)}{r2 + 1}";
+            }
+            else if (type == RecCf && pendingCount > 0)
+            {
+                pendingCount--;
+                var cf = ParseCf(data, pendingRange);
+                if (cf != null) result.Add(cf);
+            }
+        }
+        return result;
+    }
+
+    private static ConditionalFormatting? ParseCf(Byte[] data, String range)
+    {
+        // CF：flags(2)+f1(8)+f2(8)+字体(4)+边框(4)+图案(4)+temp(2)[+公式]
+        if (data.Length < 18) return null;
+
+        var flags = ReadUInt16(data, 0);
+        var type = flags & 0x0F;
+        var op = (flags >> 4) & 0x0F;
+        var f1 = BitConverter.Int64BitsToDouble(BitConverter.ToInt64(data, 2));
+        var f2 = BitConverter.Int64BitsToDouble(BitConverter.ToInt64(data, 10));
+
+        var info = new ConditionalFormatting { Range = range };
+        if (type == 1) // cellIs
+        {
+            info.Type = op switch
+            {
+                1 => ConditionalFormatValues.NotBetween,
+                2 => ConditionalFormatValues.Equal,
+                3 => ConditionalFormatValues.NotEqual,
+                4 => ConditionalFormatValues.GreaterThan,
+                5 => ConditionalFormatValues.LessThan,
+                _ => ConditionalFormatValues.Between,
+            };
+            info.Value = FormatCfValue(f1);
+            info.Value2 = FormatCfValue(f2);
+        }
+        else if (type == 2) // formula
+        {
+            info.Type = ConditionalFormatValues.Expression;
+            // 公式为 Rgce 编码（token），固定部分之后；best-effort 读取
+            if (data.Length > 32)
+                info.Formula = Encoding.UTF8.GetString(data, 32, data.Length - 32).TrimEnd('\0');
+        }
+        else return null; // colorScale/dataBar/iconSet 复杂，跳过
+
+        return info;
+    }
+
+    /// <summary>格式化 CF 条件值（整数值不带小数）</summary>
+    private static String FormatCfValue(Double value)
+    {
+        if (Math.Abs(value - Math.Truncate(value)) < 0.0001)
+            return ((Int64)value).ToString();
+        return value.ToString(CultureInfo.InvariantCulture);
+    }
+    #endregion
+
     #region 批注读取
     /// <summary>读取指定工作表的批注（NOTE + TXO 记录）</summary>
     /// <param name="sheet">工作表名称，null 取第一个</param>
@@ -1230,6 +1318,8 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     private const UInt16 RecName = 0x0018;
     private const UInt16 RecNote = 0x001C;
     private const UInt16 RecTxo = 0x01B6;
+    private const UInt16 RecCondFmt = 0x01B0;
+    private const UInt16 RecCf = 0x01B1;
     #endregion
 
     #region 文本提取
