@@ -138,6 +138,92 @@ public class DocReaderTests
         return new MemoryStream(doc.ToBytes());
     }
 
+    // ─── 构建带 CHPX/PAPX 格式的 .doc 辅助 ────────────────────────────────
+
+    /// <summary>
+    /// 构建含 CHPX/PAPX 格式的最小 .doc WordDocument 流。
+    /// 文本固定为 "BoldText\rPlainText\r"（两段），第一段粗体+居中，第二段无格式。
+    /// CHPX/PAPX 数据与 PlcBte 表均放在 WordDocument 流（非 fast-saved）。
+    /// </summary>
+    private static Byte[] BuildFormattedWordDocStream()
+    {
+        const String text = "BoldText\rPlainText\r";
+        var textBytes = Encoding.ASCII.GetBytes(text);
+        var textLen = textBytes.Length; // 19
+
+        const Int32 FibSize = 400;
+        const Int32 ClxStart = FibSize;
+        const Int32 PlcPcdSize = 2 * 4 + 1 * 8;  // n=1
+        const Int32 ClxBlockSize = 1 + 4 + PlcPcdSize;
+
+        var textOffset = ClxStart + ClxBlockSize;   // 421
+        var fcValue = textOffset * 2;               // ANSI 压缩
+
+        // CHPX 数据块
+        //   chpx0 = 粗体 (sprmCFBold=0x0835 序列化为 [0x88,0x35] + 操作数 0x01)
+        var chpx0 = new Byte[] { 3, 0x88, 0x35, 0x01 };
+        //   chpx1 = 默认 (cbGrpprl=0)
+        var chpx1 = new Byte[] { 0 };
+        var chpxData0 = textOffset + textLen;        // 440
+        var chpxData1 = chpxData0 + chpx0.Length;    // 444
+        // CHPX PlcBte: CPs [0,8,19] + BTEs [chpxData0, chpxData1]
+        var chpxPlcBteStart = chpxData1 + chpx1.Length; // 445
+        var chpxPlcBte = Concat(LE4(0), LE4(8), LE4(19), LE4((UInt32)chpxData0), LE4((UInt32)chpxData1));
+        var lcbChpx = chpxPlcBte.Length; // 20
+
+        // PAPX 数据块
+        //   papx0 = 居中 (sprmPJc=0x2403 序列化为 [0xA4,0x03] + 操作数 0x01) -> [3, 0xA4,0x03,0x01] + PHE(12)
+        var papx0 = new Byte[17];
+        papx0[0] = 3; papx0[1] = 0xA4; papx0[2] = 0x03; papx0[3] = 0x01; // 后 13 字节 PHE 留 0
+        //   papx1 = 默认 -> [0] + PHE(12)
+        var papx1 = new Byte[13];
+        var papxData0 = chpxPlcBteStart + lcbChpx;   // 465
+        var papxData1 = papxData0 + papx0.Length;    // 482
+        // PAPX PlcBte: CPs [0,9,19] + BTEs [papxData0, papxData1]
+        var papxPlcBteStart = papxData1 + papx1.Length; // 495
+        var papxPlcBte = Concat(LE4(0), LE4(9), LE4(19), LE4((UInt32)papxData0), LE4((UInt32)papxData1));
+        var lcbPapx = papxPlcBte.Length; // 20
+
+        // ─── FIB ─────────────────────────────────────────────────────
+        var fib = new Byte[FibSize];
+        fib[0] = 0xEC; fib[1] = 0xA5;   // wIdent
+        fib[2] = 0xC1; fib[3] = 0x00;   // nFib
+        fib[32] = 14; fib[33] = 0;      // csw
+        fib[62] = 22; fib[63] = 0;      // cslw
+        fib[152] = 74; fib[153] = 0;    // ccbRgFcLcb
+
+        // index 12: fcPlcfbteChpx（偏移 154+96=250）
+        var fcChpxBytes = LE4((UInt32)chpxPlcBteStart);
+        var lcbChpxBytes = LE4((UInt32)lcbChpx);
+        Array.Copy(fcChpxBytes, 0, fib, 250, 4);
+        Array.Copy(lcbChpxBytes, 0, fib, 254, 4);
+        // index 13: fcClx（偏移 258）
+        var fcClxBytes = LE4((UInt32)ClxStart);
+        var lcbClxBytes = LE4((UInt32)ClxBlockSize);
+        Array.Copy(fcClxBytes, 0, fib, 258, 4);
+        Array.Copy(lcbClxBytes, 0, fib, 262, 4);
+        // index 14: fcPlcfbtePapx（偏移 266）
+        var fcPapxBytes = LE4((UInt32)papxPlcBteStart);
+        var lcbPapxBytes = LE4((UInt32)lcbPapx);
+        Array.Copy(fcPapxBytes, 0, fib, 266, 4);
+        Array.Copy(lcbPapxBytes, 0, fib, 270, 4);
+
+        // ─── CLX（PCDT）──────────────────────────────────────────────
+        var plcPcd = Concat(LE4(0), LE4((UInt32)textLen), Concat(LE2(0), LE4((UInt32)(fcValue | (1 << 30))), LE2(0)));
+        var clxBlock = Concat(new Byte[] { 0x02 }, LE4((UInt32)plcPcd.Length), plcPcd);
+
+        return Concat(fib, clxBlock, textBytes, chpx0, chpx1, chpxPlcBte, papx0, papx1, papxPlcBte);
+    }
+
+    /// <summary>将带格式 WordDocument 流打包为 .doc 流</summary>
+    private static Stream BuildFormattedDoc()
+    {
+        var wordDocBytes = BuildFormattedWordDocStream();
+        var doc = new CfbDocument();
+        doc.Root.AddStream("WordDocument", wordDocBytes);
+        return new MemoryStream(doc.ToBytes());
+    }
+
     // ─── 测试 ─────────────────────────────────────────────────────────────
 
     [Fact, System.ComponentModel.DisplayName("ReadFullText 返回单行文本")]
@@ -253,5 +339,38 @@ public class DocReaderTests
         Assert.Single(tables);
         Assert.Equal(2, tables[0].Length);
         Assert.Equal(2, tables[0][0].Length);
+    }
+
+    [Fact, System.ComponentModel.DisplayName("ReadParagraphsWithFormat 提取粗体/居中格式")]
+    public void ReadParagraphsWithFormat_BoldAndCenter()
+    {
+        using var stream = BuildFormattedDoc();
+        using var reader = new DocReader(stream);
+
+        var paras = reader.ReadParagraphsWithFormat().ToList();
+        Assert.Equal(2, paras.Count);
+
+        // 第一段：BoldText，粗体 + 居中
+        var p1 = paras[0];
+        Assert.Equal("BoldText", p1.Text);
+        Assert.True(p1.Bold, "第一段应识别为粗体");
+        Assert.Equal("center", p1.Alignment);
+
+        // 第二段：PlainText，无格式
+        var p2 = paras[1];
+        Assert.Equal("PlainText", p2.Text);
+        Assert.False(p2.Bold);
+    }
+
+    [Fact, System.ComponentModel.DisplayName("ReadParagraphsWithFormat 纯文本 doc 不崩溃且返回段落")]
+    public void ReadParagraphsWithFormat_PlainText()
+    {
+        using var stream = BuildDoc("First line\rSecond line");
+        using var reader = new DocReader(stream);
+        // 无 CHPX/PAPX 表时应回退为纯文本段落
+        var paras = reader.ReadParagraphsWithFormat().ToList();
+        Assert.Equal(2, paras.Count);
+        Assert.Equal("First line", paras[0].Text);
+        Assert.False(paras[0].Bold);
     }
 }
