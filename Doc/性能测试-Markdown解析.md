@@ -1,6 +1,6 @@
 # 性能测试报告 — Markdown 解析/序列化/HTML 转换
 
-> 日期：2026-08-07 | 项目：NewLife.Office（MD10→MD16）| 基准项目：`Benchmark/MarkdownBenchmark`
+> 日期：2026-08-07 | 项目：NewLife.Office（MD10→MD17）| 基准项目：`Benchmark/MarkdownBenchmark`
 
 ## 测试目标
 
@@ -13,16 +13,16 @@
 - .NET: .NET 10.0.10 (X64 RyuJIT AVX2)
 - BenchmarkDotNet: v0.14.0（Release 模式，Short 模式运行，`[MemoryDiagnoser]`）
 
-## 测试结果（MD16 优化后）
+## 测试结果（MD17 优化后）
 
 | 方法 | Mean | Error | Median | Gen0 | Gen1 | Gen2 | Allocated |
 |------|-----:|------:|-------:|-----:|-----:|-----:|----------:|
-| Parse | 10,618.5 μs | 40.70 μs | 36.08 μs | 250.00 | 187.50 | - | 2604.46 KB |
-| ParseRoundtrip | 11,779.0 μs | 64.13 μs | 59.98 μs | 328.13 | 250.00 | - | 3472.29 KB |
-| Serialize | 756.3 μs | 7.34 μs | 6.87 μs | 124.02 | 124.02 | 124.02 | 611.23 KB |
-| SerializeRoundtrip | 13,458.9 μs | 53.95 μs | 45.05 μs | 421.88 | 281.25 | - | 4356.47 KB |
-| ToHtml | 487.3 μs | 6.12 μs | 5.73 μs | 71.29 | 71.29 | 71.29 | 780.85 KB |
-| ToHtmlPage | 696.4 μs | 11.41 μs | 10.67 μs | 213.87 | 213.87 | 213.87 | 1267.16 KB |
+| Parse | 10,654.2 μs | 46.54 μs | 41.25 μs | 218.75 | 140.63 | - | 2332.58 KB |
+| ParseRoundtrip | 11,325.5 μs | 42.21 μs | 37.41 μs | 312.50 | 203.13 | - | 3219.16 KB |
+| Serialize | 720.1 μs | 6.45 μs | 5.72 μs | 124.02 | 124.02 | 124.02 | 611.32 KB |
+| SerializeRoundtrip | 13,696.9 μs | 61.56 μs | 54.57 μs | 390.63 | 312.50 | - | 4103.34 KB |
+| ToHtml | 464.1 μs | 5.48 μs | 4.86 μs | 71.29 | 71.29 | 71.29 | 780.85 KB |
+| ToHtmlPage | 631.8 μs | 9.81 μs | 9.17 μs | 213.87 | 213.87 | 213.87 | 1267.16 KB |
 
 ### MD14 优化前后对比（列表项快速路径）
 
@@ -56,13 +56,26 @@
 | ToHtml | 484.5 μs | 487.3 μs | 780.85 KB | 780.85 KB | ≈0 | ≈0 |
 | ToHtmlPage | 685.1 μs | 696.4 μs | 1267.16 KB | 1267.16 KB | ≈0 | ≈0 |
 
-> 注：本文档规模约 200 组混合块（日常 Markdown 文件的数倍），优化后解析 ~10.6ms、序列化 ~0.76ms、HTML ~0.49ms，均处于可接受范围。
+### MD17 优化前后对比（AST 集合延迟初始化 + 裸 URL 前缀 Span 比较）
+
+| 方法 | MD16 Mean | MD17 Mean | MD16 分配 | MD17 分配 | 耗时降幅 | 分配降幅 |
+|------|-----------:|-----------:|----------:|----------:|--------:|--------:|
+| Parse | 10,618.5 μs | 10,654.2 μs | 2604.46 KB | 2332.58 KB | ≈0 | **-10.4%** |
+| ParseRoundtrip | 11,779.0 μs | 11,325.5 μs | 3472.29 KB | 3219.16 KB | -3.9% | **-7.3%** |
+| Serialize | 756.3 μs | 720.1 μs | 611.31 KB | 611.32 KB | -4.8% | ≈0 |
+| SerializeRoundtrip | 13,458.9 μs | 13,696.9 μs | 4356.47 KB | 4103.34 KB | +1.8% | -5.8% |
+| ToHtml | 487.3 μs | 464.1 μs | 780.85 KB | 780.85 KB | -4.8% | ≈0 |
+| ToHtmlPage | 696.4 μs | 631.8 μs | 1267.16 KB | 1267.16 KB | -9.3% | ≈0 |
+
+> 注：本文档规模约 200 组混合块（日常 Markdown 文件的数倍），优化后解析 ~10.7ms、序列化 ~0.72ms、HTML ~0.46ms，均处于可接受范围。
 
 ## 分析
 
 - **解析 ~11ms / 2.9MB（MD15 再降耗时 31%、分配 5.9%）**：MD15 延续 MD14 的子解析器消除思路——**引用块快速路径**（单行普通内容直接行内解析，不再创建子解析器；基准 200 个引用块全部命中）叠加 **引用预扫描行首过滤**（引用定义必须以 `[` 开头，≤3 空格缩进；普通文档绝大多数行直接跳过，不再逐行 Trim + 正则）。两者消除子解析器创建、FrontMatter 检查、预扫描开销，与 MD14 列表项快速路径（列表分配 -61%）叠加后 Parse 累计分配 -22%（3761→2917KB）、耗时累计 -45%（20.9→11.4ms）。
 - **解析 ~10.6ms / 2.6MB（MD16 再降耗时 6.8%、分配 10.7%）**：MD16 经 GC 分段诊断定位两个高频小对象热点——①**行内令牌复用**：`ParseInlineCore` 的 tokens 临时列表改为别名复用 result（result 恒为空列表传入），消除每行内解析 1 个 List 分配 + 末尾 `AddRange` 全量复制；②**表格行拆分索引化**：`SplitTableRow` 用索引边界剥离首尾空白与管道符（替代 `Trim` + `[1..]`/`[..^1]` 子串），并移除每行 `StringBuilder`，普通单元格直接 `Substring` 零额外分配（转义管道 `\|` 仅命中时走 `ProcessCell`）。**表格是最大单项扩展成本**：诊断实测 422KB→298KB（占 Parse 分配 11%）。
 - **GC 分段诊断结论（MD16）**：41.8KB 输入下 Parse 分配构成——预处理 Split 164KB（6%）、AST 无惰性构造（Parse 与 Parse+Touch 差值≈0）、扩展分支合计 ~420KB（表格为最大单项）。再次验证数据驱动决策：优化应优先命中子解析器消除（MD14/15）与高频小对象分配（MD16），而非字符串切片假设。
+- **解析 ~10.7ms / 2.3MB（MD17 再降分配 10.4%）**：MD17 聚焦 **AST 集合延迟初始化**——`MarkdownInline.Children` 与 `MarkdownBlock.Children/Inlines` 从 `= []` 属性初始化器改为 `_children ??= []` 惰性创建（叶子文本令牌/叶子块不再各带一个空 List）。基准 200 组混合块约 3000 令牌 + 2800 块，每空 List ~40B → 省 ~250KB。附带 **裸 URL 前缀 Span 比较**（`TryParseBareUrl` 用 `text.AsSpan(...).StartsWith(prefix, OrdinalIgnoreCase)` 替代 `text[start..end]` 子串，每次调用省一个子串）。Gen0 250→219，GC 压力显著下降；Serialize/ToHtml/ToHtmlPage 耗时亦降 5-9%（延迟初始化减少序列化遍历对象）。
+- **块类型分配分布（MD17 probe）**：纯段落 714KB/200 个（最重，行内令牌+自动链接）、纯表格 564KB、纯列表 339KB、纯标题 216KB、纯代码块 181KB、纯引用 142KB——段落行内解析与表格为两大结构性成本（AST 对象+文本子串，难以进一步消除）。
 - **推翻 MD12 假设**：MD12 报告猜测「AST 字符串复制 ~120x 为主成本」，经 GC 分段实测文本令牌字符串仅占 1.3%（~49KB）；`Memory<Char>` 惰性切片（net45 经 System.Memory 支持）实测无收益且因对象膨胀与惰性转换使 Serialize/ToHtml 略增，**已回滚**。数据驱动决策：真实收益在列表/引用子解析器消除。
 - **Parse 与 ParseRoundtrip 差距 8%**：往返模式多捕获原始源码与快照，代价有限；需要原始格式保真时直接用 `ParseRoundtrip`（MD10-10 公开 API）。
 - **SerializeRoundtrip（14.3ms）**：包含重新解析 + 快照比较，与"解析+序列化"整体成本一致，属预期。
@@ -74,8 +87,9 @@
 1. **深层嵌套列表/引用行复制**：子解析器 `ParseLines` 仍 `ToArray()` 复制行数组，可传 `IReadOnlyList` 引用（MD15 后仅多行引用/多行列表项仍创建子解析器；实测影响较小，属代码质量改进）。
 2. **块级行缓冲**：主入口 `text.Split('\n')` 每行独立子串（诊断实测预处理 164KB/6%），可 `ArrayPool<Char>` 单行扫描（预计收益有限，需基准验证）。
 3. **表格单元格快速路径（MD16 后续）**：基准 200 表格 × 4 单元格 ≈800 次 `ParseInlineWithRefs`（每次独立 List + Text 对象）。单 token 单元格（如 `A`/`B`）可直达文本构造，但 AST 对象为必需结构，预计收益有限；若需进一步压降可评估。
+4. **DelimInfo class→struct（评估中）**：强调分隔符 run 每项一个引用对象（~48B），改 struct 需处理 `ResolveEmphasis` 的可空 opener 与写回，风险中等、预计收益 ~1-2%，暂缓。
 
-> MD16 已完成：行内令牌复用（ParseInlineCore tokens→result 别名）+ 表格行拆分索引化（SplitTableRow 无子串/无 StringBuilder），Parse 分配 -10.7%。
+> MD17 已完成：AST 集合延迟初始化（MarkdownInline.Children + MarkdownBlock.Children/Inlines 惰性创建）+ 裸 URL 前缀 Span 比较，Parse 分配 -10.4%（累计 MD14→MD17 -38%）。
 
 ## 运行方式
 

@@ -17,10 +17,16 @@ public abstract class MarkdownBlock
     public MarkdownBlockType Type { get; protected set; }
 
     /// <summary>子块列表（容器块使用：列表/引用块/列表项/表格行）</summary>
-    public List<MarkdownBlock> Children { get; } = [];
+    private List<MarkdownBlock>? _children;
+
+    /// <summary>子块列表（容器块使用：列表/引用块/列表项/表格行；叶子块延迟创建，MD17）</summary>
+    public List<MarkdownBlock> Children => _children ??= [];
 
     /// <summary>行内元素列表（叶子块使用：段落/标题/列表项文本/单元格）</summary>
-    public List<MarkdownInline> Inlines { get; } = [];
+    private List<MarkdownInline>? _inlines;
+
+    /// <summary>行内元素列表（叶子块使用：段落/标题/列表项文本/单元格；容器块延迟创建，MD17）</summary>
+    public List<MarkdownInline> Inlines => _inlines ??= [];
 
     /// <summary>自定义属性（MD05-06），如 "class1 class2" 或 "id1" 或 "key=value"</summary>
     public String? Attributes { get; set; }

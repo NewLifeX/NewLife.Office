@@ -2171,13 +2171,13 @@ internal sealed class MarkdownParser
         // GFM：链接内部不识别裸 URL
         if (inLink) return false;
 
-        // 检查是否是 URL 前缀
-        var remaining = text[start..end];
+        // 检查是否是 URL 前缀（Span 前缀比较，避免 text[start..end] 子串分配，MD17）
+        var span = text.AsSpan(start, end - start);
         var prefixes = new[] { "https://", "http://", "ftp://", "www." };
         String? matchedPrefix = null;
         foreach (var prefix in prefixes)
         {
-            if (remaining.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            if (span.StartsWith(prefix.AsSpan(), StringComparison.OrdinalIgnoreCase))
             {
                 matchedPrefix = prefix;
                 break;

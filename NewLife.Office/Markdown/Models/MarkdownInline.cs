@@ -23,7 +23,10 @@ public sealed class MarkdownInline
     public String Alt { get; set; } = String.Empty;
 
     /// <summary>子行内元素（Strong/Emphasis/Link 可嵌套）</summary>
-    public List<MarkdownInline> Children { get; } = [];
+    private List<MarkdownInline>? _children;
+
+    /// <summary>子行内元素（Strong/Emphasis/Link 可嵌套；叶子节点延迟创建，省去每令牌一个空 List 分配，MD17）</summary>
+    public List<MarkdownInline> Children => _children ??= [];
 
     /// <summary>源码列号（0 基准，MD06-04），支持编辑器场景定位</summary>
     public Int32 SourceColumn { get; set; }
