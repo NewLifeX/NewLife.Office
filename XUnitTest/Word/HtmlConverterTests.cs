@@ -85,10 +85,30 @@ public class WordHtmlConverterTests
         Assert.Contains("</p>", html);
     }
 
+    [Fact, DisplayName("文本框内容渲染为段落文本")]
+    public void TextBox_Renders_Text()
+    {
+        var xml = "<?xml version=\"1.0\"?><w:document " + W + " " + WR
+            + " xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\""
+            + " xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\""
+            + " xmlns:wps=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\"><w:body>"
+            + "<w:p><w:r><w:t>正文</w:t></w:r></w:p>"
+            + "<w:p><w:r><w:drawing><wp:inline><wp:extent cx=\"1800000\" cy=\"720000\"/><wp:docPr id=\"1\" name=\"Shape1\"/>"
+            + "<a:graphic><a:graphicData uri=\"http://schemas.microsoft.com/office/word/2010/wordprocessingShape\">"
+            + "<wps:wsp><wps:cNvSpPr/><wps:spPr><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></wps:spPr>"
+            + "<wps:txbx><w:txbxContent><w:p><w:r><w:t>框内说明</w:t></w:r></w:p></w:txbxContent></wps:txbx>"
+            + "<wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>"
+            + "</w:body></w:document>";
+        var doc = BuildDocx(xml);
+        var conv = new WordHtmlConverter { FullPage = false };
+        var html = conv.Convert(new MemoryStream(doc));
+        Assert.Contains("框内说明", html);
+        Assert.Contains("正文", html);
+    }
+
     [Fact, DisplayName("空段落仍然生成 <p> 元素")]
     public void EmptyParagraph_Renders_Empty_P()
-    {
-        var xml = $"<?xml version=\"1.0\"?><w:document {W}><w:body><w:p/></w:body></w:document>";
+    {        var xml = $"<?xml version=\"1.0\"?><w:document {W}><w:body><w:p/></w:body></w:document>";
         var doc = BuildDocx(xml);
         var conv = new WordHtmlConverter { FullPage = false };
         var html = conv.Convert(new MemoryStream(doc));

@@ -294,21 +294,30 @@ public sealed class WordHtmlConverter
         sb.Append(content);
     }
 
-    /// <summary>渲染 DrawingML 图片（wp:inline / wp:anchor 中的 a:blip）</summary>
+    /// <summary>渲染 DrawingML 图片（wp:inline / wp:anchor 中的 a:blip）；无图片时为文本框则渲染文本</summary>
     private static void RenderDrawing(StringBuilder sb, XmlElement drawing,
         Dictionary<String, String> rels, Dictionary<String, String> images, XmlNamespaceManager ns)
     {
         var blip = drawing.SelectSingleNode(".//a:blip", ns) as XmlElement;
         var rId = blip?.GetAttribute("r:embed");
-        if (rId == null) return;
-
-        if (images.TryGetValue(rId, out var src))
+        if (rId != null)
         {
-            sb.Append($"<img src=\"{src}\" alt=\"image\" />");
+            if (images.TryGetValue(rId, out var src))
+            {
+                sb.Append($"<img src=\"{src}\" alt=\"image\" />");
+            }
+            else if (rels.TryGetValue(rId, out var target))
+            {
+                sb.Append($"<img src=\"word/{HtmlAttrEncode(target)}\" alt=\"image\" />");
+            }
+            return;
         }
-        else if (rels.TryGetValue(rId, out var target))
+
+        // 文本框（wps:txbx/w:txbxContent）：渲染其中段落文本（W22，与 Word 导出行为一致）
+        foreach (XmlElement txbxContent in drawing.SelectNodes(".//w:txbxContent", ns)!)
         {
-            sb.Append($"<img src=\"word/{HtmlAttrEncode(target)}\" alt=\"image\" />");
+            foreach (XmlElement p in txbxContent.SelectNodes("w:p", ns)!)
+                RenderParagraph(sb, p, rels, images, ns);
         }
     }
 
