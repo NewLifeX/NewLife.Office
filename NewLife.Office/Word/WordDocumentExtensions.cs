@@ -180,14 +180,14 @@ public static class WordDocumentExtensions
             {
                 foreach (var row in el.Table.Rows)
                     foreach (var cell in row.Cells)
-                        foreach (var p in cell.Paragraphs)
+                        foreach (var p in EnumerateCellParagraphs(cell))
                             yield return p;
             }
             else if (el.TableRows != null)
             {
                 foreach (var row in el.TableRows)
                     foreach (var cell in row)
-                        foreach (var p in cell.Paragraphs)
+                        foreach (var p in EnumerateCellParagraphs(cell))
                             yield return p;
             }
         }
@@ -204,6 +204,20 @@ public static class WordDocumentExtensions
             {
                 if (el.Paragraph != null) yield return el.Paragraph;
             }
+        }
+    }
+
+    /// <summary>枚举单元格内段落（含嵌套表格递归，W46）</summary>
+    private static IEnumerable<Paragraph> EnumerateCellParagraphs(Cell cell)
+    {
+        foreach (var p in cell.Paragraphs)
+            yield return p;
+        foreach (var nested in cell.NestedTables)
+        {
+            foreach (var row in nested.Rows)
+                foreach (var nc in row.Cells)
+                    foreach (var p in EnumerateCellParagraphs(nc))
+                        yield return p;
         }
     }
     #endregion

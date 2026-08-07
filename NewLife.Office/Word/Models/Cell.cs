@@ -7,6 +7,9 @@ public class Cell
     /// <summary>段落集合</summary>
     public List<Paragraph> Paragraphs { get; } = [];
 
+    /// <summary>嵌套表格（w:tc 内的 w:tbl，W46），Writer 在段落前输出</summary>
+    public List<Table> NestedTables { get; set; } = [];
+
     /// <summary>背景色（16进制 RGB）</summary>
     public String? BackgroundColor { get; set; }
 

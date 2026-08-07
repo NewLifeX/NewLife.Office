@@ -1839,6 +1839,13 @@ public class WordWriter : IDisposable
                     sb.Append("<w:vMerge/>");
                 sb.Append("</w:tcPr>");
 
+                // 嵌套表格（W46）：单元格内的 w:tbl
+                if (cell.NestedTables.Count > 0)
+                {
+                    foreach (var nested in cell.NestedTables)
+                        BuildTableModelXml(sb, nested);
+                }
+
                 foreach (var para in cell.Paragraphs)
                 {
                     // 表头行加粗
@@ -1869,6 +1876,9 @@ public class WordWriter : IDisposable
         var availW = ps.PageWidth - ps.MarginLeft - ps.MarginRight;
 
         sb.Append("<w:tbl><w:tblPr>");
+        // 表格样式引用（优先原样保留，如 "TableGrid"）
+        if (table.StyleId != null)
+            sb.Append($"<w:tblStyle w:val=\"{Esc(table.StyleId)}\"/>");
         // 表格宽度：显式或自适应
         if (table.Width.HasValue)
             sb.Append($"<w:tblW w:w=\"{table.Width}\" w:type=\"dxa\"/>");
@@ -1951,6 +1961,13 @@ public class WordWriter : IDisposable
                 else if (cell.RowSpan == 0)
                     sb.Append("<w:vMerge/>");
                 sb.Append("</w:tcPr>");
+
+                // 嵌套表格（W46）：单元格内的 w:tbl
+                if (cell.NestedTables.Count > 0)
+                {
+                    foreach (var nested in cell.NestedTables)
+                        BuildTableModelXml(sb, nested);
+                }
 
                 foreach (var para in cell.Paragraphs)
                 {

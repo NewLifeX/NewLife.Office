@@ -30,6 +30,9 @@ public class Table
     /// <summary>表格样式（表头背景/斑马纹等）</summary>
     public TableStyle? Style { get; set; }
 
+    /// <summary>表格样式引用 ID（w:tblPr/w:tblStyle w:val，如 "TableGrid"），Reader 保留用于写回</summary>
+    public String? StyleId { get; set; }
+
     /// <summary>四边边框配置，null 表示使用默认样式</summary>
     public TableBorders? Borders { get; set; }
 

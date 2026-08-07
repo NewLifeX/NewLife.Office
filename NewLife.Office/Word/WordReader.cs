@@ -411,7 +411,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
 
     /// <summary>处理 body 下的单个块级元素（段落/表格/内容控件/修订包裹块/节设置）</summary>
     private void ProcessBodyElement(XmlElement el, XmlNamespaceManager ns, Dictionary<String, String> rels,
-        Dictionary<String, RunProperties> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
+        Dictionary<String, WordStyle> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
     {
         if (el.LocalName == "p")
         {
@@ -546,10 +546,30 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         return map;
     }
 
-    /// <summary>加载样式表并展开继承链（docDefaults + basedOn），返回 styleId → 合并后的 RunProperties</summary>
-    private Dictionary<String, RunProperties> LoadStyles()
+    /// <summary>样式信息（含字符格式 RPr 与段落默认格式 PPr），用于把样式默认应用到段落/文字模型</summary>
+    private sealed class WordStyle
     {
-        var map = new Dictionary<String, RunProperties>(StringComparer.OrdinalIgnoreCase);
+        /// <summary>字符格式（展开继承后）</summary>
+        public RunProperties? RPr { get; set; }
+
+        /// <summary>基础样式 ID（基于关系）</summary>
+        public String? BasedOn { get; set; }
+
+        // ── 段落默认（来自样式 w:pPr，段落未显式设置时应用）──
+        public String? Alignment { get; set; }
+        public Int32? IndentLeft { get; set; }
+        public Int32? IndentRight { get; set; }
+        public Int32? FirstLineIndent { get; set; }
+        public Int32? SpaceBefore { get; set; }
+        public Int32? SpaceAfter { get; set; }
+        public Int32? LineSpacingPct { get; set; }
+        public String? BackgroundColor { get; set; }
+    }
+
+    /// <summary>加载样式表并展开继承链（docDefaults + basedOn），返回 styleId → 合并后的样式信息</summary>
+    private Dictionary<String, WordStyle> LoadStyles()
+    {
+        var map = new Dictionary<String, WordStyle>(StringComparer.OrdinalIgnoreCase);
         var entry = _zip.GetEntry("word/styles.xml");
         if (entry == null) return map;
         var doc = new XmlDocument();
@@ -562,22 +582,60 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         if (rPrDefault != null)
             defaults = ParseRunPr(rPrDefault, ns, false);
 
-        // 收集每个样式的直接 rPr 与 basedOn 引用
-        var raw = new Dictionary<String, (RunProperties? RPr, String? BasedOn)>(StringComparer.OrdinalIgnoreCase);
+        // 收集每个样式的直接 rPr / 段落默认 / basedOn 引用
+        var raw = new Dictionary<String, WordStyle>(StringComparer.OrdinalIgnoreCase);
         foreach (XmlElement st in doc.SelectNodes("//w:style", ns)!)
         {
             var styleId = st.GetAttribute("w:styleId");
             if (String.IsNullOrEmpty(styleId)) continue;
-            RunProperties? rPr = null;
+
+            var style = new WordStyle();
             var rPrEl = st.SelectSingleNode("w:rPr", ns) as XmlElement;
             if (rPrEl == null)
             {
-                var pPr = st.SelectSingleNode("w:pPr", ns) as XmlElement;
-                if (pPr != null) rPrEl = pPr.SelectSingleNode("w:rPr", ns) as XmlElement;
+                var pPr0 = st.SelectSingleNode("w:pPr", ns) as XmlElement;
+                if (pPr0 != null) rPrEl = pPr0.SelectSingleNode("w:rPr", ns) as XmlElement;
             }
-            if (rPrEl != null) rPr = ParseRunPr(rPrEl, ns, false);
-            var basedOn = (st.SelectSingleNode("w:basedOn", ns) as XmlElement)?.GetAttribute("w:val");
-            raw[styleId] = (rPr, basedOn);
+            if (rPrEl != null) style.RPr = ParseRunPr(rPrEl, ns, false);
+            style.BasedOn = (st.SelectSingleNode("w:basedOn", ns) as XmlElement)?.GetAttribute("w:val");
+
+            // 段落默认格式（w:pPr）
+            var pPr = st.SelectSingleNode("w:pPr", ns) as XmlElement;
+            if (pPr != null)
+            {
+                var jc = pPr.SelectSingleNode("w:jc", ns) as XmlElement;
+                if (jc != null) style.Alignment = jc.GetAttribute("w:val") ?? jc.GetAttribute("val");
+                var ind = pPr.SelectSingleNode("w:ind", ns) as XmlElement;
+                if (ind != null)
+                {
+                    var left = ind.GetAttribute("w:left") ?? ind.GetAttribute("left");
+                    if (Int32.TryParse(left, out var lv)) style.IndentLeft = lv;
+                    var right = ind.GetAttribute("w:right") ?? ind.GetAttribute("right");
+                    if (Int32.TryParse(right, out var rv)) style.IndentRight = rv;
+                    var firstLine = ind.GetAttribute("w:firstLine") ?? ind.GetAttribute("firstLine");
+                    if (Int32.TryParse(firstLine, out var fl)) style.FirstLineIndent = fl;
+                    else
+                    {
+                        var hanging = ind.GetAttribute("w:hanging") ?? ind.GetAttribute("hanging");
+                        if (Int32.TryParse(hanging, out var hg)) style.FirstLineIndent = -hg;
+                    }
+                }
+                var spacing = pPr.SelectSingleNode("w:spacing", ns) as XmlElement;
+                if (spacing != null)
+                {
+                    var before = spacing.GetAttribute("w:before") ?? spacing.GetAttribute("before");
+                    if (Int32.TryParse(before, out var bv)) style.SpaceBefore = bv;
+                    var after = spacing.GetAttribute("w:after") ?? spacing.GetAttribute("after");
+                    if (Int32.TryParse(after, out var av)) style.SpaceAfter = av;
+                    var line = spacing.GetAttribute("w:line") ?? spacing.GetAttribute("line");
+                    var lineRule = spacing.GetAttribute("w:lineRule") ?? spacing.GetAttribute("lineRule");
+                    if (Int32.TryParse(line, out var lv) && lineRule == "auto")
+                        style.LineSpacingPct = lv * 100 / 240;
+                }
+                var shd = pPr.SelectSingleNode("w:shd", ns) as XmlElement;
+                if (shd != null) style.BackgroundColor = shd.GetAttribute("w:fill") ?? shd.GetAttribute("fill");
+            }
+            raw[styleId] = style;
         }
 
         // 展开继承链（基于 Normal → 目标样式，带环保护）
@@ -587,35 +645,52 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         return map;
     }
 
-    /// <summary>递归展开样式继承链：docDefaults → basedOn 链 → 样式自身 rPr</summary>
+    /// <summary>递归展开样式继承链：docDefaults → basedOn 链 → 样式自身（字符 + 段落默认）</summary>
     /// <param name="styleId">样式 ID</param>
     /// <param name="raw">样式原始信息表</param>
     /// <param name="defaults">文档默认格式</param>
     /// <param name="visited">已访问样式集合（环保护）</param>
-    private static RunProperties ExpandStyle(String styleId,
-        Dictionary<String, (RunProperties? RPr, String? BasedOn)> raw,
+    private static WordStyle ExpandStyle(String styleId,
+        Dictionary<String, WordStyle> raw,
         RunProperties defaults, HashSet<String> visited)
     {
-        var merged = new RunProperties();
+        var merged = new WordStyle();
         // 环保护：重复引用同一样式时返回空，避免无限递归
         if (!visited.Add(styleId)) return merged;
 
-        // 1. 应用文档默认格式
-        merged = MergeRunProps(merged, defaults);
+        // 1. 应用文档默认字符格式
+        merged.RPr = new RunProperties();
+        merged.RPr = MergeRunProps(merged.RPr, defaults);
 
         // 2. 递归应用 basedOn 链
         if (raw.TryGetValue(styleId, out var self) && self.BasedOn != null && raw.ContainsKey(self.BasedOn))
         {
-            var baseProps = ExpandStyle(self.BasedOn!, raw, defaults, visited);
-            merged = MergeRunProps(merged, baseProps);
+            var baseStyle = ExpandStyle(self.BasedOn!, raw, defaults, visited);
+            merged.RPr = MergeRunProps(merged.RPr, baseStyle.RPr);
+            merged = MergeStyleDefaults(merged, baseStyle);
         }
 
         // 3. 应用样式自身格式（最高优先级）
         if (self.RPr != null)
-            merged = MergeRunProps(merged, self.RPr);
+            merged.RPr = MergeRunProps(merged.RPr, self.RPr);
+        merged = MergeStyleDefaults(merged, self);
 
         visited.Remove(styleId);
         return merged;
+    }
+
+    /// <summary>合并段落默认格式（源非空即覆盖）</summary>
+    private static WordStyle MergeStyleDefaults(WordStyle target, WordStyle src)
+    {
+        if (src.Alignment != null) target.Alignment = src.Alignment;
+        if (src.IndentLeft.HasValue) target.IndentLeft = src.IndentLeft;
+        if (src.IndentRight.HasValue) target.IndentRight = src.IndentRight;
+        if (src.FirstLineIndent.HasValue) target.FirstLineIndent = src.FirstLineIndent;
+        if (src.SpaceBefore.HasValue) target.SpaceBefore = src.SpaceBefore;
+        if (src.SpaceAfter.HasValue) target.SpaceAfter = src.SpaceAfter;
+        if (src.LineSpacingPct.HasValue) target.LineSpacingPct = src.LineSpacingPct;
+        if (src.BackgroundColor != null) target.BackgroundColor = src.BackgroundColor;
+        return target;
     }
 
     /// <summary>合并源格式到目标格式（源属性非空即覆盖）</summary>
@@ -683,7 +758,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     #endregion
 
     #region 段落解析
-    private Element ParsePara(XmlElement pEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, RunProperties> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats)
+    private Element ParsePara(XmlElement pEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, WordStyle> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats)
     {
         var para = new Paragraph();
         var isPageBreak = false;
@@ -699,6 +774,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
 
         var pPr = pEl.SelectSingleNode("w:pPr", ns);
         RunProperties? styleDefaults = null;
+        WordStyle? style = null;
         if (pPr is XmlElement pPrEl)
         {
             var pStyle = pPrEl.SelectSingleNode("w:pStyle", ns) as XmlElement;
@@ -708,7 +784,8 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 if (styleId == null) styleId = pStyle.GetAttribute("val");
                 para.StyleId = styleId;
                 para.Style = ParseStyleId(styleId);
-                if (styleId != null) styleMap.TryGetValue(styleId, out styleDefaults);
+                if (styleId != null && styleMap.TryGetValue(styleId, out style))
+                    styleDefaults = style.RPr;
             }
 
             var jc = pPrEl.SelectSingleNode("w:jc", ns) as XmlElement;
@@ -843,6 +920,19 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 var val = widowEl.GetAttribute("w:val") ?? widowEl.GetAttribute("val");
                 para.WidowControl = val != "0" && val != "false";
             }
+        }
+
+        // 应用段落样式默认（段落未显式设置时填充；优先级：内联显式 > 样式默认）
+        if (style != null)
+        {
+            if (para.Alignment == null) para.Alignment = style.Alignment;
+            if (para.IndentLeft == null && style.IndentLeft.HasValue) para.IndentLeft = style.IndentLeft;
+            if (para.IndentRight == null && style.IndentRight.HasValue) para.IndentRight = style.IndentRight;
+            if (para.FirstLineIndent == null && style.FirstLineIndent.HasValue) para.FirstLineIndent = style.FirstLineIndent;
+            if (para.SpaceBefore == null && style.SpaceBefore.HasValue) para.SpaceBefore = style.SpaceBefore;
+            if (para.SpaceAfter == null && style.SpaceAfter.HasValue) para.SpaceAfter = style.SpaceAfter;
+            if (para.LineSpacingPct == null && style.LineSpacingPct.HasValue) para.LineSpacingPct = style.LineSpacingPct;
+            if (para.BackgroundColor == null) para.BackgroundColor = style.BackgroundColor;
         }
 
         var br = pEl.SelectSingleNode("w:r/w:br", ns) as XmlElement;
@@ -1098,15 +1188,32 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     #endregion
 
     #region 表格/图片/节属性
-    private Element ParseTable(XmlElement tblEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, RunProperties> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
+    private Element ParseTable(XmlElement tblEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, WordStyle> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
     {
         var rows = new List<List<Cell>>();
         var firstRowHeader = false;
         var style = new TableStyle();
+        String? tblStyleId = null;
+        String? tblAlignment = null;
+        Int32? tblWidth = null;
 
         var tblPr = tblEl.SelectSingleNode("w:tblPr", ns) as XmlElement;
         if (tblPr != null)
         {
+            // 表格样式引用
+            var tblStyle = tblPr.SelectSingleNode("w:tblStyle", ns) as XmlElement;
+            tblStyleId = tblStyle?.GetAttribute("w:val") ?? tblStyle?.GetAttribute("val");
+            // 表格对齐
+            var jc = tblPr.SelectSingleNode("w:jc", ns) as XmlElement;
+            tblAlignment = jc?.GetAttribute("w:val") ?? jc?.GetAttribute("val");
+            // 表格宽度
+            var tblW = tblPr.SelectSingleNode("w:tblW", ns) as XmlElement;
+            if (tblW != null)
+            {
+                var wv = tblW.GetAttribute("w:w") ?? tblW.GetAttribute("w");
+                if (Int32.TryParse(wv, out var tw)) tblWidth = tw;
+            }
+
             var borders = tblPr.SelectSingleNode("w:tblBorders", ns) as XmlElement;
             if (borders != null)
             {
@@ -1175,6 +1282,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         }
         tableModel.Rows = modelRows;
         tableModel.FirstRowHeader = firstRowHeader;
+        tableModel.StyleId = tblStyleId;
+        tableModel.Alignment = tblAlignment;
+        tableModel.Width = tblWidth;
 
         return new Element
         {
@@ -1187,7 +1297,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     }
 
     private Cell ParseCell(XmlElement tcEl, XmlNamespaceManager ns, Dictionary<String, String> rels,
-        Dictionary<String, RunProperties> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
+        Dictionary<String, WordStyle> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
     {
         var cell = new Cell();
         var tcPr = tcEl.SelectSingleNode("w:tcPr", ns) as XmlElement;
@@ -1226,6 +1336,13 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         {
             var pe = ParsePara(pEl, ns, rels, styleMap, numIdFormats);
             if (pe.Paragraph != null) cell.Paragraphs.Add(pe.Paragraph);
+        }
+
+        // 嵌套表格（W46）：<w:tc><w:tbl>...</w:tbl>
+        foreach (XmlElement tblEl in tcEl.SelectNodes("w:tbl", ns)!)
+        {
+            var te = ParseTable(tblEl, ns, rels, styleMap, numIdFormats, doc);
+            if (te.Table != null) cell.NestedTables.Add(te.Table);
         }
 
         // 单元格内嵌图片：提取图片数据到 doc.Images（RawXml 已保留原 XML）
@@ -1601,7 +1718,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         return sdt;
     }
 
-    private void LoadHdrFtr(Dictionary<String, String> rels, Dictionary<String, RunProperties> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
+    private void LoadHdrFtr(Dictionary<String, String> rels, Dictionary<String, WordStyle> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
     {
         var ps = doc.PageSettings;
 
@@ -1653,7 +1770,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
 
     /// <summary>解析页眉/页脚部件内容为元素列表（段落/表格/内容控件 + 图片提取）</summary>
     private List<Element> LoadHdrFtrElements(String target, Dictionary<String, String> rels,
-        Dictionary<String, RunProperties> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
+        Dictionary<String, WordStyle> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
     {
         var elements = new List<Element>();
         var entry = _zip.GetEntry($"word/{target}");
@@ -2000,8 +2117,20 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
 
     private static String GetCellText(Cell cell)
     {
-        if (cell.Paragraphs.Count == 0) return String.Empty;
+        if (cell.Paragraphs.Count == 0 && cell.NestedTables.Count == 0) return String.Empty;
         var sb = new StringBuilder();
+        // 嵌套表格文本（W46）
+        foreach (var nested in cell.NestedTables)
+        {
+            foreach (var row in nested.Rows)
+            {
+                foreach (var nc in row.Cells)
+                {
+                    sb.Append(GetCellText(nc));
+                    sb.Append('\t');
+                }
+            }
+        }
         for (var i = 0; i < cell.Paragraphs.Count; i++)
         {
             var para = cell.Paragraphs[i];
