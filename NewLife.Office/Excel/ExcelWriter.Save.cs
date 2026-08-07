@@ -278,10 +278,14 @@ partial class ExcelWriter
         return Math.Max(1, endCol - startCol + 1);
     }
 
-    /// <summary>条件格式是否需要 dxf 槽位（cellIs 类型与带颜色的 expression）</summary>
+    /// <summary>条件格式是否需要 dxf 槽位（cellIs 类型与带样式的 expression）</summary>
     private static Boolean IsDxfEligible(ConditionalFormatEntry cf) =>
         cf.Type < ConditionalFormatValues.DataBar ||
-        (cf.Type == ConditionalFormatValues.Expression && !cf.Color.IsNullOrEmpty());
+        (cf.Type == ConditionalFormatValues.Expression && HasDxfStyle(cf));
+
+    /// <summary>条件格式是否携带 dxf 样式（填充色/字体颜色/加粗）</summary>
+    private static Boolean HasDxfStyle(ConditionalFormatEntry cf) =>
+        !cf.Color.IsNullOrEmpty() || !cf.FontColor.IsNullOrEmpty() || cf.IsBold;
 
     /// <summary>计算指定工作表的 dxf 起始索引（全局顺序：按工作表顺序累计之前所有符合条件的槽位）</summary>
     private Int32 GetDxfBase(String sheet)
@@ -913,7 +917,7 @@ partial class ExcelWriter
                         case ConditionalFormatValues.Expression:
                             {
                                 var esc = SecurityElement.Escape(cf.Formula) ?? cf.Formula ?? String.Empty;
-                                var dxfAttr = cf.Color.IsNullOrEmpty() ? String.Empty : $" dxfId=\"{ruleDxfId}\"";
+                                var dxfAttr = HasDxfStyle(cf) ? $" dxfId=\"{ruleDxfId}\"" : String.Empty;
                                 sw.Write($"<cfRule type=\"expression\"{dxfAttr} priority=\"{priority++}\"><formula>{esc}</formula></cfRule>");
                                 break;
                             }
@@ -1639,6 +1643,14 @@ partial class ExcelWriter
                 {
                     if (!IsDxfEligible(cf)) continue;
                     sw.Write("<dxf>");
+                    if (HasDxfStyle(cf) && (!cf.FontColor.IsNullOrEmpty() || cf.IsBold))
+                    {
+                        sw.Write("<font>");
+                        if (cf.IsBold) sw.Write("<b/>");
+                        if (!cf.FontColor.IsNullOrEmpty())
+                            sw.Write($"<color rgb=\"FF{cf.FontColor}\"/>");
+                        sw.Write("</font>");
+                    }
                     if (!cf.Color.IsNullOrEmpty())
                         sw.Write($"<fill><patternFill><bgColor rgb=\"FF{cf.Color}\"/></patternFill></fill>");
                     sw.Write("</dxf>");

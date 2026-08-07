@@ -44,6 +44,11 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     private List<BorderInfo>? _borderInfos;
     private List<XfInfo>? _xfInfos;
     private List<String>? _dxfColors; // 条件格式 dxf 填充背景色（styles.xml dxfs）
+
+    /// <summary>条件格式 dxf 差异样式（styles.xml dxfs）：填充背景色 + 字体颜色/加粗</summary>
+    private record DxfStyle(String? Color, String? FontColor, Boolean IsBold);
+
+    private List<DxfStyle>? _dxfStyles;
     private Dictionary<Int32, String>? _numFmtCodes;
     #endregion
 
@@ -844,20 +849,33 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             }
         }
 
-        // dxfs（条件格式差异样式）——提取填充背景色
-        _dxfColors = [];
+        // dxfs（条件格式差异样式）——提取填充背景色与字体样式
+        _dxfStyles = [];
         var dxfsEl = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "dxfs");
         if (dxfsEl != null)
         {
             foreach (var dxf in dxfsEl.Elements())
             {
                 var color = (String?)null;
+                var fontColor = (String?)null;
+                var isBold = false;
+
                 var fill = dxf.Elements().FirstOrDefault(e => e.Name.LocalName == "fill");
                 var patternFill = fill?.Elements().FirstOrDefault(e => e.Name.LocalName == "patternFill");
                 var bgColor = patternFill?.Elements().FirstOrDefault(e => e.Name.LocalName == "bgColor");
                 var rgb = bgColor?.Attribute("rgb")?.Value;
                 if (!rgb.IsNullOrEmpty()) color = NormalizeRgb(rgb);
-                _dxfColors.Add(color);
+
+                var font = dxf.Elements().FirstOrDefault(e => e.Name.LocalName == "font");
+                if (font != null)
+                {
+                    var fColor = font.Elements().FirstOrDefault(e => e.Name.LocalName == "color");
+                    var frgb = fColor?.Attribute("rgb")?.Value;
+                    if (!frgb.IsNullOrEmpty()) fontColor = NormalizeRgb(frgb);
+                    isBold = font.Elements().Any(e => e.Name.LocalName == "b");
+                }
+
+                _dxfStyles.Add(new DxfStyle(color, fontColor, isBold));
             }
         }
     }
@@ -2121,12 +2139,14 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                     if (formulas.Count > 0) info.Value = formulas[0].Value;
                     if (formulas.Count > 1) info.Value2 = formulas[1].Value;
 
-                    // 从 dxf 获取填充色（styles.xml dxfs 的填充背景色）
+                    // 从 dxf 获取样式（styles.xml dxfs 的填充背景色与字体样式）
                     var dxfId = rule.Attribute("dxfId")?.Value.ToInt(-1) ?? -1;
-                    if (dxfId >= 0 && _dxfColors != null && dxfId < _dxfColors.Count)
+                    if (dxfId >= 0 && _dxfStyles != null && dxfId < _dxfStyles.Count)
                     {
-                        var dc = _dxfColors[dxfId];
-                        if (!dc.IsNullOrEmpty()) info.Color = dc;
+                        var ds = _dxfStyles[dxfId];
+                        if (!ds.Color.IsNullOrEmpty()) info.Color = ds.Color;
+                        if (!ds.FontColor.IsNullOrEmpty()) info.FontColor = ds.FontColor;
+                        info.IsBold = ds.IsBold;
                     }
                 }
                 else if (type == "dataBar")
@@ -2152,12 +2172,14 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                     var formulas = rule.Elements().Where(e => e.Name.LocalName == "formula").ToList();
                     if (formulas.Count > 0) info.Formula = formulas[0].Value;
 
-                    // 从 dxf 获取填充色（expression 条件格式可带样式）
+                    // 从 dxf 获取样式（expression 条件格式可带样式）
                     var dxfId = rule.Attribute("dxfId")?.Value.ToInt(-1) ?? -1;
-                    if (dxfId >= 0 && _dxfColors != null && dxfId < _dxfColors.Count)
+                    if (dxfId >= 0 && _dxfStyles != null && dxfId < _dxfStyles.Count)
                     {
-                        var dc = _dxfColors[dxfId];
-                        if (!dc.IsNullOrEmpty()) info.Color = dc;
+                        var ds = _dxfStyles[dxfId];
+                        if (!ds.Color.IsNullOrEmpty()) info.Color = ds.Color;
+                        if (!ds.FontColor.IsNullOrEmpty()) info.FontColor = ds.FontColor;
+                        info.IsBold = ds.IsBold;
                     }
                 }
 

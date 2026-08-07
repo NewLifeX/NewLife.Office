@@ -93,6 +93,10 @@ public partial class ExcelWriter : DisposeBase
         public String? Value { get; set; }
         public String? Value2 { get; set; }
         public String? Color { get; set; }
+        /// <summary>字体颜色（RGB十六进制，dxf 字体样式）</summary>
+        public String? FontColor { get; set; }
+        /// <summary>是否加粗（dxf 字体样式）</summary>
+        public Boolean IsBold { get; set; }
         /// <summary>图标集类型名（如 "3Arrows"、"3Flags"、"5Rating"），仅 IconSet 使用</summary>
         public String? IconSetType { get; set; }
         /// <summary>自定义公式字符串（不含 = 号），仅 Expression 使用</summary>
@@ -1198,6 +1202,29 @@ public partial class ExcelWriter : DisposeBase
         list.Add(new ConditionalFormatEntry { Range = range, Type = type, Value = value, Value2 = value2, Color = color });
     }
 
+    /// <summary>添加条件格式（带 dxf 字体样式：字体颜色/加粗）</summary>
+    /// <param name="sheet">工作表名称（可空）</param>
+    /// <param name="range">应用范围（如 "A1:A100"）</param>
+    /// <param name="type">条件类型</param>
+    /// <param name="value">条件值</param>
+    /// <param name="color">满足条件时的背景色（RGB十六进制）</param>
+    /// <param name="value2">第二个条件值（仅 Between 类型使用）</param>
+    /// <param name="fontColor">满足条件时的字体颜色（RGB十六进制，可空）</param>
+    /// <param name="bold">满足条件时是否加粗</param>
+    public void AddConditionalFormat(String? sheet, String range, ConditionalFormatValues type, String? value, String? color, String? value2, String? fontColor, Boolean bold = false)
+    {
+        if (range.IsNullOrEmpty()) throw new ArgumentNullException(nameof(range));
+        if (sheet.IsNullOrEmpty()) sheet = SheetName;
+        EnsureSheet(sheet);
+
+        if (!_sheetCondFormats.TryGetValue(sheet, out var list))
+        {
+            list = [];
+            _sheetCondFormats[sheet] = list;
+        }
+        list.Add(new ConditionalFormatEntry { Range = range, Type = type, Value = value, Value2 = value2, Color = color, FontColor = fontColor, IsBold = bold });
+    }
+
     /// <summary>添加图标集条件格式</summary>
     /// <param name="sheet">工作表名称（可空）</param>
     /// <param name="range">应用范围（如 "A1:A100"）</param>
@@ -1445,7 +1472,7 @@ public partial class ExcelWriter : DisposeBase
                 // 条件格式
                 foreach (var cf in sd.ConditionalFormats)
                 {
-                    AddConditionalFormat(sheet, cf.Range, cf.Type, cf.Value, cf.Color, cf.Value2);
+                    AddConditionalFormat(sheet, cf.Range, cf.Type, cf.Value, cf.Color, cf.Value2, cf.FontColor, cf.IsBold);
                 }
 
                 // 批注（0基→1基行）

@@ -19,6 +19,12 @@ public class ConditionalFormatting
     /// <summary>颜色（RGB十六进制）</summary>
     public String? Color { get; set; }
 
+    /// <summary>字体颜色（RGB十六进制，dxf 字体样式）</summary>
+    public String? FontColor { get; set; }
+
+    /// <summary>是否加粗（dxf 字体样式）</summary>
+    public Boolean IsBold { get; set; }
+
     /// <summary>图标集类型（仅 IconSet 类型，如 "3Arrows"/"3TrafficLights1"）</summary>
     public String? IconSetType { get; set; }
 

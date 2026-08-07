@@ -533,6 +533,68 @@ public class ExcelReaderRobustnessTests
     }
     #endregion
 
+    #region 条件格式 dxf 字体样式往返
+    [Fact]
+    [DisplayName("Excel往返—条件格式dxf字体颜色/加粗写入读取")]
+    public void ConditionalFormat_Font_Roundtrip()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w = new ExcelWriter(path))
+        {
+            w.WriteRow("Sheet1", new Object?[] { 100 });
+            w.WriteRow("Sheet1", new Object?[] { 0 });
+            w.AddConditionalFormat("Sheet1", "A1:A2", ConditionalFormatValues.GreaterThan, "0", "92D050", null, "FF0000", true);
+            w.AddConditionalFormat("Sheet1", "A1:A2", ConditionalFormatValues.LessThan, "50", "FF0000", null, "0000FF", false);
+            w.AddExpressionConditionalFormat("Sheet1", "A1:A2", "A1>200", "FFFF00");
+            w.Save();
+        }
+
+        // 直接读取
+        using (var reader = new ExcelReader(path))
+        {
+            var cfs = reader.ReadConditionalFormats("Sheet1").ToList();
+            Assert.Equal(3, cfs.Count);
+            var gt = cfs.First(c => c.Type == ConditionalFormatValues.GreaterThan);
+            Assert.Equal("92D050", gt.Color);
+            Assert.Equal("FF0000", gt.FontColor);
+            Assert.True(gt.IsBold);
+            var lt = cfs.First(c => c.Type == ConditionalFormatValues.LessThan);
+            Assert.Equal("FF0000", lt.Color);
+            Assert.Equal("0000FF", lt.FontColor);
+            Assert.False(lt.IsBold);
+            var ex = cfs.First(c => c.Type == ConditionalFormatValues.Expression);
+            Assert.Equal("FFFF00", ex.Color);
+            Assert.Null(ex.FontColor);
+        }
+
+        // 快照往返后仍保留
+        ExcelDocument data;
+        using (var reader = new ExcelReader(path))
+        {
+            data = reader.ReadExcel();
+        }
+        var path2 = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w2 = new ExcelWriter(path2))
+        {
+            w2.WriteExcel(data);
+            w2.Save();
+        }
+        using var reader2 = new ExcelReader(path2);
+        var cfs2 = reader2.ReadConditionalFormats("Sheet1").ToList();
+        var gt2 = cfs2.First(c => c.Type == ConditionalFormatValues.GreaterThan);
+        Assert.Equal("92D050", gt2.Color);
+        Assert.Equal("FF0000", gt2.FontColor);
+        Assert.True(gt2.IsBold);
+        var lt2 = cfs2.First(c => c.Type == ConditionalFormatValues.LessThan);
+        Assert.Equal("FF0000", lt2.Color);
+        Assert.Equal("0000FF", lt2.FontColor);
+        Assert.False(lt2.IsBold);
+        var ex2 = cfs2.First(c => c.Type == ConditionalFormatValues.Expression);
+        Assert.Equal("FFFF00", ex2.Color);
+        Assert.Null(ex2.FontColor);
+    }
+    #endregion
+
     #region 缺失部件容错
     [Fact]
     [DisplayName("Excel读—无sharedStrings/styles部件仍可读取")]
