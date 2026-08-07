@@ -245,6 +245,23 @@ public class TextBoxFieldTests
         Assert.Single(doc.FindText("控件内容"));
     }
 
+    [Fact, DisplayName("W22_文本框_GetText与Markdown转换包含文本框")]
+    public void TextBox_GetTextAndMarkdown()
+    {
+        var (bytes, _) = BuildTextboxDocx("框内说明文字");
+        using var ms = new MemoryStream(bytes);
+        using var reader = new WordReader(ms);
+
+        // 模型 GetText 包含文本框
+        var doc = reader.ReadDocument();
+        Assert.Contains("框内说明文字", doc.GetText());
+
+        // Markdown 转换包含文本框（Word 原生导出行为）
+        var md = reader.ExtractMarkdown();
+        Assert.NotNull(md);
+        Assert.Contains("框内说明文字", md);
+    }
+
     [Fact, DisplayName("W22_文本框_表格单元格内替换持久化")]
     public void TextBox_InTableCell_ReplacePersists()
     {

@@ -2138,8 +2138,32 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         // 普通段落
         FlushLists(md);
         var inlines = BuildRunInlines(para.Runs, doc);
+        // 文本框内容并入（Word 原生导出/搜索均包含文本框文本，W22）
+        if (para.TextBoxes.Count > 0)
+        {
+            foreach (var tp in EnumerateTextBoxesForMd(para))
+            {
+                var tbInlines = BuildRunInlines(tp.Runs, doc);
+                if (tbInlines.Count > 0)
+                {
+                    if (inlines.Count > 0) inlines.Add(MarkdownInline.CreateText(" "));
+                    inlines.AddRange(tbInlines);
+                }
+            }
+        }
         if (inlines.Count > 0)
             md.Blocks.Add(MarkdownBlock.CreateParagraph(inlines));
+    }
+
+    /// <summary>递归枚举段落内文本框内容段落（W22，Markdown 转换用）</summary>
+    private static IEnumerable<Paragraph> EnumerateTextBoxesForMd(Paragraph para)
+    {
+        foreach (var tp in para.TextBoxes)
+        {
+            yield return tp;
+            foreach (var nested in EnumerateTextBoxesForMd(tp))
+                yield return nested;
+        }
     }
 
     /// <summary>提交所有列表缓冲</summary>

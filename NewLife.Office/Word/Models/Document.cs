@@ -150,6 +150,8 @@ public class Document
         if (el.Paragraph != null)
         {
             foreach (var r in el.Paragraph.Runs) sb.Append(r.Text);
+            // 文本框内容并入（与 Word 原生搜索/导出一致）
+            AppendTextBoxesText(sb, el.Paragraph);
             sb.AppendLine();
         }
         else if (el.Table != null)
@@ -182,7 +184,7 @@ public class Document
         }
     }
 
-    /// <summary>将单元格文本（含嵌套表格）追加到 StringBuilder</summary>
+    /// <summary>将单元格文本（含嵌套表格与文本框）追加到 StringBuilder</summary>
     private static void AppendCellText(StringBuilder sb, Cell cell)
     {
         foreach (var nested in cell.NestedTables)
@@ -200,6 +202,17 @@ public class Document
         foreach (var p in cell.Paragraphs)
         {
             foreach (var r in p.Runs) sb.Append(r.Text);
+            AppendTextBoxesText(sb, p);
+        }
+    }
+
+    /// <summary>递归追加段落内文本框文本（W22）</summary>
+    private static void AppendTextBoxesText(StringBuilder sb, Paragraph para)
+    {
+        foreach (var tp in para.TextBoxes)
+        {
+            foreach (var r in tp.Runs) sb.Append(r.Text);
+            AppendTextBoxesText(sb, tp);
         }
     }
     #endregion
