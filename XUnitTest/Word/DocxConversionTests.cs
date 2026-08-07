@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.IO;
 using System.Text;
+using NewLife.Office;
 using NewLife.Office.Ole2;
 using NewLife.Office.Word;
 using Xunit;
@@ -233,6 +234,28 @@ public class DocxConversionTests
         Assert.Equal(2, doc.Elements.Count);
         Assert.Equal("Alpha", String.Concat(doc.Elements[0].Paragraph!.Runs.Select(r => r.Text)));
         Assert.Equal("Beta", String.Concat(doc.Elements[1].Paragraph!.Runs.Select(r => r.Text)));
+    }
+
+    [Fact, DisplayName("W20_doc转docx_OfficeFactory便捷转换")]
+    public void DocToDocx_OfficeFactory()
+    {
+        var bytes = BuildDoc("FactoryDoc\r");
+        var inPath = Path.Combine(Path.GetTempPath(), $"in_{Guid.NewGuid():N}.doc");
+        var outPath = Path.Combine(Path.GetTempPath(), $"out_{Guid.NewGuid():N}.docx");
+        try
+        {
+            File.WriteAllBytes(inPath, bytes);
+            OfficeFactory.ConvertDocToDocx(inPath, outPath);
+            Assert.True(File.Exists(outPath));
+
+            using var reader = new WordReader(outPath);
+            Assert.Contains("FactoryDoc", reader.ReadFullText());
+        }
+        finally
+        {
+            if (File.Exists(inPath)) File.Delete(inPath);
+            if (File.Exists(outPath)) File.Delete(outPath);
+        }
     }
 
     #endregion

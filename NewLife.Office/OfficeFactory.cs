@@ -462,4 +462,24 @@ public static class OfficeFactory
         }
     }
     #endregion
+
+    #region 格式转换
+    /// <summary>将 doc（97-2003）文件转换为 docx 文件（W20）</summary>
+    /// <param name="inputPath">doc 输入路径</param>
+    /// <param name="outputPath">docx 输出路径</param>
+    public static void ConvertDocToDocx(String inputPath, String outputPath)
+    {
+        using var reader = new DocReader(inputPath);
+        reader.SaveAsDocx(outputPath);
+    }
+
+    /// <summary>将 doc（97-2003）数据流转换为 docx 数据流（W20）</summary>
+    /// <param name="inputStream">doc 输入流</param>
+    /// <param name="outputStream">docx 输出流</param>
+    public static void ConvertDocToDocx(Stream inputStream, Stream outputStream)
+    {
+        using var reader = new DocReader(inputStream);
+        reader.SaveAsDocx(outputStream);
+    }
+    #endregion
 }

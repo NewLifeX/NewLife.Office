@@ -538,12 +538,13 @@ var doc = new XWPFDocument(File.OpenRead("source.docx"));
 | 差距 | 说明 | 影响 |
 |------|------|------|
 | 修订追踪（Track Changes） | 仅可通过 DocumentXml 全文透传保留现有修订，无模型级读取/接受/拒绝 | 🟡 中 |
-| doc 写入 | 仅支持 doc 读取（OLE2 纯文本 + 段落结构），不支持写回 .doc | 🟢 低 |
+| doc 写入 | 仅支持 doc 读取（OLE2 纯文本 + 段落结构），不支持写回 .doc；**已补 doc→docx 转换**（`DocReader.ToDocument/SaveAsDocx`，段落/表格/格式映射），覆盖历史文档迁移主场景 | 🟢 低 |
+| doc 图片/页眉页脚提取 | MS-DOC DrawingGroup/PICF 与 STSHI/Plcfhdd 二进制解析复杂度高，暂缓 | 🟢 低 |
 | docx → 图片渲染 | PDF 转换为内容映射型，非像素级渲染引擎，无法渲染成图片 | 🟡 中 |
 | 公式/图表/SmartArt 程序化创建 | 现有公式/图表/SmartArt 通过部件透传完整保留，但不支持从零创建 | 🟢 低 |
 | 自选图形/ActiveX | 不支持形状对象创建与 ActiveX 控件 | 🟢 低 |
 
-> **策略**：上述差距均为设计取舍——保持 MIT 纯净性、零外部依赖与轻量化是更高优先级。PDF 像素级渲染可通过可选的外部工具（LibreOffice headless）集成提供，不引入核心库重依赖；修订追踪模型、doc 写入等将按用户需求优先级排期。
+> **策略**：上述差距均为设计取舍——保持 MIT 纯净性、零外部依赖与轻量化是更高优先级。PDF 像素级渲染可通过可选的外部工具（LibreOffice headless）集成提供，不引入核心库重依赖；修订追踪模型、doc 写入等将按用户需求优先级排期。doc 图片/页眉页脚提取在 doc→docx 转换覆盖主场景后收益有限，暂缓。
 
 ---
 

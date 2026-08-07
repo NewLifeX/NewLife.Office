@@ -38,8 +38,8 @@ Nuget：NewLife.Office（渲染扩展包：NewLife.Office.Rendering）
 |------|:---:|:---:|:---:|:---:|:---:|------|
 | **Excel xlsx** | ✅ | ✅ | ✅ | — | — | 含样式/图表/透视表/条件格式/图片/命名范围/结构化表格/批注/迷你图/切片器/线程化批注/隐藏行列，流式读取与 1904 日期支持 |
 | **Excel xls** | ✅ | ✅ | — | — | — | OLE2/BIFF8，BiffReader+BiffWriter 读写双全，含样式/合并/超链接/筛选/页面设置 |
-| **Word docx** | ✅ | ✅ | ✅ | HTML/PDF | — | 含段落/表格/图片/页眉页脚/批注/内容控件/AES 加密/邮件合并/查找替换/多节 |
-| **Word doc** | ✅ | — | — | — | — | MS-DOC，DocReader 纯文本 + 段落格式提取（粗体/字号/对齐等） |
+| **Word docx** | ✅ | ✅ | ✅ | HTML/PDF | — | 含段落/表格/图片/页眉页脚/批注/内容控件/AES 加密/邮件合并/查找替换（含文本框）/脚注模型/多节，NPOI+OpenXmlValidator 交叉验证 |
+| **Word doc** | ✅ | — | — | ✅ doc→docx | — | MS-DOC，DocReader 纯文本 + 段落格式提取（粗体/字号/对齐等）+ doc→docx 转换 |
 | **PPT pptx** | ✅ | ✅ | ✅ | PDF | — | 含文本框/图片/表格/图表/母版/动画/批注/Section；跨文件合并 |
 | **PPT ppt** | ✅ | — | — | — | — | MS-PPT，PptReader 提取幻灯片文本 |
 | **PDF** | ✅ | ✅ | — | — | — | 含 Fluent API/合并/拆分/加密/签名/表单/注释/PDF-A |
