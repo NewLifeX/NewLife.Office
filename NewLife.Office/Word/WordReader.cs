@@ -2068,12 +2068,33 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             }
             FlushLists(md);
 
+            // 脚注/尾注（W22：AI 知识库场景包含脚注内容）
+            AppendNotesToMarkdown(md, doc.Footnotes, "脚注");
+            AppendNotesToMarkdown(md, doc.Endnotes, "尾注");
+
             return md.Blocks.Count > 0 ? md : null;
         }
         catch
         {
             return null;
         }
+    }
+
+    /// <summary>将脚注/尾注追加为 Markdown 引用块（AI 知识库场景）</summary>
+    private static void AppendNotesToMarkdown(MarkdownDocument md, List<Footnote> notes, String label)
+    {
+        if (notes.Count == 0) return;
+        var sb = new StringBuilder();
+        var added = false;
+        foreach (var fn in notes)
+        {
+            if (String.IsNullOrWhiteSpace(fn.Text)) continue;
+            if (sb.Length > 0) sb.Append('\n');
+            sb.Append($"{label} {fn.Id}: {fn.Text}");
+            added = true;
+        }
+        if (added)
+            md.Blocks.Add(MarkdownBlock.CreateBlockQuote([MarkdownBlock.CreateParagraph([MarkdownInline.CreateText(sb.ToString())])]));
     }
 
     /// <summary>回退构建：纯段落 + 表格</summary>

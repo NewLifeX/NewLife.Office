@@ -65,6 +65,11 @@ public class WordWriter : IDisposable
     public Boolean ProtectionReadOnly { get; set; }
 
     private Dictionary<String, String> _documentVariables = [];
+
+    // 程序化创建的脚注/尾注（非空时生成 footnotes.xml/endnotes.xml 部件，W22）
+    private List<Footnote> _footnotes = [];
+    private List<Footnote> _endnotes = [];
+    private Int32 _nextNoteId = 1;
     #endregion
 
     #region 构造
@@ -202,6 +207,62 @@ public class WordWriter : IDisposable
             + "<w:r><w:fldChar w:fldCharType=\"end\"/></w:r>"
             + "</w:p>";
         _elements.Add(new Element { Type = ElementType.Paragraph, RawXml = xml });
+    }
+
+    /// <summary>追加带脚注的段落（W22：程序化创建脚注，对标 Word/Aspose）</summary>
+    /// <param name="paragraphText">段落正文文本</param>
+    /// <param name="footnoteText">脚注内容（显示在页面底部）</param>
+    /// <returns>段落对象</returns>
+    /// <remarks>
+    /// 自动分配脚注 ID 并注册到 <c>word/footnotes.xml</c>（含内置分隔符标记），
+    /// 段落末尾生成上标脚注引用 <c>w:footnoteReference</c>。
+    /// </remarks>
+    public Paragraph AppendFootnote(String paragraphText, String footnoteText)
+    {
+        if (footnoteText == null) throw new ArgumentNullException(nameof(footnoteText));
+        var id = _nextNoteId++;
+        _footnotes.Add(new Footnote
+        {
+            Id = id,
+            Text = footnoteText,
+            Paragraphs = { new Paragraph { Runs = { new Run { Text = footnoteText } } } },
+        });
+
+        var para = new Paragraph();
+        if (!String.IsNullOrEmpty(paragraphText))
+            para.Runs.Add(new Run { Text = paragraphText });
+        var xml = "<w:p>"
+            + (String.IsNullOrEmpty(paragraphText) ? "" : $"<w:r><w:t xml:space=\"preserve\">{Esc(paragraphText)}</w:t></w:r>")
+            + $"<w:r><w:rPr><w:vertAlign w:val=\"superscript\"/></w:rPr><w:footnoteReference w:id=\"{id}\"/></w:r>"
+            + "</w:p>";
+        _elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para, RawXml = xml });
+        return para;
+    }
+
+    /// <summary>追加带尾注的段落（W22：程序化创建尾注，对标 Word/Aspose）</summary>
+    /// <param name="paragraphText">段落正文文本</param>
+    /// <param name="endnoteText">尾注内容（显示在文档末尾）</param>
+    /// <returns>段落对象</returns>
+    public Paragraph AppendEndnote(String paragraphText, String endnoteText)
+    {
+        if (endnoteText == null) throw new ArgumentNullException(nameof(endnoteText));
+        var id = _nextNoteId++;
+        _endnotes.Add(new Footnote
+        {
+            Id = id,
+            Text = endnoteText,
+            Paragraphs = { new Paragraph { Runs = { new Run { Text = endnoteText } } } },
+        });
+
+        var para = new Paragraph();
+        if (!String.IsNullOrEmpty(paragraphText))
+            para.Runs.Add(new Run { Text = paragraphText });
+        var xml = "<w:p>"
+            + (String.IsNullOrEmpty(paragraphText) ? "" : $"<w:r><w:t xml:space=\"preserve\">{Esc(paragraphText)}</w:t></w:r>")
+            + $"<w:r><w:rPr><w:vertAlign w:val=\"superscript\"/></w:rPr><w:endnoteReference w:id=\"{id}\"/></w:r>"
+            + "</w:p>";
+        _elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para, RawXml = xml });
+        return para;
     }
 
     /// <summary>追加分页符</summary>
@@ -499,6 +560,9 @@ public class WordWriter : IDisposable
                 if (_mergeDocumentRels != null)
                     WriteEntry(za, "word/_rels/document.xml.rels", InjectHeaderFooterRels(_mergeDocumentRels));
             }
+            // 脚注/尾注（模型重建且用户修改/新增时）：重新生成部件，覆盖透传的旧文件
+            if (_footnotes.Count > 0 || _endnotes.Count > 0)
+                WriteNotes(za);
             WriteDocument(za);
             return;
         }
@@ -511,6 +575,7 @@ public class WordWriter : IDisposable
         WriteDocument(za);
         WriteNumbering(za);
         WriteDocumentRels(za);
+        WriteNotes(za);
         var psave = PageSettings;
         var hdrInOther = _otherParts.ContainsKey("word/header1.xml");
         var ftrInOther = _otherParts.ContainsKey("word/footer1.xml");
@@ -563,6 +628,15 @@ public class WordWriter : IDisposable
         _headers = document.Headers;
         _footers = document.Footers;
         _sections = document.Sections;
+        // 脚注/尾注：模型输出（DocumentXml=null）时由 Writer 生成部件，否则走 OtherParts 透传
+        if (document.DocumentXml == null)
+        {
+            _footnotes = document.Footnotes;
+            _endnotes = document.Endnotes;
+            // 计算下一个可用 ID（避免与现有脚注冲突）
+            foreach (var fn in _footnotes) if (fn.Id >= _nextNoteId) _nextNoteId = fn.Id + 1;
+            foreach (var en in _endnotes) if (en.Id >= _nextNoteId) _nextNoteId = en.Id + 1;
+        }
         // 自定义 XML 部件写入 OtherParts 以便原样透传
         foreach (var kv in document.CustomXmlParts)
             _otherParts[$"customXml/{kv.Key}"] = kv.Value;
@@ -658,6 +732,9 @@ public class WordWriter : IDisposable
             written.Add("word/footer1.xml");
             written.Add("word/_rels/footer1.xml.rels");
         }
+        // Writer 生成脚注/尾注部件时，排除透传的旧文件
+        if (_footnotes.Count > 0) written.Add("word/footnotes.xml");
+        if (_endnotes.Count > 0) written.Add("word/endnotes.xml");
 
         foreach (var kv in _otherParts)
         {
@@ -704,6 +781,11 @@ public class WordWriter : IDisposable
             sb.Append("<Override PartName=\"/docProps/core.xml\" ContentType=\"application/vnd.openxmlformats-package.core-properties+xml\"/>");
         if (DocumentProperties.CustomProperties.Count > 0)
             sb.Append("<Override PartName=\"/docProps/custom.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.custom-properties+xml\"/>");
+        // 脚注/尾注（W22）
+        if (_footnotes.Count > 0)
+            sb.Append("<Override PartName=\"/word/footnotes.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml\"/>");
+        if (_endnotes.Count > 0)
+            sb.Append("<Override PartName=\"/word/endnotes.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml\"/>");
         // 图表（W13）：chart 部件 + 嵌入式 xlsx
         if (_elements.Any(e => e.Type == ElementType.Chart && e.Chart != null))
         {
@@ -781,6 +863,11 @@ public class WordWriter : IDisposable
         {
             sb.Append("<Relationship Id=\"rFtr1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer\" Target=\"footer1.xml\"/>");
         }
+        // 脚注/尾注关系（W22）
+        if (_footnotes.Count > 0)
+            sb.Append("<Relationship Id=\"rFootnotes\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes\" Target=\"footnotes.xml\"/>");
+        if (_endnotes.Count > 0)
+            sb.Append("<Relationship Id=\"rEndnotes\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes\" Target=\"endnotes.xml\"/>");
         foreach (var (relId, url) in _hyperlinkRels)
         {
             sb.Append($"<Relationship Id=\"{relId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"{Esc(url)}\" TargetMode=\"External\"/>");
@@ -1415,6 +1502,65 @@ public class WordWriter : IDisposable
         sb.Append("<w:fldSimple w:instr=\" PAGE \"><w:r><w:t>1</w:t></w:r></w:fldSimple>");
         sb.Append("</w:p></w:ftr>");
         WriteEntry(za, "word/footer1.xml", sb.ToString());
+    }
+
+    /// <summary>生成脚注/尾注部件（footnotes.xml/endnotes.xml，含内置分隔符标记，W22）</summary>
+    private void WriteNotes(ZipArchive za)
+    {
+        if (_footnotes.Count > 0)
+            WriteNotePart(za, "word/footnotes.xml", "w:footnote", _footnotes);
+        if (_endnotes.Count > 0)
+            WriteNotePart(za, "word/endnotes.xml", "w:endnote", _endnotes);
+    }
+
+    /// <summary>生成单个脚注/尾注部件</summary>
+    private void WriteNotePart(ZipArchive za, String path, String elemName, List<Footnote> notes)
+    {
+        const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+        var sb = new StringBuilder();
+        sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        sb.Append($"<{elemName}s xmlns:w=\"{W}\">");
+        // 内置分隔符/续接分隔符标记（Word 必需）
+        sb.Append($"<{elemName} w:type=\"separator\" w:id=\"-1\"><w:p><w:r><w:separator/></w:r></w:p></{elemName}>");
+        sb.Append($"<{elemName} w:type=\"continuationSeparator\" w:id=\"0\"><w:p><w:r><w:continuationSeparator/></w:r></w:p></{elemName}>");
+        foreach (var note in notes)
+        {
+            sb.Append($"<{elemName} w:id=\"{note.Id}\">");
+            if (note.Paragraphs.Count > 0)
+            {
+                foreach (var p in note.Paragraphs)
+                    sb.Append(BuildNoteParagraphXml(p));
+            }
+            else
+            {
+                sb.Append($"<w:p><w:r><w:t xml:space=\"preserve\">{Esc(note.Text)}</w:t></w:r></w:p>");
+            }
+            sb.Append($"</{elemName}>");
+        }
+        sb.Append($"</{elemName}s>");
+        WriteEntry(za, path, sb.ToString());
+    }
+
+    /// <summary>构建脚注内容段落 XML（Run 模型，保留粗体/斜体）</summary>
+    private static String BuildNoteParagraphXml(Paragraph p)
+    {
+        var sb = new StringBuilder();
+        sb.Append("<w:p>");
+        foreach (var run in p.Runs)
+        {
+            sb.Append("<w:r>");
+            if (run.Properties != null)
+            {
+                sb.Append("<w:rPr>");
+                if (run.Properties.Bold == true) sb.Append("<w:b/>");
+                if (run.Properties.Italic == true) sb.Append("<w:i/>");
+                sb.Append("</w:rPr>");
+            }
+            sb.Append($"<w:t xml:space=\"preserve\">{Esc(run.Text)}</w:t>");
+            sb.Append("</w:r>");
+        }
+        sb.Append("</w:p>");
+        return sb.ToString();
     }
 
     /// <summary>渲染单个文档元素（段落/表格/图片/形状/图表/内容控件），优先 RawXml 透传</summary>

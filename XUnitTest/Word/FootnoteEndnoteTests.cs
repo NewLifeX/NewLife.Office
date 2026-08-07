@@ -200,5 +200,99 @@ public class FootnoteEndnoteTests
         finally { if (File.Exists(outPath)) File.Delete(outPath); }
     }
 
+    [Fact, DisplayName("W22_脚注_Markdown转换包含脚注")]
+    public void Footnotes_Markdown_Included()
+    {
+        var bytes = BuildDocxWithNotes();
+        using var ms = new MemoryStream(bytes);
+        using var reader = new WordReader(ms);
+        var md = reader.ExtractMarkdown();
+        Assert.NotNull(md);
+        Assert.Contains("脚注 1: 这是脚注内容", md);
+        Assert.Contains("尾注 2: 这是尾注内容", md);
+    }
+
+    #endregion
+
+    #region 写入（WordWriter 程序化创建脚注/尾注）
+
+    [Fact, DisplayName("W22_脚注_WordWriter程序化创建并读回")]
+    public void Writer_AppendFootnote_RoundTrip()
+    {
+        var outPath = Path.Combine(Path.GetTempPath(), $"notes_{Guid.NewGuid():N}.docx");
+        try
+        {
+            using (var w = new WordWriter())
+            {
+                w.AppendFootnote("研究背景", "这是第一个脚注");
+                w.AppendParagraph("正文内容");
+                w.AppendEndnote("附录说明", "这是尾注");
+                w.Save(outPath);
+            }
+
+            using (var reader = new WordReader(outPath))
+            {
+                var doc = reader.ReadDocument();
+                Assert.Single(doc.Footnotes);
+                Assert.Equal("这是第一个脚注", doc.Footnotes[0].Text);
+                Assert.Equal(1, doc.Footnotes[0].Id);
+                Assert.Single(doc.Endnotes);
+                Assert.Equal("这是尾注", doc.Endnotes[0].Text);
+            }
+        }
+        finally { if (File.Exists(outPath)) File.Delete(outPath); }
+    }
+
+    [Fact, DisplayName("W22_脚注_WordWriter创建含脚注文件通过规范校验")]
+    public void Writer_AppendFootnote_ValidDocx()
+    {
+        var outPath = Path.Combine(Path.GetTempPath(), $"notes_{Guid.NewGuid():N}.docx");
+        try
+        {
+            using (var w = new WordWriter())
+            {
+                w.AppendFootnote("段落带脚注", "脚注内容");
+                w.AppendParagraph("第二段");
+                w.Save(outPath);
+            }
+
+            // OpenXmlValidator 校验（引用 DocumentFormat.OpenXml）
+            using var doc = DocumentFormat.OpenXml.Packaging.WordprocessingDocument.Open(outPath, false);
+            var validator = new DocumentFormat.OpenXml.Validation.OpenXmlValidator(DocumentFormat.OpenXml.FileFormatVersions.Office2019);
+            var errors = validator.Validate(doc).ToList();
+            Assert.Empty(errors);
+        }
+        finally { if (File.Exists(outPath)) File.Delete(outPath); }
+    }
+
+    [Fact, DisplayName("W22_脚注_模型写回保留脚注（读入→写出）")]
+    public void Writer_ModelWriteBack_PreservesNotes()
+    {
+        var bytes = BuildDocxWithNotes();
+        var outPath = Path.Combine(Path.GetTempPath(), $"notes_{Guid.NewGuid():N}.docx");
+        try
+        {
+            Document doc;
+            using (var ms = new MemoryStream(bytes))
+            using (var reader = new WordReader(ms))
+                doc = reader.ReadDocument();
+
+            // 模型输出：DocumentXml=null 触发 Writer 生成 footnotes.xml
+            doc.DocumentXml = null;
+            using (var writer = new WordWriter())
+                writer.Save(outPath, doc);
+
+            using (var reader = new WordReader(outPath))
+            {
+                var re = reader.ReadDocument();
+                Assert.Single(re.Footnotes);
+                Assert.Equal("这是脚注内容", re.Footnotes[0].Text);
+                Assert.Single(re.Endnotes);
+                Assert.Equal("这是尾注内容", re.Endnotes[0].Text);
+            }
+        }
+        finally { if (File.Exists(outPath)) File.Delete(outPath); }
+    }
+
     #endregion
 }
