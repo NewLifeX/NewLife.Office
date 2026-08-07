@@ -18,4 +18,14 @@ public sealed class OrderedListBlock : MarkdownBlock
         OrderedStart = start;
         Children.AddRange(items);
     }
+
+    /// <summary>创建有序列表（MD25：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="items">列表项列表</param>
+    /// <param name="start">起始序号</param>
+    internal OrderedListBlock(List<MarkdownBlock> items, Int32 start = 1)
+    {
+        Type = MarkdownBlockType.OrderedList;
+        OrderedStart = start;
+        SetChildren(items);
+    }
 }

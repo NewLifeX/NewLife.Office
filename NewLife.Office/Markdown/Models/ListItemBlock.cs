@@ -44,4 +44,16 @@ public sealed class ListItemBlock : MarkdownBlock
         b.Children.AddRange(children);
         return b;
     }
+
+    /// <summary>创建列表项（嵌套块内容，MD25：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="children">子块列表</param>
+    /// <param name="isTaskItem">是否任务项</param>
+    /// <param name="isChecked">是否已勾选</param>
+    internal static ListItemBlock CreateWithBlocks(List<MarkdownBlock> children,
+        Boolean isTaskItem = false, Boolean isChecked = false)
+    {
+        var b = new ListItemBlock([], isTaskItem, isChecked);
+        b.SetChildren(children);
+        return b;
+    }
 }

@@ -13,4 +13,12 @@ public sealed class BulletListBlock : MarkdownBlock
         Type = MarkdownBlockType.BulletList;
         Children.AddRange(items);
     }
+
+    /// <summary>创建无序列表（MD25：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="items">列表项列表</param>
+    internal BulletListBlock(List<MarkdownBlock> items)
+    {
+        Type = MarkdownBlockType.BulletList;
+        SetChildren(items);
+    }
 }

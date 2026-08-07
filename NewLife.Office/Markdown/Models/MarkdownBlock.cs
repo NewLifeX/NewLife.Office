@@ -32,6 +32,10 @@ public abstract class MarkdownBlock
     /// <param name="inlines">行内列表</param>
     protected void SetInlines(List<MarkdownInline> inlines) => _inlines = inlines;
 
+    /// <summary>直接接管子块列表（MD25：容器块 Parse 内部 List 直接归属，避免 AddRange 复制）</summary>
+    /// <param name="children">子块列表</param>
+    protected void SetChildren(List<MarkdownBlock> children) => _children = children;
+
     /// <summary>自定义属性（MD05-06），如 "class1 class2" 或 "id1" 或 "key=value"</summary>
     public String? Attributes { get; set; }
 
@@ -92,10 +96,22 @@ public abstract class MarkdownBlock
     public static MarkdownBlock CreateBlockQuote(IEnumerable<MarkdownBlock> children)
         => new BlockQuoteBlock(children);
 
+    /// <summary>创建引用块（MD25：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="children">子块列表</param>
+    /// <returns>引用块</returns>
+    public static MarkdownBlock CreateBlockQuote(List<MarkdownBlock> children)
+        => new BlockQuoteBlock(children);
+
     /// <summary>创建无序列表</summary>
     /// <param name="items">列表项</param>
     /// <returns>块</returns>
     public static MarkdownBlock CreateBulletList(IEnumerable<MarkdownBlock> items)
+        => new BulletListBlock(items);
+
+    /// <summary>创建无序列表（MD25：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="items">列表项列表</param>
+    /// <returns>无序列表</returns>
+    public static MarkdownBlock CreateBulletList(List<MarkdownBlock> items)
         => new BulletListBlock(items);
 
     /// <summary>创建有序列表</summary>
@@ -103,6 +119,13 @@ public abstract class MarkdownBlock
     /// <param name="start">起始序号</param>
     /// <returns>块</returns>
     public static MarkdownBlock CreateOrderedList(IEnumerable<MarkdownBlock> items, Int32 start = 1)
+        => new OrderedListBlock(items, start);
+
+    /// <summary>创建有序列表（MD25：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="items">列表项列表</param>
+    /// <param name="start">起始序号</param>
+    /// <returns>有序列表</returns>
+    public static MarkdownBlock CreateOrderedList(List<MarkdownBlock> items, Int32 start = 1)
         => new OrderedListBlock(items, start);
 
     /// <summary>创建列表项（简单行内内容）</summary>
@@ -129,6 +152,15 @@ public abstract class MarkdownBlock
     /// <param name="isChecked">是否已勾选</param>
     /// <returns>块</returns>
     public static MarkdownBlock CreateListItemWithBlocks(IEnumerable<MarkdownBlock> children,
+        Boolean isTaskItem = false, Boolean isChecked = false)
+        => ListItemBlock.CreateWithBlocks(children, isTaskItem, isChecked);
+
+    /// <summary>创建列表项（嵌套块内容，MD25：直接接管 List，省 AddRange 复制）</summary>
+    /// <param name="children">子块列表</param>
+    /// <param name="isTaskItem">是否任务项</param>
+    /// <param name="isChecked">是否已勾选</param>
+    /// <returns>块</returns>
+    public static MarkdownBlock CreateListItemWithBlocks(List<MarkdownBlock> children,
         Boolean isTaskItem = false, Boolean isChecked = false)
         => ListItemBlock.CreateWithBlocks(children, isTaskItem, isChecked);
 
