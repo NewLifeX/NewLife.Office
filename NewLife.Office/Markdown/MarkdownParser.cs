@@ -1454,8 +1454,8 @@ internal sealed class MarkdownParser
         // result 恒以空列表传入（顶层与递归子列表），tokens 别名复用 result，
         // 消除临时列表分配与末尾 AddRange 复制（MD16）
         var tokens = result;
-        var delims = new List<DelimInfo>();
-        TokenizeInline(text, start, end, tokens, delims, refs, pipeline, inLink);
+        // delims 延迟创建（MD19）：TokenizeInline 仅遇 * / _ 分隔符时才分配，无强调文本省一个空 List
+        var delims = TokenizeInline(text, start, end, tokens, refs, pipeline, inLink);
         ResolveEmphasis(tokens, delims);
     }
 
@@ -1464,16 +1464,17 @@ internal sealed class MarkdownParser
     /// <param name="start">开始位置</param>
     /// <param name="end">结束位置（不含）</param>
     /// <param name="tokens">输出令牌列表</param>
-    /// <param name="delims">输出分隔符信息列表</param>
     /// <param name="refs">引用链接定义（可为 null）</param>
     /// <param name="pipeline">处理管线（可为 null，视为全开）</param>
     /// <param name="inLink">是否处于链接内部（GFM：链接内不识别裸 URL 自动链接）</param>
-    private static void TokenizeInline(String text, Int32 start, Int32 end, List<MarkdownInline> tokens,
-        List<DelimInfo> delims, Dictionary<String, (String url, String title)>? refs,
+    /// <returns>强调分隔符信息列表（无强调时返回 null，MD19 延迟创建）</returns>
+    private static List<DelimInfo>? TokenizeInline(String text, Int32 start, Int32 end, List<MarkdownInline> tokens,
+        Dictionary<String, (String url, String title)>? refs,
         MarkdownPipeline? pipeline, Boolean inLink)
     {
         var i = start;
         var textStart = start;
+        List<DelimInfo>? delims = null;
 
         // 管线开关：null 视为全开
         Boolean IsOn(Func<MarkdownPipeline, Boolean> get) => pipeline == null || get(pipeline);
@@ -1596,6 +1597,7 @@ internal sealed class MarkdownParser
                 var token = MarkdownInline.CreateText(new String(ch, run));
                 tokens.Add(token);
                 var (canOpen, canClose) = ClassifyDelimiter(text, i, run, end);
+                delims ??= [];
                 delims.Add(new DelimInfo
                 {
                     Ch = ch,
@@ -1759,6 +1761,7 @@ internal sealed class MarkdownParser
         }
 
         FlushText(text, textStart, end, tokens);
+        return delims;
     }
 
     private static void FlushText(String text, Int32 start, Int32 end, List<MarkdownInline> result)
@@ -2029,8 +2032,10 @@ internal sealed class MarkdownParser
     /// <summary>按 CommonMark 分隔符栈算法解析强调（flanking + rule of 3 + 嵌套）</summary>
     /// <param name="tokens">令牌列表（原地修改）</param>
     /// <param name="delims">分隔符信息列表</param>
-    private static void ResolveEmphasis(List<MarkdownInline> tokens, List<DelimInfo> delims)
+    private static void ResolveEmphasis(List<MarkdownInline> tokens, List<DelimInfo>? delims)
     {
+        // 无强调分隔符（MD19 延迟创建，delims 为 null）时直接返回
+        if (delims == null || delims.Count == 0) return;
         var ci = 0;
         while (ci < delims.Count)
         {
