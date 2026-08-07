@@ -1767,17 +1767,24 @@ internal sealed class MarkdownParser
             // Emoji 短码 :smile: (MD05-05)
             if (ch == ':' && i > textStart && i + 2 < end && IsOn(p => p.EnableEmoji))
             {
-                var colonEnd = text.IndexOf(':', i + 1);
-                if (colonEnd > i + 1 && colonEnd - i - 1 <= 30)
+                // 快速失败（MD21）：emoji 短码 :word: 必以字母/数字/下划线开头；
+                // URL 协议分隔符 ://、时间 12:30 等冒号直接跳过，避免 IndexOf/子串/字典查找
+                var c1 = text[i + 1];
+                if (Char.IsLetterOrDigit(c1) || c1 == '_')
                 {
-                    var code = text[(i + 1)..colonEnd];
-                    if (EmojiMap.TryGetValue(code, out var emoji))
+                    // 扫描范围限制（MD21）：code 长度 ≤30 才有效，最坏只需扫 31 字符，避免扫到段尾
+                    var colonEnd = text.IndexOf(':', i + 1, Math.Min(31, end - i - 1));
+                    if (colonEnd > i + 1 && colonEnd - i - 1 <= 30)
                     {
-                        FlushText(text, textStart, i, tokens);
-                        tokens.Add(MarkdownInline.CreateText(emoji));
-                        i = colonEnd + 1;
-                        textStart = i;
-                        continue;
+                        var code = text[(i + 1)..colonEnd];
+                        if (EmojiMap.TryGetValue(code, out var emoji))
+                        {
+                            FlushText(text, textStart, i, tokens);
+                            tokens.Add(MarkdownInline.CreateText(emoji));
+                            i = colonEnd + 1;
+                            textStart = i;
+                            continue;
+                        }
                     }
                 }
             }
