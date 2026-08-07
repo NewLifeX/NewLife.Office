@@ -399,12 +399,21 @@ public class WordTemplate
         return Encoding.UTF8.GetString(ms.ToArray());
     }
 
+    /// <summary>匹配 {{Key}} 占位符（含被 run 边界拆分的情况）</summary>
+    private static readonly Regex PlaceholderRegex = new(@"\{\{(?<inner>.*?)\}\}", RegexOptions.Singleline | RegexOptions.Compiled);
+
+    /// <summary>剥离 run 边界标签（w:t / w:r / w:rPr 等），用于还原被拆分的占位符文本</summary>
+    private static readonly Regex RunBoundaryRegex = new(
+        @"</w:t>|</w:r>|<w:r[^>]*>|<w:rPr>|</w:rPr>|<w:t[^>]*>|<w:tab[^>]*>|<w:br[^>]*>|<w:proofErr[^>]*>",
+        RegexOptions.Compiled);
+
     private static String ApplyReplacements(String xml, IDictionary<String, Object?> data)
     {
-        // Word 有时将 {{Key}} 拆分在多个 w:r 中，先合并段落文本再替换
-        // 简单策略：对 xml 字符串直接做文本替换；对拆分的情况，
-        // 先将 }}...{{ 模式之间可能出现的 </w:t><w:r><w:t> 等去除
-        // 更健壮的方案：解析XML，但此处为快速实现采用字符串替换
+        // Word 有时将 {{Key}} 拆分在多个 w:r 中（例如 {{Na 与 me}} 被 run 边界隔开），
+        // 先剥离占位符区域内的 run 边界标签压缩为完整占位符，再做精确替换
+        if (data.Count > 0)
+            xml = CompressSplitPlaceholders(xml, data.Keys);
+
         foreach (var kv in data)
         {
             var placeholder = $"{{{{{kv.Key}}}}}";
@@ -412,6 +421,20 @@ public class WordTemplate
             xml = xml.Replace(placeholder, EscapeXml(value));
         }
         return xml;
+    }
+
+    /// <summary>压缩被 run 边界拆分的占位符（还原为完整占位符）</summary>
+    /// <param name="xml">document.xml 字符串</param>
+    /// <param name="keys">占位符键集合</param>
+    /// <returns>压缩后的 XML（仅当剥离 run 边界后等于某个 Key 时才压缩，避免误替换普通文本）</returns>
+    private static String CompressSplitPlaceholders(String xml, IEnumerable<String> keys)
+    {
+        var keySet = new HashSet<String>(keys, StringComparer.Ordinal);
+        return PlaceholderRegex.Replace(xml, m =>
+        {
+            var clean = RunBoundaryRegex.Replace(m.Groups["inner"].Value, "").Trim();
+            return keySet.Contains(clean) ? $"{{{{{clean}}}}}" : m.Value;
+        });
     }
 
     /// <summary>展开表格模板行；在 rowTag 行内寻找 {{#Key}} / {{/Key}} 标记并按列表数据展开</summary>

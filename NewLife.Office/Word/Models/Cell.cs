@@ -13,6 +13,9 @@ public class Cell
     /// <summary>背景色（16进制 RGB）</summary>
     public String? BackgroundColor { get; set; }
 
+    /// <summary>单元格四边边框（w:tcBorders），null 表示使用表格默认边框</summary>
+    public TableBorders? Borders { get; set; }
+
     /// <summary>合并列数</summary>
     public Int32 ColSpan { get; set; } = 1;
 

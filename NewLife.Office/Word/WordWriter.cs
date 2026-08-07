@@ -1920,6 +1920,16 @@ public class WordWriter : IDisposable
                     sb.Append("<w:vMerge w:val=\"restart\"/>");
                 else if (cell.RowSpan == 0)
                     sb.Append("<w:vMerge/>");
+                // 单元格边框 w:tcBorders
+                if (cell.Borders != null)
+                {
+                    sb.Append("<w:tcBorders>");
+                    AppendBorderXml(sb, "top", cell.Borders.Top);
+                    AppendBorderXml(sb, "left", cell.Borders.Left);
+                    AppendBorderXml(sb, "bottom", cell.Borders.Bottom);
+                    AppendBorderXml(sb, "right", cell.Borders.Right);
+                    sb.Append("</w:tcBorders>");
+                }
                 sb.Append("</w:tcPr>");
 
                 // 嵌套表格（W46）：单元格内的 w:tbl
@@ -2043,6 +2053,16 @@ public class WordWriter : IDisposable
                     sb.Append("<w:vMerge w:val=\"restart\"/>");
                 else if (cell.RowSpan == 0)
                     sb.Append("<w:vMerge/>");
+                // 单元格边框 w:tcBorders
+                if (cell.Borders != null)
+                {
+                    sb.Append("<w:tcBorders>");
+                    AppendBorderXml(sb, "top", cell.Borders.Top);
+                    AppendBorderXml(sb, "left", cell.Borders.Left);
+                    AppendBorderXml(sb, "bottom", cell.Borders.Bottom);
+                    AppendBorderXml(sb, "right", cell.Borders.Right);
+                    sb.Append("</w:tcBorders>");
+                }
                 sb.Append("</w:tcPr>");
 
                 // 嵌套表格（W46）：单元格内的 w:tbl

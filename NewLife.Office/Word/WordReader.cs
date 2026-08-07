@@ -1330,6 +1330,20 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             var vAlign = tcPr.SelectSingleNode("w:vAlign", ns) as XmlElement;
             if (vAlign != null)
                 cell.VerticalAlignment = vAlign.GetAttribute("w:val") ?? vAlign.GetAttribute("val");
+            // 单元格边框 w:tcBorders
+            var tcBorders = tcPr.SelectSingleNode("w:tcBorders", ns) as XmlElement;
+            if (tcBorders != null)
+            {
+                var borders = new TableBorders
+                {
+                    Top = ParseSingleBorder(tcBorders.SelectSingleNode("w:top", ns) as XmlElement),
+                    Bottom = ParseSingleBorder(tcBorders.SelectSingleNode("w:bottom", ns) as XmlElement),
+                    Left = ParseSingleBorder(tcBorders.SelectSingleNode("w:left", ns) as XmlElement),
+                    Right = ParseSingleBorder(tcBorders.SelectSingleNode("w:right", ns) as XmlElement),
+                };
+                if (borders.Top != null || borders.Bottom != null || borders.Left != null || borders.Right != null)
+                    cell.Borders = borders;
+            }
         }
 
         foreach (XmlElement pEl in tcEl.SelectNodes("w:p", ns)!)
