@@ -32,6 +32,9 @@ internal sealed class MarkdownParser
     #region 常量（静态缓存，避免热点路径分配，MD19）
     /// <summary>裸 URL 前缀（TryParseBareUrl 高频调用，静态化避免每次调用 new 数组分配）</summary>
     private static readonly String[] _urlPrefixes = ["https://", "http://", "ftp://", "www."];
+
+    /// <summary>表格行快速路径判定字符（反引号/反斜杠，MD21b：IndexOfAny 一次扫描替代两次 IndexOf）</summary>
+    private static readonly Char[] _tableEscapeChars = ['`', '\\'];
     #endregion
 
     #region 正则（静态缓存，避免热点路径重复编译）
@@ -1035,8 +1038,9 @@ internal sealed class MarkdownParser
     /// <returns>单元格列表</returns>
     private static List<String> SplitTableRow(String line)
     {
-        // 快速路径（MD18）：行内无反引号/反斜杠时，| 全为分隔符，直接切分（绝大多数简单表格）
-        if (line.IndexOf('`') < 0 && line.IndexOf('\\') < 0)
+        // 快速路径（MD18）：行内无反引号/反斜杠时，| 全为分隔符，直接切分（绝大多数简单表格）。
+        // MD21b：IndexOfAny 一次扫描替代两次 IndexOf（表格为最高耗时密度块，省 1 次全行扫描）
+        if (line.IndexOfAny(_tableEscapeChars) < 0)
         {
             var start = 0;
             var end = line.Length;
@@ -1540,7 +1544,8 @@ internal sealed class MarkdownParser
             // HTML 实体解码：&amp; / &lt; / &#65; 等（CommonMark 最长实体名 ~31 字符）
             if (ch == '&')
             {
-                var semi = text.IndexOf(';', i + 1);
+                // MD21b：扫描范围限 ≤33（semi - i <= 32 才有效，否则无需扫描到段尾）
+                var semi = text.IndexOf(';', i + 1, Math.Min(33, end - i - 1));
                 if (semi > i + 1 && semi - i <= 32)
                 {
                     var entity = text.Substring(i + 1, semi - i - 1);
