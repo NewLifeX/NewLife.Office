@@ -43,6 +43,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     private List<FillInfo>? _fillInfos;
     private List<BorderInfo>? _borderInfos;
     private List<XfInfo>? _xfInfos;
+    private List<String>? _dxfColors; // 条件格式 dxf 填充背景色（styles.xml dxfs）
     private Dictionary<Int32, String>? _numFmtCodes;
     #endregion
 
@@ -840,6 +841,23 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                     xi.ShrinkToFit = stf == "1" || stf == "true";
                 }
                 _xfInfos.Add(xi);
+            }
+        }
+
+        // dxfs（条件格式差异样式）——提取填充背景色
+        _dxfColors = [];
+        var dxfsEl = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "dxfs");
+        if (dxfsEl != null)
+        {
+            foreach (var dxf in dxfsEl.Elements())
+            {
+                var color = (String?)null;
+                var fill = dxf.Elements().FirstOrDefault(e => e.Name.LocalName == "fill");
+                var patternFill = fill?.Elements().FirstOrDefault(e => e.Name.LocalName == "patternFill");
+                var bgColor = patternFill?.Elements().FirstOrDefault(e => e.Name.LocalName == "bgColor");
+                var rgb = bgColor?.Attribute("rgb")?.Value;
+                if (!rgb.IsNullOrEmpty()) color = NormalizeRgb(rgb);
+                _dxfColors.Add(color);
             }
         }
     }
@@ -2103,11 +2121,12 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                     if (formulas.Count > 0) info.Value = formulas[0].Value;
                     if (formulas.Count > 1) info.Value2 = formulas[1].Value;
 
-                    // 尝试从 dxf 获取颜色（简化：从 styles.xml 的 dxfs 读取）
+                    // 从 dxf 获取填充色（styles.xml dxfs 的填充背景色）
                     var dxfId = rule.Attribute("dxfId")?.Value.ToInt(-1) ?? -1;
-                    if (dxfId >= 0 && _fillInfos != null)
+                    if (dxfId >= 0 && _dxfColors != null && dxfId < _dxfColors.Count)
                     {
-                        // dxf 颜色解析较复杂，暂不处理
+                        var dc = _dxfColors[dxfId];
+                        if (!dc.IsNullOrEmpty()) info.Color = dc;
                     }
                 }
                 else if (type == "dataBar")
@@ -2132,6 +2151,14 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                     info.Type = ConditionalFormatValues.Expression;
                     var formulas = rule.Elements().Where(e => e.Name.LocalName == "formula").ToList();
                     if (formulas.Count > 0) info.Formula = formulas[0].Value;
+
+                    // 从 dxf 获取填充色（expression 条件格式可带样式）
+                    var dxfId = rule.Attribute("dxfId")?.Value.ToInt(-1) ?? -1;
+                    if (dxfId >= 0 && _dxfColors != null && dxfId < _dxfColors.Count)
+                    {
+                        var dc = _dxfColors[dxfId];
+                        if (!dc.IsNullOrEmpty()) info.Color = dc;
+                    }
                 }
 
                 yield return info;

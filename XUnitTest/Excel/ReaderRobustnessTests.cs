@@ -481,6 +481,58 @@ public class ExcelReaderRobustnessTests
     }
     #endregion
 
+    #region 条件格式 dxf 颜色往返
+    [Fact]
+    [DisplayName("Excel往返—条件格式填充色dxf写入读取（多规则dxfId分配）")]
+    public void ConditionalFormat_Color_Roundtrip()
+    {
+        var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w = new ExcelWriter(path))
+        {
+            w.WriteRow("Sheet1", new Object?[] { 100 });
+            w.WriteRow("Sheet1", new Object?[] { 0 });
+            w.AddConditionalFormat("Sheet1", "A1:A2", ConditionalFormatValues.GreaterThan, "0", "92D050");
+            w.AddConditionalFormat("Sheet1", "A1:A2", ConditionalFormatValues.LessThan, "50", "FF0000");
+            w.AddExpressionConditionalFormat("Sheet1", "A1:A2", "A1>200", "FFFF00");
+            w.Save();
+        }
+
+        // 直接读取
+        using (var reader = new ExcelReader(path))
+        {
+            var cfs = reader.ReadConditionalFormats("Sheet1").ToList();
+            Assert.Equal(3, cfs.Count);
+            var gt = cfs.First(c => c.Type == ConditionalFormatValues.GreaterThan);
+            Assert.Equal("92D050", gt.Color);
+            var lt = cfs.First(c => c.Type == ConditionalFormatValues.LessThan);
+            Assert.Equal("FF0000", lt.Color);
+            var ex = cfs.First(c => c.Type == ConditionalFormatValues.Expression);
+            Assert.Equal("FFFF00", ex.Color);
+        }
+
+        // 快照往返后仍保留
+        ExcelDocument data;
+        using (var reader = new ExcelReader(path))
+        {
+            data = reader.ReadExcel();
+        }
+        var path2 = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
+        using (var w2 = new ExcelWriter(path2))
+        {
+            w2.WriteExcel(data);
+            w2.Save();
+        }
+        using var reader2 = new ExcelReader(path2);
+        var cfs2 = reader2.ReadConditionalFormats("Sheet1").ToList();
+        var gt2 = cfs2.First(c => c.Type == ConditionalFormatValues.GreaterThan);
+        Assert.Equal("92D050", gt2.Color);
+        var lt2 = cfs2.First(c => c.Type == ConditionalFormatValues.LessThan);
+        Assert.Equal("FF0000", lt2.Color);
+        var ex2 = cfs2.First(c => c.Type == ConditionalFormatValues.Expression);
+        Assert.Equal("FFFF00", ex2.Color);
+    }
+    #endregion
+
     #region 缺失部件容错
     [Fact]
     [DisplayName("Excel读—无sharedStrings/styles部件仍可读取")]

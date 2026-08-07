@@ -278,6 +278,24 @@ partial class ExcelWriter
         return Math.Max(1, endCol - startCol + 1);
     }
 
+    /// <summary>条件格式是否需要 dxf 槽位（cellIs 类型与带颜色的 expression）</summary>
+    private static Boolean IsDxfEligible(ConditionalFormatEntry cf) =>
+        cf.Type < ConditionalFormatValues.DataBar ||
+        (cf.Type == ConditionalFormatValues.Expression && !cf.Color.IsNullOrEmpty());
+
+    /// <summary>计算指定工作表的 dxf 起始索引（全局顺序：按工作表顺序累计之前所有符合条件的槽位）</summary>
+    private Int32 GetDxfBase(String sheet)
+    {
+        var dxf = 0;
+        foreach (var sn in _sheetNames)
+        {
+            if (sn == sheet) break;
+            if (!_sheetCondFormats.TryGetValue(sn, out var list)) continue;
+            dxf += list.Count(IsDxfEligible);
+        }
+        return dxf;
+    }
+
     /// <summary>生成图表 XML（xl/charts/chartN.xml）</summary>
     private static void WriteChartXml(StreamWriter sw, ExcelChart chart, Int32 chartId)
     {
@@ -846,28 +864,31 @@ partial class ExcelWriter
             if (_sheetCondFormats.TryGetValue(sheet, out var conds) && conds.Count > 0)
             {
                 var priority = 1;
+                var dxfId = GetDxfBase(sheet);
                 foreach (var cf in conds)
                 {
+                    var ruleDxfId = IsDxfEligible(cf) ? dxfId : -1;
+                    if (IsDxfEligible(cf)) dxfId++;
                     sw.Write($"<conditionalFormatting sqref=\"{cf.Range}\">");
                     switch (cf.Type)
                     {
                         case ConditionalFormatValues.GreaterThan:
-                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"greaterThan\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"greaterThan\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
                             break;
                         case ConditionalFormatValues.LessThan:
-                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"lessThan\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"lessThan\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
                             break;
                         case ConditionalFormatValues.Equal:
-                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"equal\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"equal\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
                             break;
                         case ConditionalFormatValues.Between:
-                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"between\"><formula>{SecurityElement.Escape(cf.Value)}</formula><formula>{SecurityElement.Escape(cf.Value2)}</formula></cfRule>");
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"between\"><formula>{SecurityElement.Escape(cf.Value)}</formula><formula>{SecurityElement.Escape(cf.Value2)}</formula></cfRule>");
                             break;
                         case ConditionalFormatValues.NotEqual:
-                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"notEqual\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"notEqual\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
                             break;
                         case ConditionalFormatValues.NotBetween:
-                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"0\" priority=\"{priority++}\" operator=\"notBetween\"><formula>{SecurityElement.Escape(cf.Value)}</formula><formula>{SecurityElement.Escape(cf.Value2)}</formula></cfRule>");
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"notBetween\"><formula>{SecurityElement.Escape(cf.Value)}</formula><formula>{SecurityElement.Escape(cf.Value2)}</formula></cfRule>");
                             break;
                         case ConditionalFormatValues.DataBar:
                             sw.Write($"<cfRule type=\"dataBar\" priority=\"{priority++}\"><dataBar><cfvo type=\"min\"/><cfvo type=\"max\"/><color rgb=\"FF{cf.Color ?? "4472C4"}\"/></dataBar></cfRule>");
@@ -892,10 +913,8 @@ partial class ExcelWriter
                         case ConditionalFormatValues.Expression:
                             {
                                 var esc = SecurityElement.Escape(cf.Formula) ?? cf.Formula ?? String.Empty;
-                                if (cf.Color.IsNullOrEmpty())
-                                    sw.Write($"<cfRule type=\"expression\" dxfId=\"0\" priority=\"{priority++}\"><formula>{esc}</formula></cfRule>");
-                                else
-                                    sw.Write($"<cfRule type=\"expression\" dxfId=\"0\" priority=\"{priority++}\"><formula>{esc}</formula></cfRule>");
+                                var dxfAttr = cf.Color.IsNullOrEmpty() ? String.Empty : $" dxfId=\"{ruleDxfId}\"";
+                                sw.Write($"<cfRule type=\"expression\"{dxfAttr} priority=\"{priority++}\"><formula>{esc}</formula></cfRule>");
                                 break;
                             }
                     }
@@ -1603,25 +1622,22 @@ partial class ExcelWriter
         }
         sw.Write("</cellXfs>");
 
-        // 条件格式需要的 dxf（差异格式）
+        // 条件格式需要的 dxf（差异格式）——按工作表顺序生成，与 cfRule dxfId 分配一致
         var totalDxf = 0;
-        foreach (var kv in _sheetCondFormats)
+        foreach (var sn in _sheetNames)
         {
-            foreach (var cf in kv.Value)
-            {
-                if (cf.Type < ConditionalFormatValues.DataBar ||
-                    (cf.Type == ConditionalFormatValues.Expression && !cf.Color.IsNullOrEmpty())) totalDxf++;
-            }
+            if (!_sheetCondFormats.TryGetValue(sn, out var list)) continue;
+            totalDxf += list.Count(IsDxfEligible);
         }
         if (totalDxf > 0)
         {
             sw.Write($"<dxfs count=\"{totalDxf}\">");
-            foreach (var kv in _sheetCondFormats)
+            foreach (var sn in _sheetNames)
             {
-                foreach (var cf in kv.Value)
+                if (!_sheetCondFormats.TryGetValue(sn, out var list)) continue;
+                foreach (var cf in list)
                 {
-                    if (cf.Type >= ConditionalFormatValues.DataBar &&
-                        !(cf.Type == ConditionalFormatValues.Expression && !cf.Color.IsNullOrEmpty())) continue;
+                    if (!IsDxfEligible(cf)) continue;
                     sw.Write("<dxf>");
                     if (!cf.Color.IsNullOrEmpty())
                         sw.Write($"<fill><patternFill><bgColor rgb=\"FF{cf.Color}\"/></patternFill></fill>");
