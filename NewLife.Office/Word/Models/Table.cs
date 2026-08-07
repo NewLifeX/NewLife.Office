@@ -48,4 +48,63 @@ public class Table
     /// <summary>原始表格 XML，非空时 Writer 直接写入（完整保留所有未建模属性）</summary>
     public String? RawXml { get; set; }
     #endregion
+
+    #region 行列操作
+    /// <summary>追加一行（空行，可在返回的 <see cref="TableRow"/> 上填充单元格）</summary>
+    /// <returns>新增行</returns>
+    public TableRow AddRow()
+    {
+        var row = new TableRow();
+        Rows.Add(row);
+        return row;
+    }
+
+    /// <summary>在指定位置插入一行（空行）</summary>
+    /// <param name="index">插入位置（0=最前），超出范围则追加到末尾</param>
+    /// <returns>新增行</returns>
+    public TableRow InsertRow(Int32 index)
+    {
+        var row = new TableRow();
+        if (index < 0) index = 0;
+        if (index > Rows.Count) index = Rows.Count;
+        Rows.Insert(index, row);
+        return row;
+    }
+
+    /// <summary>移除指定行</summary>
+    /// <param name="index">行索引</param>
+    public void RemoveRow(Int32 index)
+    {
+        if (index >= 0 && index < Rows.Count) Rows.RemoveAt(index);
+    }
+
+    /// <summary>为每行追加一列（空单元格）</summary>
+    /// <param name="cellIndex">可选：插入到指定列位置（默认追加到末尾）</param>
+    public void AddColumn(Int32? cellIndex = null)
+    {
+        foreach (var row in Rows)
+        {
+            var cell = new Cell { Paragraphs = { new Paragraph() } };
+            if (cellIndex.HasValue)
+            {
+                var idx = cellIndex.Value < 0 ? 0 : cellIndex.Value > row.Cells.Count ? row.Cells.Count : cellIndex.Value;
+                row.Cells.Insert(idx, cell);
+            }
+            else
+            {
+                row.Cells.Add(cell);
+            }
+        }
+    }
+
+    /// <summary>从每行移除一列</summary>
+    /// <param name="index">列索引</param>
+    public void RemoveColumn(Int32 index)
+    {
+        foreach (var row in Rows)
+        {
+            if (index >= 0 && index < row.Cells.Count) row.Cells.RemoveAt(index);
+        }
+    }
+    #endregion
 }
