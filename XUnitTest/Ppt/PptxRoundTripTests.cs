@@ -78,13 +78,10 @@ public class PptxRoundTripTests : IntegrationTestBase
         }
         else
             Assert.True((src.BackgroundImage == null) == (dst.BackgroundImage == null), $"{tag} 背景图存在性不匹配");
-        // P12: 背景渐变+隐藏（Reader 可能未回读，双方都有值时才比较）
-        if (src.BackgroundGradientType != null && dst.BackgroundGradientType != null)
-        {
-            Assert.Equal(src.BackgroundGradientType, dst.BackgroundGradientType);
-            Assert.Equal(src.BackgroundGradientColor1 ?? "", dst.BackgroundGradientColor1 ?? "");
-            Assert.Equal(src.BackgroundGradientColor2 ?? "", dst.BackgroundGradientColor2 ?? "");
-        }
+        // 背景渐变+隐藏（Reader/Writer 均已支持，严格比较）
+        Assert.Equal(src.BackgroundGradientType ?? "", dst.BackgroundGradientType ?? "");
+        Assert.Equal(src.BackgroundGradientColor1 ?? "", dst.BackgroundGradientColor1 ?? "");
+        Assert.Equal(src.BackgroundGradientColor2 ?? "", dst.BackgroundGradientColor2 ?? "");
         Assert.Equal(src.Hidden, dst.Hidden);
     }
 
@@ -99,13 +96,10 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.Equal(src.Charts.Count, dst.Charts.Count);
         Assert.Equal(src.Groups.Count, dst.Groups.Count);
         Assert.Equal(src.Videos.Count, dst.Videos.Count);
-        // P12/P14-P16: 连接器/动画/批注（Reader 可能未回读，双方都有时才严格比较）
-        if (src.Connectors.Count > 0 && dst.Connectors.Count > 0)
-            Assert.Equal(src.Connectors.Count, dst.Connectors.Count);
-        if (src.Animations.Count > 0 && dst.Animations.Count > 0)
-            Assert.Equal(src.Animations.Count, dst.Animations.Count);
-        if (src.Comments.Count > 0 && dst.Comments.Count > 0)
-            Assert.Equal(src.Comments.Count, dst.Comments.Count);
+        // 连接器/动画/批注（Reader 与 Writer 均已支持，严格比较）
+        Assert.Equal(src.Connectors.Count, dst.Connectors.Count);
+        Assert.Equal(src.Animations.Count, dst.Animations.Count);
+        Assert.Equal(src.Comments.Count, dst.Comments.Count);
     }
 
     /// <summary>验证文本框位置、尺寸和旋转</summary>
@@ -115,9 +109,8 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.True(EmuClose(src.Top, dst.Top), $"{tag}.Top: {src.Top} vs {dst.Top}");
         Assert.True(EmuClose(src.Width, dst.Width), $"{tag}.Width: {src.Width} vs {dst.Width}");
         Assert.True(EmuClose(src.Height, dst.Height), $"{tag}.Height: {src.Height} vs {dst.Height}");
-        // Rotation: 双方都有非默认值时才比较（Reader 可能未回读此属性）
-        if (src.Rotation != 0 && dst.Rotation != 0)
-            Assert.Equal(src.Rotation, dst.Rotation);
+        // Rotation: Reader/Writer 已支持，严格比较
+        Assert.Equal(src.Rotation, dst.Rotation);
     }
 
     /// <summary>验证文本框文本内容</summary>
@@ -725,6 +718,8 @@ public class PptxRoundTripTests : IntegrationTestBase
                     newTb.TopInset = tb.TopInset;
                     newTb.BottomInset = tb.BottomInset;
                     newTb.Anchor = tb.Anchor;
+                    newTb.Rotation = tb.Rotation;
+                    newTb.AltText = tb.AltText;
 
                     if (tb.Paragraphs.Count > 0)
                     {
@@ -861,10 +856,39 @@ public class PptxRoundTripTests : IntegrationTestBase
                         PptxWriter.EmuToCm(grp.Width), PptxWriter.EmuToCm(grp.Height));
                     foreach (var sp in grp.Shapes) newGrp.Shapes.Add(sp);
                     foreach (var tb in grp.TextBoxes) newGrp.TextBoxes.Add(tb);
+                    foreach (var img in grp.Images) newGrp.Images.Add(img);
                 }
+
+                // 连接器/动画/批注（S13-01/S13-02，Phase 6 严格比较）
+                foreach (var cn in src.Connectors)
+                    writer.Slides[slideIdx].Connectors.Add(new ConnectionShape
+                    {
+                        Left = cn.Left, Top = cn.Top, Width = cn.Width, Height = cn.Height,
+                        ConnectorType = cn.ConnectorType, LineColor = cn.LineColor, LineWidth = cn.LineWidth,
+                    });
+                foreach (var anim in src.Animations)
+                    writer.Slides[slideIdx].Animations.Add(new Animation
+                    {
+                        TargetType = anim.TargetType, TargetIndex = anim.TargetIndex,
+                        Category = anim.Category, Effect = anim.Effect, Trigger = anim.Trigger,
+                        DelayMs = anim.DelayMs, DurationMs = anim.DurationMs,
+                        Sequence = anim.Sequence, Order = anim.Order, Repeat = anim.Repeat, AutoReverse = anim.AutoReverse,
+                    });
+                foreach (var cm in src.Comments)
+                    writer.Slides[slideIdx].Comments.Add(new Comment
+                    {
+                        Index = cm.Index, Author = cm.Author, AuthorId = cm.AuthorId,
+                        Date = cm.Date, Text = cm.Text, X = cm.X, Y = cm.Y,
+                    });
 
                 if (src.BackgroundColor != null) writer.SetBackground(slideIdx, src.BackgroundColor);
                 if (src.BackgroundImage != null) writer.Slides[slideIdx].BackgroundImage = src.BackgroundImage;
+                if (src.BackgroundGradientType != null)
+                {
+                    writer.Slides[slideIdx].BackgroundGradientType = src.BackgroundGradientType;
+                    writer.Slides[slideIdx].BackgroundGradientColor1 = src.BackgroundGradientColor1;
+                    writer.Slides[slideIdx].BackgroundGradientColor2 = src.BackgroundGradientColor2;
+                }
                 if (src.Notes != null) writer.SetNotes(slideIdx, src.Notes);
                 if (src.Transition != null) { writer.SetTransition(slideIdx, src.Transition.Type, src.Transition.DurationMs); writer.Slides[slideIdx].Transition!.Direction = src.Transition.Direction; writer.Slides[slideIdx].Transition!.AdvanceOnClick = src.Transition.AdvanceOnClick; }
             }

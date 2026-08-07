@@ -40,8 +40,8 @@ Nuget：NewLife.Office（渲染扩展包：NewLife.Office.Rendering）
 | **Excel xls** | ✅ | ✅ | — | — | — | OLE2/BIFF8，BiffReader+BiffWriter 读写双全，含样式/合并/超链接/筛选/页面设置 |
 | **Word docx** | ✅ | ✅ | ✅ | HTML/PDF | — | 含段落/表格/图片/页眉页脚/批注/内容控件/AES 加密/邮件合并/查找替换（含文本框）/脚注模型/多节，NPOI+OpenXmlValidator 交叉验证 |
 | **Word doc** | ✅ | — | — | ✅ doc→docx | — | MS-DOC，DocReader 纯文本 + 段落格式提取（粗体/字号/对齐等）+ doc→docx 转换 |
-| **PPT pptx** | ✅ | ✅ | ✅ | PDF | — | 含文本框/图片/表格/图表/母版/动画/批注/Section；跨文件合并 |
-| **PPT ppt** | ✅ | — | — | — | — | MS-PPT，PptReader 提取幻灯片文本 |
+| **PPT pptx** | ✅ | ✅ | ✅ | PDF | — | 含文本框/图片/表格/图表/母版/动画/批注/Section；跨文件合并（含图表/批注/备注保真） |
+| **PPT ppt** | ✅ | ✅ | — | — | — | MS-PPT：PptReader 文本提取 + PptWriter 文本幻灯片写入 |
 | **PDF** | ✅ | ✅ | — | — | — | 含 Fluent API/合并/拆分/加密/签名/表单/注释/PDF-A |
 | **Markdown** | ✅ | ✅ | — | HTML/Word/PDF/各格式→MD | — | CommonMark + GFM + 强类型 AST，全格式转换中枢 |
 | **RTF** | ✅ | ✅ | ✅ | — | — | 段落/表格/模板填充/图片嵌入（PNG/JPEG） |

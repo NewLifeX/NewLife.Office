@@ -424,6 +424,11 @@
 | 原始 XML 访问 | OpenXML/Aspose | 直接访问/修改 XML 部件 |
 | 视频/音频嵌入（含缩略图） | Aspose/OpenXML | `PptVideo` |
 | 图片圆角 | ShapeCrawler/Aspose | 已覆盖 |
+| 写入 ppt（97-2003） | Aspose | `PptWriter` 最小可用：文本幻灯片（多行/中文/长文本续记录），合法 OLE2（PowerPoint Document + Current User 流） |
+| 打开密码（AES 加密） | Aspose / OpenXML | `SaveEncrypted` OOXML Agile Encryption + `PptxReader(password)` 解密 |
+| 形状图片填充 | Aspose / ShapeCrawler | `Shape.FillImage` BlipFill 读写（含组内形状） |
+| 图表样式/配色 | Aspose / OpenXML | `StyleIndex` + 系列颜色读写 + 数值轴 min/max/图例位置读回 |
+| 超链接跳转到文件 | Aspose / ShapeCrawler | Run/TextBox/Shape/组内形状跳转文件（TargetMode=External）读写 |
 
 ### 5.2 仍存在的真实差距项
 
@@ -433,18 +438,13 @@
 |--------|---------|------|
 | **SmartArt 创建/编辑** | Aspose / OpenXML（底层） | 不支持 SmartArt 模型，无法生成/修改 SmartArt 图形 |
 | **完整动画时间轴系统** | Aspose（150+ 效果） | 支持进入/强调/退出三类基础动画，缺交互式动画（点击触发）、自定义动画路径、效果库 |
-| **写入 ppt（97-2003）** | Aspose | 仅支持 ppt 读取（`PptReader` 提取幻灯片文本），不支持写入 |
 | **pptx → PNG/JPEG 幻灯片渲染** | Aspose | 需外部渲染库（SkiaSharp 等），与零外部依赖定位冲突 |
 | **高保真 PDF 导出** | Aspose | 当前为文本映射级（`PptxPdfConverter` + `LayoutEngine`），非像素级 |
-| **打开密码（AES 加密）** | Aspose / OpenXML | 仅支持修改密码（SHA-512 modifyVerifier） |
 | **导出 SVG/HTML/XPS/视频** | Aspose | 不计划 |
-| **形状图片填充** | Aspose / ShapeCrawler | 图片仅作为独立图片形状插入 |
-| **图表样式/配色** | Aspose / OpenXML | 图表创建与数据修改可用，样式定制未覆盖 |
 | **ODP/FODP 读写** | Aspose | 不计划 |
 | **VBA 宏（pptm）** | Aspose / OpenXML | 不计划 |
 | **OLE 嵌入对象** | Aspose / OpenXML | 不计划 |
 | **数学公式（MathML）** | Aspose / OpenXML | 不计划 |
-| **超链接跳转到文件** | Aspose / ShapeCrawler | 仅支持页内/文本跳转 |
 
 ---
 
@@ -458,7 +458,6 @@ NewLife.Office 的 PPT 模块在**读写与业务自动化**层面已全面落�
 |---------|------|
 | **SmartArt 创建/编辑** | 无法生成 SmartArt 图形 |
 | **完整动画时间轴系统** | 支持进入/强调/退出三类基础动画，但缺交互式动画（点击触发）、自定义动画路径、150+ 效果库 |
-| **写入 ppt（97-2003）** | 老格式仅支持读取（`PptReader` 提取幻灯片文本） |
 | **pptx → PNG/JPEG 幻灯片渲染** | 无像素级渲染；PDF 导出为文本映射级（`PptxPdfConverter` + `LayoutEngine` 自动排版） |
 
 ### 6.2 差异化定位
