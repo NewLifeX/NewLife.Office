@@ -81,8 +81,8 @@ internal sealed class MarkdownParser
 
         while (_pos < _lines.Length)
         {
-            // 跳过引用链接定义行（已在预扫描中提取）
-            if (_skipLines.Contains(_pos)) { _pos++; continue; }
+            // 跳过引用链接定义行（已在预扫描中提取）；无定义时短路，避免每行哈希查找（MD16）
+            if (_skipLines.Count > 0 && _skipLines.Contains(_pos)) { _pos++; continue; }
 
             var blockStart = _pos;
             var blockCount = doc.Blocks.Count;
@@ -1026,16 +1026,20 @@ internal sealed class MarkdownParser
     /// <returns>单元格列表</returns>
     private static List<String> SplitTableRow(String line)
     {
-        line = line.Trim();
-        if (line.StartsWith("|")) line = line[1..];
-        if (line.EndsWith("|")) line = line[..^1];
+        // 索引边界剥离首尾空白与管道符，避免 Trim/[1..]/[..^1] 子串分配（MD16）
+        var start = 0;
+        var end = line.Length;
+        while (start < end && Char.IsWhiteSpace(line[start])) start++;
+        while (end > start && Char.IsWhiteSpace(line[end - 1])) end--;
+        if (start < end && line[start] == '|') start++;
+        if (end > start && line[end - 1] == '|') end--;
 
         var cells = new List<String>();
-        var sb = new System.Text.StringBuilder();
+        var cellStart = start;
         var slashCount = 0;
         var codeTicks = 0; // >0 表示处于代码段内，值为开头反引号个数
-        var i = 0;
-        while (i < line.Length)
+        var i = start;
+        while (i < end)
         {
             var c = line[i];
             if (codeTicks > 0)
@@ -1044,13 +1048,11 @@ internal sealed class MarkdownParser
                 if (c == '`')
                 {
                     var run = 0;
-                    while (i + run < line.Length && line[i + run] == '`') run++;
-                    for (var k = 0; k < run; k++) sb.Append('`');
+                    while (i + run < end && line[i + run] == '`') run++;
                     if (run == codeTicks) codeTicks = 0;
                     i += run;
                     continue;
                 }
-                sb.Append(c);
                 i++;
                 continue;
             }
@@ -1059,36 +1061,56 @@ internal sealed class MarkdownParser
             {
                 // 进入代码段：记录反引号个数
                 var run = 0;
-                while (i + run < line.Length && line[i + run] == '`') run++;
+                while (i + run < end && line[i + run] == '`') run++;
                 codeTicks = run;
-                for (var k = 0; k < run; k++) sb.Append('`');
                 i += run;
                 continue;
             }
-            if (c == '\\') { sb.Append(c); slashCount++; i++; continue; }
+            if (c == '\\') { slashCount++; i++; continue; }
             if (c == '|')
             {
-                // 奇数个连续反斜杠 → 转义管道符，去掉转义用反斜杠
-                if (slashCount % 2 == 1)
+                // 奇数个连续反斜杠 → 转义管道符，不拆分（\| 保留在单元格内，由 ProcessCell 去反斜杠）
+                if (slashCount % 2 == 0)
                 {
-                    sb.Remove(sb.Length - 1, 1);
-                    sb.Append('|');
-                }
-                else
-                {
-                    cells.Add(sb.ToString());
-                    sb.Clear();
+                    cells.Add(ProcessCell(line.Substring(cellStart, i - cellStart)));
+                    cellStart = i + 1;
                 }
                 slashCount = 0;
                 i++;
                 continue;
             }
             slashCount = 0;
-            sb.Append(c);
             i++;
         }
-        cells.Add(sb.ToString());
+        cells.Add(ProcessCell(line.Substring(cellStart, end - cellStart)));
         return cells;
+    }
+
+    /// <summary>处理单元格：去首尾空白 + 去转义管道符反斜杠（\| → |）</summary>
+    /// <param name="raw">单元格原始子串</param>
+    /// <returns>处理后的单元格文本</returns>
+    private static String ProcessCell(String raw)
+    {
+        var cell = raw.Trim();
+        // 仅含 \| 转义时处理（普通单元格零额外分配）
+        var idx = cell.IndexOf("\\|", StringComparison.Ordinal);
+        if (idx < 0) return cell;
+        var sb = new System.Text.StringBuilder(cell.Length);
+        var i = 0;
+        while (i < cell.Length)
+        {
+            if (i + 1 < cell.Length && cell[i] == '\\' && cell[i + 1] == '|')
+            {
+                sb.Append('|');
+                i += 2;
+            }
+            else
+            {
+                sb.Append(cell[i]);
+                i++;
+            }
+        }
+        return sb.ToString();
     }
     #endregion
 
@@ -1368,11 +1390,12 @@ internal sealed class MarkdownParser
         // 两阶段解析（CommonMark §6.2）：
         // 1) 词法令牌化：文本拆分为令牌列表，* / _ 分隔符 run 收集为强调候选
         // 2) 分隔符栈解析：按 flanking + rule of 3 配对强调/粗体，嵌套结构
-        var tokens = new List<MarkdownInline>();
+        // result 恒以空列表传入（顶层与递归子列表），tokens 别名复用 result，
+        // 消除临时列表分配与末尾 AddRange 复制（MD16）
+        var tokens = result;
         var delims = new List<DelimInfo>();
         TokenizeInline(text, start, end, tokens, delims, refs, pipeline, inLink);
         ResolveEmphasis(tokens, delims);
-        result.AddRange(tokens);
     }
 
     /// <summary>行内令牌化：文本解析为令牌列表，* / _ 分隔符 run 收集为强调候选</summary>
