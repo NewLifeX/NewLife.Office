@@ -58,6 +58,10 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     #region 读取方法
     /// <summary>读取所有段落文本</summary>
     /// <returns>段落字符串序列</returns>
+    /// <remarks>
+    /// 排除文本框（w:txbxContent）内层段落——它们由外层形状段落的文本提取一并覆盖，
+    /// 避免文本框文本重复出现。w:tab→\t、w:br→换行、w:cr→换行，域指令文本不泄漏。
+    /// </remarks>
     public IEnumerable<String> ReadParagraphs()
     {
         var doc = LoadDocumentXml();
@@ -65,16 +69,54 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var ns = new XmlNamespaceManager(doc.NameTable);
         ns.AddNamespace("w", W);
 
-        foreach (XmlElement para in doc.SelectNodes("//w:p", ns)!)
+        foreach (XmlElement para in doc.SelectNodes("//w:p[not(ancestor::w:txbxContent)]", ns)!)
         {
             var sb = new StringBuilder();
-            foreach (XmlElement t in para.SelectNodes(".//w:t", ns)!)
-            {
-                sb.Append(t.InnerText);
-            }
+            AppendParaText(para, ns, sb);
             var text = sb.ToString();
             if (text.Length > 0)
                 yield return text;
+        }
+    }
+
+    /// <summary>按文档顺序拼接段落文本，处理 w:t/w:tab/w:br/w:cr 语义；递归下钻到超链接/文本框等容器</summary>
+    private static void AppendParaText(XmlElement el, XmlNamespaceManager ns, StringBuilder sb)
+    {
+        foreach (XmlNode child in el.ChildNodes)
+        {
+            if (child is not XmlElement c) continue;
+            switch (c.LocalName)
+            {
+                case "t":
+                    sb.Append(c.InnerText);
+                    break;
+                case "tab":
+                    sb.Append('\t');
+                    break;
+                case "br":
+                    var bt = c.GetAttribute("w:type") ?? c.GetAttribute("type");
+                    sb.Append(bt == "page" ? '\f' : bt == "column" ? '\v' : '\n');
+                    break;
+                case "cr":
+                    sb.Append('\n');
+                    break;
+                case "noBreakHyphen":
+                    sb.Append('-');
+                    break;
+                case "softHyphen":
+                    sb.Append('\u00AD');
+                    break;
+                case "instrText":   // 域指令（如 MERGEFIELD/PAGE）不泄漏到纯文本
+                case "delText":     // 修订删除文本不提取
+                case "fldChar":
+                case "footnoteReference":
+                case "endnoteReference":
+                case "commentReference":
+                    break;
+                default:
+                    AppendParaText(c, ns, sb);
+                    break;
+            }
         }
     }
 
@@ -352,10 +394,60 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
 
         LoadHdrFtr(rels, styleMap, numIdFormats, doc);
 
+        // 脚注/尾注（W22）：解析 footnotes.xml/endnotes.xml 到模型（不含内置分隔符标记）
+        ParseNotes(ReadZipEntryText("word/footnotes.xml"), doc.Footnotes);
+        ParseNotes(ReadZipEntryText("word/endnotes.xml"), doc.Endnotes);
+
         // 收集所有 ZIP 部件（除 document.xml 外全部透传）
         CollectOtherParts(doc);
 
         return doc;
+    }
+
+    /// <summary>解析脚注/尾注 XML 到模型（w:footnote/w:endnote，跳过内置分隔符/续接标记）</summary>
+    /// <param name="xml">footnotes.xml 或 endnotes.xml 内容</param>
+    /// <param name="target">目标列表（Footnotes 或 Endnotes）</param>
+    private static void ParseNotes(String? xml, List<Footnote> target)
+    {
+        if (String.IsNullOrEmpty(xml)) return;
+        try
+        {
+            var doc = new XmlDocument();
+            doc.LoadXml(xml);
+            var ns = new XmlNamespaceManager(doc.NameTable);
+            ns.AddNamespace("w", Wns);
+            foreach (XmlElement fn in doc.SelectNodes("//w:footnote | //w:endnote", ns)!)
+            {
+                var type = fn.GetAttribute("w:type");
+                if (String.IsNullOrEmpty(type)) type = fn.GetAttribute("type");
+                // 内置标记脚注（分隔符/续接分隔符/续接提示）不建模
+                if (type is "separator" or "continuationSeparator" or "continuationNotice") continue;
+                if (!Int32.TryParse(fn.GetAttribute("w:id") ?? fn.GetAttribute("id"), out var id)) continue;
+
+                var note = new Footnote { Id = id, Type = String.IsNullOrEmpty(type) ? null : type };
+                var sb = new StringBuilder();
+                foreach (XmlElement p in fn.SelectNodes("w:p", ns)!)
+                {
+                    var para = new Paragraph();
+                    foreach (XmlElement r in p.SelectNodes("w:r", ns)!)
+                        para.Runs.Add(ParseRun(r, ns, null));
+                    if (para.Runs.Count > 0)
+                    {
+                        var paraText = new StringBuilder();
+                        foreach (var r in para.Runs) paraText.Append(r.Text);
+                        if (paraText.Length > 0)
+                        {
+                            if (sb.Length > 0) sb.Append('\n');
+                            sb.Append(paraText);
+                        }
+                        note.Paragraphs.Add(para);
+                    }
+                }
+                note.Text = sb.ToString();
+                target.Add(note);
+            }
+        }
+        catch { /* 脚注 XML 损坏时静默跳过 */ }
     }
 
     /// <summary>读取 ZIP 入口的文本内容</summary>
@@ -969,6 +1061,52 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                         ApplyStyleDefaults(run, styleDefaults);
                         para.Runs.Add(run);
                     }
+                }
+            }
+            else if (el.LocalName == "sdt")
+            {
+                // 内联内容控件（W22）：把 sdtContent 内的 Run 并入段落 Runs，Find/Replace 可达
+                var sdtContent = el.SelectSingleNode("w:sdtContent", ns) as XmlElement;
+                if (sdtContent != null)
+                {
+                    foreach (XmlNode sc in sdtContent.ChildNodes)
+                    {
+                        if (sc is not XmlElement sdtChild) continue;
+                        if (sdtChild.LocalName == "r")
+                        {
+                            var run = ParseRun(sdtChild, ns, null);
+                            ApplyStyleDefaults(run, styleDefaults);
+                            para.Runs.Add(run);
+                        }
+                        else if (sdtChild.LocalName == "hyperlink")
+                        {
+                            var hlRelId = sdtChild.GetAttribute("r:id") ?? sdtChild.GetAttribute("id");
+                            foreach (XmlNode hlChild in sdtChild.ChildNodes)
+                            {
+                                if (hlChild is XmlElement hlRun && hlRun.LocalName == "r")
+                                {
+                                    var run = ParseRun(hlRun, ns, hlRelId);
+                                    ApplyStyleDefaults(run, styleDefaults);
+                                    para.Runs.Add(run);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 文本框（W22）：解析 w:drawing 内 wps:txbx/w:txbxContent 的段落到 TextBoxes，
+        // FindText/ReplaceText 可覆盖文本框文本；递归支持文本框嵌套
+        foreach (XmlElement txbxContent in pEl.SelectNodes(".//w:txbxContent", ns)!)
+        {
+            foreach (XmlNode txbxChild in txbxContent.ChildNodes)
+            {
+                if (txbxChild is XmlElement txbxPara && txbxPara.LocalName == "p")
+                {
+                    var tp = ParsePara(txbxPara, ns, rels, styleMap, numIdFormats).Paragraph!;
+                    tp.RawXml = txbxPara.OuterXml; // 保留内层原 XML，替换时优先使用
+                    para.TextBoxes.Add(tp);
                 }
             }
         }

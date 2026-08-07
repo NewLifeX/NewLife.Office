@@ -14,6 +14,18 @@ public class Paragraph
     /// <summary>文字段集合</summary>
     public List<Run> Runs { get; } = [];
 
+    /// <summary>
+    /// 文本框内容段落集合（w:drawing 内 wps:txbx/w:txbxContent 的段落，W22）。
+    /// Reader 解析填充，FindText/ReplaceText 可覆盖；替换后自动同步外层段落 RawXml 保证保存生效。
+    /// </summary>
+    public List<Paragraph> TextBoxes { get; } = [];
+
+    /// <summary>
+    /// 原始 XML（文本框内层 <c>w:p</c> 原文，W22）。
+    /// Reader 解析文本框时填充；ReplaceText 修改后清空并由 Writer 从模型重建，保证修改持久化。
+    /// </summary>
+    public String? RawXml { get; set; }
+
     /// <summary>对齐方式（left/center/right/both）</summary>
     public String? Alignment { get; set; }
 

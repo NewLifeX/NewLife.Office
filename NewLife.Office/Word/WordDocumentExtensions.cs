@@ -72,8 +72,8 @@ public static class WordDocumentExtensions
         var comparer = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         var count = 0;
         foreach (var para in EnumerateParagraphs(doc))
-            count += ReplaceInParagraph(para, find, replace, comparer, wholeWord);
-        return count;
+            count += ReplaceInParagraph(para, find, replace, comparer, wholeWord);        // 文本框替换后同步外层段落 RawXml（txbxContent 部分），保证保存时修改生效
+        if (count > 0) SyncTextBoxesRawXml(doc);        return count;
     }
 
     /// <summary>在单个段落中替换（支持跨 Run），返回替换次数</summary>
@@ -169,13 +169,17 @@ public static class WordDocumentExtensions
         return -1;
     }
 
-    /// <summary>枚举文档中所有可替换的段落（正文/表格单元格/页眉页脚）</summary>
+    /// <summary>枚举文档中所有可替换的段落（正文/表格单元格/页眉页脚/文本框）</summary>
     private static IEnumerable<Paragraph> EnumerateParagraphs(Document doc)
     {
         foreach (var el in doc.Elements)
         {
             if (el.Paragraph != null)
+            {
                 yield return el.Paragraph;
+                foreach (var tp in EnumerateTextBoxes(el.Paragraph))
+                    yield return tp;
+            }
             else if (el.Table != null)
             {
                 foreach (var row in el.Table.Rows)
@@ -195,15 +199,36 @@ public static class WordDocumentExtensions
         {
             foreach (var el in hdr.Elements)
             {
-                if (el.Paragraph != null) yield return el.Paragraph;
+                if (el.Paragraph != null)
+                {
+                    yield return el.Paragraph;
+                    foreach (var tp in EnumerateTextBoxes(el.Paragraph))
+                        yield return tp;
+                }
             }
         }
         foreach (var ftr in doc.Footers)
         {
             foreach (var el in ftr.Elements)
             {
-                if (el.Paragraph != null) yield return el.Paragraph;
+                if (el.Paragraph != null)
+                {
+                    yield return el.Paragraph;
+                    foreach (var tp in EnumerateTextBoxes(el.Paragraph))
+                        yield return tp;
+                }
             }
+        }
+    }
+
+    /// <summary>递归枚举段落内文本框内容段落（W22）</summary>
+    private static IEnumerable<Paragraph> EnumerateTextBoxes(Paragraph para)
+    {
+        foreach (var tp in para.TextBoxes)
+        {
+            yield return tp;
+            foreach (var nested in EnumerateTextBoxes(tp))
+                yield return nested;
         }
     }
 
@@ -211,7 +236,11 @@ public static class WordDocumentExtensions
     private static IEnumerable<Paragraph> EnumerateCellParagraphs(Cell cell)
     {
         foreach (var p in cell.Paragraphs)
+        {
             yield return p;
+            foreach (var tp in EnumerateTextBoxes(p))
+                yield return tp;
+        }
         foreach (var nested in cell.NestedTables)
         {
             foreach (var row in nested.Rows)
@@ -243,6 +272,11 @@ public static class WordDocumentExtensions
             foreach (var el in list)
             {
                 el.RawXml = null;
+                if (el.Paragraph != null)
+                {
+                    foreach (var tp in EnumerateTextBoxes(el.Paragraph))
+                        tp.RawXml = null;
+                }
                 if (el.Table != null)
                 {
                     el.Table.RawXml = null;
@@ -257,6 +291,77 @@ public static class WordDocumentExtensions
         Clear(doc.Elements);
         foreach (var h in doc.Headers) Clear(h.Elements);
         foreach (var f in doc.Footers) Clear(f.Elements);
+    }
+
+    /// <summary>文本框替换后同步外层元素 RawXml（重建 txbxContent 部分），保证保存时修改生效</summary>
+    private static void SyncTextBoxesRawXml(Document doc)
+    {
+        void Sync(List<Element> list)
+        {
+            foreach (var el in list)
+            {
+                if (el.Paragraph != null && el.Paragraph.TextBoxes.Count > 0)
+                    SyncTextBoxesRawXml(el);
+                // 表格单元格内文本框：持久化需同步表格元素 RawXml（复杂场景），
+                // 由通用 ClearRawXml 工作流兜底（见 ClearRawXml 文档）
+            }
+        }
+
+        Sync(doc.Elements);
+        foreach (var h in doc.Headers) Sync(h.Elements);
+        foreach (var f in doc.Footers) Sync(f.Elements);
+    }
+
+    /// <summary>重建单个段落元素 RawXml 的 txbxContent 部分（从 TextBoxes 模型，文本框按序对应）</summary>
+    private static void SyncTextBoxesRawXml(Element el)
+    {
+        if (el.RawXml == null || el.Paragraph == null || el.Paragraph.TextBoxes.Count == 0) return;
+
+        var idx = 0;
+        el.RawXml = System.Text.RegularExpressions.Regex.Replace(
+            el.RawXml,
+            "<w:txbxContent>.*?</w:txbxContent>",
+            m =>
+            {
+                var tp = idx < el.Paragraph.TextBoxes.Count ? el.Paragraph.TextBoxes[idx] : null;
+                idx++;
+                return tp == null ? m.Value : $"<w:txbxContent>{BuildTextboxParagraphXml(tp)}</w:txbxContent>";
+            },
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+    }
+
+    /// <summary>从 Run 模型构建文本框内段落 XML（替换后重建用，保留常见字符格式）</summary>
+    private static String BuildTextboxParagraphXml(Paragraph p)
+    {
+        static String Esc(String? s) => s == null ? String.Empty : (System.Security.SecurityElement.Escape(s) ?? s);
+
+        var sb = new StringBuilder();
+        sb.Append("<w:p>");
+        foreach (var run in p.Runs)
+        {
+            sb.Append("<w:r>");
+            var rp = run.Properties;
+            if (rp != null)
+            {
+                sb.Append("<w:rPr>");
+                if (rp.Bold == true) sb.Append("<w:b/>");
+                if (rp.Italic == true) sb.Append("<w:i/>");
+                if (rp.Strikethrough == true) sb.Append("<w:strike/>");
+                if (rp.Underline == true) sb.Append("<w:u/>");
+                if (rp.Superscript == true) sb.Append("<w:vertAlign w:val=\"superscript\"/>");
+                else if (rp.Subscript == true) sb.Append("<w:vertAlign w:val=\"subscript\"/>");
+                if (rp.ForeColor != null) sb.Append($"<w:color w:val=\"{rp.ForeColor.TrimStart('#')}\"/>");
+                if (rp.FontSize.HasValue) sb.Append($"<w:sz w:val=\"{(Int32)(rp.FontSize.Value * 2)}\"/>");
+                if (rp.FontName != null) sb.Append($"<w:rFonts w:ascii=\"{Esc(rp.FontName)}\" w:hAnsi=\"{Esc(rp.FontName)}\"/>");
+                sb.Append("</w:rPr>");
+            }
+            var spaceAttr = (run.Text.Length > 0 && (run.Text[0] == ' ' || run.Text[^1] == ' '))
+                ? " xml:space=\"preserve\"" : "";
+            sb.Append($"<w:t{spaceAttr}>{Esc(run.Text)}</w:t>");
+            sb.Append("</w:r>");
+        }
+        sb.Append("</w:p>");
+        return sb.ToString();
     }
     #endregion
 }

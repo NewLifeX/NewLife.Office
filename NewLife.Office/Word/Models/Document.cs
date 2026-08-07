@@ -64,6 +64,12 @@ public class Document
     /// <summary>文档批注列表（审阅评论）</summary>
     public List<Comment> Comments { get; set; } = [];
 
+    /// <summary>脚注列表（W22，读取自 word/footnotes.xml，不含内置分隔符标记）</summary>
+    public List<Footnote> Footnotes { get; set; } = [];
+
+    /// <summary>尾注列表（W22，读取自 word/endnotes.xml，不含内置分隔符标记）</summary>
+    public List<Footnote> Endnotes { get; set; } = [];
+
     /// <summary>内容控件列表（SDT）</summary>
     public List<SdtElement> SdtElements { get; set; } = [];
 
