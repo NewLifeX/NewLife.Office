@@ -82,6 +82,13 @@ partial class PptxWriter
             using var es = entry.Open();
             es.Write(data, 0, data.Length);
         }
+        // 写入跨文件复制的动态部件（图表/批注/嵌入等，S10-04）
+        foreach (var (path, data) in _rawParts)
+        {
+            var entry = za.CreateEntry(path, CompressionLevel.Fastest);
+            using var es = entry.Open();
+            es.Write(data, 0, data.Length);
+        }
         // 写入嵌入字体（ppt/fonts/）
         foreach (var kv in _embeddedFonts)
         {
@@ -175,6 +182,23 @@ partial class PptxWriter
         for (var i = 0; i < _rawSlides.Count; i++)
         {
             sb.Append($"<Override PartName=\"/ppt/slides/slide{Slides.Count + i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/>");
+        }
+        // 跨文件复制的动态部件内容类型（S10-04）
+        var rawExt = new HashSet<String>();
+        foreach (var (path, _) in _rawParts)
+        {
+            if (path.StartsWith("ppt/charts/", StringComparison.OrdinalIgnoreCase))
+                sb.Append($"<Override PartName=\"/{path}\" ContentType=\"application/vnd.openxmlformats-officedocument.drawingml.chart+xml\"/>");
+            else if (path.Equals("ppt/comments/commentAuthors.xml", StringComparison.OrdinalIgnoreCase))
+                sb.Append($"<Override PartName=\"/{path}\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.commentAuthors+xml\"/>");
+            else if (path.StartsWith("ppt/comments/", StringComparison.OrdinalIgnoreCase))
+                sb.Append($"<Override PartName=\"/{path}\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.comments+xml\"/>");
+            else if (path.StartsWith("ppt/embeddings/", StringComparison.OrdinalIgnoreCase))
+            {
+                var ext = Path.GetExtension(path).TrimStart('.');
+                if (rawExt.Add(ext))
+                    sb.Append($"<Default Extension=\"{ext}\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"/>");
+            }
         }
         // chart types
         foreach (var slide in Slides)
@@ -324,6 +348,11 @@ partial class PptxWriter
         for (var i = 0; i < _rawSlides.Count; i++)
         {
             sb.Append($"<Relationship Id=\"rSlide{Slides.Count + i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide{Slides.Count + i + 1}.xml\"/>");
+        }
+        // 批注作者关系（S13-01）
+        if (Slides.Any(s => s.Comments.Count > 0) || _rawHasComments)
+        {
+            sb.Append("<Relationship Id=\"rCommentAuthors\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/commentAuthors\" Target=\"comments/commentAuthors.xml\"/>");
         }
         sb.Append("</Relationships>");
         WriteEntry(za, "ppt/_rels/presentation.xml.rels", sb.ToString());
@@ -812,6 +841,11 @@ partial class PptxWriter
         foreach (var chart in slide.Charts)
         {
             relsSb.Append($"<Relationship Id=\"{chart.RelId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart\" Target=\"../charts/chart{chart.ChartNumber}.xml\"/>");
+        }
+        // 批注关系（S13-01）：幻灯片 → 批注部件
+        if (slide.Comments.Count > 0)
+        {
+            relsSb.Append($"<Relationship Id=\"rComment1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments\" Target=\"../comments/comment{idx + 1}.xml\"/>");
         }
         foreach (var vid in slide.Videos)
         {

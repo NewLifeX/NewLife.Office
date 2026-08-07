@@ -88,6 +88,71 @@ public class FeatureCoverageTests
         writer.AddSlide();
         Assert.Throws<ArgumentOutOfRangeException>(() => writer.CopySlideFrom(src, 99));
     }
+
+    [Fact, DisplayName("S10-04 跨文件复制：图表部件复制与读回")]
+    public void CopySlideFrom_ChartParts()
+    {
+        var src = BuildPptx(w =>
+        {
+            var c = w.AddBarChart(0, ["分类A", "分类B"]);
+            c.Series.Add(new ChartSeries { Name = "复制图表", Values = [11, 22] });
+        });
+
+        using var ms = new MemoryStream();
+        using (var writer = new PptxWriter())
+        {
+            writer.AddSlide();
+            var idx = writer.CopySlideFrom(src, 0);
+            Assert.Equal(1, idx);
+            writer.Save(ms);
+        }
+        var bytes = ms.ToArray();
+
+        // 图表部件已复制
+        using var za = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
+        Assert.NotNull(za.GetEntry("ppt/charts/chart1.xml"));
+
+        // 读回图表数据
+        using var reader = new PptxReader(new MemoryStream(bytes));
+        var slides = reader.ReadAllSlides().ToList();
+        Assert.True(slides.Count >= 2);
+        var chart = slides[1].Charts.FirstOrDefault();
+        Assert.NotNull(chart);
+        Assert.Equal("复制图表", chart!.Series[0].Name);
+        Assert.Equal(22, chart.Series[0].Values[1]);
+    }
+
+    [Fact, DisplayName("S10-04 跨文件复制：批注部件复制与读回")]
+    public void CopySlideFrom_Comments()
+    {
+        var src = BuildPptx(w =>
+        {
+            w.Slides[0].Comments.Add(new Comment { Author = "甲", Text = "复制来的批注" });
+        });
+
+        using var ms = new MemoryStream();
+        using (var writer = new PptxWriter())
+        {
+            writer.AddSlide();
+            var idx = writer.CopySlideFrom(src, 0);
+            Assert.Equal(1, idx);
+            writer.Save(ms);
+        }
+        var bytes = ms.ToArray();
+
+        // 批注部件按输出幻灯片编号命名（目标第 2 张 → comment2.xml），含作者部件
+        using var za = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
+        Assert.NotNull(za.GetEntry("ppt/comments/comment2.xml"));
+        Assert.NotNull(za.GetEntry("ppt/comments/commentAuthors.xml"));
+
+        // 读回批注
+        using var reader = new PptxReader(new MemoryStream(bytes));
+        var slides = reader.ReadAllSlides().ToList();
+        Assert.True(slides.Count >= 2);
+        var comment = slides[1].Comments.FirstOrDefault();
+        Assert.NotNull(comment);
+        Assert.Contains("复制来的批注", comment!.Text);
+    }
     #endregion
 
     #region S12 动画

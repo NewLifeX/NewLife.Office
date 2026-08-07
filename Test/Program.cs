@@ -22,6 +22,8 @@ class Program
         try
         {
             TestPptxMaster();
+            TestPptWriter();
+            DiagnoseDocx.Run();
         }
         catch (Exception ex)
         {
@@ -30,6 +32,24 @@ class Program
 
         Console.WriteLine("OK!");
         Console.ReadKey();
+    }
+
+    /// <summary>演示 .ppt（97-2003 二进制）写入：生成纯文本幻灯片，可用 PowerPoint/WPS 打开验证</summary>
+    static void TestPptWriter()
+    {
+        var path = "PptWriterDemo.ppt".GetFullPath();
+        using var writer = new PptWriter { Author = "NewLife.Office" };
+        writer.AddSlide("基于 NewLife.Office 生成的 .ppt", "零外部依赖 · MIT 许可", "PowerPoint 97-2003 二进制格式");
+        writer.AddSlide("第二张幻灯片", "仅文本内容的演示", "每行文本是一个段落");
+        writer.AddSlide("第三张", "中文内容 ✔ 标点符号，中文内容 ✔");
+        writer.Save(path);
+        XTrace.WriteLine($"已生成 {path}");
+
+        // 读回验证
+        using var reader = new PptReader(path);
+        XTrace.WriteLine($"幻灯片数：{reader.SlideCount}");
+        for (var i = 0; i < reader.SlideCount; i++)
+            XTrace.WriteLine($"  第 {i + 1} 张：{reader.GetSlideText(i)}");
     }
 
     /// <summary>演示 PPT 母版页功能：从企业模板加载母版/版式/主题后添加幻灯片</summary>

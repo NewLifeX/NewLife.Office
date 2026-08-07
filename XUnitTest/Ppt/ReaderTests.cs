@@ -32,18 +32,18 @@ public class PptReaderTests
         return Concat(LE2(verType), LE2(recType), LE4(recLen));
     }
 
-    // TextCharsAtom (0x03F2)：UTF-16LE 文本原子
+    // TextCharsAtom (0x0FA0)：UTF-16LE 文本原子
     private static Byte[] TextCharsAtom(String text)
     {
         var textBytes = Encoding.Unicode.GetBytes(text);
-        return Concat(RecHeader(0x00, 0x0000, 0x03F2, (UInt32)textBytes.Length), textBytes);
+        return Concat(RecHeader(0x00, 0x0000, 0x0FA0, (UInt32)textBytes.Length), textBytes);
     }
 
-    // TextBytesAtom (0x03F0)：ANSI 文本原子
+    // TextBytesAtom (0x0FA8)：ANSI 文本原子
     private static Byte[] TextBytesAtom(String text)
     {
         var textBytes = Encoding.ASCII.GetBytes(text);
-        return Concat(RecHeader(0x00, 0x0000, 0x03F0, (UInt32)textBytes.Length), textBytes);
+        return Concat(RecHeader(0x00, 0x0000, 0x0FA8, (UInt32)textBytes.Length), textBytes);
     }
 
     // SlideContainer (0x03EE)：幻灯片容器

@@ -1417,8 +1417,10 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         if (ce == null) return;
         var cd = LoadXml(ce);
         const String C = "http://schemas.openxmlformats.org/drawingml/2006/chart";
+        const String A = "http://schemas.openxmlformats.org/drawingml/2006/main";
         var cns = new XmlNamespaceManager(cd.NameTable);
         cns.AddNamespace("c", C);
+        cns.AddNamespace("a", A);
         var chart = new Chart { Left = left, Top = top, Width = width, Height = height };
         var ctn = cd.SelectSingleNode("//*[substring(local-name(), string-length(local-name())-4) = 'Chart'][@*]", null);
         chart.ChartType = ctn?.LocalName?.Replace("Chart", String.Empty) ?? "bar";
