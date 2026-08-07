@@ -1879,6 +1879,24 @@ public class WordWriter : IDisposable
         }
         sb.Append("</w:tblPr>");
 
+        // 列网格：OOXML 规范要求 tbl 子元素顺序为 tblPr → tblGrid → tr（缺失会被 Word 打开时提示修复）
+        var gridCols = 0;
+        foreach (var r in tableRows)
+            if (r.Count > gridCols) gridCols = r.Count;
+        if (gridCols < 1) gridCols = 1;
+        var availW = ps.PageWidth - ps.MarginLeft - ps.MarginRight;
+        sb.Append("<w:tblGrid>");
+        for (var c = 0; c < gridCols; c++)
+        {
+            Int32 colW;
+            if (style?.ColumnWidths != null && c < style.ColumnWidths.Length)
+                colW = style.ColumnWidths[c];
+            else
+                colW = availW / gridCols;
+            sb.Append($"<w:gridCol w:w=\"{colW}\"/>");
+        }
+        sb.Append("</w:tblGrid>");
+
         for (var ri = 0; ri < tableRows.Count; ri++)
         {
             var row = tableRows[ri];
@@ -1887,7 +1905,6 @@ public class WordWriter : IDisposable
                 sb.Append("<w:trPr><w:tblHeader/></w:trPr>");
 
             var colCount = row.Count;
-            var availW = ps.PageWidth - ps.MarginLeft - ps.MarginRight;
 
             for (var ci = 0; ci < row.Count; ci++)
             {

@@ -39,6 +39,17 @@
     </PackageReference>
   </ItemGroup>
 
+  <!-- 竞品交叉兼容测试依赖（仅测试项目，不污染生产代码） -->
+  <ItemGroup>
+    <PackageReference Include="NPOI" Version="2.8.0" />
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
+  </ItemGroup>
+
+  <!-- Word 真实文件回归库：从 Bin 复制到测试输出，供往返/交叉测试使用 -->
+  <ItemGroup>
+    <None Include="Word\Fixtures\**\*.docx" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\NewLife.Office\NewLife.Office.csproj" />
     <ProjectReference Include="..\NewLife.Office.Cli\NewLife.Office.Cli.csproj" />
