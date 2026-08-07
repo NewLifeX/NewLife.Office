@@ -45,6 +45,19 @@ public class Paragraph
     /// <summary>列表级别（0=一级, 1=二级...），配合 IsBullet 使用，默认 0</summary>
     public Int32 ListLevel { get; set; }
 
+    /// <summary>
+    /// 原始编号定义 ID（w:numPr/w:numId w:val，如 5）。
+    /// Reader 从真实文档填充；Writer 非空时优先原样写回，保证引用透传的 numbering.xml 中的编号定义，
+    /// 避免程序化重新映射为 1/2/3 导致列表编号错乱。
+    /// </summary>
+    public Int32? NumId { get; set; }
+
+    /// <summary>
+    /// 编号格式（numFmt：bullet / decimal / lowerLetter / upperRoman 等，对应段落所在层级的 numFmt）。
+    /// Reader 解析 numbering.xml 后填充，用于程序化判断列表类型与展示。
+    /// </summary>
+    public String? ListFormat { get; set; }
+
     /// <summary>有序列表起始编号（仅 IsOrderedList=true 时有效），默认 1</summary>
     public Int32? ListStartOverride { get; set; }
 

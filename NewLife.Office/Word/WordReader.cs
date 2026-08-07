@@ -248,6 +248,8 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var ns = WmlNs(xml);
         var rels = LoadRels();
         var styleMap = LoadStyles();
+        var numberingXml = ReadZipEntryText("word/numbering.xml");
+        var numIdFormats = ParseNumIdFormats(numberingXml);
 
         // 保存 document.xml 根元素的命名空间声明，用于 Writer 重建时保展扩命名空间
         if (xml.DocumentElement != null)
@@ -267,7 +269,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             foreach (XmlNode child in body.ChildNodes)
             {
                 if (child is not XmlElement el) continue;
-                ProcessBodyElement(el, ns, rels, styleMap, doc);
+                ProcessBodyElement(el, ns, rels, styleMap, numIdFormats, doc);
             }
         }
 
@@ -306,7 +308,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
 
         // 保存原始 XML 部件，用于 Writer 完美还原视觉效果
         doc.StylesXml = ReadZipEntryText("word/styles.xml");
-        doc.NumberingXml = ReadZipEntryText("word/numbering.xml");
+        doc.NumberingXml = numberingXml;
         // 解析编号定义到模型（无损往返时 NumberingXml 已足够，模型解析便于程序化修改）
         if (doc.NumberingXml != null)
             doc.Numbering = ParseNumbering(doc.NumberingXml);
@@ -378,7 +380,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
 
     /// <summary>处理 body 下的单个块级元素（段落/表格/内容控件/修订包裹块/节设置）</summary>
     private void ProcessBodyElement(XmlElement el, XmlNamespaceManager ns, Dictionary<String, String> rels,
-        Dictionary<String, RunProperties> styleMap, Document doc)
+        Dictionary<String, RunProperties> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
     {
         if (el.LocalName == "p")
         {
@@ -394,12 +396,10 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             else
             {
                 // 文字段落（可能含内嵌图片）——保存完整 RawXml，图片已包含在其中
-                var pe = ParsePara(el, ns, rels, styleMap);
-                if (pe.Paragraph != null && !IsEmptyPara(pe.Paragraph))
-                {
-                    pe.RawXml = el.OuterXml;
-                    doc.Elements.Add(pe);
-                }
+                // 保留空段落（含书签/分页符的段落），保证"读入→写出"结构完整（空行/占位段落不丢失）
+                var pe = ParsePara(el, ns, rels, styleMap, numIdFormats);
+                pe.RawXml = el.OuterXml;
+                doc.Elements.Add(pe);
                 // 加载图片数据到 doc.Images（需要，即使 RawXml 已包含 XML）
                 if (drawing != null)
                     ParseDrawing(drawing, ns, rels, doc); // 将图片加入 Images，不追加到 Elements
@@ -432,7 +432,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             foreach (XmlNode inner in el.ChildNodes)
             {
                 if (inner is XmlElement innerEl)
-                    ProcessBodyElement(innerEl, ns, rels, styleMap, doc);
+                    ProcessBodyElement(innerEl, ns, rels, styleMap, numIdFormats, doc);
             }
         }
     }
@@ -513,6 +513,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         return map;
     }
 
+    /// <summary>加载样式表并展开继承链（docDefaults + basedOn），返回 styleId → 合并后的 RunProperties</summary>
     private Dictionary<String, RunProperties> LoadStyles()
     {
         var map = new Dictionary<String, RunProperties>(StringComparer.OrdinalIgnoreCase);
@@ -521,24 +522,135 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var doc = new XmlDocument();
         using (var s = entry.Open()) doc.Load(s);
         var ns = WmlNs(doc);
+
+        // 文档默认格式（docDefaults/rPrDefault），所有样式的基础
+        var defaults = new RunProperties();
+        var rPrDefault = doc.SelectSingleNode("//w:docDefaults/w:rPrDefault/w:rPr", ns) as XmlElement;
+        if (rPrDefault != null)
+            defaults = ParseRunPr(rPrDefault, ns, false);
+
+        // 收集每个样式的直接 rPr 与 basedOn 引用
+        var raw = new Dictionary<String, (RunProperties? RPr, String? BasedOn)>(StringComparer.OrdinalIgnoreCase);
         foreach (XmlElement st in doc.SelectNodes("//w:style", ns)!)
         {
             var styleId = st.GetAttribute("w:styleId");
             if (String.IsNullOrEmpty(styleId)) continue;
-            var rPr = st.SelectSingleNode("w:rPr", ns) as XmlElement;
-            if (rPr == null)
+            RunProperties? rPr = null;
+            var rPrEl = st.SelectSingleNode("w:rPr", ns) as XmlElement;
+            if (rPrEl == null)
             {
                 var pPr = st.SelectSingleNode("w:pPr", ns) as XmlElement;
-                if (pPr != null) rPr = pPr.SelectSingleNode("w:rPr", ns) as XmlElement;
+                if (pPr != null) rPrEl = pPr.SelectSingleNode("w:rPr", ns) as XmlElement;
             }
-            if (rPr != null) map[styleId] = ParseRunPr(rPr, ns, false);
+            if (rPrEl != null) rPr = ParseRunPr(rPrEl, ns, false);
+            var basedOn = (st.SelectSingleNode("w:basedOn", ns) as XmlElement)?.GetAttribute("w:val");
+            raw[styleId] = (rPr, basedOn);
         }
+
+        // 展开继承链（基于 Normal → 目标样式，带环保护）
+        foreach (var kv in raw)
+            map[kv.Key] = ExpandStyle(kv.Key, raw, defaults, []);
+
+        return map;
+    }
+
+    /// <summary>递归展开样式继承链：docDefaults → basedOn 链 → 样式自身 rPr</summary>
+    /// <param name="styleId">样式 ID</param>
+    /// <param name="raw">样式原始信息表</param>
+    /// <param name="defaults">文档默认格式</param>
+    /// <param name="visited">已访问样式集合（环保护）</param>
+    private static RunProperties ExpandStyle(String styleId,
+        Dictionary<String, (RunProperties? RPr, String? BasedOn)> raw,
+        RunProperties defaults, HashSet<String> visited)
+    {
+        var merged = new RunProperties();
+        // 环保护：重复引用同一样式时返回空，避免无限递归
+        if (!visited.Add(styleId)) return merged;
+
+        // 1. 应用文档默认格式
+        merged = MergeRunProps(merged, defaults);
+
+        // 2. 递归应用 basedOn 链
+        if (raw.TryGetValue(styleId, out var self) && self.BasedOn != null && raw.ContainsKey(self.BasedOn))
+        {
+            var baseProps = ExpandStyle(self.BasedOn!, raw, defaults, visited);
+            merged = MergeRunProps(merged, baseProps);
+        }
+
+        // 3. 应用样式自身格式（最高优先级）
+        if (self.RPr != null)
+            merged = MergeRunProps(merged, self.RPr);
+
+        visited.Remove(styleId);
+        return merged;
+    }
+
+    /// <summary>合并源格式到目标格式（源属性非空即覆盖）</summary>
+    private static RunProperties MergeRunProps(RunProperties target, RunProperties src)
+    {
+        if (src.Bold.HasValue) target.Bold = src.Bold;
+        if (src.Italic.HasValue) target.Italic = src.Italic;
+        if (src.Underline.HasValue) target.Underline = src.Underline;
+        if (src.Strikethrough.HasValue) target.Strikethrough = src.Strikethrough;
+        if (src.Superscript.HasValue) target.Superscript = src.Superscript;
+        if (src.Subscript.HasValue) target.Subscript = src.Subscript;
+        if (src.ForeColor != null) target.ForeColor = src.ForeColor;
+        if (src.FontSize.HasValue) target.FontSize = src.FontSize;
+        if (src.FontName != null) target.FontName = src.FontName;
+        if (src.EastAsiaFontName != null) target.EastAsiaFontName = src.EastAsiaFontName;
+        if (src.HighlightColor != null) target.HighlightColor = src.HighlightColor;
+        if (src.SmallCaps.HasValue) target.SmallCaps = src.SmallCaps;
+        if (src.AllCaps.HasValue) target.AllCaps = src.AllCaps;
+        if (src.Hidden.HasValue) target.Hidden = src.Hidden;
+        if (src.Language != null) target.Language = src.Language;
+        return target;
+    }
+
+    /// <summary>从 numbering.xml 解析 numId → 各层 numFmt 映射，用于段落列表类型判定</summary>
+    /// <param name="numberingXml">numbering.xml 内容</param>
+    /// <returns>numId → (ilvl → numFmt) 字典</returns>
+    private static Dictionary<Int32, Dictionary<Int32, String>> ParseNumIdFormats(String? numberingXml)
+    {
+        var map = new Dictionary<Int32, Dictionary<Int32, String>>();
+        if (String.IsNullOrEmpty(numberingXml)) return map;
+        try
+        {
+            var doc = new XmlDocument();
+            doc.LoadXml(numberingXml);
+            var ns = new XmlNamespaceManager(doc.NameTable);
+            ns.AddNamespace("w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
+
+            // numId → abstractNumId
+            var numToAbs = new Dictionary<Int32, Int32>();
+            foreach (XmlElement numEl in doc.SelectNodes("//w:num", ns)!)
+            {
+                if (!Int32.TryParse(numEl.GetAttribute("w:numId"), out var numId)) continue;
+                var absEl = numEl.SelectSingleNode("w:abstractNumId", ns) as XmlElement;
+                if (absEl != null && Int32.TryParse(absEl.GetAttribute("w:val"), out var absId))
+                    numToAbs[numId] = absId;
+            }
+
+            foreach (var kv in numToAbs)
+            {
+                var absEl = doc.SelectSingleNode($"//w:abstractNum[@w:abstractNumId='{kv.Value}']", ns) as XmlElement;
+                if (absEl == null) continue;
+                var levels = new Dictionary<Int32, String>();
+                foreach (XmlElement lvl in absEl.SelectNodes("w:lvl", ns)!)
+                {
+                    if (!Int32.TryParse(lvl.GetAttribute("w:ilvl"), out var ilvl)) continue;
+                    var fmt = (lvl.SelectSingleNode("w:numFmt", ns) as XmlElement)?.GetAttribute("w:val");
+                    if (fmt != null) levels[ilvl] = fmt;
+                }
+                map[kv.Key] = levels;
+            }
+        }
+        catch { /* 解析失败回退为按 numId==2 的旧逻辑 */ }
         return map;
     }
     #endregion
 
     #region 段落解析
-    private Element ParsePara(XmlElement pEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, RunProperties> styleMap)
+    private Element ParsePara(XmlElement pEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, RunProperties> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats)
     {
         var para = new Paragraph();
         var isPageBreak = false;
@@ -609,17 +721,39 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             if (pPrEl.SelectSingleNode("w:numPr", ns) != null)
             {
                 var numIdEl = pPrEl.SelectSingleNode("w:numPr/w:numId", ns) as XmlElement;
-                var numId = numIdEl?.GetAttribute("w:val") ?? numIdEl?.GetAttribute("val");
-                if (numId == "2")
-                    isOrderedList = true;
-                else
-                    isBullet = true;
+                var numIdStr = numIdEl?.GetAttribute("w:val") ?? numIdEl?.GetAttribute("val");
 
-                var ilvl = pPrEl.SelectSingleNode("w:numPr/w:ilvl", ns) as XmlElement;
-                if (ilvl != null)
+                var ilvlEl = pPrEl.SelectSingleNode("w:numPr/w:ilvl", ns) as XmlElement;
+                var ilvlStr = ilvlEl?.GetAttribute("w:val") ?? ilvlEl?.GetAttribute("val");
+                if (Int32.TryParse(ilvlStr, out var ilvlVal)) para.ListLevel = ilvlVal;
+
+                // 通过 numbering.xml 的 numId → numFmt 映射判定列表类型（而非硬编码 numId==2）
+                if (Int32.TryParse(numIdStr, out var numIdVal))
                 {
-                    var lv = ilvl.GetAttribute("w:val") ?? ilvl.GetAttribute("val");
-                    if (Int32.TryParse(lv, out var lvi)) para.ListLevel = lvi;
+                    para.NumId = numIdVal;
+                    if (numIdVal == 0)
+                    {
+                        // numId=0 表示无编号
+                        isBullet = false;
+                        isOrderedList = false;
+                    }
+                    else if (numIdFormats.TryGetValue(numIdVal, out var levels) &&
+                             levels.TryGetValue(para.ListLevel, out var fmt))
+                    {
+                        para.ListFormat = fmt;
+                        var isBulletFmt = fmt == "bullet";
+                        isBullet = isBulletFmt;
+                        isOrderedList = !isBulletFmt;
+                    }
+                    else
+                    {
+                        // 映射缺失时回退为无序列表（保持原行为）
+                        isBullet = true;
+                    }
+                }
+                else
+                {
+                    isBullet = true;
                 }
             }
 
@@ -689,29 +823,27 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         para.IsOrderedList = isOrderedList;
         para.IsPageBreak = isPageBreak;
 
-        if (!isPageBreak)
+        // 始终解析 Run（含分页符段落中的文本，如"正文后加分页符"），分页符在 Run 中以 \f 表示
+        foreach (XmlNode child in pEl.ChildNodes)
         {
-            foreach (XmlNode child in pEl.ChildNodes)
+            if (child is not XmlElement el) continue;
+            if (el.LocalName == "r")
             {
-                if (child is not XmlElement el) continue;
-                if (el.LocalName == "r")
+                var run = ParseRun(el, ns, null);
+                ApplyStyleDefaults(run, styleDefaults);
+                para.Runs.Add(run);
+            }
+            else if (el.LocalName == "hyperlink")
+            {
+                var hlRelId = el.GetAttribute("r:id");
+                if (hlRelId == null) hlRelId = el.GetAttribute("id");
+                foreach (XmlNode hlChild in el.ChildNodes)
                 {
-                    var run = ParseRun(el, ns, null);
-                    ApplyStyleDefaults(run, styleDefaults);
-                    para.Runs.Add(run);
-                }
-                else if (el.LocalName == "hyperlink")
-                {
-                    var hlRelId = el.GetAttribute("r:id");
-                    if (hlRelId == null) hlRelId = el.GetAttribute("id");
-                    foreach (XmlNode hlChild in el.ChildNodes)
+                    if (hlChild is XmlElement hlRun && hlRun.LocalName == "r")
                     {
-                        if (hlChild is XmlElement hlRun && hlRun.LocalName == "r")
-                        {
-                            var run = ParseRun(hlRun, ns, hlRelId);
-                            ApplyStyleDefaults(run, styleDefaults);
-                            para.Runs.Add(run);
-                        }
+                        var run = ParseRun(hlRun, ns, hlRelId);
+                        ApplyStyleDefaults(run, styleDefaults);
+                        para.Runs.Add(run);
                     }
                 }
             }
@@ -726,17 +858,71 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var rPr = rEl.SelectSingleNode("w:rPr", ns) as XmlElement;
         if (rPr != null)
             run.Properties = ParseRunPr(rPr, ns, hyperlinkRelId != null);
-        var tEl = rEl.SelectSingleNode("w:t", ns);
-        if (tEl != null) run.Text = tEl.InnerText;
+
+        // 一个 Run 可能包含多个 w:t（被域代码/分隔符分割），也可能含 w:tab / w:br / w:cr 等特殊字符元素
+        var sb = new StringBuilder();
+        foreach (XmlNode child in rEl.ChildNodes)
+        {
+            if (child is not XmlElement el) continue;
+            switch (el.LocalName)
+            {
+                case "t":
+                    sb.Append(el.InnerText);
+                    break;
+                case "tab":
+                    sb.Append('\t');
+                    break;
+                case "br":
+                    var brType = el.GetAttribute("w:type") ?? el.GetAttribute("type");
+                    if (brType == "page")
+                        sb.Append('\f');   // 分页符
+                    else if (brType == "column")
+                        sb.Append('\v');   // 分栏符
+                    else
+                        sb.Append('\n');   // 普通换行
+                    break;
+                case "cr":
+                    sb.Append('\n');
+                    break;
+                case "noBreakHyphen":
+                    sb.Append('-');
+                    break;
+                case "softHyphen":
+                    sb.Append('\u00AD');
+                    break;
+            }
+        }
+        run.Text = sb.ToString();
         return run;
+    }
+
+    /// <summary>解析布尔开关元素（w:b / w:i / w:strike 等），支持 w:val="0/1/true/false" 显式关闭</summary>
+    /// <param name="el">开关元素，null 表示未出现</param>
+    /// <returns>null=未设置（继承），true=开启，false=显式关闭</returns>
+    private static Boolean? ParseSwitch(XmlElement? el)
+    {
+        if (el == null) return null;
+        var val = el.GetAttribute("w:val");
+        if (String.IsNullOrEmpty(val)) val = el.GetAttribute("val");
+        if (String.IsNullOrEmpty(val)) return true; // 无 w:val = 开启
+        return val switch
+        {
+            "0" or "false" or "off" or "none" => false,
+            _ => true,
+        };
     }
 
     private static RunProperties ParseRunPr(XmlElement rPrEl, XmlNamespaceManager ns, Boolean isHyperlink)
     {
         var p = new RunProperties();
-        if (rPrEl.SelectSingleNode("w:b", ns) != null) p.Bold = true;
-        if (rPrEl.SelectSingleNode("w:i", ns) != null) p.Italic = true;
-        if (rPrEl.SelectSingleNode("w:u", ns) != null) p.Underline = true;
+        // 三态解析：<w:b/> = 开启，<w:b w:val="0"/> = 显式关闭（取消样式继承的粗体）
+        p.Bold = ParseSwitch(rPrEl.SelectSingleNode("w:b", ns) as XmlElement);
+        p.Italic = ParseSwitch(rPrEl.SelectSingleNode("w:i", ns) as XmlElement);
+        p.Strikethrough = ParseSwitch(rPrEl.SelectSingleNode("w:strike", ns) as XmlElement)
+            ?? ParseSwitch(rPrEl.SelectSingleNode("w:dstrike", ns) as XmlElement); // 双删除线同归 Strikethrough
+        p.SmallCaps = ParseSwitch(rPrEl.SelectSingleNode("w:smallCaps", ns) as XmlElement);
+        p.AllCaps = ParseSwitch(rPrEl.SelectSingleNode("w:caps", ns) as XmlElement);
+        p.Hidden = ParseSwitch(rPrEl.SelectSingleNode("w:vanish", ns) as XmlElement);
         var color = rPrEl.SelectSingleNode("w:color", ns) as XmlElement;
         if (color != null)
         {
@@ -751,29 +937,53 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         }
         var rFonts = rPrEl.SelectSingleNode("w:rFonts", ns) as XmlElement;
         if (rFonts != null)
-            p.FontName = rFonts.GetAttribute("w:ascii") ?? rFonts.GetAttribute("ascii")
+        {
+            var ascii = rFonts.GetAttribute("w:ascii") ?? rFonts.GetAttribute("ascii")
                 ?? rFonts.GetAttribute("w:hAnsi") ?? rFonts.GetAttribute("hAnsi");
-        // 删除线：<w:strike/> 或 <w:dstrike/>（双删除线同归 Strikethrough）
-        if (rPrEl.SelectSingleNode("w:strike", ns) != null || rPrEl.SelectSingleNode("w:dstrike", ns) != null)
-            p.Strikethrough = true;
-        // 上标/下标：<w:vertAlign w:val="superscript"/> / subscript
+            if (ascii != null) p.FontName = ascii;
+            var eastAsia = rFonts.GetAttribute("w:eastAsia") ?? rFonts.GetAttribute("eastAsia");
+            if (eastAsia != null) p.EastAsiaFontName = eastAsia;
+        }
+        // 上标/下标：<w:vertAlign w:val="superscript"/> / subscript / baseline
         var vertAlign = rPrEl.SelectSingleNode("w:vertAlign", ns) as XmlElement;
         if (vertAlign != null)
         {
             var va = vertAlign.GetAttribute("w:val") ?? vertAlign.GetAttribute("val");
-            if (va == "superscript") p.Superscript = true;
-            else if (va == "subscript") p.Subscript = true;
+            if (va == "superscript") { p.Superscript = true; p.Subscript = false; }
+            else if (va == "subscript") { p.Superscript = false; p.Subscript = true; }
+            else if (va == "baseline") { p.Superscript = false; p.Subscript = false; }
         }
-        // 下划线样式：重新解析 w:u 并记录样式值
+        // 高亮：<w:highlight w:val="yellow"/>
+        var highlight = rPrEl.SelectSingleNode("w:highlight", ns) as XmlElement;
+        if (highlight != null)
+        {
+            var hv = highlight.GetAttribute("w:val") ?? highlight.GetAttribute("val");
+            if (!String.IsNullOrEmpty(hv) && hv != "none") p.HighlightColor = hv;
+        }
+        // 语言：<w:lang w:val="zh-CN"/>
+        var lang = rPrEl.SelectSingleNode("w:lang", ns) as XmlElement;
+        if (lang != null)
+        {
+            var lv = lang.GetAttribute("w:val") ?? lang.GetAttribute("val");
+            if (!String.IsNullOrEmpty(lv)) p.Language = lv;
+        }
+        // 下划线样式：<w:u w:val="..."/>（val=none/nil 表示显式取消）
         var uEl = rPrEl.SelectSingleNode("w:u", ns) as XmlElement;
         if (uEl != null)
         {
             var uVal = uEl.GetAttribute("w:val") ?? uEl.GetAttribute("val");
-            if (uVal == null || uVal == "single" || (uVal != "none" && uVal != "nil"))
+            if (uVal == null || uVal == "single" || uVal == "1" || uVal == "true")
             {
                 p.Underline = true;
-                if (!String.IsNullOrEmpty(uVal) && uVal != "single")
-                    p.UnderlineStyle = uVal;
+            }
+            else if (uVal == "none" || uVal == "nil" || uVal == "0" || uVal == "false")
+            {
+                p.Underline = false;
+            }
+            else
+            {
+                p.Underline = true;
+                p.UnderlineStyle = uVal;
             }
         }
         // 字符间距：<w:spacing w:val="..."/>
@@ -804,25 +1014,25 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var rp = run.Properties;
         if (rp == null)
         {
-            var np = new RunProperties();
-            if (defaults.Bold) np.Bold = true;
-            if (defaults.Italic) np.Italic = true;
-            if (defaults.Underline) np.Underline = true;
-            if (defaults.ForeColor != null) np.ForeColor = defaults.ForeColor;
-            if (defaults.FontSize.HasValue) np.FontSize = defaults.FontSize;
-            if (defaults.FontName != null) np.FontName = defaults.FontName;
-            if (np.Bold || np.Italic || np.Underline || np.ForeColor != null || np.FontSize.HasValue || np.FontName != null)
-                run.Properties = np;
+            rp = new RunProperties();
+            run.Properties = rp;
         }
-        else
-        {
-            if (!rp.Bold && defaults.Bold) rp.Bold = true;
-            if (!rp.Italic && defaults.Italic) rp.Italic = true;
-            if (!rp.Underline && defaults.Underline) rp.Underline = true;
-            if (rp.ForeColor == null) rp.ForeColor = defaults.ForeColor;
-            if (rp.FontSize == null) rp.FontSize = defaults.FontSize;
-            if (rp.FontName == null) rp.FontName = defaults.FontName;
-        }
+        // 仅填充 run 上未显式设置的属性（样式优先级低于 run 内联格式）
+        if (rp.Bold == null) rp.Bold = defaults.Bold;
+        if (rp.Italic == null) rp.Italic = defaults.Italic;
+        if (rp.Underline == null) rp.Underline = defaults.Underline;
+        if (rp.Strikethrough == null) rp.Strikethrough = defaults.Strikethrough;
+        if (rp.Superscript == null) rp.Superscript = defaults.Superscript;
+        if (rp.Subscript == null) rp.Subscript = defaults.Subscript;
+        if (rp.ForeColor == null) rp.ForeColor = defaults.ForeColor;
+        if (rp.FontSize == null) rp.FontSize = defaults.FontSize;
+        if (rp.FontName == null) rp.FontName = defaults.FontName;
+        if (rp.EastAsiaFontName == null) rp.EastAsiaFontName = defaults.EastAsiaFontName;
+        if (rp.HighlightColor == null) rp.HighlightColor = defaults.HighlightColor;
+        if (rp.SmallCaps == null) rp.SmallCaps = defaults.SmallCaps;
+        if (rp.AllCaps == null) rp.AllCaps = defaults.AllCaps;
+        if (rp.Hidden == null) rp.Hidden = defaults.Hidden;
+        if (rp.Language == null) rp.Language = defaults.Language;
     }
 
     /// <summary>解析单边边框 XML 元素（w:top / w:bottom / w:left / w:right）</summary>
@@ -1298,11 +1508,6 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         return sb.Length > 0 ? sb.ToString() : null;
     }
 
-    private static Boolean IsEmptyPara(Paragraph p)
-    {
-        return !p.IsPageBreak && !p.IsBullet && p.BookmarkName == null && p.Runs.Count == 0;
-    }
-
     private static ParagraphStyle ParseStyleId(String? styleId)
     {
         if (String.IsNullOrEmpty(styleId)) return ParagraphStyle.Normal;
@@ -1515,9 +1720,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         if (props == null) return [MarkdownInline.CreateText(MarkdownTextCleaner.Clean(text))];
 
         List<MarkdownInline> inlines = [MarkdownInline.CreateText(MarkdownTextCleaner.Clean(text))];
-        if (props.Bold) inlines = [MarkdownInline.CreateStrong(inlines)];
-        if (props.Italic) inlines = [MarkdownInline.CreateEmphasis(inlines)];
-        if (props.Strikethrough) inlines = [MarkdownInline.CreateStrikethrough(inlines)];
+        if (props.Bold == true) inlines = [MarkdownInline.CreateStrong(inlines)];
+        if (props.Italic == true) inlines = [MarkdownInline.CreateEmphasis(inlines)];
+        if (props.Strikethrough == true) inlines = [MarkdownInline.CreateStrikethrough(inlines)];
         return inlines;
     }
 

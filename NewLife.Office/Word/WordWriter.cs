@@ -1317,7 +1317,7 @@ public class WordWriter : IDisposable
         var hasPPr = para.StyleId != null || para.Style != ParagraphStyle.Normal || para.Alignment != null
             || para.IndentLeft.HasValue || para.IndentRight.HasValue || para.FirstLineIndent.HasValue
             || para.SpaceBefore.HasValue || para.SpaceAfter.HasValue || para.LineSpacingPct.HasValue
-            || para.IsBullet || para.IsOrderedList || para.BackgroundColor != null
+            || para.IsBullet || para.IsOrderedList || para.NumId.HasValue || para.BackgroundColor != null
             || para.Borders != null || (para.TabStops != null && para.TabStops.Count > 0)
             || para.DropCapLines.HasValue || para.KeepNext || para.KeepLines
             || !para.WidowControl;
@@ -1362,13 +1362,13 @@ public class WordWriter : IDisposable
                 }
                 sb.Append("/>");
             }
-            if (para.IsBullet)
-                sb.Append($"<w:numPr><w:ilvl w:val=\"{para.ListLevel}\"/><w:numId w:val=\"1\"/></w:numPr>");
-            else if (para.IsOrderedList)
+            if (para.IsBullet || para.IsOrderedList || para.NumId.HasValue)
             {
-                var numId = para.ListStartOverride.HasValue ? 3 : 2; // numId=3 用于有 startOverride 的列表
+                // 优先保留原始 numId（真实文档往返保真，引用透传的 numbering.xml），
+                // 程序化创建时映射 1/2/3（对应 WriteNumbering 生成的编号定义）
+                var numId = para.NumId ?? (para.IsBullet ? 1 : (para.ListStartOverride.HasValue ? 3 : 2));
                 sb.Append($"<w:numPr><w:ilvl w:val=\"{para.ListLevel}\"/><w:numId w:val=\"{numId}\"/></w:numPr>");
-                if (para.ListStartOverride.HasValue)
+                if (para.IsOrderedList && para.ListStartOverride.HasValue && !para.NumId.HasValue)
                     _orderedStartOverrides[para.ListLevel] = para.ListStartOverride.Value;
             }
             // 段落边框
@@ -1505,22 +1505,40 @@ public class WordWriter : IDisposable
         if (p != null)
         {
             sb.Append("<w:rPr>");
-            if (p.Bold) sb.Append("<w:b/>");
-            if (p.Italic) sb.Append("<w:i/>");
-            if (p.Strikethrough) sb.Append("<w:strike/>");
-            if (p.Superscript) sb.Append("<w:vertAlign w:val=\"superscript\"/>");
-            else if (p.Subscript) sb.Append("<w:vertAlign w:val=\"subscript\"/>");
+            // 三态写回：true=开启，false=显式关闭（w:val="0"），null=不输出（继承样式）
+            AppendSwitchXml(sb, "b", p.Bold);
+            AppendSwitchXml(sb, "i", p.Italic);
+            AppendSwitchXml(sb, "strike", p.Strikethrough);
+            AppendSwitchXml(sb, "smallCaps", p.SmallCaps);
+            AppendSwitchXml(sb, "caps", p.AllCaps);
+            AppendSwitchXml(sb, "vanish", p.Hidden);
+            if (p.Superscript == true) sb.Append("<w:vertAlign w:val=\"superscript\"/>");
+            else if (p.Subscript == true) sb.Append("<w:vertAlign w:val=\"subscript\"/>");
+            else if (p.Superscript == false || p.Subscript == false) sb.Append("<w:vertAlign w:val=\"baseline\"/>");
             // 下划线（支持样式）
-            if (p.Underline || p.UnderlineStyle != null)
+            if (p.Underline != null || p.UnderlineStyle != null)
             {
-                var uVal = p.UnderlineStyle ?? "single";
+                var uVal = p.Underline == false && p.UnderlineStyle == null ? "none" : (p.UnderlineStyle ?? "single");
                 sb.Append($"<w:u w:val=\"{uVal}\"/>");
             }
             if (p.ForeColor != null) sb.Append($"<w:color w:val=\"{p.ForeColor.TrimStart('#')}\"/>");
             if (p.FontSize.HasValue) sb.Append($"<w:sz w:val=\"{(Int32)(p.FontSize.Value * 2)}\"/>");
             if (p.CharacterSpacing.HasValue) sb.Append($"<w:spacing w:val=\"{p.CharacterSpacing.Value}\"/>");
             if (p.CharacterScaling.HasValue) sb.Append($"<w:w w:val=\"{p.CharacterScaling.Value}\"/>");
-            if (p.FontName != null) sb.Append($"<w:rFonts w:ascii=\"{Esc(p.FontName)}\" w:hAnsi=\"{Esc(p.FontName)}\" w:eastAsia=\"{Esc(p.FontName)}\"/>");
+            // 字体：西文/东亚字体独立设置（eastAsia 单独可控）
+            if (p.FontName != null || p.EastAsiaFontName != null)
+            {
+                var rf = new StringBuilder();
+                if (p.FontName != null)
+                    rf.Append($" w:ascii=\"{Esc(p.FontName)}\" w:hAnsi=\"{Esc(p.FontName)}\"");
+                if (p.EastAsiaFontName != null)
+                    rf.Append($" w:eastAsia=\"{Esc(p.EastAsiaFontName)}\"");
+                sb.Append($"<w:rFonts{rf}/>");
+            }
+            if (p.HighlightColor != null)
+                sb.Append($"<w:highlight w:val=\"{Esc(p.HighlightColor.TrimStart('#'))}\"/>");
+            if (p.Language != null)
+                sb.Append($"<w:lang w:val=\"{Esc(p.Language)}\"/>");
             if (run.HyperlinkRelId != null) sb.Append("<w:rStyle w:val=\"Hyperlink\"/><w:color w:val=\"0563C1\"/><w:u w:val=\"single\"/>");
             // 文字发光效果 (w14:glow)
             if (p.GlowColor != null)
@@ -1547,6 +1565,18 @@ public class WordWriter : IDisposable
 
         if (run.HyperlinkRelId != null)
             sb.Append("</w:hyperlink>");
+    }
+
+    /// <summary>生成三态开关元素 XML（w:b 等）：true=开启，false=显式关闭（w:val="0"），null=不输出</summary>
+    /// <param name="sb">目标 StringBuilder</param>
+    /// <param name="tag">元素名（如 "b"、"i"、"strike"）</param>
+    /// <param name="value">三态值</param>
+    private static void AppendSwitchXml(StringBuilder sb, String tag, Boolean? value)
+    {
+        if (value == true)
+            sb.Append($"<w:{tag}/>");
+        else if (value == false)
+            sb.Append($"<w:{tag} w:val=\"0\"/>");
     }
 
     /// <summary>生成单边段落边框 XML（w:top / w:left / w:bottom / w:right）</summary>
