@@ -29,6 +29,11 @@ internal sealed class MarkdownParser
     internal Boolean Roundtrip;
     #endregion
 
+    #region 常量（静态缓存，避免热点路径分配，MD19）
+    /// <summary>裸 URL 前缀（TryParseBareUrl 高频调用，静态化避免每次调用 new 数组分配）</summary>
+    private static readonly String[] _urlPrefixes = ["https://", "http://", "ftp://", "www."];
+    #endregion
+
     #region 正则（静态缓存，避免热点路径重复编译）
     private static readonly Regex _atxHeading = new(@"^(#{1,6})(\s+|$)(.*)$", RegexOptions.Compiled);
     private static readonly Regex _trailingHashes = new(@"\s+#+\s*$", RegexOptions.Compiled);
@@ -1661,14 +1666,40 @@ internal sealed class MarkdownParser
             }
 
             // Email 自动链接 (MD05-01): user@domain
+            // MD19：按连续 email 字符 run 处理——run 内只 IndexOf('@') 一次，
+            // 避免对每个字母数字字符重复 IndexOf('@') 造成 O(n²)（英文无 @ 文本 ~6% 成本）。
+            // 注意：IsEmailChar 含 _（强调标记/email 用户名下划线），run 内出现 _ 时回退原逻辑
+            // （逐字符尝试），保证强调解析与含下划线 email（john_doe@x.com）兼容。
             if (IsOn(p => p.EnableAutoLinks) && Char.IsLetterOrDigit(ch))
             {
-                if (TryParseBareEmail(text, i, end, out var emailInline, out var emailEnd))
+                var runEnd2 = i + 1;
+                while (runEnd2 < end && (IsEmailChar(text[runEnd2]) || text[runEnd2] == '@')) runEnd2++;
+                var hasUnderscore = text.AsSpan(i, runEnd2 - i).IndexOf('_') >= 0;
+                if (hasUnderscore || runEnd2 - i <= 1)
+                {
+                    // 含 _ 或单字符：回退原逻辑（逐字符尝试）
+                    if (TryParseBareEmail(text, i, end, out var emailInline, out var emailEnd))
+                    {
+                        FlushText(text, textStart, i, tokens);
+                        tokens.Add(emailInline!);
+                        i = emailEnd;
+                        textStart = i;
+                        continue;
+                    }
+                }
+                else if (text.IndexOf('@', i, runEnd2 - i) >= 0 &&
+                    TryParseBareEmail(text, i, end, out var emailInline2, out var emailEnd2))
                 {
                     FlushText(text, textStart, i, tokens);
-                    tokens.Add(emailInline!);
-                    i = emailEnd;
+                    tokens.Add(emailInline2!);
+                    i = emailEnd2;
                     textStart = i;
+                    continue;
+                }
+                else
+                {
+                    // run 内无 @ 且无下划线：整段作为普通文本，i 跳到 run 末尾（避免逐字符重复尝试）
+                    i = runEnd2;
                     continue;
                 }
             }
@@ -2227,11 +2258,10 @@ internal sealed class MarkdownParser
         // GFM：链接内部不识别裸 URL
         if (inLink) return false;
 
-        // 检查是否是 URL 前缀（Span 前缀比较，避免 text[start..end] 子串分配，MD17）
+        // 检查是否是 URL 前缀（Span 前缀比较，避免 text[start..end] 子串分配，MD17；前缀静态化避免每次 new 数组，MD19）
         var span = text.AsSpan(start, end - start);
-        var prefixes = new[] { "https://", "http://", "ftp://", "www." };
         String? matchedPrefix = null;
-        foreach (var prefix in prefixes)
+        foreach (var prefix in _urlPrefixes)
         {
             if (span.StartsWith(prefix.AsSpan(), StringComparison.OrdinalIgnoreCase))
             {

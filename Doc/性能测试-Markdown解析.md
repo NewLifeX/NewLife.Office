@@ -1,6 +1,6 @@
 # 性能测试报告 — Markdown 解析/序列化/HTML 转换
 
-> 日期：2026-08-07 | 项目：NewLife.Office（MD10→MD18）| 基准项目：`Benchmark/MarkdownBenchmark`
+> 日期：2026-08-07 | 项目：NewLife.Office（MD10→MD19）| 基准项目：`Benchmark/MarkdownBenchmark`
 
 ## 测试目标
 
@@ -13,16 +13,29 @@
 - .NET: .NET 10.0.10 (X64 RyuJIT AVX2)
 - BenchmarkDotNet: v0.14.0（Release 模式，Short 模式运行，`[MemoryDiagnoser]`）
 
-## 测试结果（MD18 优化后）
+## 测试结果（MD19 优化后）
 
 | 方法 | Mean | Error | Median | Gen0 | Gen1 | Gen2 | Allocated |
 |------|-----:|------:|-------:|-----:|-----:|-----:|----------:|
-| Parse | 9,186.3 μs | 82.15 μs | 72.82 μs | 218.75 | 109.38 | - | 2276.33 KB |
-| ParseRoundtrip | 9,834.5 μs | 41.86 μs | 32.68 μs | 296.88 | 218.75 | - | 3162.90 KB |
-| Serialize | 745.7 μs | 14.83 μs | 30.96 μs | 124.02 | 124.02 | 124.02 | 611.24 KB |
-| SerializeRoundtrip | 11,697.4 μs | 81.49 μs | 63.62 μs | 390.63 | 250.00 | - | 4047.09 KB |
-| ToHtml | 467.2 μs | 9.10 μs | 7.10 μs | 71.29 | 71.29 | 71.29 | 780.85 KB |
-| ToHtmlPage | 662.1 μs | 13.14 μs | 20.85 μs | 213.87 | 213.87 | 213.87 | 1267.16 KB |
+| Parse | 8,957.4 μs | 29.83 μs | 27.90 μs | 218.75 | 109.38 | - | 2276.33 KB |
+| ParseEnglish | 2,580.8 μs | 9.57 μs | 7.99 μs | 42.97 | 11.72 | - | 442.42 KB |
+| ParseRoundtrip | 9,742.8 μs | 51.78 μs | 43.24 μs | 296.88 | 218.75 | - | 3162.91 KB |
+| Serialize | 707.6 μs | 4.30 μs | 4.03 μs | 124.02 | 124.02 | 124.02 | 611.31 KB |
+| SerializeRoundtrip | 11,577.6 μs | 44.07 μs | 41.23 μs | 390.63 | 250.00 | - | 4047.09 KB |
+| ToHtml | 465.0 μs | 4.82 μs | 4.50 μs | 71.29 | 71.29 | 71.29 | 780.85 KB |
+| ToHtmlPage | 621.0 μs | 10.47 μs | 8.75 μs | 213.87 | 213.87 | 213.87 | 1267.16 KB |
+
+> 注：`ParseEnglish` 为 MD19 新增纯英文基准（300 组无标记英文段落，约 20KB，含 h/f/w 触发裸 URL/Email 尝试），用于验证 email run 快速跳过在英文场景的效果。
+
+### MD19 优化前后对比（Email run 快速跳过 + URL 前缀静态化）
+
+| 方法 | MD18 Mean | MD19 Mean | 耗时降幅 |
+|------|-----------:|-----------:|--------:|
+| Parse | 8,962.4 μs | 8,932.4 μs | ≈0（混合中文） |
+| ParseEnglish | 2,729.3 μs | 2,580.8 μs | **-5.4%**（纯英文） |
+| ParseRoundtrip | 9,913.7 μs | 9,729.8 μs | -1.9% |
+
+> 注：MD18/MD19 同机 Short 模式对比（MD18 为 stash 回退实测）。混合中文基准中英文 run 多被中文/标记字符打断、run 长度短，收益不明显；纯英文长 run 场景 -5.4%。分配不变（优化目标是减少 IndexOf 重复扫描耗时，非分配）。
 
 ### MD14 优化前后对比（列表项快速路径）
 
@@ -89,6 +102,7 @@
 - **块类型分配分布（MD17 probe）**：纯段落 714KB/200 个（最重，行内令牌+自动链接）、纯表格 564KB、纯列表 339KB、纯标题 216KB、纯代码块 181KB、纯引用 142KB——段落行内解析与表格为两大结构性成本（AST 对象+文本子串，难以进一步消除）。
 - **解析 ~9.2ms / 2.3MB（MD18 首次大幅降耗时 13.8%）**：耗时诊断（Stopwatch probe）显示**表格是最高耗时密度块类型**（0.56ms/KB vs 段落 0.23ms/KB），且自动链接/email 尝试各 ~0.15-0.2ms。MD18 实施——①**行内纯文本快速路径**：`ParseInline`/`ParseInlineWithRefs` 入口先 `IsPlainText` 扫描（排除转义/实体/代码/图片/链接/强调/删除线/<>/$/:/@/换行/裸URL前缀 hfw 等触发字符），无标记字符时直接 `CreateText` 单令牌，跳过 TokenizeInline 逐字符全分支检查；表格单元格/列表项/引用等简单文本全部命中。②**SplitTableRow 快速拆分**：行内无反引号/反斜杠时直接按 `|` 切分（省逐字符代码段/转义判断）。Parse 首次突破 10ms 大关，ParseRoundtrip/SerializeRoundtrip 耗时同步降 13-15%。
 - **耗时诊断方法（MD18 probe）**：`Stopwatch` 均值测量 + `MarkdownPipeline` 开关对比（关闭自动链接/删除线识别分支成本）；块类型同字符量对比（表格 0.56ms/KB 最高）。自动链接成本 ~7%、email 尝试成本 ~6%（英文无 @ 文本）。
+- **解析 ~9.0ms / 2.3MB（MD19 英文场景再降耗时 5.4%）**：MD19 修复两个高频路径——①**Email run 快速跳过**：`TokenizeInline` 原对每个字母数字字符调用 `TryParseBareEmail`（内部再 `IndexOf('@')` 全段扫描），英文无 @ 文本呈 O(n²)；改为按连续 email 字符 run（含 `@`）单次 `IndexOf('@')`，无 @ 整段跳过。②**URL 前缀静态化**：`TryParseBareUrl` 原每次调用 `new[] { "https://", ... }` 数组，提为静态 readonly（分配已被 JIT 逃逸优化覆盖，属规范改进）。**踩坑**：email run 界定用了 `IsEmailChar`（含 `_`），会把 `_` 强调标记吞进 run 跳过 → 强调解析失效（3 测试失败）；修复为 run 内含 `_` 时回退原逻辑（逐字符尝试），保证 `john_doe@x.com` 与强调兼容。混合中文基准英文 run 多被中文/标记打断收益不明显，纯英文长 run 场景 -5.4%（stash 回退同机对比实测）。
 - **推翻 MD12 假设**：MD12 报告猜测「AST 字符串复制 ~120x 为主成本」，经 GC 分段实测文本令牌字符串仅占 1.3%（~49KB）；`Memory<Char>` 惰性切片（net45 经 System.Memory 支持）实测无收益且因对象膨胀与惰性转换使 Serialize/ToHtml 略增，**已回滚**。数据驱动决策：真实收益在列表/引用子解析器消除。
 - **Parse 与 ParseRoundtrip 差距 8%**：往返模式多捕获原始源码与快照，代价有限；需要原始格式保真时直接用 `ParseRoundtrip`（MD10-10 公开 API）。
 - **SerializeRoundtrip（14.3ms）**：包含重新解析 + 快照比较，与"解析+序列化"整体成本一致，属预期。
@@ -102,7 +116,7 @@
 3. **表格单元格快速路径（MD16 后续）**：基准 200 表格 × 4 单元格 ≈800 次 `ParseInlineWithRefs`（每次独立 List + Text 对象）。单 token 单元格（如 `A`/`B`）可直达文本构造，但 AST 对象为必需结构，预计收益有限；若需进一步压降可评估。
 4. **DelimInfo class→struct（评估中）**：强调分隔符 run 每项一个引用对象（~48B），改 struct 需处理 `ResolveEmphasis` 的可空 opener 与写回，风险中等、预计收益 ~1-2%，暂缓。
 
-> MD18 已完成：行内纯文本快速路径（IsPlainText 单令牌直达）+ SplitTableRow 快速拆分，Parse 耗时 -13.8%（累计 MD14→MD18 耗时 -56%、分配 -39%）。
+> MD19 已完成：Email run 快速跳过（按连续 email 字符 run 单次 `IndexOf('@')`，消除英文无 @ 文本 O(n²) 重复扫描，纯英文 Parse -5.4%）+ URL 前缀数组静态化。累计 MD14→MD19 混合中文 Parse 耗时 -57%（20.9→9.0ms）、分配 -39%。
 
 ## 运行方式
 
@@ -110,6 +124,7 @@
 # 先打包主库到本地源（规避 BDN Deterministic 与通配版本冲突）
 dotnet pack NewLife.Office\NewLife.Office.csproj -c Release -o Bin\LocalFeed
 # 清理本地包缓存后运行基准（Release 模式）
-Remove-Item "$env:USERPROFILE\.nuget\packages\newlife.office\1.3.2026.806" -Recurse -Force
+Remove-Item "$env:USERPROFILE\.nuget\packages\newlife.office\1.3.2026.807" -Recurse -Force
+# 基准失败（CS0246 NewLife 找不到 / 0 runs）时：重新 pack + 删缓存 + 删 Bin\Benchmark 下 BDN 临时目录
 dotnet run -c Release --project Benchmark\MarkdownBenchmark
 ```

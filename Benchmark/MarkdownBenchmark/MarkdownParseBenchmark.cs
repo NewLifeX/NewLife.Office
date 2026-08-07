@@ -13,6 +13,7 @@ namespace MarkdownBenchmark;
 public class MarkdownParseBenchmark
 {
     private String _text = "";
+    private String _englishText = "";
     private MarkdownDocument? _doc;
 
     [GlobalSetup]
@@ -29,11 +30,21 @@ public class MarkdownParseBenchmark
             sb.Append("```csharp\nvar x = 1;\nConsole.WriteLine(x);\n```\n\n");
         }
         _text = sb.ToString();
+
+        // 纯英文段落：长字母 run + 常见词触发 h/f/w 裸 URL 尝试，但无任何标记字符
+        var esb = new StringBuilder();
+        for (var i = 0; i < 300; i++)
+            esb.Append($"The quick brown fox jumps over the lazy dog near the river. This is a simple paragraph number {i} with many english words and numbers 12345.\n\n");
+        _englishText = esb.ToString();
         _doc = MarkdownDocument.Parse(_text);
     }
 
     [Benchmark]
     public MarkdownDocument Parse() => MarkdownDocument.Parse(_text);
+
+    /// <summary>纯英文段落（含 h/f/w 触发裸 URL/Email 尝试，无标记字符）——验证 MD19 email run 快速跳过</summary>
+    [Benchmark]
+    public MarkdownDocument ParseEnglish() => MarkdownDocument.Parse(_englishText);
 
     [Benchmark]
     public MarkdownDocument ParseRoundtrip() => MarkdownDocument.ParseRoundtrip(_text);
