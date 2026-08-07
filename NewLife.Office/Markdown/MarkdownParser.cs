@@ -1702,7 +1702,8 @@ internal sealed class MarkdownParser
             // 避免对每个字母数字字符重复 IndexOf('@') 造成 O(n²)（英文无 @ 文本 ~6% 成本）。
             // 注意：IsEmailChar 含 _（强调标记/email 用户名下划线），run 内出现 _ 时回退原逻辑
             // （逐字符尝试），保证强调解析与含下划线 email（john_doe@x.com）兼容。
-            if (IsOn(p => p.EnableAutoLinks) && Char.IsLetterOrDigit(ch))
+            // MD22：触发判定加 ASCII 快速路径（中文等非 ASCII 才走 Unicode 分类）
+            if (IsOn(p => p.EnableAutoLinks) && (IsAsciiLetterOrDigit(ch) || ch >= 128 && Char.IsLetterOrDigit(ch)))
             {
                 var runEnd2 = i + 1;
                 while (runEnd2 < end && (IsEmailChar(text[runEnd2]) || text[runEnd2] == '@')) runEnd2++;
@@ -2405,8 +2406,21 @@ internal sealed class MarkdownParser
 
     private static Boolean IsEmailChar(Char c)
     {
-        return Char.IsLetterOrDigit(c) || c == '.' || c == '-' || c == '_' || c == '+' || c == '%';
+        // ASCII 快速路径（MD22）：字母数字与常用符号直接位运算，避免 Unicode 分类调用；
+        // 中文等非 ASCII 字符才走 Char.IsLetterOrDigit（中文是 Unicode Letter）
+        if (c < 128)
+        {
+            return c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9'
+                or '.' or '-' or '_' or '+' or '%';
+        }
+        return Char.IsLetterOrDigit(c);
     }
+
+    /// <summary>判断 ASCII 字母数字（email 触发快速路径，MD22）</summary>
+    /// <param name="c">字符</param>
+    /// <returns>是否为 ASCII 字母或数字</returns>
+    private static Boolean IsAsciiLetterOrDigit(Char c) =>
+        c is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9';
 
     /// <summary>尝试解析引用链接 [text][id] / [text][] / [text]（CommonMark）</summary>
     /// <param name="text">文本</param>

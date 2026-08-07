@@ -13,29 +13,29 @@
 - .NET: .NET 10.0.10 (X64 RyuJIT AVX2)
 - BenchmarkDotNet: v0.14.0（Release 模式，Short 模式运行，`[MemoryDiagnoser]`）
 
-## 测试结果（MD21 优化后）
+## 测试结果（MD22 优化后）
 
 | 方法 | Mean | Error | Median | Gen0 | Gen1 | Gen2 | Allocated |
 |------|-----:|------:|-------:|-----:|-----:|-----:|----------:|
-| Parse | 8,973.7 μs | 32.92 μs | 29.18 μs | 218.75 | 109.38 | - | 2270.07 KB |
-| ParseEnglish | 2,211.2 μs | 8.49 μs | 7.53 μs | 39.06 | 11.72 | - | 433.04 KB |
-| ParseRoundtrip | 9,654.8 μs | 39.37 μs | 36.82 μs | 296.88 | 218.75 | - | 3156.66 KB |
+| Parse | 8,877.1 μs | 33.24 μs | 25.95 μs | 218.75 | 109.38 | - | 2270.08 KB |
+| ParseEnglish | 2,197.4 μs | 14.51 μs | 12.86 μs | 39.06 | 11.72 | - | 433.04 KB |
+| ParseRoundtrip | 9,686.9 μs | 41.48 μs | 34.64 μs | 296.88 | 218.75 | - | 3156.66 KB |
 | Serialize | 627.4 μs | 7.55 μs | 6.31 μs | 644.53 | 644.53 | 107.42 | 609.45 KB |
 | SerializeRoundtrip | 11,682.3 μs | 56.49 μs | 52.84 μs | 390.63 | 250.00 | - | 4040.83 KB |
 | ToHtml | 547.7 μs | 61.75 μs | 181.11 μs | 201.17 | 201.17 | 57.13 | 780.93 KB |
 | ToHtmlPage | 556.3 μs | 10.67 μs | 19.51 μs | 581.05 | 581.05 | 166.02 | 1267.46 KB |
 
-> 注：Parse/ParseEnglish/ParseRoundtrip 为本轮 MD21 干净数据（StdDev 8-39μs）；Serialize/ToHtml 系列为 MD20 负载数据（不含 MD21 改动，不重测）。
+> 注：Parse/ParseEnglish/ParseRoundtrip 为本轮 MD22 干净数据（StdDev 13-41μs）；Serialize/ToHtml 系列为 MD21 负载数据（不含 MD22 改动）。
 
-### MD19-21 优化前后对比（email run + delims + IsPlainText + 块调度正则 + emoji 快速失败）
+### MD19-22 优化前后对比（email run + delims + IsPlainText + 块调度正则 + emoji + ASCII 快速路径）
 
-| 方法 | MD18 Mean | MD21 Mean | MD18 分配 | MD21 分配 | 耗时降幅 | 分配降幅 |
+| 方法 | MD18 Mean | MD22 Mean | MD18 分配 | MD22 分配 | 耗时降幅 | 分配降幅 |
 |------|-----------:|-----------:|----------:|----------:|--------:|--------:|
-| Parse | 8,962.4 μs | 8,973.7 μs | 2276.33 KB | 2270.07 KB | ≈0（混合中文） | -0.3% |
-| ParseEnglish | 2,729.3 μs | 2,211.2 μs | 442.42 KB | 433.04 KB | **-19.0%**（纯英文） | **-2.1%** |
-| ParseRoundtrip | 9,913.7 μs | 9,654.8 μs | 3162.90 KB | 3156.66 KB | -2.6% | -0.2% |
+| Parse | 8,962.4 μs | 8,877.1 μs | 2276.33 KB | 2270.08 KB | **-1.0%**（混合中文） | -0.3% |
+| ParseEnglish | 2,729.3 μs | 2,197.4 μs | 442.42 KB | 433.04 KB | **-19.5%**（纯英文） | **-2.1%** |
+| ParseRoundtrip | 9,913.7 μs | 9,686.9 μs | 3162.90 KB | 3156.66 KB | -2.3% | -0.2% |
 
-> 注：MD18/MD21 同机 Short 模式对比（MD18 为 stash 回退实测）。五类优化叠加——email run（O(n²) IndexOf 消除）、delims 延迟创建、IsPlainText 精确化（纯英文段落快速路径）、块调度正则快速失败、**emoji 快速失败（MD21：`:` 后非字母数字下划线直接跳过 + IndexOf 范围限 ≤31，URL 协议冒号 `://` 不再触发扫描/子串/字典查找）**——ParseEnglish 耗时 -19.0%、分配 -2.1%。混合中文 Parse 因中文 run 与标记打断，收益集中在英文场景。
+> 注：MD18/MD22 同机 Short 模式对比（MD18 为 stash 回退实测）。六类优化叠加——email run、delims 延迟创建、IsPlainText 精确化、块调度正则快速失败、emoji 快速失败、**ASCII 快速路径（MD22：`IsEmailChar`/email 触发判定对 ASCII 字符位运算，中文等非 ASCII 才走 Unicode 分类——Release probe 显示纯中文段落 0.57ms/KB 比英文 0.34ms/KB 贵 68%，中文 email run 扫描的 Unicode 分类是成本）**——ParseEnglish 耗时 -19.5%、分配 -2.1%；混合中文 Parse 首次转负（-1.0%，中文场景受益）。
 
 ### MD14 优化前后对比（列表项快速路径）
 
@@ -116,7 +116,7 @@
 3. **表格单元格快速路径（MD16 后续）**：基准 200 表格 × 4 单元格 ≈800 次 `ParseInlineWithRefs`（每次独立 List + Text 对象）。单 token 单元格（如 `A`/`B`）可直达文本构造，但 AST 对象为必需结构，预计收益有限；若需进一步压降可评估。
 4. **DelimInfo class→struct（评估中）**：强调分隔符 run 每项一个引用对象（~48B），改 struct 需处理 `ResolveEmphasis` 的可空 opener 与写回，风险中等、预计收益 ~1-2%，暂缓。
 
-> MD21 已完成：emoji 快速失败（`:` 后非字母数字下划线直接跳过 + IndexOf 范围限 ≤31，URL 协议冒号 `://` 不再触发扫描/子串/EmojiMap 查找；耗时 probe 定位 emoji 分支省 12%）——混合 Parse -2.6%、纯英文 ParseEnglish 累计 -19.0%（2729→2211μs）、分配 -2.1%。混合中文 Parse 耗时 -56%（20.9→9.0ms）、分配 -39%（累计 MD14→MD21）。
+> MD22 已完成：ASCII 快速路径（`IsEmailChar`/email 触发判定 ASCII 位运算，中文等非 ASCII 才走 Unicode 分类；Release probe 定位纯中文段落 0.57ms/KB 比英文贵 68%）——混合中文 Parse 首次转负（-1.0%，8877μs）、纯英文 ParseEnglish 累计 -19.5%（2729→2197μs）、分配 -2.1%。混合中文 Parse 耗时 -56%（20.9→8.9ms）、分配 -39%（累计 MD14→MD22）。
 
 ## 运行方式
 
