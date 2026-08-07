@@ -1083,8 +1083,9 @@ partial class ExcelWriter
                         rsw.Write($"<Relationship Id=\"rHl{h + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"{SecurityElement.Escape(rels[h].Url)}\" TargetMode=\"External\"/>");
                     }
                 }
-                if (sheetsWithImages.Contains(i))
+                if (sheetsWithImages.Contains(i) || sheetsWithCharts.ContainsKey(i))
                 {
+                    // 图表与图片共用 drawing：仅含图表时也必须写 rDr1 关系，否则 sheet 的 <drawing> 引用断链
                     rsw.Write($"<Relationship Id=\"rDr1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing\" Target=\"../drawings/drawing{i + 1}.xml\"/>");
                 }
                 if (sheetsWithComments.Contains(i))
@@ -1428,8 +1429,12 @@ partial class ExcelWriter
             foreach (var chart in kv.Value)
             {
                 cIndex++;
-                using var csw = new StreamWriter(za.CreateEntry($"xl/charts/chart{cIndex}.xml").Open(), Encoding);
-                WriteChartXml(csw, chart, cIndex);
+                // 用块作用域限定图表流生命周期：ZipArchive 同一时刻仅允许一个打开的条目流，
+                // 必须等 chartN.xml 条目流关闭后才能创建其 rels 条目
+                {
+                    using var csw = new StreamWriter(za.CreateEntry($"xl/charts/chart{cIndex}.xml").Open(), Encoding);
+                    WriteChartXml(csw, chart, cIndex);
+                }
                 // chart rels
                 var cRelEntry = za.CreateEntry($"xl/charts/_rels/chart{cIndex}.xml.rels");
                 using var crsw = new StreamWriter(cRelEntry.Open(), Encoding);

@@ -2761,8 +2761,11 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             }
             if (chartTarget.IsNullOrEmpty()) continue;
 
-            // 读取 chart XML
-            var chartPath = chartTarget.TrimStart('.', '/').Replace("../", "xl/");
+            // 读取 chart XML（Target 形如 "../charts/chart1.xml"，先剥掉相对前缀再拼 xl/ 根）
+            var chartPath = chartTarget;
+            while (chartPath.StartsWith("../"))
+                chartPath = chartPath.Substring(3);
+            chartPath = "xl/" + chartPath.TrimStart('/');
             var chartEntry = _zip.GetEntry(chartPath);
             if (chartEntry == null) continue;
 
@@ -2772,11 +2775,11 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             if (cDoc.Root == null) continue;
 
             var cNs = cDoc.Root.Name.Namespace;
-            // 图表标题
+            // 图表标题（<a:t> 在 drawingml main 命名空间，不限定命名空间按 LocalName 匹配）
             var titleEl = cDoc.Root.Descendants(cNs + "title").FirstOrDefault();
             if (titleEl != null)
             {
-                var tEl = titleEl.Descendants(cNs + "t").FirstOrDefault();
+                var tEl = titleEl.Descendants().FirstOrDefault(e => e.Name.LocalName == "t");
                 if (tEl != null) chart.Title = tEl.Value;
             }
             // 图表类型
@@ -2803,7 +2806,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                         var nameV = serEl.Descendants(cNs + "strCache").FirstOrDefault()
                             ?.Descendants(cNs + "v").FirstOrDefault()?.Value;
                         ser.Name = nameV ?? "";
-                        var catVals = serEl.Descendants(cNs + "strRef").FirstOrDefault()
+                        // 分类从 c:cat 下的 strRef 读取（避免取到 c:tx 名称里的 strRef）
+                        var catVals = serEl.Descendants(cNs + "cat").FirstOrDefault()
+                            ?.Descendants(cNs + "strRef").FirstOrDefault()
                             ?.Descendants(cNs + "strCache")?.Elements(cNs + "pt")
                             ?.Select(p => p.Element(cNs + "v")?.Value ?? "").ToArray();
                         if (catVals != null && catVals.Length > 0)

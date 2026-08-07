@@ -610,8 +610,7 @@ public class ExcelRoundTripTests
     }
 
     /// <summary>程序化构造含图表的 xlsx → 写入 → 读回 → 图表数据对比</summary>
-    /// <remarks>已知问题：ExcelWriter.Save 中图表写入时 ZIP 条目流未正确关闭，导致 IOException。待修复。</remarks>
-    [Fact(Skip = "ExcelWriter 图表写入时 ZIP 条目流未关闭（ExcelWriter.Save.cs:1045），待修复后启用")]
+    [Fact]
     [System.ComponentModel.DisplayName("xlsx图表往返：构造柱状图→写入→读回→图表数据一致")]
     public void Xlsx_RoundTrip_ChartProgrammatic()
     {
