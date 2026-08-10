@@ -39,8 +39,7 @@ public static class ImageHelper
     {
         if (imageData == null) throw new ArgumentNullException(nameof(imageData));
 
-        using var src = SKBitmap.Decode(imageData);
-        if (src == null) throw new InvalidOperationException("无法解码图片数据");
+        using var src = DecodeOrThrow(imageData);
 
         Int32 dstW, dstH;
         if (keepAspectRatio)
@@ -72,8 +71,7 @@ public static class ImageHelper
     {
         if (imageData == null) throw new ArgumentNullException(nameof(imageData));
 
-        using var src = SKBitmap.Decode(imageData);
-        if (src == null) throw new InvalidOperationException("无法解码图片数据");
+        using var src = DecodeOrThrow(imageData);
 
         return EncodeToFormat(src, format, quality);
     }
@@ -93,8 +91,7 @@ public static class ImageHelper
     {
         if (imageData == null) throw new ArgumentNullException(nameof(imageData));
 
-        using var src = SKBitmap.Decode(imageData);
-        if (src == null) throw new InvalidOperationException("无法解码图片数据");
+        using var src = DecodeOrThrow(imageData);
 
         var rect = new SKRectI(x, y, x + width, y + height);
         using var dst = new SKBitmap(width, height);
@@ -114,8 +111,7 @@ public static class ImageHelper
     {
         if (imageData == null) throw new ArgumentNullException(nameof(imageData));
 
-        using var src = SKBitmap.Decode(imageData);
-        if (src == null) throw new InvalidOperationException("无法解码图片数据");
+        using var src = DecodeOrThrow(imageData);
 
         var radians = degrees * (Single)Math.PI / 180f;
         var cos = Math.Abs((Single)Math.Cos(radians));
@@ -149,8 +145,7 @@ public static class ImageHelper
     {
         if (imageData == null) throw new ArgumentNullException(nameof(imageData));
 
-        using var src = SKBitmap.Decode(imageData);
-        if (src == null) throw new InvalidOperationException("无法解码图片数据");
+        using var src = DecodeOrThrow(imageData);
 
         using var surface = SKSurface.Create(new SKImageInfo(src.Width, src.Height));
         var canvas = surface.Canvas;
@@ -190,9 +185,8 @@ public static class ImageHelper
         if (background == null) throw new ArgumentNullException(nameof(background));
         if (overlay == null) throw new ArgumentNullException(nameof(overlay));
 
-        using var bg = SKBitmap.Decode(background);
-        using var ov = SKBitmap.Decode(overlay);
-        if (bg == null || ov == null) throw new InvalidOperationException("无法解码图片数据");
+        using var bg = DecodeOrThrow(background);
+        using var ov = DecodeOrThrow(overlay);
 
         using var surface = SKSurface.Create(new SKImageInfo(bg.Width, bg.Height));
         var canvas = surface.Canvas;
@@ -208,16 +202,92 @@ public static class ImageHelper
     #endregion
 
     #region 辅助
+    /// <summary>解码图片字节，失败抛 InvalidOperationException（SkiaSharp 3.x 对无效数据抛异常而非返回 null）</summary>
+    private static SKBitmap DecodeOrThrow(Byte[] imageData)
+    {
+        try
+        {
+            var bmp = SKBitmap.Decode(imageData);
+            return bmp ?? throw new InvalidOperationException("无法解码图片数据");
+        }
+        catch (InvalidOperationException) { throw; }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException("无法解码图片数据", ex);
+        }
+    }
+
+    /// <summary>手写 BMP 编码（Skia 默认不含 BMP 编码器，Encode(SKEncodedImageFormat.Bmp) 返回 null）</summary>
+    /// <param name="bitmap">源位图</param>
+    /// <returns>BMP 格式图片字节</returns>
+    internal static Byte[] EncodeBmp(SKBitmap bitmap)
+    {
+        var width = bitmap.Width;
+        var height = bitmap.Height;
+        if (width <= 0 || height <= 0) throw new InvalidOperationException("无效的图片尺寸");
+
+        // 每行 4 字节对齐（BGR 24bit）
+        var rowSize = (width * 3 + 3) / 4 * 4;
+        var pixelSize = rowSize * height;
+        var fileSize = 14 + 40 + pixelSize;
+
+        var pixels = bitmap.Pixels;
+        using var ms = new MemoryStream(fileSize);
+        using var bw = new BinaryWriter(ms);
+
+        // BITMAPFILEHEADER（14 字节）
+        bw.Write((Byte)'B');
+        bw.Write((Byte)'M');
+        bw.Write(fileSize);
+        bw.Write((Int16)0);
+        bw.Write((Int16)0);
+        bw.Write(14 + 40);
+
+        // BITMAPINFOHEADER（40 字节）
+        bw.Write(40);
+        bw.Write(width);
+        bw.Write(height);
+        bw.Write((Int16)1);   // 平面数
+        bw.Write((Int16)24);  // 每像素位数
+        bw.Write(0);          // BI_RGB 不压缩
+        bw.Write(pixelSize);
+        bw.Write(2835);       // 水平分辨率 96DPI
+        bw.Write(2835);       // 垂直分辨率 96DPI
+        bw.Write(0);          // 颜色表数
+        bw.Write(0);          // 重要颜色数
+
+        // 像素数据（BMP 为 bottom-up，BGR 顺序）
+        var row = new Byte[rowSize];
+        for (var y = height - 1; y >= 0; y--)
+        {
+            var baseIdx = y * width;
+            for (var x = 0; x < width; x++)
+            {
+                var c = pixels[baseIdx + x];
+                row[x * 3] = c.Blue;
+                row[x * 3 + 1] = c.Green;
+                row[x * 3 + 2] = c.Red;
+            }
+            bw.Write(row, 0, rowSize);
+        }
+
+        bw.Flush();
+        return ms.ToArray();
+    }
+
     private static Byte[] EncodeToFormat(SKBitmap bitmap, ImageFormat format, Int32 quality = 85)
     {
+        if (format == ImageFormat.Bmp)
+            return EncodeBmp(bitmap);
+
         using var img = SKImage.FromBitmap(bitmap);
-        var data = format switch
+        var encodeFormat = format switch
         {
-            ImageFormat.Jpeg => img.Encode(SKEncodedImageFormat.Jpeg, quality),
-            ImageFormat.Webp => img.Encode(SKEncodedImageFormat.Webp, quality),
-            ImageFormat.Bmp => img.Encode(SKEncodedImageFormat.Bmp, 100),
-            _ => img.Encode(SKEncodedImageFormat.Png, 100),
+            ImageFormat.Jpeg => SKEncodedImageFormat.Jpeg,
+            ImageFormat.Webp => SKEncodedImageFormat.Webp,
+            _ => SKEncodedImageFormat.Png,
         };
+        var data = img.Encode(encodeFormat, format == ImageFormat.Jpeg || format == ImageFormat.Webp ? quality : 100);
 
         return data.ToArray();
     }

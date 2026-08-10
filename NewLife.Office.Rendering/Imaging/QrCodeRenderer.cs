@@ -63,11 +63,15 @@ public static class QrCodeRenderer
         }
 
         using var img = surface.Snapshot();
+        if (format == ImageFormat.Bmp)
+        {
+            using var bmp = SKBitmap.FromImage(img);
+            return ImageHelper.EncodeBmp(bmp);
+        }
         var encodeFormat = format switch
         {
             ImageFormat.Jpeg => SKEncodedImageFormat.Jpeg,
             ImageFormat.Webp => SKEncodedImageFormat.Webp,
-            ImageFormat.Bmp => SKEncodedImageFormat.Bmp,
             _ => SKEncodedImageFormat.Png,
         };
         return img.Encode(encodeFormat, 100).ToArray();

@@ -93,13 +93,17 @@ public static class PdfRenderer
         var pageRenderer = new PdfPageRenderer();
         pageRenderer.Render(pdfBytes, xref, pageIndex, canvas, width, height, dpi);
 
-        // 编码输出
+        // 编码输出（BMP 手写编码，Skia 默认不含 BMP 编码器）
         using var img = surface.Snapshot();
+        if (format == ImageFormat.Bmp)
+        {
+            using var bmp = SKBitmap.FromImage(img);
+            return ImageHelper.EncodeBmp(bmp);
+        }
         var encodeFormat = format switch
         {
             ImageFormat.Jpeg => SKEncodedImageFormat.Jpeg,
             ImageFormat.Webp => SKEncodedImageFormat.Webp,
-            ImageFormat.Bmp => SKEncodedImageFormat.Bmp,
             _ => SKEncodedImageFormat.Png,
         };
         var data = img.Encode(encodeFormat, quality);

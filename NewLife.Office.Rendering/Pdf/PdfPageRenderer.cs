@@ -81,12 +81,20 @@ internal sealed class PdfPageRenderer
                 var objStart = text.LastIndexOf("obj", found);
                 if (objStart >= 0)
                 {
+                    // 对象定义形如 "5 0 obj"，从 obj 前回溯对象号；obj 前可能有空格（如 "5 0 obj"）
                     var numStart = objStart - 1;
+                    // 跳过 obj 前的空白
+                    while (numStart >= 0 && Char.IsWhiteSpace(text[numStart])) numStart--;
+                    // 回退数字（对象号）
                     while (numStart >= 0 && Char.IsDigit(text[numStart])) numStart--;
                     numStart++;
-                    var numStr = text.Substring(numStart, objStart - numStart - 1).Trim();
-                    if (Int32.TryParse(numStr, out var num) && !result.Contains(num))
-                        result.Add(num);
+                    // 防御：obj 前必须存在对象号（numStart < objStart），否则 Substring 负长度崩溃
+                    if (objStart > numStart)
+                    {
+                        var numStr = text.Substring(numStart, objStart - numStart - 1).Trim();
+                        if (Int32.TryParse(numStr, out var num) && !result.Contains(num))
+                            result.Add(num);
+                    }
                 }
                 pos = afterType + 5;
             }

@@ -55,4 +55,13 @@
     <ProjectReference Include="..\NewLife.Office.Cli\NewLife.Office.Cli.csproj" />
   </ItemGroup>
 
+  <!-- Rendering 渲染扩展包测试（独立 NuGet 扩展，依赖 SkiaSharp；仅测试项目引用，不污染生产代码） -->
+  <!-- SkiaSharp 3.119.2 与 NPOI 2.8.0 传递依赖对齐（高于 Rendering 声明的 2.88.9，运行时统一到高版本） -->
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="3.119.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NewLife.Office.Rendering\NewLife.Office.Rendering.csproj" />
+  </ItemGroup>
+
 </Project>
