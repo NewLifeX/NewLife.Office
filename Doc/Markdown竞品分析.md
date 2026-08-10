@@ -208,6 +208,14 @@ var html = CommonMarkConverter.Convert("# Hello\nWorld");
 
 > **2026-08 解析分配优化（MD14）**：GC 分段量化定位真实热点——**每列表项都创建子解析器+子文档+FrontMatter 检查+引用预扫描**（列表输入 233x 放大）。单行普通内容快速路径直接行内解析，列表分配 -61%、**Parse 分配 -18%/耗时 -20%**（基准实测）。同时修正 MD12「AST 字符串复制 ~120x 主成本」猜测（实测文本令牌仅 1.3%），`Memory<Char>` 惰性切片经实测无收益后回滚——数据驱动的性能优化决策。
 
+> **2026-08 解析分配优化（MD15）**：引用子解析器消除——单行引用块直接行内解析（基准 200 个引用块全部命中）+ 引用预扫描行首过滤（定义必须以 `[` 开头，普通行快速跳过）。MD14+MD15 累计 **Parse 分配 -22%、耗时 -45%**。
+
+> **2026-08 解析分配优化（MD16-MD18）**：GC 分段定位高频小对象热点——行内令牌复用（tokens 别名复用 result）、表格行拆分索引化（替代 Trim+子串，表格为最大单项扩展成本）、AST 集合延迟初始化（省叶子节点空 List ~250KB）、行内纯文本快速路径（无标记字符直达单令牌）。**Parse 分配累计 -30%+、耗时 -13.8% 首破 10ms**，与 Markdig 的零分配/极致性能差距持续缩小。
+
+> **2026-08 解析优化（MD19-MD23）**：英文场景再降——Email run 快速跳过（O(n²)→单次 IndexOf('@')）、delims 延迟创建、IsPlainText 精确化（h/f/w 放行）、块调度正则快速失败、emoji 快速失败、ASCII 快速路径、DelimInfo class→struct。**ParseEnglish 分配 -56.2%、耗时 -19.9%**（MD18→MD26 累计）。
+
+> **2026-08 解析分配优化（MD24-MD26，里程碑）**：块/行内节点直接接管 Parse 创建的 List（省每节点新 List + AddRange 复制）、容器块 Children 直接接管、Roundtrip 快照序列化池化（writer 实例复用 + StringBuilder 池化）。**累计 MD14→MD26 混合中文分配 -50.1%（3761→1878KB）、耗时 -58%（20.9→8.8ms）**——大规模中文文档解析已达到毫秒级，性能优势对标 Markdig 的核心竞争力由「功能完整」扩展至「高性能」。
+
 **真实未实现项（不虚标）**：
 - **Agent Skill（Node.js/Python 绑定）**：anydoc 提供多语言绑定；NewLife.Office 为纯 .NET 库 API + CLI 工具（`NewLife.Office.Cli` convert/info，内容识别路由）
 - **Mermaid 图表 / 媒体嵌入**：Markdig 独有，本项目有意不实现（需引入 JS 引擎，偏离零依赖原则）
