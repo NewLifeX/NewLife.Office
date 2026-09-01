@@ -21,21 +21,20 @@ public static class TextRenderer
         if (text == null) throw new ArgumentNullException(nameof(text));
 
         using var typeface = GetTypeface(fontFamily);
+        using var font = new SKFont(typeface, fontSize, 1, 0);
         using var paint = new SKPaint
         {
-            Typeface = typeface,
-            TextSize = fontSize,
             IsAntialias = true,
             Color = foreColor ?? SKColors.Black,
         };
 
         // 计算行高和文字高度
-        var fontMetrics = paint.FontMetrics;
+        var fontMetrics = font.Metrics;
         var lineHeight = fontMetrics.Descent - fontMetrics.Ascent + fontMetrics.Leading;
         var contentWidth = width - padding * 2;
 
         // 自动换行：逐字符累加宽度，超出则换行
-        var lines = WrapText(text, paint, contentWidth);
+        var lines = WrapText(text, font, paint, contentWidth);
 
         var totalHeight = (Int32)(lines.Count * lineHeight + padding * 2 + 10);
 
@@ -51,7 +50,7 @@ public static class TextRenderer
         var y = padding + fontMetrics.Ascent;
         foreach (var line in lines)
         {
-            canvas.DrawText(line, padding, -y, paint);
+            canvas.DrawText(line, padding, -y, font, paint);
             y += lineHeight;
         }
 
@@ -83,7 +82,7 @@ public static class TextRenderer
         return SKTypeface.Default;
     }
 
-    private static List<String> WrapText(String text, SKPaint paint, Single maxWidth)
+    private static List<String> WrapText(String text, SKFont font, SKPaint paint, Single maxWidth)
     {
         var lines = new List<String>();
         var currentLine = String.Empty;
@@ -98,7 +97,7 @@ public static class TextRenderer
             }
 
             var testLine = currentLine + ch;
-            if (paint.MeasureText(testLine) > maxWidth && currentLine.Length > 0)
+            if (font.MeasureText(testLine, paint) > maxWidth && currentLine.Length > 0)
             {
                 lines.Add(currentLine);
                 currentLine = ch.ToString();

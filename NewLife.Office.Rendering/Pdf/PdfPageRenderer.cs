@@ -457,17 +457,16 @@ internal sealed class PdfPageRenderer
         var typeface = _fontMapper.GetTypeface(_state.FontKey!, _state.FontKey, null);
         var pos = _state.GetTextPosition();
 
+        using var font = new SKFont(typeface, _state.FontSize, 1, 0);
         using var paint = new SKPaint
         {
-            Typeface = typeface,
-            TextSize = _state.FontSize,
             IsAntialias = true,
             Color = _state.FillColor,
         };
 
-        _canvas.DrawText(text, pos.X, pos.Y, paint);
+        _canvas.DrawText(text, pos.X, pos.Y, font, paint);
 
-        var advance = paint.MeasureText(text) + _state.CharSpacing * _state.FontSize / 1000f;
+        var advance = font.MeasureText(text, paint) + _state.CharSpacing * _state.FontSize / 1000f;
         var m = SKMatrix.CreateTranslation(advance, 0);
         _state.TextMatrix = _state.TextMatrix.PreConcat(m);
     }

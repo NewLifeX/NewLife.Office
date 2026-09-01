@@ -196,13 +196,13 @@ public static class PdfRenderer
             canvas.Restore();
 
             // 画页面编号
+            using var textFont = new SKFont(SKTypeface.Default, 11, 1, 0);
             using var textPaint = new SKPaint
             {
                 Color = SKColors.White,
-                TextSize = 11,
                 IsAntialias = true,
             };
-            canvas.DrawText($"{i + 1}", x + 4, y + 14, textPaint);
+            canvas.DrawText($"{i + 1}", x + 4, y + 14, textFont, textPaint);
         }
 
         using var img = surface.Snapshot();

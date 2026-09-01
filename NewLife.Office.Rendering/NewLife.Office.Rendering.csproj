@@ -30,7 +30,7 @@
     <RepositoryUrl>https://github.com/NewLifeX/NewLife.Office</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>新生命团队;X组件;NewLife;$(AssemblyName);Office;Rendering;PDF;Word;PPT;Markdown;Image;SkiaSharp</PackageTags>
-    <PackageReleaseNotes>首个版本：PDF/Word/PPT/Markdown 页面渲染为图片；图片缩放/裁剪/旋转/水印/格式转换；文字→图片；二维码→图片；缩略图网格</PackageReleaseNotes>
+    <PackageReleaseNotes>PDF/Word/PPT/Markdown 页面渲染为图片；图片缩放/裁剪/旋转/水印/格式转换；文字→图片；二维码→图片；缩略图网格；测试补齐 21 项并修复 PDF 页面对象号解析负长度崩溃、BMP 编码空引用、解码异常包装 3 个生产缺陷</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
@@ -39,15 +39,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.301">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.400">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="SkiaSharp" Version="2.88.9" />
+    <PackageReference Include="SkiaSharp" Version="4.151.1" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net462'">
-    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.10" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.11" />
   </ItemGroup>
 
   <ItemGroup>

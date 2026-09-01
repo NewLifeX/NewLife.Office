@@ -54,7 +54,7 @@ public static class ImageHelper
             dstH = height;
         }
 
-        using var dst = src.Resize(new SKSizeI(dstW, dstH), SKFilterQuality.High);
+        using var dst = src.Resize(new SKSizeI(dstW, dstH), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
         if (dst == null) throw new InvalidOperationException("缩放失败");
 
         return EncodeToFormat(dst, format, quality);
@@ -151,20 +151,20 @@ public static class ImageHelper
         var canvas = surface.Canvas;
         canvas.DrawBitmap(src, 0, 0);
 
+        using var font = new SKFont(SKTypeface.Default, fontSize, 1, 0);
         using var paint = new SKPaint
         {
             Color = SKColors.White.WithAlpha((Byte)(opacity * 255)),
-            TextSize = fontSize,
             IsAntialias = true,
             Style = SKPaintStyle.Fill,
         };
 
         // 文字居中
-        var textWidth = paint.MeasureText(text);
+        var textWidth = font.MeasureText(text, paint);
         var x = (src.Width - textWidth) / 2f;
         var y = src.Height / 2f + fontSize / 3f;
 
-        canvas.DrawText(text, x, y, paint);
+        canvas.DrawText(text, x, y, font, paint);
 
         using var img = surface.Snapshot();
         using var dst = SKBitmap.FromImage(img);

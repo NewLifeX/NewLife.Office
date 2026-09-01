@@ -1,5 +1,58 @@
 # NewLife.Office 版本更新记录
 
+## v1.4.2026.0902 (2026-09-02)
+
+### Word 增强
+- **读取保真修复**：RunProperties 三态化（支持 w:val=0 显式关闭）、ParseRun 多 w:t/tab/br/cr 拼接、列表 numId→numFmt 映射判定、新增高亮/小型大写/全大写/隐藏/东亚字体/语言属性、样式继承 docDefaults+basedOn 链、空段落保留
+- **图片与页眉页脚**：SVG/VML/浮动 anchor 图片解析与写回、页眉页脚富文本模型（Reader 三类型填充 + Writer 部件生成）
+- **多节支持**：Section 模型 + Reader 切分 + Writer 程序化多节输出
+- **日常编辑 API**：FindText/ReplaceText 查找替换（跨 Run 匹配保留首 Run 格式）、Table 行列增删操作、单元格便利 API（GetCell/SetCellText）
+- **转换器增强**：WordHtmlConverter 列表分组/图片/删除线/上下标/合并单元格，WordPdfConverter 列表前缀/字体/分页符/段落内图片
+- **doc 二进制格式提取**：ReadParagraphsWithFormat 基于 PlcBte+CHPX/PAPX 解析段落格式
+- **脚注/尾注**：WordWriter 程序化创建 + Find/Replace 覆盖 + Markdown 转换、脚注占位符合并替换
+- **文本框与修订**：文本框模型化与 Find/Replace 覆盖、修订追踪模型级读取
+- **doc→docx 转换**：DocReader.ToDocument/SaveAsDocx（段落+表格+格式，保持文档顺序）+ CLI 子命令
+- **自选图形/公式/图表**：自选图形创建、公式与图表创建
+- **写回保真优化**：页眉页脚显式重建、模板占位符合并、嵌套表格支持、ClearRawXml 解决读改写时 RawXml 兜底覆盖修改的痛点
+
+### Excel 增强
+- **xls 全面增强**：样式读取（FONT/FORMAT/XF）、批注读取（NOTE+TXO）、命名范围/打印区域写入、保护/数据验证、BiffReader 合并单元格/页面设置
+- **条件格式 dxf**：字体样式/填充色/边框颜色读写 + AddConditionalFormat 新增 fontColor/bold/borderColor 重载、图案前景色调色板还原
+- **图表增强**：doughnut/radar/stock/surface 类型识别与写入、图表读写往返修复
+- **批注增强**：Comment 模型（尺寸/可见性/vml 解析）、富文本增强、线程化批注
+- **切片器**：切片器 + 透视表切片器关联
+- **流式读取性能**：ReadRows/ReadRowsWithIndex XmlReader 流式解析（10 万行 995ms，内存平坦）
+- **显示与打印**：SetGridlines/SetZoomScale/SetDefaultRowHeight、打印区域/分页符读写往返、隐藏行列写入
+- **读取健壮性**：1904 日期系统、t=e/t=d 单元格类型、富文本共享字符串、主题色解析、缺失部件容错
+
+### Markdown 引擎优化
+- **CommonMark 规范补全**：规范级完善、边界修复（setext 单横线/反引号等长分隔/表格管线/嵌套链接/紧松列表/编码检测）
+- **解析性能大幅优化**：MD15-MD26 多轮优化（引用块快速路径、AST 延迟初始化、行内令牌复用、DelimInfo 改 struct、快照序列化池化等），Parse 耗时与分配显著下降
+- **转换中枢扩展**：ODS/RTF/EPUB→Markdown 一键转换
+- **读写完善**：写入转义/列表续行/引用链接/HTML 块/管线开关
+
+### PPT 增强
+- **形状往返保真**：组内图片读取/写入、组内形状属性（旋转/翻转/渐变/虚线/线宽/圆角）读写、CornerRadius 精度修复
+- **图表增强**：AddAreaChart 公开方法、图表系列颜色/散点 X 值/轴范围/图例位置读回
+- **超链接**：Shape 级超链接（URL/文件跳转）+ 组内形状超链接读写
+- **PptWriter**：最小可用写入 + Merge/CopySlideFrom 保真修复 + 批注关系/图表命名空间修复
+- **竞品功能 S17-S20**：对标 Aspose.Slides/ShapeCrawler
+
+### PDF 增强
+- **结构化表格提取**：对标 iText 7/Aspose.PDF
+- **嵌入字体子集化**：对标 PdfSharp
+- **文档属性测试修复**：S14 审计修复
+
+### CLI 工具链
+- **内容识别**：OfficeFactory magic bytes 识别文件格式
+- **转换工具链**：命令行转换工具，doc→docx 子命令
+
+### 测试与质量
+- **Rendering 测试补齐**：RenderingTests 21 项覆盖 REN01-13 + 修复 3 个生产缺陷
+- **交叉兼容测试**：NPOI + OpenXml SDK 竞品包交叉验证、真实文件 Fixtures 回归、合并单元格交叉验证
+
+---
+
 ## v1.3.2026.0802 (2026-08-02)
 
 ### 新增渲染扩展包
