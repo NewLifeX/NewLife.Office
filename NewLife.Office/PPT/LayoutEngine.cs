@@ -85,9 +85,9 @@ public static class LayoutEngine
             curY += 4.0;
         }
 
-        // 正文
+        // 正文（KPI 行之后仍须放置，否则文本框保持临时坐标导致渲染异常）
         var body = FindRole(slide, "body");
-        if (body != null && kpis.Count == 0)
+        if (body != null)
         {
             SetRect(body, MarginL, curY, ContentW, 5.5);
             curY += 6.0;
