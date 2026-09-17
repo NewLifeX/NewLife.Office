@@ -170,6 +170,13 @@ public partial class ExcelWriter : DisposeBase
     /// <summary>是否自动根据数据内容估算列宽，并写入 <c>&lt;cols&gt;</c> 来避免 WPS/Excel 出现########。默认 true。</summary>
     public Boolean AutoFitColumnWidth { get; set; } = true;
 
+    /// <summary>工作簿默认字体名称（styles.xml font[0]）。空=不设置（沿用客户端默认字体）</summary>
+    /// <remarks>设置后影响未显式指定字体的全部单元格；往返读写场景保持空以保留源文件字体</remarks>
+    public String? DefaultFontName { get; set; }
+
+    /// <summary>工作簿默认字体字号（磅）。0=不设置</summary>
+    public Double DefaultFontSize { get; set; }
+
     // 多 sheet：保持插入顺序，写 workbook.xml 时用于 sheetId 顺序
     private readonly List<String> _sheetNames = [];
     private readonly Dictionary<String, List<String>> _sheetRows = new(StringComparer.OrdinalIgnoreCase); // sheet -> 行XML集合

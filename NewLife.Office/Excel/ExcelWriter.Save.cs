@@ -1518,8 +1518,16 @@ partial class ExcelWriter
 
         // fonts
         sw.Write($"<fonts count=\"{_fonts.Count}\">");
-        foreach (var f in _fonts)
+        for (var fi = 0; fi < _fonts.Count; fi++)
         {
+            var f = _fonts[fi];
+            // 默认字体：font[0] 注入工作簿默认字体（影响所有未显式指定字体的单元格）
+            if (fi == 0 && (!DefaultFontName.IsNullOrEmpty() || DefaultFontSize > 0))
+                f = f with
+                {
+                    Name = DefaultFontName.IsNullOrEmpty() ? f.Name : DefaultFontName,
+                    Size = DefaultFontSize > 0 ? DefaultFontSize : f.Size,
+                };
             sw.Write("<font>");
             if (f.Bold) sw.Write("<b/>");
             if (f.Italic) sw.Write("<i/>");
