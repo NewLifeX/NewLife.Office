@@ -2127,8 +2127,8 @@ public class WordWriter : IDisposable
                     bgColor = style.StripeColor;
                 if (bgColor != null)
                     sb.Append($"<w:shd w:fill=\"{bgColor.TrimStart('#')}\" w:val=\"clear\"/>");
-                if (cell.VerticalAlignment != null)
-                    sb.Append($"<w:vAlign w:val=\"{cell.VerticalAlignment}\"/>");
+                // 垂直对齐：未显式指定时默认居中，表格整体观感更平衡
+                sb.Append($"<w:vAlign w:val=\"{cell.VerticalAlignment ?? "center"}\"/>");
                 if (cell.ColSpan > 1)
                     sb.Append($"<w:gridSpan w:val=\"{cell.ColSpan}\"/>");
                 // 垂直合并：RowSpan>1 或 -1（reader 的 restart）= 合并起点；0 = 继续合并

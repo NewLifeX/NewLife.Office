@@ -114,6 +114,7 @@ public class WriterStyleTests
             Assert.Contains("<w:tblCellMar>", xml);
             Assert.Contains("<w:left w:w=\"108\" w:type=\"dxa\"/>", xml);
             Assert.Contains("<w:right w:w=\"108\" w:type=\"dxa\"/>", xml);
+            Assert.Contains("w:vAlign w:val=\"center\"", xml);   // 未指定时默认垂直居中
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }}
