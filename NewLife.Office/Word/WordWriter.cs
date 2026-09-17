@@ -2055,11 +2055,14 @@ public class WordWriter : IDisposable
                 sb.Append($"<w:{edge} w:val=\"single\" w:sz=\"{borderSize}\" w:space=\"0\" w:color=\"{borderColor}\"/>");
             }
             sb.Append("</w:tblBorders>");
+            sb.Append("<w:tblCellMar><w:top w:w=\"0\" w:type=\"dxa\"/><w:left w:w=\"108\" w:type=\"dxa\"/><w:bottom w:w=\"0\" w:type=\"dxa\"/><w:right w:w=\"108\" w:type=\"dxa\"/></w:tblCellMar>");
         }
         else
         {
             sb.Append("<w:tblStyle w:val=\"TableGrid\"/>");
             sb.Append("<w:tblW w:w=\"0\" w:type=\"auto\"/>");
+            // 默认单元格内边距 0.19cm（与 Word 内置行为一致，避免文字贴边框）
+            sb.Append("<w:tblCellMar><w:top w:w=\"0\" w:type=\"dxa\"/><w:left w:w=\"108\" w:type=\"dxa\"/><w:bottom w:w=\"0\" w:type=\"dxa\"/><w:right w:w=\"108\" w:type=\"dxa\"/></w:tblCellMar>");
         }
         sb.Append("</w:tblPr>");
 

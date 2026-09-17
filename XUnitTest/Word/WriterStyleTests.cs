@@ -93,4 +93,27 @@ public class WriterStyleTests
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
-}
+    [Fact(DisplayName = "WordWriter—表格默认内边距（避免文字贴边框）")]
+    public void Table_DefaultCellMargins_Applied()
+    {
+        var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
+        try
+        {
+            using var writer = new WordWriter();
+            var rows = new List<IEnumerable<String>>
+            {
+                new String[] { "姓名", "分数" },
+                new String[] { "张三", "85" },
+            };
+            // 自定义样式与内置 TableGrid 两种路径都应有内边距
+            writer.AppendTable(rows, firstRowHeader: true, new TableStyle { HeaderBgColor = "2563EB" });
+            writer.AppendTable(rows, firstRowHeader: true);
+            writer.Save(tempFile);
+
+            var xml = ReadEntry(tempFile, "word/document.xml");
+            Assert.Contains("<w:tblCellMar>", xml);
+            Assert.Contains("<w:left w:w=\"108\" w:type=\"dxa\"/>", xml);
+            Assert.Contains("<w:right w:w=\"108\" w:type=\"dxa\"/>", xml);
+        }
+        finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
+    }}
