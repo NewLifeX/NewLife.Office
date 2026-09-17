@@ -26,6 +26,7 @@ public partial class ExcelWriter : DisposeBase
     }
 
     private static readonly NumFmtStyle[] _cellFormats = (NumFmtStyle[])Enum.GetValues(typeof(NumFmtStyle));
+    private static readonly CellFormat _plainFormat = new();
 
     private record FontEntry(String? Name, Double Size, Boolean Bold, Boolean Italic, Boolean Underline, String? Color, Boolean Strike, String? VerticalAlign);
     private record FillEntry(String? BgColor, String PatternType, String? GradientType = null, String? GradientColor1 = null, String? GradientColor2 = null, String? PatternFgColor = null, String? PatternTypeName = null);

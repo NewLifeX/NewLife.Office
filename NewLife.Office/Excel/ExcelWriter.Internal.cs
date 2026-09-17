@@ -102,6 +102,7 @@ partial class ExcelWriter
 
             // 识别类型
             var autoStyle = NumFmtStyle.General;
+            String? customNumFmt = null; // 自定义数字格式（货币/千分位）
             String? tAttr = null; // t="s" / "b"
             String? inner = null; // <v>值</v>
             var displayLen = 0;   // 估算显示长度用于列宽
@@ -128,12 +129,16 @@ partial class ExcelWriter
                             //displayLen = inner.Length + 1;
                             break;
                         }
-                        else
+                        // 带货币符号或千分位分组的数值：形如 "¥1,234.50" / "1,208" / "-3,240"，转为真数值并保留显示格式
+                        if (TryParseFormattedNumber(str, out var symbol, out var numValue, out var numFormat))
                         {
-                            // 普通字符串走共享字符串，减少体积 & 避免被推断
-                            tAttr = "s";
-                            inner = GetSharedStringIndex(str).ToString();
+                            customNumFmt = numFormat;
+                            inner = numValue.ToString(CultureInfo.InvariantCulture);
+                            break;
                         }
+                        // 普通字符串走共享字符串，减少体积 & 避免被推断
+                        tAttr = "s";
+                        inner = GetSharedStringIndex(str).ToString();
                         break;
                     }
                 case Boolean b:
@@ -255,7 +260,7 @@ partial class ExcelWriter
             if (effectiveStyle != null)
             {
                 // 用户指定了样式：合并自动检测的 numFmtId 与用户样式的字体/填充/边框/对齐
-                var numFmtId = (Int32)autoStyle;
+                var numFmtId = customNumFmt != null ? GetOrCreateNumFmt(customNumFmt) : (Int32)autoStyle;
                 // 如果用户样式指定了自定义数字格式，则覆盖自动检测
                 if (!effectiveStyle.NumberFormat.IsNullOrEmpty())
                     numFmtId = GetOrCreateNumFmt(effectiveStyle.NumberFormat!);
@@ -263,8 +268,16 @@ partial class ExcelWriter
             }
             else if (tAttr == null)
             {
-                // 无用户样式、非字符串/布尔：使用内置样式
-                sIndex = Array.IndexOf(_cellFormats, autoStyle);
+                if (customNumFmt != null)
+                {
+                    // 无用户样式但需自定义数字格式：生成仅含该格式的单元格样式
+                    sIndex = GetOrCreateXf(_plainFormat, GetOrCreateNumFmt(customNumFmt));
+                }
+                else
+                {
+                    // 无用户样式、非字符串/布尔：使用内置样式
+                    sIndex = Array.IndexOf(_cellFormats, autoStyle);
+                }
             }
 
             // 富文本覆盖：写 inline string <is> 结构
@@ -359,6 +372,69 @@ partial class ExcelWriter
         var txt = str.Trim().TrimEnd('%');
         if (Decimal.TryParse(txt, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) { value = d; return true; }
         return false;
+    }
+
+    /// <summary>尝试解析带货币符号或千分位分组的数值字符串（如 "¥1,234.50"、"1,208"、"-3,240"）。</summary>
+    /// <remarks>解析成功时给出数值与保留原始精度的数字格式；普通文本（含编号）不受影响，仍按字符串写入。</remarks>
+    /// <param name="str">原始字符串</param>
+    /// <param name="symbol">货币符号（可空）</param>
+    /// <param name="value">解析出的数值</param>
+    /// <param name="format">建议的数字格式（含货币符号与千分位）</param>
+    /// <returns>是否解析成功</returns>
+    private static Boolean TryParseFormattedNumber(String str, out String? symbol, out Decimal value, out String format)
+    {
+        symbol = null;
+        value = 0m;
+        format = String.Empty;
+
+        var s = str.Trim();
+        if (s.Length < 2) return false;
+
+        var i = 0;
+        var sign = 1m;
+        // 正负号可出现在货币符号前后（如 -¥1,200 / ¥-1,200）
+        if (i < s.Length && (s[i] == '+' || s[i] == '-')) { if (s[i] == '-') sign = -1m; i++; }
+        if (i < s.Length && "¥￥$€£".IndexOf(s[i]) >= 0) { symbol = s[i].ToString(); i++; }
+        if (i < s.Length && (s[i] == '+' || s[i] == '-')) { if (s[i] == '-') sign = -1m; i++; }
+        if (i >= s.Length) return false;
+
+        // 数字部分：仅允许数字、千分位逗号与小数点
+        var hasComma = false;
+        var dotPos = -1;
+        var digits = 0;
+        for (var j = i; j < s.Length; j++)
+        {
+            var ch = s[j];
+            if (ch >= '0' && ch <= '9') { digits++; continue; }
+            if (ch == ',') { if (dotPos >= 0) return false; hasComma = true; continue; }
+            if (ch == '.') { if (dotPos >= 0) return false; dotPos = j; continue; }
+            return false;
+        }
+        if (digits == 0 || digits > 15) return false;
+        // 无货币符号且无千分位分组时保持文本，避免把编号、年份等误判为数值
+        if (symbol == null && !hasComma) return false;
+
+        // 千分位分组校验：整数部分必须是 1~3 位开头，后续每段恰好 3 位
+        if (hasComma)
+        {
+            var intPart = dotPos >= 0 ? s[i..dotPos] : s[i..];
+            var groups = intPart.Split(',');
+            if (groups.Length < 2 || groups[0].Length is < 1 or > 3) return false;
+            for (var g = 1; g < groups.Length; g++)
+            {
+                if (groups[g].Length != 3) return false;
+            }
+        }
+
+        var body = s[i..].Replace(",", "");
+        if (!Decimal.TryParse(body, NumberStyles.Float, CultureInfo.InvariantCulture, out value)) return false;
+        value *= sign;
+
+        // 保留原始小数位数（最多 4 位），如 "¥1,234.5" → ¥#,##0.0
+        var dec = dotPos >= 0 ? s.Length - dotPos - 1 : 0;
+        if (dec > 4) dec = 4;
+        format = (symbol ?? String.Empty) + "#,##0" + (dec > 0 ? "." + new String('0', dec) : String.Empty);
+        return true;
     }
 
     private Int32 GetSharedStringIndex(String str)
