@@ -13,6 +13,9 @@ public class TableStyle
     /// <summary>表头行背景色（16进制 RGB，null=不设置）</summary>
     public String? HeaderBgColor { get; set; }
 
+    /// <summary>表头行字体颜色（16进制 RGB，null=不设置）。配合 HeaderBgColor 深色底时使用浅色字</summary>
+    public String? HeaderFontColor { get; set; }
+
     /// <summary>表头行字体加粗</summary>
     public Boolean HeaderBold { get; set; } = true;
 

@@ -24,6 +24,14 @@ public class WordWriter : IDisposable
 
     /// <summary>文档属性</summary>
     public DocumentProperties DocumentProperties { get; set; } = new();
+
+    /// <summary>自定义样式表 XML（word/styles.xml）。非空时直接使用该内容，不再生成默认样式</summary>
+    /// <remarks>
+    /// 用于注入品牌样式表（字体/字号/间距/标题配色/表格边框），实现与产品视觉统一的文档排版。
+    /// 需自带默认样式生成的全部引用：docDefaults、Normal、Heading1~Heading6、TableGrid，否则样式引用会断裂。
+    /// 与 <see cref="Save(Stream, Document)"/> 的 <see cref="Document.StylesXml"/> 等效，但可在程序化追加内容时使用。
+    /// </remarks>
+    public String? StylesXml { get; set; }
     #endregion
 
     #region 私有字段
@@ -1036,9 +1044,11 @@ public class WordWriter : IDisposable
 
     private void WriteStyles(ZipArchive za)
     {
-        if (_stylesXml != null)
+        // 优先级：公开属性 StylesXml > 文档模型导入的样式表 > 默认生成
+        var stylesXml = StylesXml ?? _stylesXml;
+        if (stylesXml != null)
         {
-            WriteEntry(za, "word/styles.xml", _stylesXml);
+            WriteEntry(za, "word/styles.xml", stylesXml);
             return;
         }
 
@@ -1046,20 +1056,34 @@ public class WordWriter : IDisposable
         var sb = new StringBuilder();
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
         sb.Append($"<w:styles xmlns:w=\"{W}\">");
+        // 默认排版：西文 Segoe UI + 中文微软雅黑，五号字（10.5pt），1.3 倍行距，段后 6pt
         sb.Append("<w:docDefaults><w:rPrDefault><w:rPr>");
-        sb.Append("<w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\" w:eastAsia=\"SimSun\"/>");
-        sb.Append("<w:sz w:val=\"24\"/></w:rPr></w:rPrDefault></w:docDefaults>");
+        sb.Append("<w:rFonts w:ascii=\"Segoe UI\" w:hAnsi=\"Segoe UI\" w:eastAsia=\"微软雅黑\"/>");
+        sb.Append("<w:sz w:val=\"21\"/>");
+        sb.Append("</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr>");
+        sb.Append("<w:spacing w:line=\"312\" w:lineRule=\"auto\" w:after=\"120\"/>");
+        sb.Append("</w:pPr></w:pPrDefault></w:docDefaults>");
         sb.Append("<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\"><w:name w:val=\"Normal\"/></w:style>");
-        int[] headSizes = [40, 32, 28, 26, 24, 22];
+        // 标题 1~6：字号阶梯 + 深蓝/深灰配色 + 段前后间距 + keepNext（标题不与后文分离）
+        (Int32 Size, String Color, Int32 Before, Int32 After)[] headings =
+        [
+            (40, "1F4E79", 340, 140), // 20pt
+            (32, "1F4E79", 300, 120), // 16pt
+            (28, "1F4E79", 260, 100), // 14pt
+            (26, "404040", 240, 80),  // 13pt
+            (24, "404040", 200, 60),  // 12pt
+            (22, "595959", 160, 60),  // 11pt
+        ];
         for (var i = 1; i <= 6; i++)
         {
-            sb.Append($"<w:style w:type=\"paragraph\" w:styleId=\"Heading{i}\"><w:name w:val=\"heading {i}\"/><w:basedOn w:val=\"Normal\"/><w:pPr><w:outlineLvl w:val=\"{i - 1}\"/></w:pPr><w:rPr><w:b/><w:sz w:val=\"{headSizes[i - 1]}\"/></w:rPr></w:style>");
+            var h = headings[i - 1];
+            sb.Append($"<w:style w:type=\"paragraph\" w:styleId=\"Heading{i}\"><w:name w:val=\"heading {i}\"/><w:basedOn w:val=\"Normal\"/><w:pPr><w:keepNext/><w:spacing w:before=\"{h.Before}\" w:after=\"{h.After}\"/><w:outlineLvl w:val=\"{i - 1}\"/></w:pPr><w:rPr><w:b/><w:color w:val=\"{h.Color}\"/><w:sz w:val=\"{h.Size}\"/></w:rPr></w:style>");
         }
         sb.Append("<w:style w:type=\"table\" w:styleId=\"TableGrid\"><w:name w:val=\"Table Grid\"/>");
         sb.Append("<w:tblPr><w:tblBorders>");
         foreach (var edge in new[] { "top", "left", "bottom", "right", "insideH", "insideV" })
         {
-            sb.Append($"<w:{edge} w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"000000\"/>");
+            sb.Append($"<w:{edge} w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"BFBFBF\"/>");
         }
         sb.Append("</w:tblBorders></w:tblPr></w:style>");
         sb.Append("</w:styles>");
@@ -2130,7 +2154,7 @@ public class WordWriter : IDisposable
 
                 foreach (var para in cell.Paragraphs)
                 {
-                    // 表头行加粗：仅在输出时临时生效，构建后恢复原值，避免保存副作用污染模型
+                    // 表头行加粗/字色：仅在输出时临时生效，构建后恢复原值，避免保存副作用污染模型
                     var headerBold = new List<(Run Run, Boolean? Old)>();
                     if (ri == 0 && firstRowHeader && style is { HeaderBold: true })
                     {
@@ -2142,9 +2166,21 @@ public class WordWriter : IDisposable
                             run.Properties.Bold = true;
                         }
                     }
+                    var headerColor = new List<(Run Run, String? Old)>();
+                    if (ri == 0 && firstRowHeader && style != null && !style.HeaderFontColor.IsNullOrEmpty())
+                    {
+                        foreach (var run in para.Runs)
+                        {
+                            run.Properties ??= new RunProperties();
+                            headerColor.Add((run, run.Properties.ForeColor));
+                            run.Properties.ForeColor = style.HeaderFontColor;
+                        }
+                    }
                     BuildParagraphXml(sb, para);
                     foreach (var (run, old) in headerBold)
                         run.Properties!.Bold = old;
+                    foreach (var (run, old) in headerColor)
+                        run.Properties!.ForeColor = old;
                 }
                 sb.Append("</w:tc>");
             }
