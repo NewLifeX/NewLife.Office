@@ -25,8 +25,14 @@ public partial class PptxWriter : IDisposable
     /// <summary>幻灯片集合</summary>
     public List<Slide> Slides { get; } = [];
 
-    /// <summary>主题强调色（6个，默认 Office 配色，可通过 SetAccentColors 修改）</summary>
+    /// <summary>主题强调色（6个，默认 Office 配色，可通过 SetAccentColors 修改）。图表系列未显式指定颜色时按序回退使用</summary>
     public String[] AccentColors { get; set; } = ["4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F79646"];
+
+    /// <summary>主题西文字体（majorFont/minorFont 的 latin），空=默认 Calibri</summary>
+    public String? ThemeLatinFont { get; set; }
+
+    /// <summary>主题东亚字体（majorFont/minorFont 的 ea 与 Hans 脚本），空=不设置（跟随客户端）</summary>
+    public String? ThemeEastAsianFont { get; set; }
 
     /// <summary>全局页眉页脚设置（S13-03），null 表示不加页脚</summary>
     public HeaderFooter? HeaderFooter { get; set; }
@@ -543,6 +549,21 @@ public partial class PptxWriter : IDisposable
         {
             AccentColors[i] = hexColors[i].TrimStart('#');
         }
+        return this;
+    }
+
+    /// <summary>设置演示文稿主题字体（西文与东亚）</summary>
+    /// <remarks>
+    /// 修改主题的 majorFont/minorFont，影响未显式指定字体的全部文本。
+    /// 幻灯片元素仍可在 TextBox/Run 级覆盖字体。
+    /// </remarks>
+    /// <param name="latinFont">西文字体名（如 Segoe UI），null 保持默认 Calibri</param>
+    /// <param name="eastAsianFont">东亚字体名（如 微软雅黑），null 保持默认（跟随客户端）</param>
+    /// <returns>自身，支持链式调用</returns>
+    public PptxWriter SetThemeFonts(String? latinFont, String? eastAsianFont)
+    {
+        ThemeLatinFont = latinFont;
+        ThemeEastAsianFont = eastAsianFont;
         return this;
     }
 

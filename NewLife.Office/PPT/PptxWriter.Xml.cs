@@ -1194,11 +1194,11 @@ partial class PptxWriter
         if (chart.ChartType == "radar")
             sb.Append("<c:radarStyle val=\"marker\"/>");
 
-        var serColors = new[] { "4F81BD", "C0504D", "9BBB59", "8064A2", "4BACC6", "F79646" };
         for (var si = 0; si < chart.Series.Count; si++)
         {
             var ser = chart.Series[si];
-            var color = ser.Color ?? serColors[si % serColors.Length];
+            // 未显式指定颜色的系列：回退主题强调色，保证 SetAccentColors 对图表生效
+            var color = ser.Color ?? AccentColors[si % AccentColors.Length];
             sb.Append("<c:ser>");
             sb.Append($"<c:idx val=\"{si}\"/><c:order val=\"{si}\"/>");
             sb.Append($"<c:tx><c:strRef><c:f/><c:strCache><c:ptCount val=\"1\"/><c:pt idx=\"0\"><c:v>{EscXml(ser.Name)}</c:v></c:pt></c:strCache></c:strRef></c:tx>");
@@ -1523,13 +1523,24 @@ partial class PptxWriter
             "<a:hlink><a:srgbClr val=\"0000FF\"/></a:hlink>" +
             "<a:folHlink><a:srgbClr val=\"800080\"/></a:folHlink>" +
             "</a:clrScheme>" +
-            "<a:fontScheme name=\"Office\"><a:majorFont><a:latin typeface=\"Calibri\"/><a:ea typeface=\"\"/><a:cs typeface=\"\"/></a:majorFont>" +
-            "<a:minorFont><a:latin typeface=\"Calibri\"/><a:ea typeface=\"\"/><a:cs typeface=\"\"/></a:minorFont></a:fontScheme>" +
+            BuildThemeFontScheme() +
             "<a:fmtScheme name=\"Office\"><a:fillStyleLst><a:noFill/><a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill><a:noFill/></a:fillStyleLst>" +
             "<a:lnStyleLst><a:ln w=\"9525\"><a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill></a:ln><a:ln w=\"9525\"><a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill></a:ln><a:ln w=\"9525\"><a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill></a:ln></a:lnStyleLst>" +
             "<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>" +
             "<a:bgFillStyleLst><a:noFill/><a:solidFill><a:schemeClr val=\"phClr\"/></a:solidFill><a:noFill/></a:bgFillStyleLst>" +
             "</a:fmtScheme></a:themeElements></a:theme>");
+    }
+
+    /// <summary>生成主题字体方案（majorFont/minorFont）。默认 Calibri + 空东亚字体，可通过 ThemeLatinFont/ThemeEastAsianFont 覆盖</summary>
+    private String BuildThemeFontScheme()
+    {
+        var latin = ThemeLatinFont.IsNullOrEmpty() ? "Calibri" : EscXml(ThemeLatinFont!);
+        var ea = ThemeEastAsianFont.IsNullOrEmpty() ? "" : EscXml(ThemeEastAsianFont!);
+        var hans = ThemeEastAsianFont.IsNullOrEmpty() ? "" : $"<a:font script=\"Hans\" typeface=\"{ea}\"/>";
+        return "<a:fontScheme name=\"Office\">" +
+            $"<a:majorFont><a:latin typeface=\"{latin}\"/><a:ea typeface=\"{ea}\"/><a:cs typeface=\"\"/>{hans}</a:majorFont>" +
+            $"<a:minorFont><a:latin typeface=\"{latin}\"/><a:ea typeface=\"{ea}\"/><a:cs typeface=\"\"/>{hans}</a:minorFont>" +
+            "</a:fontScheme>";
     }
 
     private void WriteInfraMedia(ZipArchive za)
