@@ -131,10 +131,6 @@
 ## 运行方式
 
 ```bash
-# 先打包主库到本地源（规避 BDN Deterministic 与通配版本冲突）
-dotnet pack NewLife.Office\NewLife.Office.csproj -c Release -o Bin\LocalFeed
-# 清理本地包缓存后运行基准（Release 模式）
-Remove-Item "$env:USERPROFILE\.nuget\packages\newlife.office\1.3.2026.807" -Recurse -Force
-# 基准失败（CS0246 NewLife 找不到 / 0 runs）时：重新 pack + 删缓存 + 删 Bin\Benchmark 下 BDN 临时目录
+# Release 模式运行（项目引用主库源码，无需打包与清缓存）
 dotnet run -c Release --project Benchmark\MarkdownBenchmark
 ```

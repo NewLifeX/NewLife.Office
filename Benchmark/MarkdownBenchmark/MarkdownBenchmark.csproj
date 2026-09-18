@@ -9,13 +9,14 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
-    <!-- 本地源：引用打包后的主库，规避 BDN 强制 Deterministic 与通配版本冲突 -->
-    <RestoreSources>$(RestoreSources);$(MSBuildThisFileDirectory)..\..\Bin\LocalFeed</RestoreSources>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
-    <PackageReference Include="NewLife.Office" Version="1.3.2026.808" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\NewLife.Office\NewLife.Office.csproj" />
   </ItemGroup>
 
 </Project>
