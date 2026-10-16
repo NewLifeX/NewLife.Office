@@ -62,10 +62,12 @@ public static class PdfObjectParser
 
         var n = (Int32)nNum.Value;
         var first = (Int32)firstNum.Value;
-        var streamData = pdfStream.Data;
+        // 对象流内容通常经 FlateDecode 压缩，须先解压；latin1 解码保留高字节
+        var streamData = PdfReader.DecompressStreamData(pdfStream.Data, dict);
+        var latin1 = Encoding.GetEncoding(28591);
 
         // 读取对象索引（每个条目 = 对象号 + 流内偏移，各占可数字段）
-        var indexData = Encoding.ASCII.GetString(streamData, 0, Math.Min(first, streamData.Length));
+        var indexData = latin1.GetString(streamData, 0, Math.Min(first, streamData.Length));
         var tokens = Tokenize(indexData);
         var tokenIdx = 0;
 
@@ -83,16 +85,11 @@ public static class PdfObjectParser
 
         if (targetOffset < 0 || first + targetOffset >= streamData.Length) return null;
 
-        // 在偏移处解析对象值
-        var valueText = Encoding.ASCII.GetString(streamData, first + targetOffset, streamData.Length - first - targetOffset);
-        var valTokens = Tokenize(valueText);
-        if (valTokens.Count == 0) return null;
-
-        var latin1 = Encoding.GetEncoding(28591);
-        var parseText = latin1.GetString(data);
         // 使用简化的解析（对象流内的值不含间接对象头部）
-        var valText2 = Encoding.ASCII.GetString(streamData, first + targetOffset, streamData.Length - first - targetOffset);
-        return ParseTopLevelValue(valText2, 0, out _);
+        var valueText = latin1.GetString(streamData, first + targetOffset, streamData.Length - first - targetOffset);
+        if (Tokenize(valueText).Count == 0) return null;
+
+        return ParseTopLevelValue(valueText, 0, out _);
     }
 
     /// <summary>从 PDF 字典字符串解析为 PdfDict</summary>
@@ -349,6 +346,45 @@ public static class PdfObjectParser
         var baseValue = ParseDictValue(text, ref pos);
         if (baseValue == null) return null;
 
+        // 流对象：字典后跟 stream...endstream（此前缺失，导致 xref 级解析永远拿不到内容流）
+        if (baseValue is DictObj streamDictObj)
+        {
+            var savedPos = pos;
+            SkipWhitespace(text, ref pos);
+            if (pos + 6 <= text.Length && String.CompareOrdinal(text, pos, "stream", 0, 6) == 0)
+            {
+                pos += 6;
+                // 跳过 stream 后的行结束符（\r\n 或单个 \n）
+                if (pos < text.Length && text[pos] == '\r') pos++;
+                if (pos < text.Length && text[pos] == '\n') pos++;
+
+                // /Length 支持直接数字或间接引用
+                var length = -1;
+                if (streamDictObj.Value.TryGetValue("Length", out var lenVal))
+                {
+                    if (lenVal is PdfNumber ln) length = (Int32)ln.Value;
+                    else if (lenVal is Ref lenRef)
+                    {
+                        var resolvedLen = ReadObject(data, xref!, lenRef.ObjNum);
+                        if (resolvedLen is PdfNumber rn) length = (Int32)rn.Value;
+                    }
+                }
+                if (length < 0 || pos + length > data.Length)
+                {
+                    // 回退：扫描 endstream 关键字定位
+                    var endIdx = text.IndexOf("endstream", pos, StringComparison.Ordinal);
+                    length = endIdx > pos ? endIdx - pos : 0;
+                }
+
+                var streamData = new Byte[length];
+                if (length > 0) Array.Copy(data, pos, streamData, 0, length);
+                pos += length;
+
+                return new PdfStream { Dict = streamDictObj.Value, Data = streamData };
+            }
+            pos = savedPos;
+        }
+
         // 检查是否为间接引用（N G R）
         if (baseValue is PdfNumber numObj)
         {
@@ -599,6 +635,8 @@ public static class PdfObjectParser
                     pos++;
                 if (pos > start)
                     tokens.Add(text[start..pos]);
+                else
+                    pos++; // 未识别字符（如孤立右括号）必须前进，防止死循环
             }
         }
         return tokens;

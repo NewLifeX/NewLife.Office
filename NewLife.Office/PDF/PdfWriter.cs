@@ -1,4 +1,5 @@
-﻿using System.IO.Compression;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -954,7 +955,7 @@ public class PdfWriter : IDisposable
     /// <summary>将对象集合以表格形式写入 PDF</summary>
     /// <param name="data">对象集合</param>
     /// <param name="firstRowHeader">首行表头</param>
-    public void WriteObjects<T>(IEnumerable<T> data, Boolean firstRowHeader = true) where T : class
+    public void WriteObjects<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(IEnumerable<T> data, Boolean firstRowHeader = true) where T : class
     {
         var props = typeof(T).GetProperties();
         var headers = props.Select(p =>
@@ -1318,9 +1319,23 @@ public class PdfWriter : IDisposable
             enc = new PdfEncryptor(UserPassword, OwnerPassword ?? UserPassword ?? String.Empty, Permissions, fileIdBytes, CipherRevision);
         }
 
+        /// <summary>编码 PDF 文本字符串：可被 WinAnsi/Latin-1 表示时用括号字面量，否则用 UTF-16BE 十六进制字面量（含 BOM）</summary>
+        /// <param name="text">原始文本</param>
+        /// <returns>PDF 字符串字面量</returns>
+        static String EncodePdfStringLiteral(String text)
+        {
+            foreach (var ch in text)
+            {
+                if (ch >= 32 && ch < 256) continue;
+                if (_cp1252Map.ContainsKey(ch)) continue;
+                return EncodeUtf16HexString(text);
+            }
+            return $"({EncodePdfText(text)})";
+        }
+
         String PdfStr(String text, Int32 objId)
         {
-            if (enc == null) return $"({EncodePdfText(text)})";
+            if (enc == null) return EncodePdfStringLiteral(text);
             return enc.EncryptString(text, objId, 0);
         }
 
@@ -2275,6 +2290,22 @@ public class PdfWriter : IDisposable
         return sb.ToString();
     }
 
+    /// <summary>以 UTF-16BE 十六进制字面量编码文本（带 BOM，用于超出 WinAnsi 可表示范围的元数据等）</summary>
+    /// <param name="text">原始文本</param>
+    /// <returns>形如 &lt;FEFF...&gt; 的 PDF 十六进制字符串</returns>
+    private static String EncodeUtf16HexString(String text)
+    {
+        var bytes = Encoding.BigEndianUnicode.GetBytes(text);
+        var sb = new StringBuilder(bytes.Length * 2 + 6);
+        sb.Append("<FEFF");
+        foreach (var b in bytes)
+        {
+            sb.Append(b.ToString("X2"));
+        }
+        sb.Append('>');
+        return sb.ToString();
+    }
+
     private static String HexToRgbOp(String hex, Boolean fill)
     {
         hex = hex.TrimStart('#');
@@ -2344,7 +2375,7 @@ public class PdfWriter : IDisposable
         // 尝试用简单方案：如果系统有 System.Drawing，用它；否则返回白色占位
         try
         {
-#if NET6_0_OR_GREATER
+#if NETFRAMEWORK
             using var ms = new System.IO.MemoryStream(png);
             using var bmp = System.Drawing.Image.FromStream(ms);
             return ExtractBitmapRgb(bmp, w, h);
@@ -2358,7 +2389,7 @@ public class PdfWriter : IDisposable
         }
     }
 
-#if NET6_0_OR_GREATER
+#if NETFRAMEWORK
     private static Byte[] ExtractBitmapRgb(System.Drawing.Image img, Int32 w, Int32 h)
     {
         using var bmp = new System.Drawing.Bitmap(img);

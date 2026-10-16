@@ -1794,6 +1794,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var doc = LoadXml(commentsEntry);
         var authorsDoc = TryLoadCommentsAuthors();
         var authorMap = new Dictionary<String, String>();
+        var authorUidMap = new Dictionary<String, String>();
         if (authorsDoc != null)
         {
             foreach (XmlElement author in authorsDoc.SelectNodes("//*[local-name()='cmAuthor']")!)
@@ -1801,14 +1802,20 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 var aId = author.GetAttribute("id");
                 var aName = author.GetAttribute("name");
                 var aUid = author.GetAttribute("uid");
-                if (aId.Length > 0) authorMap[aId] = aName;
+                if (aId.Length > 0)
+                {
+                    authorMap[aId] = aName;
+                    if (aUid.Length > 0) authorUidMap[aId] = aUid;
+                }
             }
         }
         var idx = 0;
         foreach (XmlElement cm in doc.SelectNodes("//*[local-name()='cm']")!)
         {
             var c = new Comment { Index = ++idx };
-            c.Author = authorMap.TryGetValue(cm.GetAttribute("authorId"), out var name) ? name : cm.GetAttribute("authorId");
+            var authorKey = cm.GetAttribute("authorId");
+            c.Author = authorMap.TryGetValue(authorKey, out var name) ? name : authorKey;
+            c.AuthorId = authorUidMap.TryGetValue(authorKey, out var uid) ? uid : null;
             var dtStr = cm.GetAttribute("dt");
             if (DateTime.TryParse(dtStr, out var dt)) c.Date = dt;
             var pos = cm.SelectSingleNode("*[local-name()='pos']") as XmlElement;
@@ -1851,20 +1858,35 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             if (cBhvr == null) continue;
             var anim = new Animation
             {
+                Sequence = order,
                 Order = order++,
                 Category = category,
                 Effect = el.GetAttribute("filter") ?? el.LocalName,
             };
-            // 目标形状
+            // 触发方式：包裹的最近 par/cTn@nodeType（onClick/withPrev/afterPrev）
+            var parCTn = el.SelectSingleNode("ancestor::*[local-name()='par'][1]/*[local-name()='cTn'][1]") as XmlElement;
+            anim.Trigger = parCTn?.GetAttribute("nodeType") switch
+            {
+                "withPrev" => AnimationTrigger.WithPrevious,
+                "afterPrev" => AnimationTrigger.AfterPrevious,
+                _ => AnimationTrigger.OnClick,
+            };
+            // 目标形状（Writer 以 TargetIndex + 2 生成 spid，读取时还原为集合索引）
             var tgt = cBhvr.SelectSingleNode("*[local-name()='tgtEl']/*[local-name()='spTgt']") as XmlElement;
             if (tgt != null && Int32.TryParse(tgt.GetAttribute("spid"), out var spid))
-                anim.TargetIndex = spid;
-            // 时长
-            var durEl = cBhvr.SelectSingleNode("*[local-name()='cTn']") as XmlElement;
-            if (durEl != null)
+                anim.TargetIndex = Math.Max(0, spid - 2);
+            // 时长/延迟/重复/自动反转
+            var cTnEl = cBhvr.SelectSingleNode("*[local-name()='cTn']") as XmlElement;
+            if (cTnEl != null)
             {
-                var durVal = durEl.GetAttribute("dur");
-                if (durVal.Length > 0) anim.DurationMs = (Int32)(ParseDuration(durVal) / 1000);
+                var durVal = cTnEl.GetAttribute("dur");
+                // OOXML 动画时长以毫秒计（如 dur="2000" 表示 2 秒），与模型 DurationMs 同单位
+                if (durVal.Length > 0) anim.DurationMs = (Int32)ParseDuration(durVal);
+                var condDelay = (cTnEl.SelectSingleNode("*[local-name()='stCondLst']/*[local-name()='cond']") as XmlElement)?.GetAttribute("delay");
+                if (condDelay != null && Int32.TryParse(condDelay, out var delayMs)) anim.DelayMs = delayMs;
+                var repeat = cTnEl.GetAttribute("repeatCount");
+                if (repeat.Length > 0) anim.Repeat = repeat;
+                anim.AutoReverse = cTnEl.GetAttribute("autoRev") == "1";
             }
             slide.Animations.Add(anim);
         }

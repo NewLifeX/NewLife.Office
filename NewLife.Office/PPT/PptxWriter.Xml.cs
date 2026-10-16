@@ -890,6 +890,10 @@ partial class PptxWriter
                     sb.Append($" dur=\"{anim.DurationMs}\"");
                 if (anim.DelayMs > 0)
                     sb.Append($" st=\"{(anim.Trigger == AnimationTrigger.AfterPrevious ? anim.DelayMs : 0)}\"");
+                if (anim.Repeat != null)
+                    sb.Append($" repeatCount=\"{EscXml(anim.Repeat)}\"");
+                if (anim.AutoReverse)
+                    sb.Append(" autoRev=\"1\"");
                 sb.Append($">");
                 if (anim.DelayMs > 0)
                     sb.Append($"<p:stCondLst><p:cond delay=\"{anim.DelayMs}\"/></p:stCondLst>");

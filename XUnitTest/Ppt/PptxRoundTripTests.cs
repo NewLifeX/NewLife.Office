@@ -395,6 +395,129 @@ public class PptxRoundTripTests : IntegrationTestBase
             Assert.Equal(src.ThumbnailRelId, dst.ThumbnailRelId);
     }
 
+    /// <summary>验证连接器逐项属性（P14）</summary>
+    private static void AssertConnector(ConnectionShape src, ConnectionShape dst, String tag)
+    {
+        Assert.True(EmuClose(src.Left, dst.Left), $"{tag}.Left: {src.Left} vs {dst.Left}");
+        Assert.True(EmuClose(src.Top, dst.Top), $"{tag}.Top: {src.Top} vs {dst.Top}");
+        Assert.True(EmuClose(src.Width, dst.Width), $"{tag}.Width: {src.Width} vs {dst.Width}");
+        Assert.True(EmuClose(src.Height, dst.Height), $"{tag}.Height: {src.Height} vs {dst.Height}");
+        Assert.Equal(src.ConnectorType, dst.ConnectorType);
+        // Writer 对未设置颜色的连接器按 OOXML 默认黑色写出，读取端按同一契约归一
+        Assert.Equal(src.LineColor ?? "000000", dst.LineColor ?? "000000");
+        Assert.Equal(src.LineWidth, dst.LineWidth);
+        Assert.Equal(src.StartArrow ?? "", dst.StartArrow ?? "");
+        Assert.Equal(src.EndArrow ?? "", dst.EndArrow ?? "");
+        Assert.Equal(src.DashStyle ?? "", dst.DashStyle ?? "");
+    }
+
+    /// <summary>验证动画逐项属性（P15）</summary>
+    private static void AssertAnimation(Animation src, Animation dst, String tag)
+    {
+        Assert.True(src.Category == dst.Category, $"{tag}.Category: {src.Category} vs {dst.Category}");
+        Assert.True(src.Effect == dst.Effect, $"{tag}.Effect: {src.Effect} vs {dst.Effect}");
+        Assert.True(src.TargetType == dst.TargetType, $"{tag}.TargetType: {src.TargetType} vs {dst.TargetType}");
+        Assert.True(src.TargetIndex == dst.TargetIndex, $"{tag}.TargetIndex: {src.TargetIndex} vs {dst.TargetIndex}");
+        Assert.True(src.Trigger == dst.Trigger, $"{tag}.Trigger: {src.Trigger} vs {dst.Trigger}");
+        Assert.True(src.DelayMs == dst.DelayMs, $"{tag}.DelayMs: {src.DelayMs} vs {dst.DelayMs}");
+        Assert.True(src.DurationMs == dst.DurationMs, $"{tag}.DurationMs: {src.DurationMs} vs {dst.DurationMs}");
+        Assert.True(src.Sequence == dst.Sequence, $"{tag}.Sequence: {src.Sequence} vs {dst.Sequence}");
+        Assert.True(src.Order == dst.Order, $"{tag}.Order: {src.Order} vs {dst.Order}");
+        Assert.True((src.Repeat ?? "") == (dst.Repeat ?? ""), $"{tag}.Repeat: {src.Repeat} vs {dst.Repeat}");
+        Assert.True(src.AutoReverse == dst.AutoReverse, $"{tag}.AutoReverse: {src.AutoReverse} vs {dst.AutoReverse}");
+    }
+
+    /// <summary>验证批注逐项属性（P16）</summary>
+    private static void AssertComment(Comment src, Comment dst, String tag)
+    {
+        Assert.True(src.Index == dst.Index, $"{tag}.Index: {src.Index} vs {dst.Index}");
+        Assert.True((src.Author ?? "") == (dst.Author ?? ""), $"{tag}.Author: {src.Author} vs {dst.Author}");
+        // Writer 在 AuthorId 缺失时以作者姓名回填 uid，读取端按同一契约还原
+        Assert.True((src.AuthorId ?? src.Author ?? "") == (dst.AuthorId ?? dst.Author ?? ""), $"{tag}.AuthorId: {src.AuthorId} vs {dst.AuthorId}");
+        if (src.Date != null)
+        {
+            Assert.NotNull(dst.Date);
+            Assert.True(Math.Abs((src.Date.Value - dst.Date!.Value).TotalSeconds) <= 1, $"{tag}.Date: {src.Date} vs {dst.Date}");
+        }
+        Assert.True((src.Text ?? "") == (dst.Text ?? ""), $"{tag}.Text: {src.Text} vs {dst.Text}");
+        Assert.True(Math.Abs(src.X - dst.X) < 1e-3f, $"{tag}.X: {src.X} vs {dst.X}");
+        Assert.True(Math.Abs(src.Y - dst.Y) < 1e-3f, $"{tag}.Y: {src.Y} vs {dst.Y}");
+    }
+
+    /// <summary>验证文档属性（P17）</summary>
+    private static void AssertDocumentProperties(DocumentProperties src, DocumentProperties dst, String fileName)
+    {
+        Assert.True((src.Title ?? "") == (dst.Title ?? ""), $"[{fileName}] 文档属性 Title: {src.Title} vs {dst.Title}");
+        Assert.True((src.Author ?? "") == (dst.Author ?? ""), $"[{fileName}] 文档属性 Author: {src.Author} vs {dst.Author}");
+        Assert.True((src.Subject ?? "") == (dst.Subject ?? ""), $"[{fileName}] 文档属性 Subject: {src.Subject} vs {dst.Subject}");
+        Assert.True((src.Description ?? "") == (dst.Description ?? ""), $"[{fileName}] 文档属性 Description: {src.Description} vs {dst.Description}");
+    }
+
+    /// <summary>验证页眉页脚（P18）。Reader 对存在但全默认的 p:hf 返回全默认实例，与“无页眉页脚”等价</summary>
+    private static void AssertHeaderFooter(HeaderFooter? src, HeaderFooter? dst, String fileName)
+    {
+        var a = NormalizeHeaderFooter(src);
+        var b = NormalizeHeaderFooter(dst);
+        if (a == null || b == null)
+        {
+            Assert.True(a == null && b == null, $"[{fileName}] 页眉页脚存在性不匹配: 源={DescribeHeaderFooter(a)}, 输出={DescribeHeaderFooter(b)}");
+            return;
+        }
+        Assert.Equal(a.ShowFooter, b.ShowFooter);
+        Assert.Equal(a.FooterText ?? "", b.FooterText ?? "");
+        Assert.Equal(a.ShowPageNumber, b.ShowPageNumber);
+        Assert.Equal(a.ShowDate, b.ShowDate);
+        Assert.Equal(a.DateAutomatic, b.DateAutomatic);
+        Assert.Equal(a.FixedDate ?? "", b.FixedDate ?? "");
+        Assert.Equal(a.DateFormat ?? "", b.DateFormat ?? "");
+    }
+
+    private static HeaderFooter? NormalizeHeaderFooter(HeaderFooter? hf)
+        => hf == null || (!hf.ShowFooter && !hf.ShowPageNumber && !hf.ShowDate) ? null : hf;
+
+    private static String DescribeHeaderFooter(HeaderFooter? hf)
+        => hf == null ? "null" : $"footer={hf.ShowFooter},{hf.FooterText};num={hf.ShowPageNumber};date={hf.ShowDate}";
+
+    /// <summary>验证节列表（P20）</summary>
+    private static void AssertSections(List<Section>? src, List<Section>? dst, String fileName)
+    {
+        var a = src ?? [];
+        var b = dst ?? [];
+        Assert.True(a.Count == b.Count, $"[{fileName}] 节数量不匹配: 源={a.Count}, 输出={b.Count}");
+        for (var i = 0; i < a.Count; i++)
+        {
+            Assert.True(a[i].Name == b[i].Name, $"[{fileName}] 节[{i}].Name: {a[i].Name} vs {b[i].Name}");
+            Assert.True(a[i].SlideIndices.SequenceEqual(b[i].SlideIndices), $"[{fileName}] 节[{i}].SlideIndices: [{String.Join(",", a[i].SlideIndices)}] vs [{String.Join(",", b[i].SlideIndices)}]");
+        }
+    }
+
+    /// <summary>验证版式结构化信息（P21）</summary>
+    private static void AssertSlideLayouts(List<SlideLayoutInfo> src, List<SlideLayoutInfo> dst, String fileName)
+    {
+        Assert.True(src.Count == dst.Count, $"[{fileName}] 版式数量不匹配: 源={src.Count}, 输出={dst.Count}");
+        for (var i = 0; i < src.Count; i++)
+        {
+            Assert.True(src[i].Index == dst[i].Index, $"[{fileName}] 版式[{i}].Index: {src[i].Index} vs {dst[i].Index}");
+            Assert.True(src[i].Name == dst[i].Name, $"[{fileName}] 版式[{i}].Name: {src[i].Name} vs {dst[i].Name}");
+            Assert.True(src[i].LayoutType == dst[i].LayoutType, $"[{fileName}] 版式[{i}].LayoutType: {src[i].LayoutType} vs {dst[i].LayoutType}");
+            Assert.True(src[i].DisplayName == dst[i].DisplayName, $"[{fileName}] 版式[{i}].DisplayName: {src[i].DisplayName} vs {dst[i].DisplayName}");
+        }
+    }
+
+    /// <summary>验证母版结构化信息（P22）</summary>
+    private static void AssertSlideMasters(List<SlideMasterInfo> src, List<SlideMasterInfo> dst, String fileName)
+    {
+        Assert.True(src.Count == dst.Count, $"[{fileName}] 母版数量不匹配: 源={src.Count}, 输出={dst.Count}");
+        for (var i = 0; i < src.Count; i++)
+        {
+            Assert.True(src[i].Index == dst[i].Index, $"[{fileName}] 母版[{i}].Index: {src[i].Index} vs {dst[i].Index}");
+            Assert.True(src[i].Name == dst[i].Name, $"[{fileName}] 母版[{i}].Name: {src[i].Name} vs {dst[i].Name}");
+            Assert.True((src[i].BackgroundColor ?? "") == (dst[i].BackgroundColor ?? ""), $"[{fileName}] 母版[{i}].BackgroundColor: {src[i].BackgroundColor} vs {dst[i].BackgroundColor}");
+            Assert.True(src[i].LayoutIds.SequenceEqual(dst[i].LayoutIds), $"[{fileName}] 母版[{i}].LayoutIds: [{String.Join(",", src[i].LayoutIds)}] vs [{String.Join(",", dst[i].LayoutIds)}]");
+            Assert.True(src[i].ThemeRef == dst[i].ThemeRef, $"[{fileName}] 母版[{i}].ThemeRef: {src[i].ThemeRef} vs {dst[i].ThemeRef}");
+        }
+    }
+
     /// <summary>验证切换动画</summary>
     private static void AssertTransition(Transition src, Transition dst, String tag)
     {
@@ -652,6 +775,9 @@ public class PptxRoundTripTests : IntegrationTestBase
         Int64 sourceImageTotalBytes;
         Int64 sourceSlideWidth, sourceSlideHeight;
         String[] sourceAccentColors;
+        Presentation sourceDoc;
+        List<SlideMasterInfo> sourceMasters;
+        List<SlideLayoutInfo> sourceLayouts;
 
         using (var ms = new MemoryStream(sourceBytes))
         using (var reader = new PptxReader(ms))
@@ -673,6 +799,11 @@ public class PptxRoundTripTests : IntegrationTestBase
             sourceSlideWidth = reader.SlideWidth;
             sourceSlideHeight = reader.SlideHeight;
             sourceAccentColors = reader.AccentColors;
+
+            // 文档级模型（P17-P22）：文档属性/页眉页脚/节/母版/版式结构化信息
+            sourceDoc = reader.ReadDocument();
+            sourceMasters = reader.ReadSlideMasters().ToList();
+            sourceLayouts = reader.ReadSlideLayouts().ToList();
         }
 
         // ─── 写入阶段 ───────────────────────────────────────────────
@@ -683,6 +814,10 @@ public class PptxRoundTripTests : IntegrationTestBase
             writer.SlideWidth = sourceSlideWidth;
             writer.SlideHeight = sourceSlideHeight;
             writer.AccentColors = sourceAccentColors;
+            // 文档级能力（P17-P20）：文档属性/页眉页脚/节 随源模型写入，供回读深度对比
+            writer.DocumentProperties = sourceDoc.Properties;
+            writer.HeaderFooter = sourceDoc.HeaderFooter;
+            writer.Sections = sourceDoc.Sections;
 
             for (var i = 0; i < sourceSlides.Count; i++)
             {
@@ -865,6 +1000,7 @@ public class PptxRoundTripTests : IntegrationTestBase
                     {
                         Left = cn.Left, Top = cn.Top, Width = cn.Width, Height = cn.Height,
                         ConnectorType = cn.ConnectorType, LineColor = cn.LineColor, LineWidth = cn.LineWidth,
+                        StartArrow = cn.StartArrow, EndArrow = cn.EndArrow, DashStyle = cn.DashStyle,
                     });
                 foreach (var anim in src.Animations)
                     writer.Slides[slideIdx].Animations.Add(new Animation
@@ -988,7 +1124,25 @@ public class PptxRoundTripTests : IntegrationTestBase
                     AssertGroup(src.Groups[gi], dst.Groups[gi], $"幻灯片{i}.GRP[{gi}]");
                 for (var vi = 0; vi < src.Videos.Count; vi++)
                     AssertVideo(src.Videos[vi], dst.Videos[vi], $"幻灯片{i}.VID[{vi}]");
+                // 连接器/动画/批注逐项深度对比（P14-P16）
+                for (var ci = 0; ci < src.Connectors.Count; ci++)
+                    AssertConnector(src.Connectors[ci], dst.Connectors[ci], $"幻灯片{i}.CN[{ci}]");
+                for (var ai = 0; ai < src.Animations.Count; ai++)
+                    AssertAnimation(src.Animations[ai], dst.Animations[ai], $"幻灯片{i}.AN[{ai}]");
+                for (var cmi = 0; cmi < src.Comments.Count; cmi++)
+                    AssertComment(src.Comments[cmi], dst.Comments[cmi], $"幻灯片{i}.CM[{cmi}]");
             }
+
+            // ⑥.5 文档级深度对比（P17-P22）：文档属性/页眉页脚/节/尺寸/强调色/版式/母版结构化信息
+            var outDoc = outReader.ReadDocument();
+            Assert.Equal(sourceSlideWidth, outReader.SlideWidth);
+            Assert.Equal(sourceSlideHeight, outReader.SlideHeight);
+            Assert.Equal(sourceAccentColors, outReader.AccentColors);
+            AssertDocumentProperties(sourceDoc.Properties, outDoc.Properties, fileName);
+            AssertHeaderFooter(sourceDoc.HeaderFooter, outDoc.HeaderFooter, fileName);
+            AssertSections(sourceDoc.Sections, outDoc.Sections, fileName);
+            AssertSlideLayouts(sourceLayouts, outReader.ReadSlideLayouts().ToList(), fileName);
+            AssertSlideMasters(sourceMasters, outReader.ReadSlideMasters().ToList(), fileName);
 
             // ⑦ Entry 级 ZIP 对比
             var entryResult = PptxZipComparer.Compare(sourcePath, outputPath);

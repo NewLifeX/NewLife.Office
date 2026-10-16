@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text;
@@ -39,6 +40,14 @@ public partial class PptxWriter : IDisposable
 
     /// <summary>节（Section）列表（S13-04），按节组织幻灯片，null 表示不使用节</summary>
     public List<Section>? Sections { get; set; }
+
+    /// <summary>文档属性（S14-01/S14-02，docProps/core.xml + app.xml），null 表示不写文档属性</summary>
+    /// <remarks>Save(Presentation) 时自动取模型属性；增量写入（LoadMaster/AddSlide）场景可显式赋值以保留属性</remarks>
+    public DocumentProperties? DocumentProperties
+    {
+        get => _documentProperties;
+        set => _documentProperties = value;
+    }
     #endregion
 
     #region 私有字段
@@ -486,7 +495,7 @@ public partial class PptxWriter : IDisposable
     /// <param name="leftCm">左边距（厘米）</param>
     /// <param name="topCm">上边距（厘米）</param>
     /// <param name="widthCm">宽度（厘米）</param>
-    public void WriteObjects<T>(Int32 slideIndex, IEnumerable<T> data,
+    public void WriteObjects<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(Int32 slideIndex, IEnumerable<T> data,
         Double leftCm = 1, Double topCm = 2, Double widthCm = 22) where T : class
     {
         var props = typeof(T).GetProperties();

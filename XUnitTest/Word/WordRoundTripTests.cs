@@ -449,6 +449,9 @@ public class WordRoundTripTests : IntegrationTestBase
         Assert.True(a.SettingsXml == b.SettingsXml,
             $"[{context}] settings.xml 内容不一致——兼容性设置丢失");
 
+        // W15: 编号定义模型级对比（Numbering.Levels 逐级属性，与 numbering.xml 原文双保险）
+        AssertNumbering(a.Numbering, b.Numbering, context);
+
         // 文档属性
         Assert.Equal(a.DocumentProperties.Title, b.DocumentProperties.Title);
         Assert.Equal(a.DocumentProperties.Author, b.DocumentProperties.Author);
@@ -543,6 +546,41 @@ public class WordRoundTripTests : IntegrationTestBase
                 $"[{context}] OtherParts[{kv.Key}] 字节长度不匹配: 源={kv.Value.Length} 输出={bBytes.Length}");
             Assert.True(kv.Value.SequenceEqual(bBytes),
                 $"[{context}] OtherParts[{kv.Key}] 字节内容不一致（应原样透传）");
+        }
+    }
+
+    /// <summary>W15: 编号定义模型级对比（Numbering.Levels 逐级属性）</summary>
+    private static void AssertNumbering(Numbering? a, Numbering? b, String context)
+    {
+        if (a == null || b == null)
+        {
+            Assert.True(a == null && b == null,
+                $"[{context}] 编号模型存在性不匹配: 源={(a == null ? "null" : $"{a.Levels.Count}级")}, 输出={(b == null ? "null" : $"{b.Levels.Count}级")}");
+            return;
+        }
+
+        Assert.True(a.NumberingId == b.NumberingId,
+            $"[{context}] 编号模型 NumberingId 不匹配: 源={a.NumberingId}, 输出={b.NumberingId}");
+        Assert.True(a.Format == b.Format,
+            $"[{context}] 编号模型 Format 不匹配: 源={a.Format}, 输出={b.Format}");
+        Assert.True((a.BulletChar ?? "") == (b.BulletChar ?? ""),
+            $"[{context}] 编号模型 BulletChar 不匹配: 源={a.BulletChar}, 输出={b.BulletChar}");
+        Assert.True(a.Levels.Count == b.Levels.Count,
+            $"[{context}] 编号级别数不匹配: 源={a.Levels.Count}, 输出={b.Levels.Count}");
+
+        var count = Math.Min(a.Levels.Count, b.Levels.Count);
+        for (var i = 0; i < count; i++)
+        {
+            var la = a.Levels[i];
+            var lb = b.Levels[i];
+            Assert.True(la.Level == lb.Level, $"[{context}] 编号级别[{i}].Level: 源={la.Level}, 输出={lb.Level}");
+            Assert.True(la.Format == lb.Format, $"[{context}] 编号级别[{i}].Format: 源={la.Format}, 输出={lb.Format}");
+            Assert.True((la.Text ?? "") == (lb.Text ?? ""), $"[{context}] 编号级别[{i}].Text: 源={la.Text}, 输出={lb.Text}");
+            Assert.True((la.BulletChar ?? "") == (lb.BulletChar ?? ""), $"[{context}] 编号级别[{i}].BulletChar: 源={la.BulletChar}, 输出={lb.BulletChar}");
+            Assert.True((la.BulletFontName ?? "") == (lb.BulletFontName ?? ""), $"[{context}] 编号级别[{i}].BulletFontName: 源={la.BulletFontName}, 输出={lb.BulletFontName}");
+            Assert.True(la.StartAt == lb.StartAt, $"[{context}] 编号级别[{i}].StartAt: 源={la.StartAt}, 输出={lb.StartAt}");
+            Assert.True(la.Indent == lb.Indent, $"[{context}] 编号级别[{i}].Indent: 源={la.Indent}, 输出={lb.Indent}");
+            Assert.True(la.HangingIndent == lb.HangingIndent, $"[{context}] 编号级别[{i}].HangingIndent: 源={la.HangingIndent}, 输出={lb.HangingIndent}");
         }
     }
 

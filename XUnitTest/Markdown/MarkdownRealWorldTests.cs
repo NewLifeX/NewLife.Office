@@ -77,4 +77,39 @@ public class MarkdownRealWorldTests
 
         Assert.Equal(text1, text2);
     }
+
+    [Fact]
+    [DisplayName("真实文档：Fixtures 目录逐文件往返回归（M4）")]
+    public void AllFixtures_RoundTrip()
+    {
+        var dir = Path.Combine(AppContext.BaseDirectory, "Markdown", "Fixtures");
+        Assert.True(Directory.Exists(dir), $"未找到 Fixtures 目录：{dir}");
+        var files = Directory.GetFiles(dir, "*.md");
+        Assert.True(files.Length > 0, $"Fixtures 目录下未找到 .md 文件：{dir}");
+
+        var failures = new List<String>();
+        foreach (var file in files)
+        {
+            try
+            {
+                // 语义往返：解析 → 写回 → 再解析，正文文本必须一致
+                var doc1 = MarkdownDocument.ParseFile(file);
+                var md1 = doc1.ToMarkdown();
+                var doc2 = MarkdownDocument.Parse(md1);
+                Assert.Equal(doc1.ExtractText(), doc2.ExtractText());
+
+                // 序列化不动点：二次写回必须与首次一致，保证往返稳定
+                var md2 = doc2.ToMarkdown();
+                Assert.Equal(md1, md2);
+            }
+            catch (Exception ex)
+            {
+                var lines = ex.Message.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+                failures.Add($"[{Path.GetFileName(file)}] {lines.FirstOrDefault()?.Trim()}");
+            }
+        }
+
+        if (failures.Count > 0)
+            Assert.Fail($"❌ {failures.Count}/{files.Length} 个真实文档往返失败: {String.Join(" | ", failures)}");
+    }
 }

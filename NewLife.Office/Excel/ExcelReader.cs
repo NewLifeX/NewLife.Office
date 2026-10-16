@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
 using System.Reflection;
@@ -32,6 +33,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
 
     private ZipArchive _zip;
     private String[]? _sharedStrings;
+
+    /// <summary>共享字符串的富文本 run（与 _sharedStrings 索引对齐；无富文本的项为 null）</summary>
+    private List<RichTextRun>?[]? _sharedStringRuns;
     private ExcelNumberFormat?[]? _styles;
     private IDictionary<String, ZipArchiveEntry>? _entries;
     private List<String>? _orderedSheets;
@@ -169,7 +173,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             if (entry != null)
             {
                 using var es = entry.Open(); // 确保及时释放，避免后续再打开时报本地文件头损坏
-                _sharedStrings = ReadStrings(es);
+                _sharedStrings = ReadStrings(es, out _sharedStringRuns);
             }
         }
 
@@ -511,12 +515,15 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         return val;
     }
 
-    private String[]? ReadStrings(Stream ms)
+    private String[]? ReadStrings(Stream ms, out List<RichTextRun>?[]? runs)
     {
+        runs = null;
         var doc = XDocument.Load(ms);
         if (doc?.Root == null) return null;
 
         var list = new List<String>();
+        var runList = new List<List<RichTextRun>?>();
+        var hasRuns = false;
         foreach (var item in doc.Root.Elements())
         {
             // 仅拼接 <t> 文本节点（富文本 <r> run 依次拼接），跳过 <rPh>/<phoneticPr> 音标内容
@@ -534,9 +541,66 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                 }
             }
             list.Add(sb.ToString());
+
+            // E15：同时解析富文本 run，供 ReadCellFormats 回读
+            var itemRuns = ParseRichTextRuns(item);
+            runList.Add(itemRuns);
+            if (itemRuns != null) hasRuns = true;
         }
 
+        if (hasRuns) runs = runList.ToArray();
         return list.ToArray();
+    }
+
+    /// <summary>解析富文本容器（&lt;si&gt;/&lt;is&gt;）中的 &lt;r&gt; run 列表；无 run 时返回 null</summary>
+    private static List<RichTextRun>? ParseRichTextRuns(XElement container)
+    {
+        var runs = new List<RichTextRun>();
+        foreach (var r in container.Elements())
+        {
+            if (r.Name.LocalName != "r") continue;
+
+            var run = new RichTextRun();
+            var rPr = r.Elements().FirstOrDefault(e => e.Name.LocalName == "rPr");
+            if (rPr != null)
+            {
+                run.Bold = rPr.Elements().Any(e => e.Name.LocalName == "b");
+                run.Italic = rPr.Elements().Any(e => e.Name.LocalName == "i");
+                run.Underline = rPr.Elements().Any(e => e.Name.LocalName == "u");
+                run.Strike = rPr.Elements().Any(e => e.Name.LocalName == "strike");
+                var sz = rPr.Elements().FirstOrDefault(e => e.Name.LocalName == "sz");
+                if (sz?.Attribute("val") != null && Double.TryParse(sz.Attribute("val")!.Value, out var fontSize))
+                    run.FontSize = fontSize;
+                var rgb = rPr.Elements().FirstOrDefault(e => e.Name.LocalName == "color")?.Attribute("rgb")?.Value;
+                if (!rgb.IsNullOrEmpty())
+                {
+                    // Writer 按 ARGB 写出（FF+RGB六位），读回时裁去 Alpha 通道
+                    run.Color = rgb!.Length == 8 ? rgb.Substring(2) : rgb;
+                }
+                run.FontName = rPr.Elements().FirstOrDefault(e => e.Name.LocalName == "rFont")?.Attribute("val")?.Value;
+            }
+            run.Text = r.Elements().FirstOrDefault(e => e.Name.LocalName == "t")?.Value ?? String.Empty;
+            runs.Add(run);
+        }
+        return runs.Count > 0 ? runs : null;
+    }
+
+    /// <summary>读取单元格富文本 run（内联 &lt;is&gt; 或共享字符串），无富文本时返回 null</summary>
+    private List<RichTextRun>? ParseCellRichText(XElement cell)
+    {
+        var tAttr = cell.Attribute("t")?.Value;
+        if (tAttr == "inlineStr")
+        {
+            var isEl = cell.Elements().FirstOrDefault(e => e.Name.LocalName == "is");
+            return isEl != null ? ParseRichTextRuns(isEl) : null;
+        }
+        if (tAttr == "s")
+        {
+            var v = cell.Elements().FirstOrDefault(e => e.Name.LocalName == "v")?.Value;
+            if (v != null && Int32.TryParse(v, out var si) && _sharedStringRuns != null && si >= 0 && si < _sharedStringRuns.Length)
+                return _sharedStringRuns[si];
+        }
+        return null;
     }
 
     /// <summary>解析主题色定义（theme1.xml 的 &lt;clrScheme&gt;），返回 12 个主题色索引 → RGB 六位十六进制</summary>
@@ -1035,7 +1099,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     /// <typeparam name="T">目标类型（需有无参构造函数）</typeparam>
     /// <param name="sheet">工作表名称（可空，空时取第一个）</param>
     /// <returns>对象枚举（第一行作为表头映射列名）</returns>
-    public IEnumerable<T> ReadObjects<T>(String? sheet = null) where T : new()
+    public IEnumerable<T> ReadObjects<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(String? sheet = null) where T : new()
     {
         ThrowIfDisposed();
 
@@ -1455,10 +1519,18 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                 var (_, colIndex) = ParseCellRef(r!);
 
                 var sAttr = col.Attribute("s");
-                if (sAttr == null) continue;
+                var sIdx = sAttr != null ? sAttr.Value.ToInt(-1) : -1;
 
-                var sIdx = sAttr.Value.ToInt(-1);
-                if (sIdx < 0 || sIdx >= _xfInfos.Count) continue;
+                // E15：富文本单元格（内联 <is> / 共享字符串 runs），无样式也需保留
+                var richRuns = ParseCellRichText(col);
+                if (sAttr == null)
+                {
+                    if (richRuns == null) continue;
+                    result[(rowIndex, colIndex)] = new CellFormat { RichTextRuns = richRuns };
+                    continue;
+                }
+
+                if (sIdx < 0 || _xfInfos == null || sIdx >= _xfInfos.Count) continue;
 
                 var xf = _xfInfos[sIdx];
                 var cs = new CellFormat();
@@ -1525,6 +1597,9 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                 // 数字格式
                 if (_numFmtCodes != null && _numFmtCodes.TryGetValue(xf.NumFmtId, out var fmt) && fmt != "General")
                     cs.NumberFormat = fmt;
+
+                // E15：附加富文本 run
+                if (richRuns != null) cs.RichTextRuns = richRuns;
 
                 result[(rowIndex, colIndex)] = cs;
             }
@@ -2584,6 +2659,123 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
 
             yield return info;
         }
+    }
+
+    /// <summary>读取数据透视表定义（E17：透视表字段回读）</summary>
+    /// <param name="sheet">工作表名称</param>
+    /// <returns>透视表列表（名称/位置/字段集合，字段名取自透视缓存）</returns>
+    public List<PivotTableInfo> ReadPivotTables(String sheet)
+    {
+        var result = new List<PivotTableInfo>();
+        if (_entries == null || !_entries.TryGetValue(sheet, out var sheetEntry)) return result;
+
+        var n = sheetEntry.Name.TrimEnd(".xml");
+        if (n.StartsWith("sheet")) n = n.Substring(5);
+        var sheetIdx = n.ToInt(-1);
+        if (sheetIdx < 1) return result;
+
+        // sheet rels → pivotTable 部件路径
+        var pivotPaths = new List<String>();
+        var relEntry = _zip.GetEntry($"xl/worksheets/_rels/sheet{sheetIdx}.xml.rels");
+        if (relEntry == null) return result;
+        using (var rs = relEntry.Open())
+        {
+            var rdoc = XDocument.Load(rs);
+            if (rdoc.Root != null)
+            {
+                foreach (var rel in rdoc.Root.Elements().Where(e => e.Name.LocalName == "Relationship"))
+                {
+                    var type = rel.Attribute("Type")?.Value ?? "";
+                    if (!type.EndsWith("/pivotTable", StringComparison.OrdinalIgnoreCase)) continue;
+                    var target = rel.Attribute("Target")?.Value ?? "";
+                    if (target.Length > 0) pivotPaths.Add("xl/pivotTables/" + Path.GetFileName(target));
+                }
+            }
+        }
+
+        foreach (var path in pivotPaths)
+        {
+            var entry = _zip.GetEntry(path);
+            if (entry == null) continue;
+            XDocument pdoc;
+            using (var ps = entry.Open()) pdoc = XDocument.Load(ps);
+            if (pdoc.Root == null) continue;
+
+            var info = new PivotTableInfo
+            {
+                Name = pdoc.Root.Attribute("name")?.Value ?? String.Empty,
+                CacheId = pdoc.Root.Attribute("cacheId")?.Value.ToInt() ?? 0,
+                Location = pdoc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "location")?.Attribute("ref")?.Value ?? String.Empty,
+            };
+
+            // pivotFields 顺序对应透视缓存 cacheFields 顺序，字段名从缓存还原
+            var names = ReadPivotCacheFieldNames(info.CacheId);
+            var dataFieldMap = new Dictionary<Int32, (String Caption, String Subtotal)>();
+            var dataFieldsEl = pdoc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "dataFields");
+            if (dataFieldsEl != null)
+            {
+                foreach (var df in dataFieldsEl.Elements().Where(e => e.Name.LocalName == "dataField"))
+                {
+                    var fld = df.Attribute("fld")?.Value.ToInt(-1) ?? -1;
+                    if (fld >= 0) dataFieldMap[fld] = (df.Attribute("name")?.Value ?? String.Empty, df.Attribute("subtotal")?.Value ?? "sum");
+                }
+            }
+
+            var pivotFieldsEl = pdoc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "pivotFields");
+            if (pivotFieldsEl != null)
+            {
+                var fi = 0;
+                foreach (var pf in pivotFieldsEl.Elements().Where(e => e.Name.LocalName == "pivotField"))
+                {
+                    var field = new PivotField
+                    {
+                        Name = fi < names.Count ? names[fi] : $"Field{fi}",
+                    };
+                    var axis = pf.Attribute("axis")?.Value;
+                    if (axis == "axisRow") field.IsRowField = true;
+                    else if (axis == "axisCol") field.IsColumnField = true;
+                    else if (axis == "axisPage") field.IsFilterField = true;
+                    if (pf.Attribute("dataField")?.Value == "1" || dataFieldMap.ContainsKey(fi))
+                    {
+                        field.IsDataField = true;
+                        if (dataFieldMap.TryGetValue(fi, out var dfInfo))
+                        {
+                            field.Caption = dfInfo.Caption;
+                            field.SummaryFunction = dfInfo.Subtotal.ToLower() switch
+                            {
+                                "count" => PivotSummaryFunction.Count,
+                                "average" => PivotSummaryFunction.Average,
+                                "max" => PivotSummaryFunction.Max,
+                                "min" => PivotSummaryFunction.Min,
+                                _ => PivotSummaryFunction.Sum,
+                            };
+                        }
+                    }
+                    info.Fields.Add(field);
+                    fi++;
+                }
+            }
+
+            result.Add(info);
+        }
+        return result;
+    }
+
+    /// <summary>读取透视缓存的字段名列表（cacheFields/cacheField@name）</summary>
+    private List<String> ReadPivotCacheFieldNames(Int32 cacheId)
+    {
+        var names = new List<String>();
+        if (cacheId <= 0) return names;
+        var entry = _zip.GetEntry($"xl/pivotCache/pivotCacheDefinition{cacheId}.xml");
+        if (entry == null) return names;
+        using var cs = entry.Open();
+        var doc = XDocument.Load(cs);
+        if (doc.Root == null) return names;
+        var cacheFields = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "cacheFields");
+        if (cacheFields == null) return names;
+        foreach (var cf in cacheFields.Elements().Where(e => e.Name.LocalName == "cacheField"))
+            names.Add(cf.Attribute("name")?.Value ?? String.Empty);
+        return names;
     }
 
     /// <summary>读取工作簿中所有用户自定义命名范围（排除 _xlnm.* 系统名）</summary>

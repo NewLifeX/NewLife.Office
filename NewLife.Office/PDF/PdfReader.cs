@@ -117,15 +117,22 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
     #endregion
 
     #region 读取方法
-    /// <summary>获取总页数（通过 /Count 字段）</summary>
+    /// <summary>获取总页数（优先按页树递归统计，回退 /Count 扫描）</summary>
     /// <returns>页数</returns>
     public Int32 GetPageCount()
     {
+        // 优先 xref 页树：正确处理嵌套 /Pages 节点
+        if (XRefTable != null)
+        {
+            var count = GetPageObjectNumbers().Count;
+            if (count > 0) return count;
+        }
+
         var pdf = _latin1.GetString(_data);
         var countIdx = FindToken(pdf, "/Count");
         if (countIdx < 0) return 0;
         var numStr = ExtractNextToken(pdf, countIdx + 6);
-        return Int32.TryParse(numStr.Trim(), out var count) ? count : 0;
+        return Int32.TryParse(numStr.Trim(), out var pageCount) ? pageCount : 0;
     }
 
     /// <summary>读取 PDF 中所有嵌入/引用的字体信息</summary>
@@ -212,12 +219,14 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
         return c == ' ' || c == '\r' || c == '\n' || c == '\t' || c == '/' || c == '<' || c == '>' || c == '[' || c == ']' || c == '(' || c == ')';
     }
 
-    /// <summary>提取全部文本（基于 xref + 解压缩内容流）</summary>
+    /// <summary>提取全部文本（优先基于 xref 表逐页读取内容流，回退原始流扫描）</summary>
     /// <returns>合并后的文本</returns>
     public String ExtractText()
     {
         var sb = new StringBuilder();
-        ExtractFromStreams(_data, sb);
+        if (XRefTable != null) ExtractTextViaXref(sb);
+        // 回退原始扫描：无 xref 表或未能定位到页面内容流时，避免非内容流被误判为文本
+        if (sb.Length == 0) ExtractFromStreams(_data, sb);
         return sb.ToString();
     }
 
@@ -254,7 +263,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
         }
     }
 
-    /// <summary>获取所有页面对象号</summary>
+    /// <summary>获取所有页面对象号（递归遍历页树，兼容中间 /Pages 节点）</summary>
     private List<Int32> GetPageObjectNumbers()
     {
         var pageObjNums = new List<Int32>();
@@ -270,20 +279,33 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
         if (!catalogDictObj.Value.TryGetValue("Pages", out var pagesVal) || pagesVal is not Ref pagesRef)
             return pageObjNums;
 
-        var pagesObj = PdfObjectParser.ReadObject(_data, XRefTable, pagesRef.ObjNum);
-        if (pagesObj is not DictObj pagesDictObj) return pageObjNums;
+        CollectPageObjects(pagesRef.ObjNum, pageObjNums, 0);
+        return pageObjNums;
+    }
 
-        var pagesDict = pagesDictObj.Value;
-        if (!pagesDict.TryGetValue("Kids", out var kidsVal) || kidsVal is not PdfArray kidsArr)
-            return pageObjNums;
+    /// <summary>递归收集页面对象号；含 Kids 的中间节点继续下钻</summary>
+    /// <param name="objNum">当前节点对象号</param>
+    /// <param name="pageObjNums">收集结果</param>
+    /// <param name="depth">递归深度，超过 32 层视为畸形数据</param>
+    private void CollectPageObjects(Int32 objNum, List<Int32> pageObjNums, Int32 depth)
+    {
+        if (depth > 32) return;
 
-        foreach (var kid in kidsArr.Items)
+        var obj = PdfObjectParser.ReadObject(_data, XRefTable!, objNum);
+        if (obj is not DictObj dictObj) return;
+
+        // 有 Kids 的为中间 /Pages 节点，无 Kids 的为叶子页面
+        if (dictObj.Value.TryGetValue("Kids", out var kidsVal) && kidsVal is PdfArray kidsArr)
         {
-            if (kid is Ref kidRef)
-                pageObjNums.Add(kidRef.ObjNum);
+            foreach (var kid in kidsArr.Items)
+            {
+                if (kid is Ref kidRef)
+                    CollectPageObjects(kidRef.ObjNum, pageObjNums, depth + 1);
+            }
+            return;
         }
 
-        return pageObjNums;
+        pageObjNums.Add(objNum);
     }
 
     /// <summary>读取文档元数据</summary>
@@ -1109,43 +1131,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
     }
 
     /// <summary>解码 PDF hex 字符串（&lt;XXXX...&gt;）为 Unicode 文本</summary>
-    private static String DecodeHexString(String hex)
-    {
-        // 移除空白字符
-        var clean = new StringBuilder(hex.Length);
-        foreach (var c in hex)
-        {
-            if (c != ' ' && c != '\t' && c != '\r' && c != '\n')
-                clean.Append(c);
-        }
-        var h = clean.ToString();
-        if (h.Length == 0 || h.Length % 2 != 0) return String.Empty;
-        var byteCount = h.Length / 2;
-        var bytes = new Byte[byteCount];
-        for (var j = 0; j < byteCount; j++)
-        {
-            if (!Byte.TryParse(h.Substring(j * 2, 2), NumberStyles.HexNumber, null, out bytes[j]))
-                return String.Empty;
-        }
-        // UTF-16BE（我方 CJK 字体编码）：字节数必须为 2 的倍数
-        if (byteCount % 2 == 0)
-        {
-            try
-            {
-                var text = Encoding.BigEndianUnicode.GetString(bytes);
-                // 确认解码结果有打印字符（避免将 Latin-1 hex 误识为 UTF-16BE）
-                var printable = 0;
-                foreach (var c in text)
-                    if (c >= 32) printable++;
-                if (printable > 0 && printable * 2 >= text.Length)
-                    return text;
-            }
-            catch { }
-        }
-        // 回退：Latin-1 单字节解码
-        try { return Encoding.GetEncoding(1252).GetString(bytes); }
-        catch { return String.Empty; }
-    }
+    private static String DecodeHexString(String hex) => DecodeHexFromString(hex);
 
     private static Int32 FindToken(String pdf, String token)
     {
@@ -1296,7 +1282,8 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
                     if (inText)
                     {
                         var hex = content.Substring(i + 1, end - i - 1);
-                        var decoded = HexToString(hex);
+                        // 与 ExtractText 路径一致：UTF-16BE（本库 CJK 编码）优先、Latin-1 回退
+                        var decoded = DecodeHexString(hex);
                         if (decoded.Length > 0)
                         {
                             var peek = end + 1;
@@ -1712,12 +1699,17 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
                 return String.Empty;
         }
 
-        // UTF-16BE 猜测
+        // UTF-16 猜测：处理字节序标记（FEFF 大端 / FFFE 小端）
         if (bytes.Length % 2 == 0)
         {
             try
             {
-                var text = Encoding.BigEndianUnicode.GetString(bytes);
+                var littleEndian = bytes[0] == 0xFF && bytes[1] == 0xFE;
+                var text = littleEndian
+                    ? Encoding.Unicode.GetString(bytes)
+                    : Encoding.BigEndianUnicode.GetString(bytes);
+                // 去除 BOM
+                if (text.Length > 0 && text[0] == '\uFEFF') text = text[1..];
                 var printable = 0;
                 foreach (var ch in text) if (ch >= 32) printable++;
                 if (printable > 0 && printable * 2 >= text.Length) return text;

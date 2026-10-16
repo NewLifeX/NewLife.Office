@@ -304,6 +304,21 @@ internal sealed class MarkdownWriter
         {
             sb.AppendLine();
         }
+
+        // 子块（嵌套列表/代码块等）输出常以空行收尾，列表项统一收缩为单个换行：
+        // 项间空行由 IsLoose 逻辑统一控制，避免紧凑列表被重新解析为松散列表（往返不稳定）
+        TrimTrailingNewLines(sb);
+    }
+
+    /// <summary>收缩缓冲区末尾的连续空行，仅保留一个行结束符</summary>
+    private static void TrimTrailingNewLines(StringBuilder sb)
+    {
+        var last = sb.Length - 1;
+        if (last < 0 || (sb[last] != '\n' && sb[last] != '\r')) return;
+        var i = last;
+        while (i >= 0 && (sb[i] == '\n' || sb[i] == '\r')) i--;
+        sb.Remove(i + 1, sb.Length - i - 1);
+        sb.AppendLine();
     }
 
     private void WriteTable(StringBuilder sb, MarkdownBlock table)

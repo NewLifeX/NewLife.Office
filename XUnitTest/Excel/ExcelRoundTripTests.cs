@@ -191,6 +191,30 @@ public class ExcelRoundTripTests
                 if (s.NumberFormat != null)
                     Assert.True((s.NumberFormat ?? "") == (d.NumberFormat ?? ""), $"{sp}: NumberFormat ({r},{c}) src={s.NumberFormat} dst={d.NumberFormat}");
                 Assert.True(s.Strike == d.Strike, $"{sp}: Strike ({r},{c})");
+
+                // E15: 单元格富文本 run 逐段深度比较
+                var srcRuns = s.RichTextRuns;
+                var dstRuns = d.RichTextRuns;
+                if (srcRuns != null || dstRuns != null)
+                {
+                    Assert.True(srcRuns != null && dstRuns != null,
+                        $"{sp}: RichTextRuns 存在性 ({r},{c}) src={srcRuns?.Count.ToString() ?? "null"} dst={dstRuns?.Count.ToString() ?? "null"}");
+                    Assert.True(srcRuns!.Count == dstRuns!.Count,
+                        $"{sp}: RichTextRuns 段数 ({r},{c}) src={srcRuns.Count} dst={dstRuns.Count}");
+                    for (var ri = 0; ri < srcRuns.Count; ri++)
+                    {
+                        var a = srcRuns[ri];
+                        var b = dstRuns[ri];
+                        Assert.True(a.Text == b.Text, $"{sp}: RichTextRun[{ri}].Text ({r},{c}) src={a.Text} dst={b.Text}");
+                        Assert.True(a.Bold == b.Bold, $"{sp}: RichTextRun[{ri}].Bold ({r},{c})");
+                        Assert.True(a.Italic == b.Italic, $"{sp}: RichTextRun[{ri}].Italic ({r},{c})");
+                        Assert.True(a.Underline == b.Underline, $"{sp}: RichTextRun[{ri}].Underline ({r},{c})");
+                        Assert.True(a.Strike == b.Strike, $"{sp}: RichTextRun[{ri}].Strike ({r},{c})");
+                        Assert.True(Math.Abs(a.FontSize - b.FontSize) < 0.01, $"{sp}: RichTextRun[{ri}].FontSize ({r},{c}) src={a.FontSize} dst={b.FontSize}");
+                        Assert.True((a.Color ?? "") == (b.Color ?? ""), $"{sp}: RichTextRun[{ri}].Color ({r},{c}) src={a.Color} dst={b.Color}");
+                        Assert.True((a.FontName ?? "") == (b.FontName ?? ""), $"{sp}: RichTextRun[{ri}].FontName ({r},{c}) src={a.FontName} dst={b.FontName}");
+                    }
+                }
             }
 
             // 合并区域
@@ -462,6 +486,7 @@ public class ExcelRoundTripTests
     public void Xlsx_RoundTrip_FullFeatureProgrammatic()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), $"xlsx_roundtrip_{Guid.NewGuid():N}.xlsx");
+        var pngData = new Byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
         try
         {
             // ① 程序化构造全功能 xlsx（用临时文件）
@@ -512,8 +537,17 @@ public class ExcelRoundTripTests
             // 批注
             w.AddComment("Data", 2, 1, "这是项目A的批注", "测试员");
 
+            // E15: 富文本单元格（inline string runs 回读覆盖）
+            w.WriteRow("Data", new Object?[] { "重要提示：请认真填写" }, new NewLife.Office.Excel.CellFormat
+            {
+                RichTextRuns =
+                [
+                    new NewLife.Office.Excel.RichTextRun { Text = "重要提示：", Bold = true, Color = "FF0000" },
+                    new NewLife.Office.Excel.RichTextRun { Text = "请认真填写", FontSize = 11, Italic = true, Underline = true, FontName = "宋体" },
+                ],
+            });
+
             // 图片
-            var pngData = new Byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
             w.AddImage("Data", 2, 5, pngData, "png", 80, 60);
 
             // Sheet2: 额外工作表
@@ -547,14 +581,27 @@ public class ExcelRoundTripTests
         Assert.True(dataSheet.FreezePane.HasValue, "应有冻结");
         Assert.NotNull(dataSheet.AutoFilter);
         Assert.True(dataSheet.Hyperlinks.Count == 1, $"超链接数={dataSheet.Hyperlinks.Count}");
-        // TODO: 图片读取待修复（Reader 暂不支持回读内嵌图片）
-        if (dataSheet.Images.Count > 0)
-            Assert.True(dataSheet.Images.Count == 1, $"图片数={dataSheet.Images.Count}");
+        // E1: Reader 已支持回读内嵌图片（字节数据 + 锚点定位）
+        Assert.True(dataSheet.Images.Count == 1, $"图片数={dataSheet.Images.Count}");
+        var readImg = dataSheet.Images[0];
+        Assert.True(readImg.Data.SequenceEqual(pngData), "回读图片字节应与写入一致");
+        Assert.Equal("png", readImg.Extension);
+        Assert.Equal(2, readImg.Row);
+        Assert.Equal(5, readImg.Col);
         Assert.True(dataSheet.Comments.Count == 1, $"批注数={dataSheet.Comments.Count}");
         Assert.True(dataSheet.ConditionalFormats.Count == 1, $"条件格式数={dataSheet.ConditionalFormats.Count}");
         Assert.True(dataSheet.Validations.Count == 1, $"数据验证数={dataSheet.Validations.Count}");
         Assert.Equal(PageOrientation.Landscape, dataSheet.Orientation);
         Assert.Equal("测试报表", dataSheet.HeaderText);
+
+        // E15: 富文本单元格回读（run 模型逐段属性）
+        var rtStyle = dataSheet.CellFormats.Values.FirstOrDefault(f => f.RichTextRuns is { Count: > 0 });
+        Assert.True(rtStyle != null, "数据表应含富文本单元格样式");
+        var rtRuns = rtStyle!.RichTextRuns!;
+        Assert.True(rtRuns.Count == 2, $"富文本段数应为2，实际{rtRuns.Count}");
+        Assert.True(rtRuns[0].Bold && rtRuns[0].Color == "FF0000", $"富文本段1应为粗体红色，实际 Bold={rtRuns[0].Bold} Color={rtRuns[0].Color}");
+        Assert.True(rtRuns[1].Italic && rtRuns[1].Underline && Math.Abs(rtRuns[1].FontSize - 11) < 0.01, $"富文本段2应为斜体下划线11磅，实际 Italic={rtRuns[1].Italic} FontSize={rtRuns[1].FontSize}");
+        Assert.True(rtRuns[1].FontName == "宋体", $"富文本段2字体应为宋体，实际 {rtRuns[1].FontName}");
 
         // ④ 重新写入再读回比较
         var tempFile2 = Path.Combine(Path.GetTempPath(), $"xlsx_roundtrip2_{Guid.NewGuid():N}.xlsx");
