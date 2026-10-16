@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -72,7 +73,7 @@ public sealed class OdsReader
     /// <param name="path">ODS 文件路径</param>
     /// <param name="sheetName">工作表名称（空则取第一张）</param>
     /// <returns>对象集合</returns>
-    public static IEnumerable<T> ReadObjects<T>(String path, String? sheetName = null) where T : new()
+    public static IEnumerable<T> ReadObjects<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(String path, String? sheetName = null) where T : new()
     {
         var sheets = ReadFile(path);
         var sheet = FindSheet(sheets, sheetName);
@@ -84,7 +85,7 @@ public sealed class OdsReader
     /// <param name="stream">ODS 流</param>
     /// <param name="sheetName">工作表名称（空则取第一张）</param>
     /// <returns>对象集合</returns>
-    public static IEnumerable<T> ReadObjects<T>(Stream stream, String? sheetName = null) where T : new()
+    public static IEnumerable<T> ReadObjects<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(Stream stream, String? sheetName = null) where T : new()
     {
         var sheets = Read(stream);
         var sheet = FindSheet(sheets, sheetName);
@@ -368,7 +369,7 @@ public sealed class OdsReader
         return sheets[0];
     }
 
-    private static IEnumerable<T> MapObjects<T>(List<String[]> rows) where T : new()
+    private static IEnumerable<T> MapObjects<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(List<String[]> rows) where T : new()
     {
         if (rows.Count == 0) yield break;
 

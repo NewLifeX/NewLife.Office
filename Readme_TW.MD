@@ -18,7 +18,7 @@ NuGet：NewLife.Office（渲染擴充套件：NewLife.Office.Rendering）
 `NewLife.Office` 是一個功能全面的 .NET 辦公自動化程式庫，涵蓋 **Excel（xlsx/xls）、Word（docx/doc）、PPT（pptx/ppt）、PDF**、Markdown、RTF、ODS、Email（eml/msg）、iCalendar、vCard、EPUB、XPS 以及基於 OLE2/BIFF8 的舊式二進位格式，並搭配 **Rendering** 渲染擴充套件（文件 → 圖片）。
 
 - 零外部依賴：僅依賴 `NewLife.Core`，直接基於 Open XML（ZIP + XML）/ PDF / OLE2 檔案結構實作
-- 全框架支援：`net45` / `netstandard2.0` / `netstandard2.1` 等
+- 全框架支援：`net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0`，net8.0+ 開啟 AOT 相容分析（IsAotCompatible，零 IL 警告）
 - MIT 免費：無商業授權風險
 - 統一 API：命名空間 `NewLife.Office`，各格式 API 風格一致，學習成本低
 

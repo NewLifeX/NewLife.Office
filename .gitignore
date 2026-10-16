@@ -24,3 +24,5 @@ bld/
 /BinTest
 /BinUnitTest
 /BenchmarkDotNet.Artifacts
+/TestResults/
+/AotSmoke/out/

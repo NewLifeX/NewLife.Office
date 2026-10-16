@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net45;netstandard2.0;netstandard2.1</TargetFrameworks>
+    <TargetFrameworks>net45;netstandard2.0;netstandard2.1;net8.0;net10.0</TargetFrameworks>
     <AssemblyTitle>办公自动化库</AssemblyTitle>
     <Description>办公自动化库，支持 Excel（xlsx/xls）、Word（docx/doc）、PPT（pptx/ppt）、PDF、Markdown、RTF、ODS、Email（eml/msg）、iCalendar、vCard、EPUB、XPS 等格式的读写、模板填充与格式转换，零外部依赖，MIT 许可</Description>
     <Company>新生命开发团队</Company>
@@ -18,6 +18,11 @@
     <SignAssembly>True</SignAssembly>
     <AssemblyOriginatorKeyFile>..\Doc\newlife.snk</AssemblyOriginatorKeyFile>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- net8+ 对齐 NewLife.Core 策略：启用 AOT/裁剪分析器，为 NativeAOT 兼容性提供编译期防线 -->
+  <PropertyGroup Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -44,7 +49,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="NewLife.Core" Version="11.19.2026.901" />
+    <PackageReference Include="NewLife.Core" Version="12.0.2026.1016-beta0911" />
   </ItemGroup>
 
   <ItemGroup>

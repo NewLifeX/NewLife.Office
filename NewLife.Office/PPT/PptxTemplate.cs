@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -69,6 +70,7 @@ public class PptxTemplate
     /// <summary>从对象属性生成字典并填充</summary>
     /// <param name="outputPath">输出路径</param>
     /// <param name="model">数据模型对象</param>
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = "运行时实例反射：AOT/裁剪下由应用侧保证模型类型成员保留（同 XCode 数据转换约定）")]
     public void Fill(String outputPath, Object model)
     {
         var dict = new Dictionary<String, Object?>(StringComparer.OrdinalIgnoreCase);

@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
 
@@ -25,7 +26,12 @@ public partial class ExcelWriter : DisposeBase
         DateTime = 22 // m/d/yy h:mm
     }
 
-    private static readonly NumFmtStyle[] _cellFormats = (NumFmtStyle[])Enum.GetValues(typeof(NumFmtStyle));
+    private static readonly NumFmtStyle[] _cellFormats =
+#if NET5_0_OR_GREATER
+        Enum.GetValues<NumFmtStyle>();
+#else
+        (NumFmtStyle[])Enum.GetValues(typeof(NumFmtStyle));
+#endif
     private static readonly CellFormat _plainFormat = new();
 
     private record FontEntry(String? Name, Double Size, Boolean Bold, Boolean Italic, Boolean Underline, String? Color, Boolean Strike, String? VerticalAlign);
@@ -1279,7 +1285,7 @@ public partial class ExcelWriter : DisposeBase
     /// <param name="sheet">工作表名称（可空）</param>
     /// <param name="data">对象集合</param>
     /// <param name="headerStyle">表头样式</param>
-    public void WriteObjects<T>(String? sheet, IEnumerable<T> data, CellFormat? headerStyle = null) where T : class
+    public void WriteObjects<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(String? sheet, IEnumerable<T> data, CellFormat? headerStyle = null) where T : class
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
         if (sheet.IsNullOrEmpty()) sheet = SheetName;

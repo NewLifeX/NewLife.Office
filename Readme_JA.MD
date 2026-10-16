@@ -18,7 +18,7 @@ NuGet: NewLife.Office（レンダリング拡張パッケージ: NewLife.Office.
 `NewLife.Office` は、**Excel（xlsx/xls）、Word（docx/doc）、PowerPoint（pptx/ppt）、PDF**、Markdown、RTF、ODS、Email（eml/msg）、iCalendar、vCard、EPUB、XPS に加え、OLE2/BIFF8 ベースのレガシーバイナリ形式もカバーする、機能豊富な .NET オフィス自動化ライブラリです。**Rendering** 拡張パッケージ（ドキュメント → 画像）も提供します。
 
 - 外部依存ゼロ: `NewLife.Core` のみに依存し、Open XML（ZIP + XML）/ PDF / OLE2 ファイル構造を直接操作
-- 全フレームワーク対応: `net45` / `netstandard2.0` / `netstandard2.1` など
+- 全フレームワーク対応: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0`、net8.0+ では AOT 互換解析（IsAotCompatible、IL 警告ゼロ）を有効化
 - MIT ライセンス: 無料、商用ライセンスリスクなし
 - 統一 API: 名前空間 `NewLife.Office`、全形式で API スタイルが統一され学習コストが低い
 

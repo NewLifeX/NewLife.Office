@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel;
 using System.Data;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
 using NewLife.Buffers;
@@ -186,7 +187,7 @@ public sealed class BiffWriter : IDisposable
     /// <summary>将对象集合写入当前工作表（第一行为属性名标题）</summary>
     /// <typeparam name="T">对象类型</typeparam>
     /// <param name="data">对象集合</param>
-    public void WriteObjects<T>(IEnumerable<T> data) where T : class
+    public void WriteObjects<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(IEnumerable<T> data) where T : class
     {
         var props = GetMappableProperties<T>();
         var headers = props.Select(GetPropertyDisplayName).ToArray();
@@ -1378,7 +1379,7 @@ public sealed class BiffWriter : IDisposable
         };
     }
 
-    private static PropertyInfo[] GetMappableProperties<T>()
+    private static PropertyInfo[] GetMappableProperties<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>()
     {
         return typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.CanRead && p.GetIndexParameters().Length == 0)

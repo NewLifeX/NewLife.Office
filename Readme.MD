@@ -18,7 +18,7 @@ Nuget：NewLife.Office（渲染扩展包：NewLife.Office.Rendering）
 `NewLife.Office` 是一个功能全面的 .NET 办公自动化库，覆盖 **Excel（xlsx/xls）、Word（docx/doc）、PPT（pptx/ppt）、PDF**、Markdown、RTF、ODS、Email（eml/msg）、iCalendar、vCard、EPUB、XPS 以及基于 OLE2/BIFF8 的老式二进制格式，并配套 **Rendering** 渲染扩展包（文档 → 图片）。
 
 - 零外部依赖：仅依赖 `NewLife.Core`，直接基于 Open XML（ZIP + XML）/ PDF / OLE2 文件结构实现
-- 全框架支持：`net45` / `netstandard2.0` / `netstandard2.1` 等
+- 全框架支持：`net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0`，net8.0+ 开启 AOT 兼容分析（IsAotCompatible，零 IL 告警）
 - MIT 免费：无商业许可风险
 - 统一 API：命名空间 `NewLife.Office`，各格式 API 风格一致，学习成本低
 
@@ -31,6 +31,7 @@ Nuget：NewLife.Office（渲染扩展包：NewLife.Office.Rendering）
 - **高保真往返**：L2/L3 级保真架构（模型 + RawXml/部件透传），读→改→写不丢格式
 - **Markdown 全格式转换中枢**：MD↔docx/PDF/HTML/Excel/PPT/Word 双向转换，为 AI 知识库喂入提供统一入口
 - **渲染扩展包**：`NewLife.Office.Rendering`（独立 NuGet）提供文档 → 图片渲染、图片处理、二维码
+- **AOT/跨平台兼容**：`net8.0` / `net10.0` 零 IL 告警，CI 覆盖率 win-x64 / linux-x64 / linux-arm64 / linux-loongarch64（龙芯 LA64 经 QEMU）
 
 ## 支持的格式
 

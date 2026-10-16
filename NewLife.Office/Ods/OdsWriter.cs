@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
@@ -75,7 +76,7 @@ public sealed class OdsWriter
     /// <param name="name">工作表名称</param>
     /// <param name="items">数据集合</param>
     /// <returns>当前写入器（链式调用）</returns>
-    public OdsWriter AddSheet<T>(String name, IEnumerable<T> items)
+    public OdsWriter AddSheet<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(String name, IEnumerable<T> items)
     {
         var props = typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.CanRead).ToArray();

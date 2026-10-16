@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using System.Diagnostics.CodeAnalysis;
 
 namespace NewLife.Office.Excel;
 
@@ -18,7 +19,7 @@ public static class ExcelHelper
     /// <param name="data">对象集合</param>
     /// <param name="sheetName">工作表名称，默认 "Sheet1"</param>
     /// <param name="headerStyle">可选表头样式</param>
-    public static void SaveAs<T>(String path, IEnumerable<T> data, String sheetName = "Sheet1", CellFormat? headerStyle = null) where T : class
+    public static void SaveAs<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(String path, IEnumerable<T> data, String sheetName = "Sheet1", CellFormat? headerStyle = null) where T : class
     {
         if (path.IsNullOrEmpty()) throw new ArgumentNullException(nameof(path));
         if (data == null) throw new ArgumentNullException(nameof(data));
@@ -35,7 +36,7 @@ public static class ExcelHelper
     /// <param name="data">对象集合</param>
     /// <param name="sheetName">工作表名称，默认 "Sheet1"</param>
     /// <param name="headerStyle">可选表头样式</param>
-    public static void SaveAs<T>(Stream stream, IEnumerable<T> data, String sheetName = "Sheet1", CellFormat? headerStyle = null) where T : class
+    public static void SaveAs<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(Stream stream, IEnumerable<T> data, String sheetName = "Sheet1", CellFormat? headerStyle = null) where T : class
     {
         if (stream == null) throw new ArgumentNullException(nameof(stream));
         if (data == null) throw new ArgumentNullException(nameof(data));
@@ -85,7 +86,7 @@ public static class ExcelHelper
     /// <param name="path">xlsx 文件路径</param>
     /// <param name="sheetName">工作表名称（可空，空时读取第一个）</param>
     /// <returns>对象集合（第一行作为列名映射）</returns>
-    public static IEnumerable<T> Query<T>(String path, String? sheetName = null) where T : new()
+    public static IEnumerable<T> Query<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(String path, String? sheetName = null) where T : new()
     {
         if (path.IsNullOrEmpty()) throw new ArgumentNullException(nameof(path));
 
@@ -145,6 +146,7 @@ public static class ExcelHelper
     /// <param name="outputPath">输出文件路径</param>
     /// <param name="templatePath">模板 xlsx 文件路径</param>
     /// <param name="dataObject">数据对象，属性名即占位符键名</param>
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2075", Justification = "运行时实例反射：AOT/裁剪下由应用侧保证模型类型成员保留（同 XCode 数据转换约定）")]
     public static void SaveByTemplate(String outputPath, String templatePath, Object dataObject)
     {
         if (outputPath.IsNullOrEmpty()) throw new ArgumentNullException(nameof(outputPath));

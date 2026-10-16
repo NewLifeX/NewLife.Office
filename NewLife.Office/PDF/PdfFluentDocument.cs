@@ -1,4 +1,6 @@
-﻿namespace NewLife.Office.Pdf;
+﻿using System.Diagnostics.CodeAnalysis;
+
+namespace NewLife.Office.Pdf;
 
 /// <summary>声明式 Fluent PDF 文档生成器（P07）</summary>
 /// <remarks>
@@ -156,7 +158,7 @@ public class PdfDocumentBuilder : IDisposable
     /// <param name="data">数据集合</param>
     /// <param name="firstRowHeader">是否输出表头行</param>
     /// <returns>自身，支持链式调用</returns>
-    public PdfDocumentBuilder AddTable<T>(IEnumerable<T> data, Boolean firstRowHeader = true) where T : class
+    public PdfDocumentBuilder AddTable<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(IEnumerable<T> data, Boolean firstRowHeader = true) where T : class
     {
         EnsurePage();
         _writer.WriteObjects(data, firstRowHeader);

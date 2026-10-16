@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Reflection;
 using System.Security;
@@ -449,7 +450,7 @@ public class WordWriter : IDisposable
     /// <param name="data">对象集合</param>
     /// <param name="firstRowHeader">是否将第一行作为表头</param>
     /// <param name="style">表格样式</param>
-    public void WriteObjects<T>(IEnumerable<T> data, Boolean firstRowHeader = true, TableStyle? style = null) where T : class
+    public void WriteObjects<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(IEnumerable<T> data, Boolean firstRowHeader = true, TableStyle? style = null) where T : class
     {
         WriteObjects(data, firstRowHeader, style, 0);
     }
@@ -465,7 +466,7 @@ public class WordWriter : IDisposable
     /// 例如 Order.Customer.Name 会生成列 "Customer.Name"。
     /// 集合属性（IEnumerable）不会被展开为子表格，仅展平其直接子属性。
     /// </remarks>
-    public void WriteObjects<T>(IEnumerable<T> data, Boolean firstRowHeader, TableStyle? style = null, Int32 maxDepth = 0) where T : class
+    public void WriteObjects<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(IEnumerable<T> data, Boolean firstRowHeader, TableStyle? style = null, Int32 maxDepth = 0) where T : class
     {
         var headers = new List<String>();
         var propPaths = new List<PropPathEntry>();
@@ -478,7 +479,7 @@ public class WordWriter : IDisposable
             if (item == null) continue;
             allRows.Add(propPaths.Select(pp =>
             {
-                var value = ResolveNestedValue(item, pp.Property, pp.Path);
+                var value = ResolveNestedValue(item, pp.Chain);
                 return Convert.ToString(value) ?? String.Empty;
             }).ToArray());
         }
@@ -2504,37 +2505,40 @@ public class WordWriter : IDisposable
     /// <summary>属性路径条目</summary>
     private struct PropPathEntry
     {
-        public PropertyInfo Property;
-        public String[] Path;
+        /// <summary>从根到叶的属性链（最后一项为叶属性）</summary>
+        public PropertyInfo[] Chain;
     }
 
     /// <summary>递归收集属性路径，支持嵌套对象展开</summary>
-    private static void CollectProperties(Type type, String[] prefixPath, List<String> headers, List<PropPathEntry> entries, Int32 maxDepth)
+    [UnconditionalSuppressMessage("ReflectionAnalysis", "IL2072", Justification = "嵌套对象的属性类型在运行时发现，AOT/裁剪下由应用侧保证嵌套类型成员保留；未保留时嵌套列缺失（可接受降级）")]
+    private static void CollectProperties(
+        [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] Type type,
+        List<PropertyInfo> prefixChain, List<String> headers, List<PropPathEntry> entries, Int32 maxDepth)
     {
         foreach (var prop in type.GetProperties())
         {
             if (prop.GetIndexParameters().Length > 0) continue;
 
-            var currentPath = new String[prefixPath.Length + 1];
-            Array.Copy(prefixPath, 0, currentPath, 0, prefixPath.Length);
-            currentPath[prefixPath.Length] = prop.Name;
+            var chain = new List<PropertyInfo>(prefixChain.Count + 1);
+            chain.AddRange(prefixChain);
+            chain.Add(prop);
 
-            var headerName = GetHeaderName(prop, currentPath);
+            var headerName = GetHeaderName(prop, chain);
 
             if (maxDepth > 0 && IsExpandableType(prop.PropertyType))
             {
-                CollectProperties(prop.PropertyType, currentPath, headers, entries, maxDepth - 1);
+                CollectProperties(prop.PropertyType, chain, headers, entries, maxDepth - 1);
             }
             else
             {
                 headers.Add(headerName);
-                entries.Add(new PropPathEntry { Property = prop, Path = currentPath });
+                entries.Add(new PropPathEntry { Chain = chain.ToArray() });
             }
         }
     }
 
     /// <summary>获取属性的列名（优先 DisplayName，其次是属性名）</summary>
-    private static String GetHeaderName(PropertyInfo prop, String[] path)
+    private static String GetHeaderName(PropertyInfo prop, List<PropertyInfo> chain)
     {
         var dn = prop.GetCustomAttributes(typeof(System.ComponentModel.DisplayNameAttribute), false)
                       .OfType<System.ComponentModel.DisplayNameAttribute>().FirstOrDefault()?.DisplayName;
@@ -2543,10 +2547,10 @@ public class WordWriter : IDisposable
         var leafName = dn ?? desc ?? prop.Name;
 
         // 扁平属性直接返回
-        if (path.Length <= 1) return leafName;
+        if (chain.Count <= 1) return leafName;
 
         // 嵌套属性：ParentProp.LeafDisplayName
-        var parentName = path[0];
+        var parentName = chain[0].Name;
         return parentName + "." + leafName;
     }
 
@@ -2567,25 +2571,22 @@ public class WordWriter : IDisposable
         return true;
     }
 
-    /// <summary>根据属性路径解析嵌套对象的值</summary>
+    /// <summary>根据属性链解析嵌套对象的值</summary>
     /// <param name="root">根对象</param>
-    /// <param name="leafProp">叶子属性</param>
-    /// <param name="path">完整属性路径</param>
+    /// <param name="chain">从根到叶的属性链</param>
     /// <returns>属性值</returns>
-    private static Object? ResolveNestedValue(Object root, PropertyInfo leafProp, String[] path)
+    private static Object? ResolveNestedValue(Object root, PropertyInfo[] chain)
     {
         Object? current = root;
         // 遍历路径中的每个中间对象属性（不含最后的叶子属性）
-        for (var i = 0; i < path.Length - 1; i++)
+        for (var i = 0; i < chain.Length - 1; i++)
         {
             if (current == null) return null;
-            var intermediateProp = current.GetType().GetProperty(path[i]);
-            if (intermediateProp == null) return null;
-            current = intermediateProp.GetValue(current);
+            current = chain[i].GetValue(current);
         }
 
         if (current == null) return null;
-        return leafProp.GetValue(current);
+        return chain[^1].GetValue(current);
     }
     #endregion
 }

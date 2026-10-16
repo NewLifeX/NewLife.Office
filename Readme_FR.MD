@@ -18,7 +18,7 @@ NuGet : NewLife.Office (package de rendu : NewLife.Office.Rendering)
 `NewLife.Office` est une bibliothèque complète d'automatisation bureautique .NET couvrant **Excel (xlsx/xls), Word (docx/doc), PowerPoint (pptx/ppt), PDF**, Markdown, RTF, ODS, Email (eml/msg), iCalendar, vCard, EPUB, XPS ainsi que les formats binaires hérités basés sur OLE2/BIFF8, complétée par le package d'extension **Rendering** (documents → images).
 
 - Zéro dépendance externe : dépend uniquement de `NewLife.Core`, construit directement sur les structures de fichiers Open XML (ZIP + XML) / PDF / OLE2
-- Prise en charge complète des frameworks : `net45` / `netstandard2.0` / `netstandard2.1` et plus
+- Prise en charge complète des frameworks : `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0`, avec analyse de compatibilité AOT (IsAotCompatible, zéro avertissement IL) sur net8.0+
 - Licence MIT : gratuit, sans risque de licence commerciale
 - API unifiée : espace de noms `NewLife.Office`, style d'API cohérent, faible coût d'apprentissage
 

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>AotSmoke</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <!-- NativeAOT 冒烟：ILC 发布产物与 JIT 运行共用同一套场景，见 Program.cs 与 .github/workflows/aot.yml -->
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NewLife.Office\NewLife.Office.csproj" />
+  </ItemGroup>
+
+</Project>

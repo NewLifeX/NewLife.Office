@@ -1,0 +1,127 @@
+name: aot
+
+# NativeAOT 兼容性矩阵：win-x64 / linux-x64 / linux-arm64（各自原生 runner 发布运行）+ linux-la64（必选：QEMU 用户态仿真 + 龙芯 SDK，JIT 冒烟覆盖运行期兼容性）。
+# 触发：push / pull_request / 手动（workflow_dispatch）；不采用夜间定时（多代码库服务端同步周期长）。
+# NativeAOT 官方不支持跨 OS 编译，每个 RID 均使用原生 runner 发布运行；linux-loongarch64 无官方 ILCompiler 后端，
+# 以「禁用动态代码语义」的 JIT 冒烟（宿主 x64 构建 → 容器内龙芯 SDK 运行）覆盖运行期兼容性，参考 NewLife.XCode/NewLife.Redis。
+
+on:
+  push:
+    branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # AOT 防回归：库侧分析器 0 告警硬约束（net8.0/net10.0；-warnaserror 仅对 IL 告警生效，任一新增即阻断）
+  aot-analyzer:
+    name: aot analyzer check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup dotNET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.x
+    - name: AOT Analyzer Check
+      run: |
+        dotnet build NewLife.Office/NewLife.Office.csproj -f net8.0 -c Release -warnaserror:IL2026,IL2046,IL2057,IL2060,IL2067,IL2070,IL2071,IL2072,IL2075,IL2090,IL2091,IL2093,IL2095,IL2098,IL2111,IL3000,IL3002,IL3050
+        dotnet build NewLife.Office/NewLife.Office.csproj -f net10.0 -c Release -warnaserror:IL2026,IL2046,IL2057,IL2060,IL2067,IL2070,IL2071,IL2072,IL2075,IL2090,IL2091,IL2093,IL2095,IL2098,IL2111,IL3000,IL3002,IL3050
+
+  # NativeAOT 冒烟矩阵：同一 AotSmoke 工程先跑 JIT 基线（对照），再原生发布运行 NativeAOT 产物；
+  # ILC 发布告警（warning ILxxxx）必须为 0。
+  smoke:
+    name: smoke (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+            bin: AotSmoke.exe
+          - rid: linux-x64
+            os: ubuntu-latest
+            bin: AotSmoke
+          - rid: linux-arm64
+            os: ubuntu-24.04-arm
+            bin: AotSmoke
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup dotNET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.x
+    - name: Install NativeAOT Prerequisites (Linux)
+      if: runner.os == 'Linux'
+      run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+    - name: JIT 基线冒烟（${{ matrix.rid }}，与 AOT 结果对照）
+      shell: bash
+      run: dotnet run -c Release --project AotSmoke/AotSmoke.csproj
+    - name: NativeAOT 发布（${{ matrix.rid }}，要求 0 条 IL 告警）
+      shell: bash
+      run: |
+        set -o pipefail
+        dotnet publish AotSmoke/AotSmoke.csproj -c Release -r ${{ matrix.rid }} -o out 2>&1 | tee publish.log
+        if grep -E "warning IL[0-9]+" publish.log; then
+          echo "::error::ILC 发布存在 IL 告警，必须清零"
+          exit 1
+        fi
+    - name: NativeAOT 运行冒烟（${{ matrix.rid }}）
+      # 任一场景失败即非 0 退出码
+      shell: bash
+      run: ./out/${{ matrix.bin }}
+
+  # linux-la64（龙芯，必选覆盖）：NativeAOT 官方无 loongarch64 ILCompiler 后端，以 JIT 冒烟覆盖运行期兼容性。
+  # 宿主 x64 完成构建（避免 QEMU 内跑 MSBuild），容器内用龙芯 SDK 直接运行冒烟 DLL（禁用动态代码语义）。
+  aot-linux-la64:
+    name: smoke (linux-la64 / QEMU, JIT)
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup dotNET (host，用于预热 NuGet 缓存)
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.x
+    - name: Build AotSmoke (host，QEMU 内不跑 MSBuild)
+      run: dotnet build AotSmoke/AotSmoke.csproj -c Release --nologo
+    - name: Download Loongson .NET SDK (linux-loongarch64)
+      run: |
+        curl -fL --retry 3 -o "$RUNNER_TEMP/la64-sdk.tar.gz" \
+          https://github.com/loongson/dotnet/releases/download/v10.0.113-loongarch64/dotnet-sdk-10.0.113-linux-loongarch64.tar.gz
+        mkdir -p "$HOME/la64" && tar -xzf "$RUNNER_TEMP/la64-sdk.tar.gz" -C "$HOME/la64"
+        ls "$HOME/la64" | head -20
+    - name: Install QEMU loong64 binfmt
+      run: docker run --privileged --rm ghcr.io/loong64/binfmt --install all
+    - name: JIT 冒烟（loong64 容器，禁用动态代码语义）
+      run: |
+        docker run --rm --platform linux/loong64 -w /src \
+          -v "$PWD:/src" -v "$HOME/la64:/opt/dotnet:ro" -v "$HOME/.nuget:/home/runner/.nuget" \
+          -e HOME=/home/runner -e DOTNET_CLI_HOME=/home/runner -e NUGET_PACKAGES=/home/runner/.nuget/packages \
+          -e DOTNET_ROOT=/opt/dotnet -e PATH=/opt/dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+          -e DOTNET_CLI_TELEMETRY_OPTOUT=1 -e DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
+          -e DOTNET_ROLL_FORWARD=LatestMajor -e DOTNET_EnableWriteXorExecute=0 \
+          ghcr.io/loong64/debian:trixie bash -c '
+            set -e
+            apt-get update -qq || true
+            apt-get install -y -qq ca-certificates libstdc++6 zlib1g libunwind8 || true
+            apt-get install -y -qq libssl3t64 || apt-get install -y -qq libssl3 || true
+            LIBDIR=$(ls -d /usr/lib/*-linux-gnu* 2>/dev/null | head -1)
+            export LD_LIBRARY_PATH="$LIBDIR:$LD_LIBRARY_PATH"
+            dotnet --info
+            timeout 120m dotnet /src/AotSmoke/bin/Release/net10.0/AotSmoke.dll
+          '
+    - name: NativeAOT 说明（linux-loongarch64 无官方 ILCompiler 后端）
+      run: |
+        echo "NativeAOT 官方不支持 linux-loongarch64（ILCompiler 无 loongarch64 运行时包）；"
+        echo "本 RID 以 JIT 冒烟（禁用动态代码语义）覆盖运行期兼容性，分析器告警防线由 aot-analyzer 任务承担。"

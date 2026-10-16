@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Text;
 using NewLife.Buffers;
 using NewLife.Office.Ole2;
@@ -322,7 +323,7 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     /// <typeparam name="T">目标类型</typeparam>
     /// <param name="sheet">工作表名，null 取第一个</param>
     /// <returns>对象序列</returns>
-    public IEnumerable<T> ReadObjects<T>(String? sheet = null) where T : class, new()
+    public IEnumerable<T> ReadObjects<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>(String? sheet = null) where T : class, new()
     {
         var props = typeof(T).GetProperties();
         var rows = ReadSheet(sheet).ToList();

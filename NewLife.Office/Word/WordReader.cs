@@ -1,4 +1,5 @@
-﻿using System.IO.Compression;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.IO.Compression;
 using System.Text;
 using System.Xml;
 using NewLife.Office.Markdown;
@@ -247,7 +248,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     /// <summary>读取对象集合（将第一行表格映射到属性）</summary>
     /// <typeparam name="T">目标类型</typeparam>
     /// <returns>对象序列</returns>
-    public IEnumerable<T> ReadObjects<T>() where T : class, new()
+    public IEnumerable<T> ReadObjects<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T>() where T : class, new()
     {
         var props = typeof(T).GetProperties();
         foreach (var tbl in ReadTables())
