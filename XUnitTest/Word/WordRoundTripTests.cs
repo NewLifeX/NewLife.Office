@@ -109,8 +109,12 @@ public class WordRoundTripTests : IntegrationTestBase
     {
         var binDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, ".."));
         var files = Directory.GetFiles(binDir, "*.docx", SearchOption.TopDirectoryOnly);
+        // CI 环境不含 Bin 样张（大文件不入库），无样张时跳过
         if (files.Length == 0)
-            throw new InvalidOperationException($"未在 {binDir} 找到 .docx 文件，请放入测试文件后重试。");
+        {
+            Console.WriteLine($"跳过：{binDir} 下未找到 .docx 样张（测试资产不入库，本地放入 Bin 目录后自动生效）");
+            return;
+        }
 
         var outDir = Path.Combine(binDir, "Output");
         Directory.CreateDirectory(outDir);

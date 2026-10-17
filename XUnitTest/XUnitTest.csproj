@@ -56,9 +56,14 @@
   </ItemGroup>
 
   <!-- Rendering 渲染扩展包测试（独立 NuGet 扩展，依赖 SkiaSharp；仅测试项目引用，不污染生产代码） -->
-  <!-- SkiaSharp 3.119.2 与 NPOI 2.8.0 传递依赖对齐（高于 Rendering 声明的 2.88.9，运行时统一到高版本） -->
+  <!-- NPOI 2.8.0 传递依赖 SkiaSharp 3.119.2 + SkiaSharp.NativeAssets.Linux.NoDependencies 3.119.2；
+       托管程序集经下方向接引用统一到 4.151.1，但 Linux 原生 libSkiaSharp.so 仍会停留在 3.119（版本校验失败）。
+       此处显式引用 4.151.1 的 Linux 原生包，并将 NoDependencies 以 ExcludeAssets 提升到 4.151.1（不贡献原生文件），
+       保证 托管/原生 版本一致；Windows/macOS 原生库由 SkiaSharp 4.151.1 自带。 -->
   <ItemGroup>
     <PackageReference Include="SkiaSharp" Version="4.151.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="4.151.1" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.151.1" ExcludeAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\NewLife.Office.Rendering\NewLife.Office.Rendering.csproj" />
