@@ -1,0 +1,20 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Test Office New Styles",
+			"type": "shell",
+			"command": "dotnet",
+			"args": [
+				"test",
+				"XUnitTest/XUnitTest.csproj",
+				"--filter",
+				"FullyQualifiedName~WriterStyleTests|FullyQualifiedName~WriterDefaultFontTests|FullyQualifiedName~PptxThemeTests",
+				"--nologo",
+				"-v",
+				"q"
+			],
+			"group": "test"
+		}
+	]
+}
