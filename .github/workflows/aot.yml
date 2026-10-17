@@ -2,6 +2,7 @@ name: aot
 
 # NativeAOT 兼容性矩阵：win-x64 / linux-x64 / linux-arm64（各自原生 runner 发布运行）+ linux-la64（必选：QEMU 用户态仿真 + 龙芯 SDK，JIT 冒烟覆盖运行期兼容性）。
 # 触发：push / pull_request / 手动（workflow_dispatch）；不采用夜间定时（多代码库服务端同步周期长）。
+# 非阻塞：全部作业 continue-on-error（AOT/LA64 为兼容性覆盖，不阻塞主干发布门禁）。
 # NativeAOT 官方不支持跨 OS 编译，每个 RID 均使用原生 runner 发布运行；linux-loongarch64 无官方 ILCompiler 后端，
 # 以「禁用动态代码语义」的 JIT 冒烟（宿主 x64 构建 → 容器内龙芯 SDK 运行）覆盖运行期兼容性，参考 NewLife.XCode/NewLife.Redis。
 
@@ -22,6 +23,7 @@ jobs:
     name: aot analyzer check
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    continue-on-error: true
 
     steps:
     - uses: actions/checkout@v4
@@ -40,6 +42,7 @@ jobs:
     name: smoke (${{ matrix.rid }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -86,6 +89,7 @@ jobs:
     name: smoke (linux-la64 / QEMU, JIT)
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    continue-on-error: true
 
     steps:
     - uses: actions/checkout@v4

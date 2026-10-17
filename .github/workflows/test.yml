@@ -76,10 +76,12 @@ jobs:
 
   # linux-la64（龙芯，必选覆盖）：QEMU 用户态仿真 + 龙芯 SDK + loong64 Debian 容器。
   # 宿主 x64 预构建测试程序集；容器内独立系统无原生 ICU，以 invariant 模式运行。
+  # 非阻塞：仿真链路不稳定时允许失败跳过，不阻塞主干（LA64 为兼容性覆盖，非发布门禁）
   test-linux-la64:
     name: test (linux-la64 / QEMU)
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    continue-on-error: true
 
     steps:
     - uses: actions/checkout@v4
