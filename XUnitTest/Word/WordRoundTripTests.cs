@@ -827,9 +827,12 @@ public class WordRoundTripTests : IntegrationTestBase
         if (ai.ImageData.Length > 0 && bi.ImageData.Length > 0)
         {
             Assert.Equal(ai.ImageData.Length, bi.ImageData.Length);
-            for (var i = 0; i < ai.ImageData.Length; i++)
-                Assert.True(ai.ImageData[i] == bi.ImageData[i],
-                    $"[{context}] 图片[{idx}] 数据[{i}]: {ai.ImageData[i]:X2} vs {bi.ImageData[i]:X2}");
+            if (!ai.ImageData.AsSpan().SequenceEqual(bi.ImageData))
+            {
+                var i = 0;
+                while (i < ai.ImageData.Length && ai.ImageData[i] == bi.ImageData[i]) i++;
+                Assert.Fail($"[{context}] 图片[{idx}] 数据[{i}]: {ai.ImageData[i]:X2} vs {bi.ImageData[i]:X2}");
+            }
         }
     }
     #endregion

@@ -1,4 +1,6 @@
-﻿using System.ComponentModel;
+﻿using System.Collections.Concurrent;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Text;
 using NewLife.Office;
 using NewLife.Office.Calendar;
@@ -602,11 +604,15 @@ public class PdfRoundTripTests : IntegrationTestBase
         var pdfOutDir = Path.Combine(OutputDir, "Pdf");
         Directory.CreateDirectory(pdfOutDir);
 
-        var failures = new List<(String file, String error)>();
+        // 多文件并发往返；限制并行度避免大样张同时占用过多内存
+        var failures = new ConcurrentBag<(String file, String error)>();
         var skipped = 0;
-        foreach (var sourcePath in allFiles)
+        var options = new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount / 2, 1, 4) };
+        var total = Stopwatch.StartNew();
+        Parallel.ForEach(allFiles, options, sourcePath =>
         {
             var fileName = Path.GetFileName(sourcePath);
+            var sw = Stopwatch.StartNew();
             try
             {
                 // 预检查：ReadDocument 能否读取源文件
@@ -615,29 +621,35 @@ public class PdfRoundTripTests : IntegrationTestBase
                     var preDoc = preReader.ReadDocument();
                     if (preDoc.Pages.Count == 0)
                     {
-                        skipped++;
-                        continue; // 跳过暂不支持的 PDF
+                        Interlocked.Increment(ref skipped);
+                        return; // 跳过暂不支持的 PDF
                     }
                 }
 
                 RunSingleFileRoundTrip(sourcePath, pdfOutDir, true);
+                sw.Stop();
+                Console.WriteLine($"  ✅ {fileName}: {sw.ElapsedMilliseconds}ms");
             }
             catch (Exception ex)
             {
+                sw.Stop();
                 var lines = ex.Message.Split('\n');
                 var msg = String.Join(" | ", lines.Take(3)).Trim();
                 failures.Add((fileName, msg));
+                Console.WriteLine($"  ❌ {fileName}: {sw.ElapsedMilliseconds}ms");
             }
-        }
+        });
+        total.Stop();
+        Console.WriteLine($"  pdf 往返总耗时 {total.ElapsedMilliseconds}ms（{allFiles.Count} 个文件，并行度 {options.MaxDegreeOfParallelism}）");
 
         if (skipped > 0)
             Console.WriteLine($"  跳过 {skipped} 个暂不支持的 PDF 文件");
 
-        if (failures.Count > 0)
+        if (!failures.IsEmpty)
         {
             var sb = new StringBuilder();
             sb.AppendLine($"\n❌ {failures.Count}/{allFiles.Count} 个文件测试失败:");
-            foreach (var (file, err) in failures)
+            foreach (var (file, err) in failures.OrderBy(f => f.file, StringComparer.Ordinal))
                 sb.AppendLine($"  [{file}] {err}");
             Assert.Fail(sb.ToString());
         }

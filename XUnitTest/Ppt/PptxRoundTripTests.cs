@@ -1,4 +1,6 @@
-﻿using System.ComponentModel;
+﻿using System.Collections.Concurrent;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Text;
 using NewLife.Log;
 using NewLife.Office;
@@ -70,12 +72,7 @@ public class PptxRoundTripTests : IntegrationTestBase
         AssertTransition(src.Transition, dst.Transition, tag);
         // 背景图（逐字节比较）
         if (src.BackgroundImage != null && dst.BackgroundImage != null)
-        {
-            Assert.Equal(src.BackgroundImage.Data.Length, dst.BackgroundImage.Data.Length);
-            for (var i = 0; i < src.BackgroundImage.Data.Length; i++)
-                Assert.True(src.BackgroundImage.Data[i] == dst.BackgroundImage.Data[i],
-                    $"{tag} 背景图 Data[{i}]: {src.BackgroundImage.Data[i]:X2} vs {dst.BackgroundImage.Data[i]:X2}");
-        }
+            AssertBytesEqual(src.BackgroundImage.Data, dst.BackgroundImage.Data, $"{tag} 背景图 Data");
         else
             Assert.True((src.BackgroundImage == null) == (dst.BackgroundImage == null), $"{tag} 背景图存在性不匹配");
         // 背景渐变+隐藏（Reader/Writer 均已支持，严格比较）
@@ -238,11 +235,7 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.True(src.FlipHorizontal == dst.FlipHorizontal, $"{tag}.FlipHorizontal: {src.FlipHorizontal} vs {dst.FlipHorizontal}");
         Assert.True(src.FlipVertical == dst.FlipVertical, $"{tag}.FlipVertical: {src.FlipVertical} vs {dst.FlipVertical}");
         if (src.FillImage != null && dst.FillImage != null)
-        {
-            Assert.Equal(src.FillImage.Length, dst.FillImage.Length);
-            for (var i = 0; i < src.FillImage.Length; i++)
-                Assert.True(src.FillImage[i] == dst.FillImage[i], $"{tag}.FillImage[{i}]");
-        }
+            AssertBytesEqual(src.FillImage, dst.FillImage, $"{tag}.FillImage");
         else
             Assert.True((src.FillImage == null) == (dst.FillImage == null), $"{tag}.FillImage 存在性不匹配");
         if (src.GradientType != null && dst.GradientType != null)
@@ -254,6 +247,17 @@ public class PptxRoundTripTests : IntegrationTestBase
         }
     }
 
+    /// <summary>字节数组精确比较；先整体比较，仅失败时定位首个差异，避免逐字节断言的消息分配</summary>
+    private static void AssertBytesEqual(Byte[] expected, Byte[] actual, String tag)
+    {
+        Assert.Equal(expected.Length, actual.Length);
+        if (expected.AsSpan().SequenceEqual(actual)) return;
+
+        var i = 0;
+        while (i < expected.Length && expected[i] == actual[i]) i++;
+        Assert.Fail($"{tag}: byte[{i}] expected={expected[i]:X2} actual={actual[i]:X2}");
+    }
+
     /// <summary>验证图片</summary>
     private static void AssertImage(Picture src, Picture dst, String tag)
     {
@@ -262,10 +266,8 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.True(EmuClose(src.Top, dst.Top), $"{tag}.Top");
         Assert.True(EmuClose(src.Width, dst.Width), $"{tag}.Width");
         Assert.True(EmuClose(src.Height, dst.Height), $"{tag}.Height");
-        Assert.Equal(src.Data.Length, dst.Data.Length);
-        // 逐字节比较图片数据（前100字节+后100字节抽样，大数据量完整比较）
-        for (var i = 0; i < src.Data.Length; i++)
-            Assert.True(src.Data[i] == dst.Data[i], $"{tag}.Data[{i}]: {src.Data[i]:X2} vs {dst.Data[i]:X2}");
+        // 完整逐字节比较图片数据
+        AssertBytesEqual(src.Data, dst.Data, $"{tag}.Data");
         // P9: 扩展属性（双方都有非空值时才比较）
         if (src.RelId != null && dst.RelId != null)
             Assert.Equal(src.RelId, dst.RelId);
@@ -375,17 +377,12 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.True(EmuClose(src.Top, dst.Top), $"{tag}.Top");
         Assert.True(EmuClose(src.Width, dst.Width), $"{tag}.Width");
         Assert.True(EmuClose(src.Height, dst.Height), $"{tag}.Height");
-        Assert.Equal(src.Data.Length, dst.Data.Length);
-        for (var i = 0; i < src.Data.Length; i++)
-            Assert.True(src.Data[i] == dst.Data[i], $"{tag}.Data[{i}]: {src.Data[i]:X2} vs {dst.Data[i]:X2}");
+        AssertBytesEqual(src.Data, dst.Data, $"{tag}.Data");
         var srcThumb = src.ThumbnailData?.Length ?? 0;
         var dstThumb = dst.ThumbnailData?.Length ?? 0;
         Assert.Equal(srcThumb, dstThumb);
         if (src.ThumbnailData != null && dst.ThumbnailData != null)
-        {
-            for (var i = 0; i < src.ThumbnailData.Length; i++)
-                Assert.True(src.ThumbnailData[i] == dst.ThumbnailData[i], $"{tag}.Thumb[{i}]: {src.ThumbnailData[i]:X2} vs {dst.ThumbnailData[i]:X2}");
-        }
+            AssertBytesEqual(src.ThumbnailData, dst.ThumbnailData, $"{tag}.Thumb");
         // P11: 视频扩展属性（双方都有非空值时才比较）
         if (src.RelId != null && dst.RelId != null)
             Assert.Equal(src.RelId, dst.RelId);
@@ -781,6 +778,7 @@ public class PptxRoundTripTests : IntegrationTestBase
         var sourceInfo = new FileInfo(sourcePath);
         var sourceBytes = ReadAllBytesShared(sourcePath);
         var outputPath = Path.Combine(outputDir, fileName);
+        var swPhase = Stopwatch.StartNew();
 
         // ─── 读取阶段 ───────────────────────────────────────────────
         var sourceSlides = new List<Slide>();
@@ -819,6 +817,9 @@ public class PptxRoundTripTests : IntegrationTestBase
             sourceMasters = reader.ReadSlideMasters().ToList();
             sourceLayouts = reader.ReadSlideLayouts().ToList();
         }
+
+        var readMs = swPhase.ElapsedMilliseconds;
+        swPhase.Restart();
 
         // ─── 写入阶段 ───────────────────────────────────────────────
         try
@@ -1050,6 +1051,9 @@ public class PptxRoundTripTests : IntegrationTestBase
             throw;
         }
 
+        var writeMs = swPhase.ElapsedMilliseconds;
+        swPhase.Restart();
+
         // ─── 验证阶段 ───────────────────────────────────────────────
         try
         {
@@ -1166,6 +1170,7 @@ public class PptxRoundTripTests : IntegrationTestBase
                 Assert.Fail($"[{fileName}] Entry 级关键差异 ({entryResult.Critical.Count} 项):\n{String.Join("\n", entryResult.Critical)}");
             }
 
+            Console.WriteLine($"  [阶段耗时] {fileName}: 读取 {readMs}ms / 写入 {writeMs}ms / 验证 {swPhase.ElapsedMilliseconds}ms");
             XTrace.WriteLine($"  \u2705 {fileName}: {sourceSlideCount} 幻灯片, {sourceImageCount} 图片, {outSlides.Sum(s => s.TextBoxes.Count)} 文本框, Entry 对比通过");
         }
         finally { }
@@ -1187,29 +1192,39 @@ public class PptxRoundTripTests : IntegrationTestBase
         Directory.CreateDirectory(OutputDir);
         XTrace.WriteLine($"找到 {allFiles.Count} 个 pptx 文件，开始逐文件往返测试\n");
 
-        var failures = new List<(String file, String error)>();
-        foreach (var sourcePath in allFiles)
+        // 单个大文件往返是串行瓶颈，多文件并发压缩总耗时；限制并行度避免大样张同时占用过多内存
+        var failures = new ConcurrentBag<(String file, String error)>();
+        var options = new ParallelOptions { MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount / 2, 1, 4) };
+        var total = Stopwatch.StartNew();
+        Parallel.ForEach(allFiles, options, sourcePath =>
         {
             var fileName = Path.GetFileName(sourcePath);
+            var sw = Stopwatch.StartNew();
             try
             {
                 RunSingleFileRoundTrip(sourcePath, OutputDir);
+                sw.Stop();
+                Console.WriteLine($"  ✅ {fileName}: {sw.ElapsedMilliseconds}ms");
             }
             catch (Exception ex)
             {
+                sw.Stop();
                 // 取异常消息的前 3 行（第一行是概要，后面是细节）
                 var lines = ex.Message.Split('\n');
                 var msg = String.Join(" | ", lines.Take(3)).Trim();
                 failures.Add((fileName, msg));
+                Console.WriteLine($"  ❌ {fileName}: {sw.ElapsedMilliseconds}ms");
             }
-        }
+        });
+        total.Stop();
+        Console.WriteLine($"  pptx 往返总耗时 {total.ElapsedMilliseconds}ms（{allFiles.Count} 个文件，并行度 {options.MaxDegreeOfParallelism}）");
 
-        // 汇总报告
-        if (failures.Count > 0)
+        // 汇总报告（按文件名排序，保证失败信息稳定可读）
+        if (!failures.IsEmpty)
         {
             var sb = new StringBuilder();
             sb.AppendLine($"\n❌ {failures.Count}/{allFiles.Count} 个文件测试失败:");
-            foreach (var (file, err) in failures)
+            foreach (var (file, err) in failures.OrderBy(f => f.file, StringComparer.Ordinal))
                 sb.AppendLine($"  [{file}] {err}");
             Assert.Fail(sb.ToString());
         }

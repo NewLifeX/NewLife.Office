@@ -353,10 +353,12 @@ public class ExcelReaderRobustnessTests
 
     #region 大文件流式性能
     [Fact]
-    [DisplayName("Excel性能—10万行流式读取时间")]
-    public void Performance_100kRows()
+    [DisplayName("Excel性能—5万行流式读取时间")]
+    public void Performance_50kRows()
     {
-        // 构造 10万行 × 8 列的 xlsx（共享字符串池化，避免写放大）
+        // 构造 5万行 × 8 列的 xlsx（共享字符串池化，避免写放大）。
+        // 5万行足以覆盖流式读取路径并暴露数量级性能回退，同时把该用例耗时控制在秒级，避免拖慢全量测试。
+        const Int32 rows = 50_000;
         var path = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".xlsx");
         var pool = new String[8];
         for (var i = 0; i < pool.Length; i++) pool[i] = "类别" + i;
@@ -366,7 +368,7 @@ public class ExcelReaderRobustnessTests
         {
             w.AutoFitColumnWidth = false;
             w.WriteHeader("Sheet1", new[] { "编号", "比率", "类别A", "类别B", "类别C", "类别D", "类别E", "类别F" });
-            for (var r = 0; r < 100_000; r++)
+            for (var r = 0; r < rows; r++)
             {
                 var row = new Object?[8];
                 row[0] = r + 1;
@@ -391,11 +393,11 @@ public class ExcelReaderRobustnessTests
         }
         swRead.Stop();
 
-        Assert.Equal(100_001, count); // 表头 + 10万数据行
-        Console.WriteLine($"10万行 xlsx：写入 {swWrite.ElapsedMilliseconds}ms，流式读取 {swRead.ElapsedMilliseconds}ms，共 {count} 行");
+        Assert.Equal(rows + 1, count); // 表头 + 数据行
+        Console.WriteLine($"5万行 xlsx：写入 {swWrite.ElapsedMilliseconds}ms，流式读取 {swRead.ElapsedMilliseconds}ms，共 {count} 行");
 
-        // 读取时间宽松阈值（避免 CI 抖动）：10万行 × 8 列应 < 5 秒
-        Assert.True(swRead.ElapsedMilliseconds < 5000, $"10万行流式读取耗时 {swRead.ElapsedMilliseconds}ms 超过 5 秒阈值");
+        // 读取时间宽松阈值（避免 CI 抖动）：5万行 × 8 列应 < 5 秒
+        Assert.True(swRead.ElapsedMilliseconds < 5000, $"5万行流式读取耗时 {swRead.ElapsedMilliseconds}ms 超过 5 秒阈值");
     }
     #endregion
 

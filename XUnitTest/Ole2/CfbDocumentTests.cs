@@ -36,8 +36,11 @@ public class CfbDocumentTests
     {
         Assert.NotNull(actual);
         Assert.Equal(expected.Length, actual!.Length);
-        for (var i = 0; i < expected.Length; i++)
-            Assert.True(expected[i] == actual[i], $"{msg} byte[{i}] expected {expected[i]:X2} got {actual[i]:X2}");
+        if (expected.AsSpan().SequenceEqual(actual)) return;
+
+        var i = 0;
+        while (i < expected.Length && expected[i] == actual[i]) i++;
+        Assert.Fail($"{msg} byte[{i}] expected {expected[i]:X2} got {actual[i]:X2}");
     }
 
     // ─── 基础往返测试 ───────────────────────────────────────────────────────

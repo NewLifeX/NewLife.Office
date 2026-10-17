@@ -68,8 +68,11 @@ public class ExcelRoundTripTests
         Assert.NotNull(actual);
         if (expected.Length != actual!.Length)
             Assert.Fail($"{msg}: 字节长度不同 expected={expected.Length} actual={actual.Length}");
-        for (var i = 0; i < expected.Length; i++)
-            Assert.True(expected[i] == actual[i], $"{msg}: byte[{i}] expected={expected[i]:X2} actual={actual[i]:X2}");
+        if (expected.AsSpan().SequenceEqual(actual)) return;
+
+        var i = 0;
+        while (i < expected.Length && expected[i] == actual[i]) i++;
+        Assert.Fail($"{msg}: byte[{i}] expected={expected[i]:X2} actual={actual[i]:X2}");
     }
 
     /// <summary>获取输出目录</summary>

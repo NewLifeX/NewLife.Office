@@ -30,12 +30,23 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 10.x
+        cache: true
+        cache-dependency-path: '**/*.csproj'
     - name: Build
       run: |
         dotnet build -c Release --nologo
     - name: Test
       run: |
-        dotnet test -c Release XUnitTest/XUnitTest.csproj --nologo
+        dotnet test -c Release XUnitTest/XUnitTest.csproj --no-build --nologo \
+          --blame-hang-timeout 20m \
+          --logger "trx;LogFileName=test-linux-x64.trx" --results-directory TestResults
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-linux-x64
+        path: TestResults/**
+        if-no-files-found: ignore
 
   # win-x64 / linux-arm64：原生 runner 直接运行（首次失败自动以 --no-build 重试一次，抵御偶发环境抖动）
   test:
@@ -57,13 +68,17 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 10.x
+        cache: true
+        cache-dependency-path: '**/*.csproj'
     - name: Test（${{ matrix.rid }}）
       shell: bash
       run: |
         if ! dotnet test XUnitTest/XUnitTest.csproj -c Release --nologo \
+          --blame-hang-timeout 20m \
           --logger "trx;LogFileName=test-${{ matrix.rid }}.trx" --results-directory TestResults; then
           echo "首次失败，以 --no-build 重试一次"
           dotnet test XUnitTest/XUnitTest.csproj -c Release --no-build --nologo \
+            --blame-hang-timeout 20m \
             --logger "trx;LogFileName=test-${{ matrix.rid }}-retry.trx" --results-directory TestResults
         fi
     - name: Upload Test Results
@@ -89,6 +104,8 @@ jobs:
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 10.x
+        cache: true
+        cache-dependency-path: '**/*.csproj'
     - name: Build for loong64 (host，QEMU 内不跑 MSBuild)
       run: dotnet build XUnitTest/XUnitTest.csproj -c Release --nologo
     - name: Download xunit console runner (host，VSTest 不支持 LoongArch64)
