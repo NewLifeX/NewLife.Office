@@ -118,11 +118,17 @@ jobs:
             apt-get update -qq || true
             apt-get install -y -qq ca-certificates libstdc++6 zlib1g libunwind8 || true
             apt-get install -y -qq libssl3t64 || apt-get install -y -qq libssl3 || true
+            # SkiaSharp Linux 原生库依赖 fontconfig/freetype
+            apt-get install -y -qq libfontconfig1 fonts-dejavu-core || true
             LIBDIR=$(ls -d /usr/lib/*-linux-gnu* 2>/dev/null | head -1)
             export LD_LIBRARY_PATH="$LIBDIR:$LD_LIBRARY_PATH"
             dotnet --info
             # 把 xunit 控制台运行器放入测试输出目录，作为入口程序集保证 BaseDirectory 与 dotnet test 一致
             cp /opt/xunit/* /src/Bin/UnitTest/
+            # xunit 控制台入口的 deps.json 不含测试程序集的原生依赖，把目标 RID 原生库摊平到输出目录
+            if [ -d /src/Bin/UnitTest/runtimes/linux-loongarch64/native ]; then
+              cp -f /src/Bin/UnitTest/runtimes/linux-loongarch64/native/* /src/Bin/UnitTest/ || true
+            fi
             mkdir -p /src/TestResults
             cd /src/Bin/UnitTest
             timeout 300m dotnet xunit.console.dll XUnitTest.dll \
