@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using NewLife;
 
 namespace NewLife.Office.Pdf;
 
@@ -35,12 +36,12 @@ public static class PdfSigner
 
         var contentsIdx = pdfText.IndexOf("/Contents <", fieldIdx, StringComparison.Ordinal);
         if (contentsIdx < 0)
-            throw new InvalidOperationException("签名字段缺少 /Contents 占位符");
+            throw new InvalidOperationException(L.T("The signature field is missing the /Contents placeholder."));
 
         var valStart = contentsIdx + "/Contents <".Length;
         var valEnd = pdfText.IndexOf('>', valStart);
         if (valEnd < 0)
-            throw new InvalidOperationException("/Contents 占位符格式错误");
+            throw new InvalidOperationException(L.T("The /Contents placeholder is malformed."));
 
         // 2. 计算签名：ByteRange = [0, valStart, valEnd+2, fileLen-(valEnd+2)]
         var placeholderLen = valEnd - valStart;
@@ -175,7 +176,7 @@ public static class PdfSigner
             return rsa.SignHash(hash, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 #endif
 
-        throw new InvalidOperationException("证书不包含可用的 RSA 私钥");
+        throw new InvalidOperationException(L.T("The certificate does not contain a usable RSA private key."));
     }
 
     private static Byte[] NormalizeSerial(Byte[] serial)

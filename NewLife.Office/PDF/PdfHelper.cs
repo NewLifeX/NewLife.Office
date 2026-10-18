@@ -1,3 +1,5 @@
+using NewLife;
+
 namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 文档工具类，提供合并、拆分、水印等文档级操作</summary>
@@ -238,6 +240,6 @@ public static class PdfHelper
     /// <returns>每页图片字节（PNG 格式）的序列</returns>
     /// <exception cref="NotSupportedException">当前版本始终抛出</exception>
     public static IEnumerable<Byte[]> RenderToImages(String sourcePath, Int32 dpi = 150)
-        => throw new NotSupportedException("将 PDF 页面渲染为图片需要引入渲染库，当前版本不支持。");
+        => throw new NotSupportedException(L.T("Rendering PDF pages to images requires a rendering library, which this version does not support."));
     #endregion
 }

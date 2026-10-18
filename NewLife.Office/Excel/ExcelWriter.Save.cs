@@ -2,6 +2,7 @@
 using System.IO.Compression;
 using System.Security;
 using System.Xml.Linq;
+using NewLife;
 
 namespace NewLife.Office.Excel;
 
@@ -429,7 +430,7 @@ partial class ExcelWriter
         var target = Stream;
         if (target == null)
         {
-            if (FileName.IsNullOrEmpty()) throw new InvalidOperationException("未指定输出位置");
+            if (FileName.IsNullOrEmpty()) throw new InvalidOperationException(L.T("No output location was specified."));
 
             var file = FileName.EnsureDirectory(true).GetFullPath();
             target = new FileStream(file, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);

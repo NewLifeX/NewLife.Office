@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using NewLife.Buffers;
 using NewLife.Office.Ole2;
+using NewLife;
 
 namespace NewLife.Office.Excel;
 
@@ -70,7 +71,7 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
         // Excel 97+ 使用 "Workbook"；更早版本使用 "Book"
         var data = doc.GetStreamData("Workbook") ?? doc.GetStreamData("Book");
         if (data == null || data.Length == 0)
-            throw new InvalidDataException("找不到 Workbook 流，文件可能不是有效的 xls 格式。");
+            throw new InvalidDataException(L.T("Workbook stream not found; the file may not be a valid xls file."));
         return data;
     }
     #endregion
@@ -87,7 +88,7 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
         // 找到 Globals BOF
         var globalsStart = FindGlobalsBof(records);
         if (globalsStart < 0)
-            throw new InvalidDataException("未找到 BIFF8 Globals BOF 记录，文件可能损坏。");
+            throw new InvalidDataException(L.T("BIFF8 Globals BOF record not found; the file may be corrupted."));
 
         // 解析 Globals 段（从 globalsStart 到第一个 EOF）
         var pos = globalsStart;

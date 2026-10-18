@@ -3,6 +3,7 @@ using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
+using NewLife;
 
 namespace NewLife.Office.Excel;
 
@@ -425,7 +426,7 @@ public partial class ExcelWriter : DisposeBase
         EnsureSheet(sheet);
 
         var parts = range.Split(':');
-        if (parts.Length != 2) throw new ArgumentException("范围格式应为 A1:F1", nameof(range));
+        if (parts.Length != 2) throw new ArgumentException(L.T("The range must be in A1:F1 format."), nameof(range));
 
         var (r1, c1) = ParseCellRef(parts[0]);
         var (r2, c2) = ParseCellRef(parts[1]);
@@ -1114,7 +1115,7 @@ public partial class ExcelWriter : DisposeBase
         EnsureSheet(sheet);
 
         var list2 = segments.ToList();
-        if (list2.Count == 0) throw new ArgumentException("富文本段不能为空", nameof(segments));
+        if (list2.Count == 0) throw new ArgumentException(L.T("The rich-text segments cannot be empty."), nameof(segments));
 
         if (!_sheetComments.TryGetValue(sheet, out var list))
         {

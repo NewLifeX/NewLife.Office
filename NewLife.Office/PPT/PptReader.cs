@@ -2,6 +2,7 @@ using System.Text;
 using NewLife.Buffers;
 using NewLife.Office;
 using NewLife.Office.Ole2;
+using NewLife;
 
 namespace NewLife.Office.Ppt;
 
@@ -67,7 +68,7 @@ public sealed class PptReader : IDisposable, ITextExtractable, IMarkdownExtracta
     {
         var data = doc.GetStreamData("PowerPoint Document");
         if (data == null || data.Length == 0)
-            throw new InvalidDataException("找不到 PowerPoint Document 流，文件可能不是有效的 .ppt 格式。");
+            throw new InvalidDataException(L.T("PowerPoint Document stream not found; the file may not be a valid .ppt file."));
         return data;
     }
 

@@ -7,6 +7,7 @@ using NewLife.Office.Pdf;
 using NewLife.Office.Ppt;
 using NewLife.Office.Rtf;
 using NewLife.Office.Word;
+using NewLife;
 
 namespace NewLife.Office.Markdown;
 
@@ -354,12 +355,12 @@ public static class FormatToMarkdown
         catch (Exception ex)
         {
             // 内容识别失败统一归为 Unsupported
-            throw new ConvertErrorException(ConvertErrorType.Unsupported, "无法识别流内容或格式不支持", ex);
+            throw new ConvertErrorException(ConvertErrorType.Unsupported, L.T("The stream content cannot be recognized or the format is not supported."), ex);
         }
         if (reader is not IMarkdownExtractable extractable)
         {
             (reader as IDisposable)?.Dispose();
-            throw ConvertErrorException.Unsupported("无法识别流内容或格式不支持");
+            throw ConvertErrorException.Unsupported(L.T("The stream content cannot be recognized or the format is not supported."));
         }
         try
         {

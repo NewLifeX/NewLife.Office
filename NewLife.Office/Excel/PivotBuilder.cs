@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO.Compression;
 using System.Security;
 using System.Text;
+using NewLife;
 
 namespace NewLife.Office.Excel;
 
@@ -130,7 +131,7 @@ public class PivotBuilder
     public void Save(Stream stream)
     {
         if (_headers == null || _rows == null)
-            throw new InvalidOperationException("尚未设置源数据，请先调用 SetSourceData()");
+            throw new InvalidOperationException(L.T("Source data has not been set; call SetSourceData() first."));
 
         using var za = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true, entryNameEncoding: Encoding);
 
