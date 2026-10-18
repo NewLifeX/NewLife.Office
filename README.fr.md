@@ -1,14 +1,22 @@
 # NewLife.Office - Bibliothèque d'automatisation bureautique
 
 ![GitHub top language](https://img.shields.io/github/languages/top/newlifex/NewLife.Office?logo=github)
-![GitHub License](https://img.shields.io/github/license/newlifex/NewLife.Office?logo=github)
-![Nuget Downloads](https://img.shields.io/nuget/dt/NewLife.Office?logo=nuget)
-![Nuget](https://img.shields.io/nuget/v/NewLife.Office?logo=nuget)
-![Nuget (with prereleases)](https://img.shields.io/nuget/vpre/NewLife.Office?label=dev%20nuget&logo=nuget)
+
+
+![GitHub License](https://img.shields.io/github/license/NewLifeX/NewLife.Office?logo=github)
+![NuGet Downloads](https://img.shields.io/nuget/dt/NewLife.Office?logo=nuget)
+![NuGet](https://img.shields.io/nuget/v/NewLife.Office?logo=nuget)
+![NuGet prerelease](https://img.shields.io/nuget/vpre/NewLife.Office?label=dev%20nuget&logo=nuget)
+[![test](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml)
+![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
+[![contributors](https://img.shields.io/github/contributors/NewLifeX/NewLife.Office?logo=github)](https://github.com/NewLifeX/NewLife.Office/graphs/contributors)
+
+<!-- lang:start -->
+🌐 [中文](Readme.MD) | [繁體中文](README.zh-TW.md) | [English](README.en.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [日本語](README.ja.md) | [Português](README.pt.md) | [Русский](README.ru.md) | [한국어](README.ko.md) | [العربية](README.ar.md)
+<!-- lang:end -->
 
 Une bibliothèque complète d'automatisation bureautique .NET couvrant Excel, Word, PPT, PDF et plus de 15 formats de documents en un seul package
 
-[English](Readme_EN.MD) | [简体中文](Readme.MD) | [繁體中文](Readme_TW.MD) | [日本語](Readme_JA.MD) | [한국어](Readme_KO.MD) | [Español](Readme_ES.MD) | Français | [Deutsch](Readme_DE.MD) | [Português](Readme_PT.MD) | [Русский](Readme_RU.MD)
 
 Source : https://github.com/NewLifeX/NewLife.Office  
 NuGet : NewLife.Office (package de rendu : NewLife.Office.Rendering)  

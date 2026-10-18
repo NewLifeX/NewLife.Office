@@ -1,14 +1,22 @@
 # NewLife.Office - オフィス自動化ライブラリ
 
 ![GitHub top language](https://img.shields.io/github/languages/top/newlifex/NewLife.Office?logo=github)
-![GitHub License](https://img.shields.io/github/license/newlifex/NewLife.Office?logo=github)
-![Nuget Downloads](https://img.shields.io/nuget/dt/NewLife.Office?logo=nuget)
-![Nuget](https://img.shields.io/nuget/v/NewLife.Office?logo=nuget)
-![Nuget (with prereleases)](https://img.shields.io/nuget/vpre/NewLife.Office?label=dev%20nuget&logo=nuget)
+
+
+![GitHub License](https://img.shields.io/github/license/NewLifeX/NewLife.Office?logo=github)
+![NuGet Downloads](https://img.shields.io/nuget/dt/NewLife.Office?logo=nuget)
+![NuGet](https://img.shields.io/nuget/v/NewLife.Office?logo=nuget)
+![NuGet prerelease](https://img.shields.io/nuget/vpre/NewLife.Office?label=dev%20nuget&logo=nuget)
+[![test](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml)
+![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
+[![contributors](https://img.shields.io/github/contributors/NewLifeX/NewLife.Office?logo=github)](https://github.com/NewLifeX/NewLife.Office/graphs/contributors)
+
+<!-- lang:start -->
+🌐 [中文](Readme.MD) | [繁體中文](README.zh-TW.md) | [English](README.en.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [Français](README.fr.md) | [Português](README.pt.md) | [Русский](README.ru.md) | [한국어](README.ko.md) | [العربية](README.ar.md)
+<!-- lang:end -->
 
 Excel、Word、PPT、PDF など 15 以上のドキュメント形式を1つのライブラリでカバーする、機能豊富な .NET オフィス自動化ライブラリ
 
-[English](Readme_EN.MD) | [简体中文](Readme.MD) | [繁體中文](Readme_TW.MD) | 日本語 | [한국어](Readme_KO.MD) | [Español](Readme_ES.MD) | [Français](Readme_FR.MD) | [Deutsch](Readme_DE.MD) | [Português](Readme_PT.MD) | [Русский](Readme_RU.MD)
 
 ソース: https://github.com/NewLifeX/NewLife.Office  
 NuGet: NewLife.Office（レンダリング拡張パッケージ: NewLife.Office.Rendering）  
