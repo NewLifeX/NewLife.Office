@@ -10,7 +10,6 @@
     <IsPackable>false</IsPackable>
     <!-- NativeAOT 冒烟：ILC 发布产物与 JIT 运行共用同一套场景，见 Program.cs 与 .github/workflows/aot.yml -->
     <PublishAot>true</PublishAot>
-    <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
 
   <ItemGroup>

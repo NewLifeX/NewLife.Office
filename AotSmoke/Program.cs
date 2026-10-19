@@ -1,7 +1,8 @@
-// NewLife.Office NativeAOT 冒烟：20 场景逐项 PASS/FAIL，任一失败以非 0 退出码结束。
+// NewLife.Office NativeAOT 冒烟：23 场景逐项 PASS/FAIL，任一失败以非 0 退出码结束。
 // 同一工程双跑对照：JIT（dotnet run -c Release）与 NativeAOT（dotnet publish -c Release -r <rid> 后运行产物）。
-// 由 .github/workflows/aot.yml 自动执行（win-x64/linux-x64/linux-arm64 原生发布运行，linux-la64 经 QEMU 以 JIT 覆盖）。
+// 由 .github/workflows/aot.yml 自动执行（win-x64/win-arm64/linux-x64/linux-arm64/osx-x64/osx-arm64 原生发布运行，linux-la64 经 QEMU 以 JIT 覆盖）。
 using System.ComponentModel;
+using System.Globalization;
 using System.Text;
 using NewLife;
 using NewLife.Office;
@@ -44,6 +45,13 @@ void Run(String name, Func<Boolean> func)
 }
 
 String PathOf(String name) => Path.Combine(workDir, name);
+
+// 不变全球化模式下具名区域性不可用（GetCultureInfo 抛 CultureNotFoundException），据此判定
+Boolean IsInvariantGlobalization()
+{
+    try { return CultureInfo.GetCultureInfo("zh-Hans").Name.Length == 0; }
+    catch (CultureNotFoundException) { return true; }
+}
 
 Console.WriteLine($"IsDynamicCodeSupported={System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported}");
 
@@ -353,6 +361,41 @@ Run("21.OfficeFactory 内容识别", () =>
     var reader = OfficeFactory.CreateReader(xlsx);
     (reader as IDisposable)?.Dispose();
     return format == "xlsx" && format2 == "pdf" && format3 == "rtf" && reader != null;
+});
+
+// 22. 多语言：31 种内置语言表在 AOT 下可用（不变全球化模式下跳过，仍验证英文回退）
+Run("22.多语言 全部内置语言表可用", () =>
+{
+    const String key = "No output location was specified.";
+    var saved = Localization.Culture;
+    try
+    {
+        // 不变全球化模式下具名区域性不可用，跳过语种遍历，仅验证英文回退
+        if (IsInvariantGlobalization()) return Localization.Translate(key) == key;
+
+        Localization.Culture = CultureInfo.GetCultureInfo("en-US");
+        if (Localization.Translate(key) != key) return false;
+
+        var cultures = new[]
+        {
+            "zh-Hans", "zh-Hant", "ja", "ko", "vi", "th", "id", "ms", "hi", "bn",
+            "ar", "he", "fa", "de", "fr", "es", "pt", "it", "nl", "pl",
+            "cs", "sv", "da", "nb", "fi", "el", "ro", "hu", "ru", "uk", "tr",
+        };
+        var missing = new List<String>();
+        foreach (var name in cultures)
+        {
+            Localization.Culture = CultureInfo.GetCultureInfo(name);
+            var text = Localization.Translate(key);
+            if (text == key || text.Length == 0) missing.Add(name);
+        }
+        if (missing.Count > 0) throw new Exception("以下语言缺少译文: " + String.Join(", ", missing));
+        return true;
+    }
+    finally
+    {
+        Localization.Culture = saved;
+    }
 });
 
 Console.WriteLine();
