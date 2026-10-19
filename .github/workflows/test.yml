@@ -1,6 +1,6 @@
 name: test
 
-# 单元测试矩阵：win-x64 / linux-x64 / linux-arm64 / linux-la64（龙芯，必选覆盖）。
+# 单元测试矩阵：win-x64 / linux-x64 / linux-arm64 / linux-la64（龙芯，必选覆盖）+ osx-arm64 / win-arm64（观察期）。
 # 触发：push / pull_request / 手动（workflow_dispatch）；不采用夜间定时（多代码库服务端同步周期长）。
 # 参考 NewLife.XCode/NewLife.Redis：linux-x64 为阻断基线；win-x64 / linux-arm64 用原生 runner；
 # linux-la64 无托管 runner，经 QEMU 用户态仿真 + 龙芯 .NET SDK（github.com/loongson/dotnet）+ loong64 Debian 容器运行，
@@ -48,11 +48,13 @@ jobs:
         path: TestResults/**
         if-no-files-found: ignore
 
-  # win-x64 / linux-arm64：原生 runner 直接运行（首次失败自动以 --no-build 重试一次，抵御偶发环境抖动）
+  # win-x64 / linux-arm64：原生 runner 直接运行（首次失败自动以 --no-build 重试一次，抵御偶发环境抖动）。
+  # osx-arm64 / win-arm64：观察期，稳定全绿后转阻断。
   test:
     name: test (${{ matrix.rid }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
+    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -61,6 +63,12 @@ jobs:
             os: windows-latest
           - rid: linux-arm64
             os: ubuntu-24.04-arm
+          - rid: osx-arm64
+            os: macos-latest
+            experimental: true
+          - rid: win-arm64
+            os: windows-11-arm
+            experimental: true
 
     steps:
     - uses: actions/checkout@v4

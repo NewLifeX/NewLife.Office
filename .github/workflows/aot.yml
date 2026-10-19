@@ -1,6 +1,7 @@
 name: aot
 
-# NativeAOT 兼容性矩阵：win-x64 / linux-x64 / linux-arm64（各自原生 runner 发布运行）+ linux-la64（必选：QEMU 用户态仿真 + 龙芯 SDK，JIT 冒烟覆盖运行期兼容性）。
+# NativeAOT 兼容性矩阵：win-x64 / linux-x64 / linux-arm64（各自原生 runner 发布运行）+ win-arm64 / osx-x64 / osx-arm64（观察期）
+# + linux-la64（必选：QEMU 用户态仿真 + 龙芯 SDK，JIT 冒烟覆盖运行期兼容性）。
 # 触发：push / pull_request / 手动（workflow_dispatch）；不采用夜间定时（多代码库服务端同步周期长）。
 # 非阻塞：全部作业 continue-on-error（AOT/LA64 为兼容性覆盖，不阻塞主干发布门禁）。
 # NativeAOT 官方不支持跨 OS 编译，每个 RID 均使用原生 runner 发布运行；linux-loongarch64 无官方 ILCompiler 后端，
@@ -37,12 +38,12 @@ jobs:
         dotnet build NewLife.Office/NewLife.Office.csproj -f net10.0 -c Release -warnaserror:IL2026,IL2046,IL2057,IL2060,IL2067,IL2070,IL2071,IL2072,IL2075,IL2090,IL2091,IL2093,IL2095,IL2098,IL2111,IL3000,IL3002,IL3050
 
   # NativeAOT 冒烟矩阵：同一 AotSmoke 工程先跑 JIT 基线（对照），再原生发布运行 NativeAOT 产物；
-  # ILC 发布告警（warning ILxxxx）必须为 0。
+  # ILC 发布告警（warning ILxxxx）必须为 0。win-arm64 / macOS 双架构为观察期，稳定全绿后转阻断。
   smoke:
     name: smoke (${{ matrix.rid }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
-    continue-on-error: true
+    continue-on-error: ${{ matrix.experimental == true }}
     strategy:
       fail-fast: false
       matrix:
@@ -50,12 +51,24 @@ jobs:
           - rid: win-x64
             os: windows-latest
             bin: AotSmoke.exe
+          - rid: win-arm64
+            os: windows-11-arm
+            bin: AotSmoke.exe
+            experimental: true
           - rid: linux-x64
             os: ubuntu-latest
             bin: AotSmoke
           - rid: linux-arm64
             os: ubuntu-24.04-arm
             bin: AotSmoke
+          - rid: osx-arm64
+            os: macos-latest
+            bin: AotSmoke
+            experimental: true
+          - rid: osx-x64
+            os: macos-15-intel
+            bin: AotSmoke
+            experimental: true
 
     steps:
     - uses: actions/checkout@v4
