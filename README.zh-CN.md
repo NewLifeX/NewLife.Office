@@ -15,7 +15,7 @@
 [![contributors](https://img.shields.io/github/contributors/NewLifeX/NewLife.Office?logo=github)](https://github.com/NewLifeX/NewLife.Office/graphs/contributors)
 
 <!-- lang:start -->
-🌐 [繁體中文](README.zh-TW.md) | [English](README.en.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [日本語](README.ja.md) | [Français](README.fr.md) | [Português](README.pt.md) | [Русский](README.ru.md) | [한국어](README.ko.md) | [العربية](README.ar.md)
+🌐 [English](README.md) | [繁體中文](README.zh-TW.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [日本語](README.ja.md) | [Français](README.fr.md) | [Português](README.pt.md) | [Русский](README.ru.md) | [한국어](README.ko.md) | [العربية](README.ar.md)
 <!-- lang:end -->
 
 功能全面的 .NET 办公自动化库，一库覆盖 Excel、Word、PPT、PDF 等 15+ 文档格式
@@ -23,6 +23,8 @@
 
 源码： https://github.com/NewLifeX/NewLife.Office  
 Nuget：NewLife.Office（渲染扩展包：NewLife.Office.Rendering）  
+
+> ℹ️ 本中文版与 [English README](README.md) 同批维护；若两者内容不一致，以英文版为对外口径。
 
 ## 项目简介
 

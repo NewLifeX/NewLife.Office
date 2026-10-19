@@ -15,7 +15,7 @@
 [![contributors](https://img.shields.io/github/contributors/NewLifeX/NewLife.Office?logo=github)](https://github.com/NewLifeX/NewLife.Office/graphs/contributors)
 
 <!-- lang:start -->
-🌐 [中文](Readme.MD) | [繁體中文](README.zh-TW.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [日本語](README.ja.md) | [Français](README.fr.md) | [Português](README.pt.md) | [Русский](README.ru.md) | [한국어](README.ko.md) | [العربية](README.ar.md)
+🌐 [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md) | [Español](README.es.md) | [Deutsch](README.de.md) | [日本語](README.ja.md) | [Français](README.fr.md) | [Português](README.pt.md) | [Русский](README.ru.md) | [한국어](README.ko.md) | [العربية](README.ar.md)
 <!-- lang:end -->
 
 A comprehensive .NET office automation library covering Excel, Word, PPT, PDF and 15+ document formats in one package
@@ -49,12 +49,12 @@ NuGet: NewLife.Office (Rendering package: NewLife.Office.Rendering)
 
 | Format | Read | Write | Template | Conversion | Render | Notes |
 |--------|:---:|:---:|:---:|:---:|:---:|-------|
-| **Excel xlsx** | ✅ | ✅ | ✅ | — | — | Styles, charts, pivot tables, conditional formatting, images, named ranges, structured tables |
+| **Excel xlsx** | ✅ | ✅ | ✅ | — | — | Styles, charts, pivot tables, conditional formatting, images, named ranges, structured tables, comments, sparklines, slicers, threaded comments, hidden rows/columns, streaming read and 1904 date support |
 | **Excel xls** | ✅ | ✅ | — | — | — | OLE2/BIFF8, BiffReader+BiffWriter read/write, styles/merges/hyperlinks/filters/page setup |
-| **Word docx** | ✅ | ✅ | ✅ | HTML/PDF | — | Paragraphs, tables, images, headers/footers, comments, content controls, AES encryption, mail merge |
-| **Word doc** | ✅ | — | — | — | — | MS-DOC, DocReader extracts plain text |
-| **PPT pptx** | ✅ | ✅ | ✅ | PDF | — | Text boxes, images, tables, charts, masters, animations, comments, sections; cross-file merge |
-| **PPT ppt** | ✅ | — | — | — | — | MS-PPT, PptReader extracts slide text |
+| **Word docx** | ✅ | ✅ | ✅ | HTML/PDF | — | Paragraphs, tables, images, headers/footers, comments, content controls, AES encryption, mail merge, find/replace (including text boxes), footnote model, multiple sections; cross-validated with NPOI+OpenXmlValidator |
+| **Word doc** | ✅ | — | — | ✅ doc→docx | — | MS-DOC, DocReader plain text + paragraph formatting extraction (bold/font size/alignment, etc.) + doc→docx conversion |
+| **PPT pptx** | ✅ | ✅ | ✅ | PDF | — | Text boxes, images, tables, charts, masters, animations, comments, sections; cross-file merge (with chart/comment/notes fidelity) |
+| **PPT ppt** | ✅ | ✅ | — | — | — | MS-PPT: PptReader text extraction + PptWriter text slide writing |
 | **PDF** | ✅ | ✅ | — | — | — | Fluent API, merge/split, encryption, signatures, forms, annotations, PDF-A |
 | **Markdown** | ✅ | ✅ | — | HTML/Word/PDF/all→MD | — | CommonMark + GFM + typed AST, full-format conversion hub |
 | **RTF** | ✅ | ✅ | ✅ | — | — | Paragraphs, tables, template fill, image embedding (PNG/JPEG) |
@@ -80,6 +80,19 @@ String? text2 = OfficeFactory.ReadText("report.xlsx");
 
 // Extract as Markdown (preserves structure)
 String? md = OfficeFactory.ReadMarkdown("slides.pptx");
+
+// doc (97-2003) → docx conversion
+OfficeFactory.ConvertDocToDocx("legacy.doc", "legacy.docx");
+```
+
+### Command-Line Tool (NewLife.Office.Cli)
+
+```bash
+# Any office document → Markdown
+dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
+
+# doc (97-2003) → docx (legacy document migration)
+dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
 ```
 
 ### Excel Write and Read
@@ -151,7 +164,7 @@ All projects target net9.0/netstandard2.1/netstandard2.0/net4.62/net4.5 by defau
 
 ## NewLife Development Team
 
-![NewLife](https://newlifex.com/logo.png)
+![NewLife](https://newlifex.com/logo.png)  
 
 The NewLife team, founded in 2002, is a next-generation IoT industry solution provider, dedicated to software/hardware solution consulting, system architecture planning, and development services.
 
@@ -159,8 +172,7 @@ More than 80 open-source projects led by the team are widely used across industr
 
 We will continue to improve our services to become a long-term trusted partner for our customers, and through continuous innovation and development, become an excellent IoT service provider in China.
 
-`The NewLife team was founded in 2002. Some open-source projects have a history of over 20 years, and the source repositories preserve all modification records since 2010.`
-
+`The NewLife team was founded in 2002. Some open-source projects have a history of over 20 years, and the source repositories preserve all modification records since 2010.`  
 Website: <https://newlifex.com>  
 Open Source: <https://github.com/newlifex>  
 QQ Group: 1600800 / 1600838  
