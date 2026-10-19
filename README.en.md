@@ -8,7 +8,8 @@
 ![NuGet](https://img.shields.io/nuget/v/NewLife.Office?logo=nuget)
 ![NuGet prerelease](https://img.shields.io/nuget/vpre/NewLife.Office?label=dev%20nuget&logo=nuget)
 [![test](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml)
-[![locales](https://img.shields.io/badge/locales-11-2ea44f?logo=dotnet)](Doc/多语言本地化.md)
+[![locales](https://img.shields.io/badge/locales-31-2ea44f?logo=dotnet)](Doc/多语言本地化.md)
+[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-23%2F23-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20iOS-blue)
 ![arch](https://img.shields.io/badge/arch-x64%20%7C%20arm64%20%7C%20loongarch64%20%7C%20riscv64%20%7C%20s390x-orange)
 [![contributors](https://img.shields.io/github/contributors/NewLifeX/NewLife.Office?logo=github)](https://github.com/NewLifeX/NewLife.Office/graphs/contributors)
@@ -41,6 +42,8 @@ NuGet: NewLife.Office (Rendering package: NewLife.Office.Rendering)
 - **High-fidelity roundtrip**: L2/L3 fidelity architecture (model + RawXml/part passthrough), read → modify → write without losing formatting
 - **Markdown conversion hub**: bidirectional MD↔docx/PDF/HTML/Excel/PPT/Word conversion, a unified entry for AI knowledge base ingestion
 - **Rendering extension**: `NewLife.Office.Rendering` (separate NuGet) provides document → image rendering, image processing, and QR codes
+- **AOT/cross-platform**: zero IL warnings on `net8.0` / `net10.0`; CI covers win-x64 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch via QEMU), with 23 AOT smoke scenarios including all 31 language tables
+- **31-language localization**: exception messages are translated for the current culture and fall back to English; `Locales/*.yml` are compiled into the assembly and work under NativeAOT
 
 ## Supported Formats
 

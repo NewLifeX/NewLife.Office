@@ -1,0 +1,13 @@
+# فارسی 词表（fa）。键为英文源文，与源码字符串逐字一致；缺少的键运行时回退英文。
+"Workbook stream not found; the file may not be a valid xls file.": "جریان کتاب کار یافت نشد؛ ممکن است فایل یک فایل xls معتبر نباشد."
+"BIFF8 Globals BOF record not found; the file may be corrupted.": "رکورد BIFF8 Globals BOF یافت نشد؛ ممکن است فایل خراب باشد."
+"The range must be in A1:F1 format.": "محدوده باید در قالب A1:F1 باشد."
+"The rich-text segments cannot be empty.": "بخش‌های متن غنی نمی‌توانند خالی باشند."
+"No output location was specified.": "هیچ مکان خروجی مشخص نشده است."
+"Source data has not been set; call SetSourceData() first.": "داده‌های منبع تنظیم نشده است؛ ابتدا SetSourceData() را فراخوانی کنید."
+"The stream content cannot be recognized or the format is not supported.": "محتوای جریان قابل شناسایی نیست یا قالب پشتیبانی نمی‌شود."
+"Rendering PDF pages to images requires a rendering library, which this version does not support.": "رندر صفحات PDF به تصویر نیاز به کتابخانه رندر دارد که این نسخه از آن پشتیبانی نمی‌کند."
+"The signature field is missing the /Contents placeholder.": "فیلد امضا فاقد جایگزین /Contents است."
+"The /Contents placeholder is malformed.": "جایگزین /Contents بدشکل است."
+"The certificate does not contain a usable RSA private key.": "گواهی شامل کلید خصوصی RSA قابل استفاده نیست."
+"PowerPoint Document stream not found; the file may not be a valid .ppt file.": "جریان سند PowerPoint یافت نشد؛ ممکن است فایل یک فایل .ppt معتبر نباشد."

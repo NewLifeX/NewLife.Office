@@ -1,0 +1,13 @@
+# Svenska 词表（sv）。键为英文源文，与源码字符串逐字一致；缺少的键运行时回退英文。
+"Workbook stream not found; the file may not be a valid xls file.": "Arbetsbokens ström hittades inte; filen är kanske inte en giltig xls-fil."
+"BIFF8 Globals BOF record not found; the file may be corrupted.": "BIFF8 Globals BOF-posten hittades inte; filen kan vara skadad."
+"The range must be in A1:F1 format.": "Intervallet måste vara i formatet A1:F1."
+"The rich-text segments cannot be empty.": "Rich-text-segmenten får inte vara tomma."
+"No output location was specified.": "Ingen utdataplats angavs."
+"Source data has not been set; call SetSourceData() first.": "Källdata har inte angetts; anropa SetSourceData() först."
+"The stream content cannot be recognized or the format is not supported.": "Strömmens innehåll kan inte identifieras eller så stöds inte formatet."
+"Rendering PDF pages to images requires a rendering library, which this version does not support.": "Rendera PDF-sidor som bilder kräver ett renderingsbibliotek, vilket den här versionen inte stöder."
+"The signature field is missing the /Contents placeholder.": "Signaturfältet saknar /Contents-platshållaren."
+"The /Contents placeholder is malformed.": "/Contents-platshållaren är felaktig."
+"The certificate does not contain a usable RSA private key.": "Certifikatet innehåller ingen användbar RSA-privatnyckel."
+"PowerPoint Document stream not found; the file may not be a valid .ppt file.": "PowerPoint-dokumentströmmen hittades inte; filen är kanske inte en giltig .ppt-fil."
