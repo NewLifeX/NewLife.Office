@@ -1,6 +1,6 @@
 // NewLife.Office NativeAOT 冒烟：23 场景逐项 PASS/FAIL，任一失败以非 0 退出码结束。
 // 同一工程双跑对照：JIT（dotnet run -c Release）与 NativeAOT（dotnet publish -c Release -r <rid> 后运行产物）。
-// 由 .github/workflows/aot.yml 自动执行（win-x64/win-arm64/linux-x64/linux-arm64/osx-x64/osx-arm64 原生发布运行，linux-la64 经 QEMU 以 JIT 覆盖）。
+// 由 .github/workflows/aot.yml 自动执行（win-x64/win-x86/win-arm64/linux-x64/linux-arm64/osx-x64/osx-arm64 原生发布运行，linux-la64 经 QEMU 以 JIT 覆盖）。
 using System.ComponentModel;
 using System.Globalization;
 using System.Text;

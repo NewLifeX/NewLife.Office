@@ -1,6 +1,6 @@
 name: aot
 
-# NativeAOT 兼容性矩阵：win-x64 / linux-x64 / linux-arm64（各自原生 runner 发布运行）+ win-arm64 / osx-x64 / osx-arm64（观察期）
+# NativeAOT 兼容性矩阵：win-x64 / linux-x64 / linux-arm64（各自原生 runner 发布运行）+ win-x86 / win-arm64 / osx-x64 / osx-arm64（观察期）
 # + linux-la64（必选：QEMU 用户态仿真 + 龙芯 SDK，JIT 冒烟覆盖运行期兼容性）。
 # 触发：push / pull_request / 手动（workflow_dispatch）；不采用夜间定时（多代码库服务端同步周期长）。
 # 非阻塞：全部作业 continue-on-error（AOT/LA64 为兼容性覆盖，不阻塞主干发布门禁）。
@@ -51,6 +51,10 @@ jobs:
           - rid: win-x64
             os: windows-latest
             bin: AotSmoke.exe
+          - rid: win-x86
+            os: windows-latest
+            bin: AotSmoke.exe
+            experimental: true
           - rid: win-arm64
             os: windows-11-arm
             bin: AotSmoke.exe

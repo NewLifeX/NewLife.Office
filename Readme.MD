@@ -11,7 +11,7 @@
 [![locales](https://img.shields.io/badge/locales-31-2ea44f?logo=dotnet)](Doc/多语言本地化.md)
 [![AOT smoke](https://img.shields.io/badge/AOT%20smoke-23%2F23-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20iOS-blue)
-![arch](https://img.shields.io/badge/arch-x64%20%7C%20arm64%20%7C%20loongarch64%20%7C%20riscv64%20%7C%20s390x-orange)
+![arch](https://img.shields.io/badge/arch-x64%20%7C%20x86%20%7C%20arm64%20%7C%20loongarch64%20%7C%20riscv64%20%7C%20s390x-orange)
 [![contributors](https://img.shields.io/github/contributors/NewLifeX/NewLife.Office?logo=github)](https://github.com/NewLifeX/NewLife.Office/graphs/contributors)
 
 <!-- lang:start -->
@@ -42,7 +42,7 @@ Nuget：NewLife.Office（渲染扩展包：NewLife.Office.Rendering）
 - **高保真往返**：L2/L3 级保真架构（模型 + RawXml/部件透传），读→改→写不丢格式
 - **Markdown 全格式转换中枢**：MD↔docx/PDF/HTML/Excel/PPT/Word 双向转换，为 AI 知识库喂入提供统一入口
 - **渲染扩展包**：`NewLife.Office.Rendering`（独立 NuGet）提供文档 → 图片渲染、图片处理、二维码
-- **AOT/跨平台兼容**：`net8.0` / `net10.0` 零 IL 告警，CI 覆盖 win-x64 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64（龙芯 LA64 经 QEMU），23 项 AOT 冒烟场景（含 31 种语言表）
+- **AOT/跨平台兼容**：`net8.0` / `net10.0` 零 IL 告警，CI 覆盖 win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64（龙芯 LA64 经 QEMU），23 项 AOT 冒烟场景（含 31 种语言表）
 - **31 种语言本地化**：异常消息按当前区域自动翻译，缺失译文回退英文；`Locales/*.yml` 编译期生成，NativeAOT 下同样可用
 
 ## 支持的格式
