@@ -82,7 +82,7 @@ public sealed class PptReader : IDisposable, ITextExtractable, IMarkdownExtracta
     public String GetSlideText(Int32 index)
     {
         if (index < 0 || index >= _slideTexts.Count)
-            throw new ArgumentOutOfRangeException(nameof(index), $"幻灯片索引 {index} 超出范围（共 {_slideTexts.Count} 张）。");
+            throw new ArgumentOutOfRangeException(nameof(index), L.T("Slide index {0} is out of range (total {1} slides).", index, _slideTexts.Count));
         return _slideTexts[index];
     }
 

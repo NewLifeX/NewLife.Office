@@ -34,7 +34,7 @@ public static class QrCodeRenderer
         var pngBytes = PdfQRCode.Generate(content, 1);
 
         using var src = SKBitmap.Decode(pngBytes);
-        if (src == null) throw new InvalidOperationException("QR 码生成失败");
+        if (src == null) throw new InvalidOperationException(Localization.Translate("Failed to generate the QR code."));
 
         var moduleCount = src.Width; // 1:1 模块对应像素
         var dstSize = size ?? moduleCount * 4;

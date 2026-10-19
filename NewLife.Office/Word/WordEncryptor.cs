@@ -95,9 +95,9 @@ public static class WordEncryptor
         var encryptedPackage = root.GetStream("EncryptedPackage")?.Data;
 
         if (encryptionInfo == null || encryptionInfo.Length == 0)
-            throw new InvalidOperationException("CFB 容器中缺少 EncryptionInfo 流");
+            throw new InvalidOperationException(L.T("The EncryptionInfo stream is missing from the CFB container."));
         if (encryptedPackage == null || encryptedPackage.Length == 0)
-            throw new InvalidOperationException("CFB 容器中缺少 EncryptedPackage 流");
+            throw new InvalidOperationException(L.T("The EncryptedPackage stream is missing from the CFB container."));
 
         // 2. 解析 EncryptionInfo 提取盐值
         var salt = ParseEncryptionInfoSalt(encryptionInfo);
@@ -107,7 +107,7 @@ public static class WordEncryptor
 
         // 4. 解密 ZIP 包（AES-128-CBC，前16字节为IV）
         if (encryptedPackage.Length < BlockSize)
-            throw new InvalidOperationException("EncryptedPackage 数据过短");
+            throw new InvalidOperationException(L.T("The EncryptedPackage data is too short."));
 
         var iv = new Byte[BlockSize];
         Array.Copy(encryptedPackage, 0, iv, 0, BlockSize);
@@ -121,7 +121,7 @@ public static class WordEncryptor
         }
         catch (CryptographicException)
         {
-            throw new CryptographicException("密码错误或文档已损坏");
+            throw new CryptographicException(L.T("The password is incorrect or the document is corrupted."));
         }
     }
     #endregion
@@ -266,7 +266,7 @@ public static class WordEncryptor
 
         // 从第12字节开始搜索（跳过 VersionInfo 8B + Size 4B）
         var headerStart = 12;
-        if (data.Length < headerStart) throw new InvalidOperationException("EncryptionInfo 数据过短");
+        if (data.Length < headerStart) throw new InvalidOperationException(L.T("The EncryptionInfo data is too short."));
 
         // 搜索 XML 声明 <?xml
         var xmlStart = -1;
@@ -279,15 +279,15 @@ public static class WordEncryptor
                 break;
             }
         }
-        if (xmlStart < 0) throw new InvalidOperationException("EncryptionInfo 中缺少 XML 声明");
+        if (xmlStart < 0) throw new InvalidOperationException(L.T("The XML declaration is missing from EncryptionInfo."));
 
         var xml = Encoding.UTF8.GetString(data, xmlStart, data.Length - xmlStart);
         var saltStart = xml.IndexOf("saltValue=\"", StringComparison.Ordinal);
-        if (saltStart < 0) throw new InvalidOperationException("EncryptionInfo 中缺少 saltValue");
+        if (saltStart < 0) throw new InvalidOperationException(L.T("saltValue is missing from EncryptionInfo."));
 
         saltStart += "saltValue=\"".Length;
         var saltEnd = xml.IndexOf('"', saltStart);
-        if (saltEnd < 0) throw new InvalidOperationException("EncryptionInfo saltValue 格式错误");
+        if (saltEnd < 0) throw new InvalidOperationException(L.T("The saltValue format in EncryptionInfo is invalid."));
 
         var saltBase64 = xml[saltStart..saltEnd];
         return Convert.FromBase64String(saltBase64);

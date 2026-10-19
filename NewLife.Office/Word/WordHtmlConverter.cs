@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Text;
 using System.Xml;
 
@@ -526,7 +526,7 @@ public sealed class WordHtmlConverter
     private static XmlDocument LoadDocumentXml(ZipArchive zip)
     {
         var entry = zip.GetEntry("word/document.xml")
-            ?? throw new InvalidOperationException("无效的 docx 文件：缺少 word/document.xml");
+            ?? throw new InvalidOperationException(L.T("Invalid docx file: word/document.xml is missing."));
         var doc = new XmlDocument();
         using var s = entry.Open();
         doc.Load(s);

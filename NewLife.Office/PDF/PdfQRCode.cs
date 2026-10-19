@@ -53,7 +53,7 @@ public static class PdfQRCode
             if (byteCount <= caps[v]) return v;
         }
         if (byteCount <= 106) return 6;
-        throw new ArgumentException($"文本过长（{byteCount} 字节），最大支持 106 字节。请缩短文本。");
+        throw new ArgumentException(L.T("The text is too long ({0} bytes); the maximum is 106 bytes. Please shorten the text.", byteCount));
     }
     #endregion
 

@@ -55,7 +55,7 @@ public static class ImageHelper
         }
 
         using var dst = src.Resize(new SKSizeI(dstW, dstH), new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.Linear));
-        if (dst == null) throw new InvalidOperationException("缩放失败");
+        if (dst == null) throw new InvalidOperationException(Localization.Translate("Scaling failed."));
 
         return EncodeToFormat(dst, format, quality);
     }
@@ -208,12 +208,12 @@ public static class ImageHelper
         try
         {
             var bmp = SKBitmap.Decode(imageData);
-            return bmp ?? throw new InvalidOperationException("无法解码图片数据");
+            return bmp ?? throw new InvalidOperationException(Localization.Translate("Unable to decode the image data."));
         }
         catch (InvalidOperationException) { throw; }
         catch (Exception ex)
         {
-            throw new InvalidOperationException("无法解码图片数据", ex);
+            throw new InvalidOperationException(Localization.Translate("Unable to decode the image data."), ex);
         }
     }
 
@@ -224,7 +224,7 @@ public static class ImageHelper
     {
         var width = bitmap.Width;
         var height = bitmap.Height;
-        if (width <= 0 || height <= 0) throw new InvalidOperationException("无效的图片尺寸");
+        if (width <= 0 || height <= 0) throw new InvalidOperationException(Localization.Translate("Invalid image dimensions."));
 
         // 每行 4 字节对齐（BGR 24bit）
         var rowSize = (width * 3 + 3) / 4 * 4;

@@ -29,7 +29,7 @@ public static class WordRenderer
         var converter = new WordPdfConverter();
         var pdfBytes = converter.ConvertToBytes(docxPath);
         if (pdfBytes == null || pdfBytes.Length == 0)
-            throw new InvalidOperationException("Word 转 PDF 失败");
+            throw new InvalidOperationException(Localization.Translate("Failed to convert Word to PDF."));
 
         // PDF → Image
         return PdfRenderer.RenderPage(pdfBytes, pageIndex, dpi);
@@ -47,7 +47,7 @@ public static class WordRenderer
         var converter = new WordPdfConverter();
         var pdfBytes = converter.ConvertToBytes(docxStream);
         if (pdfBytes == null || pdfBytes.Length == 0)
-            throw new InvalidOperationException("Word 转 PDF 失败");
+            throw new InvalidOperationException(Localization.Translate("Failed to convert Word to PDF."));
 
         return PdfRenderer.RenderPage(pdfBytes, pageIndex, dpi);
     }
@@ -63,7 +63,7 @@ public static class WordRenderer
         var converter = new WordPdfConverter();
         var pdfBytes = converter.ConvertToBytes(docxPath);
         if (pdfBytes == null || pdfBytes.Length == 0)
-            throw new InvalidOperationException("Word 转 PDF 失败");
+            throw new InvalidOperationException(Localization.Translate("Failed to convert Word to PDF."));
 
         return PdfRenderer.RenderAllPages(pdfBytes, dpi);
     }

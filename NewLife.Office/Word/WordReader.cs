@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Text;
 using System.Xml;
@@ -615,7 +615,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     private XmlDocument LoadDocumentXml()
     {
         var entry = _zip.GetEntry("word/document.xml")
-            ?? throw new InvalidOperationException("无效的 docx 文件：缺少 word/document.xml");
+            ?? throw new InvalidOperationException(L.T("Invalid docx file: word/document.xml is missing."));
         var doc = new XmlDocument();
         using var s = entry.Open();
         doc.Load(s);

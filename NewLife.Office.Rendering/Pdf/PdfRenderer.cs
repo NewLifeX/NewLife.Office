@@ -80,7 +80,7 @@ public static class PdfRenderer
         // 通过 PdfReader 简单获取页数
         var pageCount = GetPdfPageCount(pdfBytes);
         if (pageIndex < 0 || pageIndex >= pageCount)
-            throw new ArgumentOutOfRangeException(nameof(pageIndex), $"页面索引 {pageIndex} 超出范围 [0, {pageCount - 1}]");
+            throw new ArgumentOutOfRangeException(nameof(pageIndex), Localization.Translate("Page index {0} is out of range [0, {1}].", pageIndex, pageCount - 1));
 
         // PDF 页面尺寸（A4 默认：595pt × 842pt）
         // 转换为像素：pt * dpi / 72

@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.IO.Compression;
 using System.Text;
 using System.Xml;
@@ -88,7 +88,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         if (data.Length > 8 && data[0] == 0xD0 && data[1] == 0xCF && data[2] == 0x11 && data[3] == 0xE0)
         {
             if (password == null)
-                throw new InvalidOperationException("加密的 PPTX 需要提供打开密码");
+                throw new InvalidOperationException(L.T("The encrypted PPTX requires an open password."));
             data = WordEncryptor.Decrypt(data, password);
         }
         var ms = new MemoryStream(data);
@@ -416,7 +416,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     {
         ThrowIfDisposed();
         var entry = _zip.GetEntry($"ppt/slides/slide{slideIndex + 1}.xml");
-        if (entry == null) throw new ArgumentOutOfRangeException(nameof(slideIndex), $"幻灯片 {slideIndex} 不存在");
+        if (entry == null) throw new ArgumentOutOfRangeException(nameof(slideIndex), L.T("Slide {0} does not exist.", slideIndex));
 
         var slide = new Slide();
         var doc = LoadXml(entry);

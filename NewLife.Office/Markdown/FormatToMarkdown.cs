@@ -324,7 +324,7 @@ public static class FormatToMarkdown
         catch (Exception ex)
         {
             // 内容识别失败（文件不存在/无法解析）统一归为 Unsupported
-            throw new ConvertErrorException(ConvertErrorType.Unsupported, $"无法识别文件内容或格式不支持: {Path.GetExtension(filePath)}", ex);
+            throw new ConvertErrorException(ConvertErrorType.Unsupported, L.T("The stream content cannot be recognized or the format is not supported: {0}", Path.GetExtension(filePath)), ex);
         }
         if (reader is not IMarkdownExtractable extractable)
         {

@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Text;
 using NewLife.Office.Calendar;
 using NewLife.Office.Epub;
@@ -96,7 +96,7 @@ public static class OfficeFactory
 
         var fullPath = filePath.GetFullPath();
         if (!File.Exists(fullPath))
-            throw new FileNotFoundException($"文件不存在: {fullPath}", fullPath);
+            throw new FileNotFoundException(L.T("File not found: {0}", fullPath), fullPath);
 
         var ext = Path.GetExtension(filePath).ToLowerInvariant();
         return ext switch
@@ -166,7 +166,7 @@ public static class OfficeFactory
 
         var fullPath = filePath.GetFullPath();
         if (!File.Exists(fullPath))
-            throw new FileNotFoundException($"文件不存在: {fullPath}", fullPath);
+            throw new FileNotFoundException(L.T("File not found: {0}", fullPath), fullPath);
 
         using var fs = File.OpenRead(fullPath);
         return Detect(fs);
@@ -325,7 +325,7 @@ public static class OfficeFactory
 
         var fullPath = filePath.GetFullPath();
         if (!File.Exists(fullPath))
-            throw new FileNotFoundException($"文件不存在: {fullPath}", fullPath);
+            throw new FileNotFoundException(L.T("File not found: {0}", fullPath), fullPath);
 
         var format = Detect(fullPath);
         if (format == null) return null;

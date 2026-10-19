@@ -116,7 +116,7 @@ public sealed class PptWriter : IDisposable
     {
         var total = _slides.Count + 1;
         if (total > 4095)
-            throw new InvalidOperationException($"持久化对象数量 {total} 超出单块持久化目录上限 4095。");
+            throw new InvalidOperationException(L.T("The number of persisted objects {0} exceeds the per-block persistence directory limit of 4095.", total));
 
         // 1. Document（偏移 0）与各 SlideContainer，记录绝对偏移
         var doc = BuildDocument();

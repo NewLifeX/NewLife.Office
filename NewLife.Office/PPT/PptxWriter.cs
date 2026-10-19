@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -185,7 +185,7 @@ public partial class PptxWriter : IDisposable
     {
         var slide = EnsureSlide(slideIndex);
         if (imageIndex < 0 || imageIndex >= slide.Images.Count)
-            throw new ArgumentOutOfRangeException(nameof(imageIndex), $"图片索引 {imageIndex} 超出范围（共 {slide.Images.Count} 张）");
+            throw new ArgumentOutOfRangeException(nameof(imageIndex), L.T("Image index {0} is out of range (total {1} images).", imageIndex, slide.Images.Count));
         var img = slide.Images[imageIndex];
         img.Data = newData;
         if (newExtension != null && newExtension.Length > 0)
@@ -731,7 +731,7 @@ public partial class PptxWriter : IDisposable
         using var srcZip = new ZipArchive(ms, ZipArchiveMode.Read);
         var srcSlideNum = slideIndex + 1;
         var slideEntry = srcZip.GetEntry($"ppt/slides/slide{srcSlideNum}.xml")
-            ?? throw new ArgumentOutOfRangeException(nameof(slideIndex), $"源文件中不存在第 {slideIndex} 张幻灯片");
+            ?? throw new ArgumentOutOfRangeException(nameof(slideIndex), L.T("Slide {0} does not exist in the source file.", slideIndex));
         String slideXml;
         using (var sr = new StreamReader(slideEntry.Open())) slideXml = sr.ReadToEnd();
         String relsXml;

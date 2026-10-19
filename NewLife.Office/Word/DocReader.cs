@@ -73,7 +73,7 @@ public sealed class DocReader : IDisposable, ITextExtractable, IMarkdownExtracta
     {
         var data = doc.GetStreamData("WordDocument");
         if (data == null || data.Length < 32)
-            throw new InvalidDataException("找不到 WordDocument 流，文件可能不是有效的 .doc 格式。");
+            throw new InvalidDataException(L.T("WordDocument stream not found; the file may not be a valid .doc file."));
         return data;
     }
 
@@ -83,7 +83,7 @@ public sealed class DocReader : IDisposable, ITextExtractable, IMarkdownExtracta
         var wIdent = reader.ReadUInt16();
         // 0xA5EC = Word 二进制文档；0xA5DC = Word 模板
         if (wIdent != 0xA5EC && wIdent != 0xA5DC)
-            throw new InvalidDataException($"不支持的文档格式：wIdent = 0x{wIdent:X4}，仅支持 Word 97-2003 二进制格式。");
+            throw new InvalidDataException(L.T("Unsupported document format: wIdent = 0x{0:X4}. Only Word 97-2003 binary format is supported.", wIdent));
     }
 
     #endregion

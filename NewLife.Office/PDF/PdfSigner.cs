@@ -32,7 +32,7 @@ public static class PdfSigner
         var fieldPattern = $"/T ({EscapePdfString(signatureFieldName)})";
         var fieldIdx = pdfText.IndexOf(fieldPattern, StringComparison.Ordinal);
         if (fieldIdx < 0)
-            throw new InvalidOperationException($"未找到签名字段 '{signatureFieldName}'");
+            throw new InvalidOperationException(L.T("Signature field '{0}' was not found.", signatureFieldName));
 
         var contentsIdx = pdfText.IndexOf("/Contents <", fieldIdx, StringComparison.Ordinal);
         if (contentsIdx < 0)
@@ -66,7 +66,7 @@ public static class PdfSigner
         var pkcs7 = BuildPkcs7(docHash, certificate);
         var sigHex = BitConverter.ToString(pkcs7).Replace("-", "");
         if (sigHex.Length > placeholderLen)
-            throw new InvalidOperationException($"签名 {sigHex.Length} 字符超出预留 {placeholderLen} 字符");
+            throw new InvalidOperationException(L.T("Signature length {0} exceeds the reserved {1} characters.", sigHex.Length, placeholderLen));
 
         var paddedSig = Encoding.ASCII.GetBytes(sigHex.PadRight(placeholderLen, '0'));
 

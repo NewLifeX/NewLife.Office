@@ -33,7 +33,7 @@ public static class DocumentPreview
             ".pptx" => PptRenderer.RenderSlide(filePath, 0, dpi),
             ".md" => MdRenderer.RenderFileToImage(filePath, dpi),
             ".markdown" => MdRenderer.RenderFileToImage(filePath, dpi),
-            _ => throw new NotSupportedException($"不支持的文件格式: {ext}"),
+            _ => throw new NotSupportedException(Localization.Translate("Unsupported file format: {0}", ext)),
         };
     }
 
@@ -50,7 +50,7 @@ public static class DocumentPreview
             case ".pdf": return PdfRenderer.RenderAllPages(filePath, dpi);
             case ".docx": return WordRenderer.RenderAllPages(filePath, dpi);
             case ".pptx": return PptRenderer.RenderAllSlides(filePath, dpi);
-            default: throw new NotSupportedException($"不支持的文件格式: {ext}");
+            default: throw new NotSupportedException(Localization.Translate("Unsupported file format: {0}", ext));
         }
     }
 }
