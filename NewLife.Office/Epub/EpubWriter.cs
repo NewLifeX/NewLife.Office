@@ -151,7 +151,7 @@ public class EpubWriter
         sb.AppendLine("<head><meta charset=\"UTF-8\"/><title>" + XmlEscape(doc.Title) + "</title></head>");
         sb.AppendLine("<body>");
         sb.AppendLine("  <nav epub:type=\"toc\" id=\"toc\">");
-        sb.AppendLine("    <h1>目录</h1>");
+        sb.AppendLine("    <h1>" + L.T("Contents") + "</h1>");
         sb.AppendLine("    <ol>");
         foreach (var ch in chapters)
         {
@@ -170,9 +170,9 @@ public class EpubWriter
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
              + "<!DOCTYPE html>\n"
              + "<html xmlns=\"http://www.w3.org/1999/xhtml\">\n"
-             + "<head><meta charset=\"UTF-8\"/><title>封面</title>\n"
+             + "<head><meta charset=\"UTF-8\"/><title>" + L.T("Cover") + "</title>\n"
              + "<style>body{margin:0;padding:0;text-align:center;} img{max-width:100%;}</style></head>\n"
-             + "<body><img src=\"cover" + ext + "\" alt=\"封面\"/></body>\n"
+             + "<body><img src=\"cover" + ext + "\" alt=\"" + L.T("Cover") + "\"/></body>\n"
              + "</html>";
     }
 

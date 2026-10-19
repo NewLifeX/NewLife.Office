@@ -2071,8 +2071,8 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             FlushLists(md);
 
             // 脚注/尾注（W22：AI 知识库场景包含脚注内容）
-            AppendNotesToMarkdown(md, doc.Footnotes, "脚注");
-            AppendNotesToMarkdown(md, doc.Endnotes, "尾注");
+            AppendNotesToMarkdown(md, doc.Footnotes, "Footnotes {0}: {1}");
+            AppendNotesToMarkdown(md, doc.Endnotes, "Endnotes {0}: {1}");
 
             return md.Blocks.Count > 0 ? md : null;
         }
@@ -2083,7 +2083,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     }
 
     /// <summary>将脚注/尾注追加为 Markdown 引用块（AI 知识库场景）</summary>
-    private static void AppendNotesToMarkdown(MarkdownDocument md, List<Footnote> notes, String label)
+    private static void AppendNotesToMarkdown(MarkdownDocument md, List<Footnote> notes, String format)
     {
         if (notes.Count == 0) return;
         var sb = new StringBuilder();
@@ -2092,7 +2092,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         {
             if (String.IsNullOrWhiteSpace(fn.Text)) continue;
             if (sb.Length > 0) sb.Append('\n');
-            sb.Append($"{label} {fn.Id}: {fn.Text}");
+            sb.Append(L.T(format, fn.Id, fn.Text));
             added = true;
         }
         if (added)
@@ -2334,7 +2334,8 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         if (ext.IsNullOrEmpty()) ext = "png";
 
         // 图片以引用形式输出（对标 anydoc：图片渲染为 alt 文本，字节留在模型层）
-        var inline = MarkdownInline.CreateImage($"image{_imageIdx}.{ext}", $"Image {_imageIdx}", "");
+        var name = "image" + _imageIdx + "." + ext;
+        var inline = MarkdownInline.CreateImage(name, L.T("Image {0}", _imageIdx), "");
         return MarkdownBlock.CreateParagraph([inline]);
     }
 

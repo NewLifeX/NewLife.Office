@@ -1368,7 +1368,7 @@ partial class ExcelWriter
                 if (items.Count == 0)
                 {
                     // 兜底：至少一个占位项目，避免空缓存
-                    items.Add("(空白)");
+                    items.Add(L.T("(Blank)"));
                 }
 
                 // slicerCacheN.xml

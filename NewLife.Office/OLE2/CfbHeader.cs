@@ -60,7 +60,7 @@ internal sealed class CfbHeader
         for (var i = 0; i < 8; i++)
         {
             if (magic[i] != MagicBytes[i])
-                throw new InvalidDataException("Not a valid CFB file: magic number mismatch.");
+                throw new InvalidDataException(L.T("Not a valid CFB file: magic number mismatch."));
         }
 
         reader.Advance(16); // Reserved CLSID

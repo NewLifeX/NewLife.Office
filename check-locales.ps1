@@ -1,15 +1,17 @@
-# 多语言词表一致性校验：键集合、占位符、格式说明符
+# 多语言词表一致性校验：键集合、占位符、格式说明符、代码→词表覆盖、翻译完整性
 # 以基准语言文件（默认 zh-Hans.yml）为准，所有语言必须提供完全相同的键集合
 #
 # 用法：
 #   pwsh -File check-locales.ps1                                      # 本库默认目录
 #   pwsh -File check-locales.ps1 -LocaleDir src\Lib\Locales -SourceDir src\Lib
-#   pwsh -File check-locales.ps1 -LocaleDir src\Lib\Locales -SkipOrphan   # 下游只想校验词表内部一致性
+#   pwsh -File check-locales.ps1 -LocaleDir src\Lib\Locales -RequireTranslated   # 禁止英文回退，强制全译
+#   pwsh -File check-locales.ps1 -LocaleDir src\Lib\Locales -SkipOrphan          # 下游只想校验词表内部一致性
 param(
     [String]$LocaleDir = "NewLife.Office/Locales",
     [String]$Baseline = "zh-Hans.yml",
     [String[]]$SourceDir = @("NewLife.Office", "NewLife.Office.Rendering", "NewLife.Office.Cli"),
-    [Switch]$SkipOrphan
+    [Switch]$SkipOrphan,
+    [Switch]$RequireTranslated
 )
 
 $ErrorActionPreference = "Stop"
@@ -109,6 +111,9 @@ foreach ($file in Get-ChildItem $localeDir -Filter *.yml | Sort-Object Name) {
         }
 
         $value = $locale.Entries[$key]
+        if ($RequireTranslated -and $value -ceq $key) {
+            $allErrors += "$($file.Name): 未翻译（英文回退）→ $key"
+        }
         $expected = Get-Placeholders $key
         $actual = Get-Placeholders $value
         if (!$expected.SetEquals($actual)) {
@@ -128,19 +133,16 @@ foreach ($file in Get-ChildItem $localeDir -Filter *.yml | Sort-Object Name) {
     }
 }
 
-foreach ($e in $allErrors) { Write-Host $e -ForegroundColor Red }
-foreach ($w in $allWarnings) { Write-Host $w -ForegroundColor Yellow }
-
-# 孤儿键：基准表中的键在源码里完全找不到（改文案后遗留的死条目）
+# 孤儿键与未登记键：词表与源码双向覆盖
 $orphans = @()
 if (!$SkipOrphan) {
     $sourceDirs = @($SourceDir | ForEach-Object {
         if ([IO.Path]::IsPathRooted($_)) { $_ } else { Join-Path $root $_ }
     } | Where-Object { Test-Path $_ })
 
-    $sourceText = ($sourceDirs | ForEach-Object { Get-ChildItem $_ -Recurse -Filter *.cs } |
-        Where-Object { $_.FullName -notmatch '\\(obj|bin|Locales)\\' } |
-        ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
+    $sourceFiles = @($sourceDirs | ForEach-Object { Get-ChildItem $_ -Recurse -Filter *.cs } |
+        Where-Object { $_.FullName -notmatch '\\(obj|bin|Locales)\\' })
+    $sourceText = ($sourceFiles | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
 
     foreach ($key in $reference.Entries.Keys) {
         # 源码中的字面量形式：制表符写作 \t，引号写作 \"
@@ -150,11 +152,29 @@ if (!$SkipOrphan) {
         }
     }
     foreach ($o in $orphans) { $allErrors += "孤儿键（源码中找不到）：$o" }
+
+    # 反向覆盖：源码中 L.T / Localization.Translate 的英文源文必须已登记，否则运行时静默回退英文
+    $usedPattern = '(?:L\.T|Localization\.Translate)\s*\(\s*"((?:[^"\\]|\\.)*)"'
+    $reported = @{}
+    foreach ($file in $sourceFiles) {
+        $text = [IO.File]::ReadAllText($file.FullName)
+        $text = [regex]::Replace($text, '(?s)/\*.*?\*/', '')
+        $text = [regex]::Replace($text, '(?m)^\s*///.*$', '')
+        $text = [regex]::Replace($text, '(?m)//.*$', '')
+        foreach ($m in [regex]::Matches($text, $usedPattern)) {
+            $key = Unescape-Yaml $m.Groups[1].Value
+            if (!$reference.Entries.Contains($key) -and !$reported.ContainsKey($key)) {
+                $reported[$key] = $true
+                $rel = $file.FullName
+                if ($rel.StartsWith($root, [StringComparison]::OrdinalIgnoreCase)) { $rel = $rel.Substring($root.Length).TrimStart("\", "/") }
+                $allErrors += "未登记词条（源码使用但词表缺失）：$rel → $key"
+            }
+        }
+    }
 }
 
-if ($allErrors.Count -gt 0) {
-    foreach ($o in $orphans) { Write-Host "孤儿键（源码中找不到）：$o" -ForegroundColor Red }
-}
+foreach ($e in $allErrors) { Write-Host $e -ForegroundColor Red }
+foreach ($w in $allWarnings) { Write-Host $w -ForegroundColor Yellow }
 
 $count = (Get-ChildItem $localeDir -Filter *.yml).Count
 if ($allErrors.Count -gt 0) {

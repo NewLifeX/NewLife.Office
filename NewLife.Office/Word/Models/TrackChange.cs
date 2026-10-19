@@ -36,5 +36,5 @@ public class TrackChange
     public String? ParagraphText { get; set; }
 
     /// <inheritdoc/>
-    public override String ToString() => $"{Type}: {Text} (作者 {Author})";
+    public override String ToString() => Type + ": " + Text + " " + L.T("(author {0})", Author);
 }

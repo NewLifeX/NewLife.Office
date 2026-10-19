@@ -66,6 +66,6 @@ public sealed class RtfTable
 
     #region 方法
     /// <inheritdoc/>
-    public override String ToString() => $"Table({Rows.Count} rows)";
+    public override String ToString() => L.T("Table({0} rows)", Rows.Count);
     #endregion
 }

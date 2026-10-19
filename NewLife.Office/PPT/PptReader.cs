@@ -215,7 +215,7 @@ public sealed class PptReader : IDisposable, ITextExtractable, IMarkdownExtracta
         for (var i = 0; i < _slideTexts.Count; i++)
         {
             if (i > 0) sb.AppendLine();
-            sb.AppendLine($"## 幻灯片 {i + 1}");
+            sb.AppendLine("## " + L.T("Slide {0}", i + 1));
             sb.AppendLine();
             sb.AppendLine(_slideTexts[i]);
         }

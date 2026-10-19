@@ -962,7 +962,7 @@ public partial class ExcelWriter : DisposeBase
             ColumnName = columnName,
             Caption = caption ?? columnName,
             Style = style ?? "SlicerStyleLight1",
-            Name = $"切片器_{columnName}",
+            Name = L.T("Slicer_{0}", columnName),
         };
         // 名称去重
         var idx = 2;

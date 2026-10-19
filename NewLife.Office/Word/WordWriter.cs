@@ -1014,7 +1014,7 @@ public class WordWriter : IDisposable
         using (var writer = new ExcelWriter(ms))
         {
             writer.SheetName = "Sheet1";
-            var header = new List<Object?> { "类别" };
+            var header = new List<Object?> { L.T("Category") };
             foreach (var s in chart.Series) header.Add(s.Name);
             writer.WriteRow("Sheet1", header.ToArray());
             for (var i = 0; i < chart.Categories.Length; i++)
@@ -1864,12 +1864,12 @@ public class WordWriter : IDisposable
         // 占位符文本
         var placeholder = sdt.SdtType switch
         {
-            SdtType.PlainText => "单击或点击输入文字",
-            SdtType.RichText => "单击或点击输入文字",
-            SdtType.Date => "单击或点击输入日期",
-            SdtType.DropDownList => "选择一项",
-            SdtType.ComboBox => "选择或输入一项",
-            _ => "单击或点击输入文字"
+            SdtType.PlainText => L.T("Click or tap to enter text"),
+            SdtType.RichText => L.T("Click or tap to enter text"),
+            SdtType.Date => L.T("Click or tap to enter a date"),
+            SdtType.DropDownList => L.T("Choose an item"),
+            SdtType.ComboBox => L.T("Choose or enter an item"),
+            _ => L.T("Click or tap to enter text")
         };
         sb.Append($"<w:placeholder><w:docPart w:val=\"{Esc(placeholder)}\"/></w:placeholder>");
 

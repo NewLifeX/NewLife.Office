@@ -226,7 +226,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         if (sheet.IsNullOrEmpty()) sheet = Sheets.FirstOrDefault();
         if (sheet.IsNullOrEmpty()) throw new ArgumentNullException(nameof(sheet));
 
-        if (!_entries.TryGetValue(sheet, out var entry)) throw new ArgumentOutOfRangeException(nameof(sheet), "Unable to find worksheet");
+        if (!_entries.TryGetValue(sheet, out var entry)) throw new ArgumentOutOfRangeException(nameof(sheet), L.T("Unable to find worksheet"));
 
         foreach (var (_, row) in ReadRowsCore(sheet))
         {
@@ -1354,7 +1354,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     private XDocument OpenSheetXml(String sheet)
     {
         if (_entries == null || !_entries.TryGetValue(sheet, out var entry))
-            throw new ArgumentOutOfRangeException(nameof(sheet), "Unable to find worksheet");
+            throw new ArgumentOutOfRangeException(nameof(sheet), L.T("Unable to find worksheet"));
         using var es = entry.Open();
         return XDocument.Load(es);
     }

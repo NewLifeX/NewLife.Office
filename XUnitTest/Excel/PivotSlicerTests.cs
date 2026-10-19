@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Text;
 using System.Xml.Linq;
+using NewLife;
 using NewLife.Office.Excel;
 using Xunit;
 
@@ -47,7 +48,7 @@ public class PivotSlicerTests
         var s = slicers[0];
         Assert.Equal("Region", s.ColumnName);
         Assert.Equal("PivotTable1", s.TableName);
-        Assert.Equal("切片器_Region", s.Name);
+        Assert.Equal(Localization.Translate("Slicer_{0}", "Region"), s.Name);
         Assert.Equal("Region", s.Caption);
         Assert.Equal("SlicerStyleLight1", s.Style);
         Assert.False(String.IsNullOrEmpty(s.CacheName));
@@ -85,7 +86,7 @@ public class PivotSlicerTests
         {
             var doc = XDocument.Load(ss);
             Assert.NotNull(doc.Root);
-            Assert.Equal("切片器_Region", doc.Root!.Attribute("name")?.Value);
+            Assert.Equal(Localization.Translate("Slicer_{0}", "Region"), doc.Root!.Attribute("name")?.Value);
         }
 
         // 透视表工作表（sheet2）extLst 含 x14:slicerList

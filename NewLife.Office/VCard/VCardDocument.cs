@@ -29,18 +29,24 @@ public class VCardDocument : ITextExtractable, IMarkdownExtractable
             if (i > 0) sb.AppendLine();
             var c = Contacts[i];
             if (!String.IsNullOrEmpty(c.FullName)) sb.AppendLine(c.FullName);
-            if (!String.IsNullOrEmpty(c.Organization)) sb.AppendLine($"组织: {c.Organization}");
-            if (!String.IsNullOrEmpty(c.Title)) sb.AppendLine($"职位: {c.Title}");
-            if (c.Birthday != null) sb.AppendLine($"生日: {c.Birthday:yyyy-MM-dd}");
+            if (!String.IsNullOrEmpty(c.Organization)) sb.AppendLine(L.T("Organization: {0}", c.Organization));
+            if (!String.IsNullOrEmpty(c.Title)) sb.AppendLine(L.T("Job title: {0}", c.Title));
+            if (c.Birthday != null) sb.AppendLine(L.T("Birthday: {0:yyyy-MM-dd}", c.Birthday));
             foreach (var phone in c.Phones)
             {
                 if (!String.IsNullOrEmpty(phone.Number))
-                    sb.AppendLine($"电话: {phone.Number}" + (String.IsNullOrEmpty(phone.Type) ? "" : $" ({phone.Type})"));
+                {
+                    var type = String.IsNullOrEmpty(phone.Type) ? "" : " (" + phone.Type + ")";
+                    sb.AppendLine(L.T("Phone: {0}", phone.Number) + type);
+                }
             }
             foreach (var email in c.Emails)
             {
                 if (!String.IsNullOrEmpty(email.Address))
-                    sb.AppendLine($"邮箱: {email.Address}" + (String.IsNullOrEmpty(email.Type) ? "" : $" ({email.Type})"));
+                {
+                    var type = String.IsNullOrEmpty(email.Type) ? "" : " (" + email.Type + ")";
+                    sb.AppendLine(L.T("Email: {0}", email.Address) + type);
+                }
             }
             foreach (var addr in c.Addresses)
             {
@@ -50,10 +56,13 @@ public class VCardDocument : ITextExtractable, IMarkdownExtractable
                 if (!String.IsNullOrEmpty(addr.City)) parts.Add(addr.City!);
                 if (!String.IsNullOrEmpty(addr.Street)) parts.Add(addr.Street!);
                 if (parts.Count > 0)
-                    sb.AppendLine($"地址: {String.Join(" ", parts)}" + (String.IsNullOrEmpty(addr.Type) ? "" : $" ({addr.Type})"));
+                {
+                    var type = String.IsNullOrEmpty(addr.Type) ? "" : " (" + addr.Type + ")";
+                    sb.AppendLine(L.T("Address: {0}", String.Join(" ", parts)) + type);
+                }
             }
-            if (!String.IsNullOrEmpty(c.Url)) sb.AppendLine($"网址: {c.Url}");
-            if (!String.IsNullOrEmpty(c.Note)) sb.AppendLine($"备注: {c.Note}");
+            if (!String.IsNullOrEmpty(c.Url)) sb.AppendLine(L.T("Website: {0}", c.Url));
+            if (!String.IsNullOrEmpty(c.Note)) sb.AppendLine(L.T("Note: {0}", c.Note));
         }
         return sb.ToString();
     }
@@ -69,20 +78,26 @@ public class VCardDocument : ITextExtractable, IMarkdownExtractable
         {
             if (i > 0) sb.AppendLine();
             var c = Contacts[i];
-            sb.AppendLine($"## {c.FullName ?? "未知联系人"}");
+            sb.AppendLine("## " + (c.FullName ?? L.T("Unknown contact")));
             sb.AppendLine();
-            if (!String.IsNullOrEmpty(c.Organization)) sb.AppendLine($"- **组织**: {c.Organization}");
-            if (!String.IsNullOrEmpty(c.Title)) sb.AppendLine($"- **职位**: {c.Title}");
-            if (c.Birthday != null) sb.AppendLine($"- **生日**: {c.Birthday:yyyy-MM-dd}");
+            if (!String.IsNullOrEmpty(c.Organization)) sb.AppendLine(L.T("- **Organization**: {0}", c.Organization));
+            if (!String.IsNullOrEmpty(c.Title)) sb.AppendLine(L.T("- **Job title**: {0}", c.Title));
+            if (c.Birthday != null) sb.AppendLine(L.T("- **Birthday**: {0:yyyy-MM-dd}", c.Birthday));
             foreach (var phone in c.Phones)
             {
                 if (!String.IsNullOrEmpty(phone.Number))
-                    sb.AppendLine($"- **电话**: {phone.Number}" + (String.IsNullOrEmpty(phone.Type) ? "" : $" ({phone.Type})"));
+                {
+                    var type = String.IsNullOrEmpty(phone.Type) ? "" : " (" + phone.Type + ")";
+                    sb.AppendLine(L.T("- **Phone**: {0}", phone.Number) + type);
+                }
             }
             foreach (var email in c.Emails)
             {
                 if (!String.IsNullOrEmpty(email.Address))
-                    sb.AppendLine($"- **邮箱**: {email.Address}" + (String.IsNullOrEmpty(email.Type) ? "" : $" ({email.Type})"));
+                {
+                    var type = String.IsNullOrEmpty(email.Type) ? "" : " (" + email.Type + ")";
+                    sb.AppendLine(L.T("- **Email**: {0}", email.Address) + type);
+                }
             }
             foreach (var addr in c.Addresses)
             {
@@ -92,10 +107,13 @@ public class VCardDocument : ITextExtractable, IMarkdownExtractable
                 if (!String.IsNullOrEmpty(addr.City)) parts.Add(addr.City!);
                 if (!String.IsNullOrEmpty(addr.Street)) parts.Add(addr.Street!);
                 if (parts.Count > 0)
-                    sb.AppendLine($"- **地址**: {String.Join(" ", parts)}" + (String.IsNullOrEmpty(addr.Type) ? "" : $" ({addr.Type})"));
+                {
+                    var type = String.IsNullOrEmpty(addr.Type) ? "" : " (" + addr.Type + ")";
+                    sb.AppendLine(L.T("- **Address**: {0}", String.Join(" ", parts)) + type);
+                }
             }
-            if (!String.IsNullOrEmpty(c.Url)) sb.AppendLine($"- **网址**: {c.Url}");
-            if (!String.IsNullOrEmpty(c.Note)) sb.AppendLine($"- **备注**: {c.Note}");
+            if (!String.IsNullOrEmpty(c.Url)) sb.AppendLine(L.T("- **Website**: {0}", c.Url));
+            if (!String.IsNullOrEmpty(c.Note)) sb.AppendLine(L.T("- **Note**: {0}", c.Note));
         }
         return sb.ToString();
     }

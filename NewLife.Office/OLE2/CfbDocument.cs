@@ -48,7 +48,7 @@ public sealed class CfbDocument : IDisposable
     public static CfbDocument Open(Stream stream, Boolean leaveOpen = true)
     {
         if (!stream.CanSeek)
-            throw new ArgumentException("Stream must be seekable.", nameof(stream));
+            throw new ArgumentException(L.T("Stream must be seekable."), nameof(stream));
         return OpenCore(stream, !leaveOpen);
     }
 

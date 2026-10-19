@@ -233,7 +233,7 @@ internal sealed class CfbReader
         while (read < count)
         {
             var r = _fs.Read(dest, destOffset + read, count - read);
-            if (r == 0) throw new EndOfStreamException("Unexpected end of CFB stream.");
+            if (r == 0) throw new EndOfStreamException(L.T("Unexpected end of CFB stream."));
             read += r;
         }
     }

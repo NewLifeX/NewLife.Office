@@ -1869,7 +1869,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
             if (blocks.Count == 0) continue;
             hasContent = true;
 
-            doc.Blocks.Add(MarkdownBlock.CreateHeading(2, [MarkdownInline.CreateText($"第 {p + 1} 页")]));
+            doc.Blocks.Add(MarkdownBlock.CreateHeading(2, [MarkdownInline.CreateText(L.T("Page {0}", p + 1))]));
 
             foreach (var line in GroupLines(blocks))
             {

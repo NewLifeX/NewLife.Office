@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Text;
 using System.Xml.Linq;
+using NewLife;
 using NewLife.Office.Excel;
 using Xunit;
 
@@ -47,7 +48,7 @@ public class SlicerTests
         var s = slicers[0];
         Assert.Equal("产品", s.ColumnName);
         Assert.Equal("销售表", s.TableName);
-        Assert.Equal("切片器_产品", s.Name);
+        Assert.Equal(Localization.Translate("Slicer_{0}", "产品"), s.Name);
         Assert.Equal("产品", s.Caption);
         Assert.Equal("SlicerStyleLight1", s.Style);
         Assert.False(String.IsNullOrEmpty(s.CacheName));
@@ -82,7 +83,7 @@ public class SlicerTests
         {
             var doc = XDocument.Load(ss);
             Assert.NotNull(doc.Root);
-            Assert.Equal("切片器_产品", doc.Root!.Attribute("name")?.Value);
+            Assert.Equal(Localization.Translate("Slicer_{0}", "产品"), doc.Root!.Attribute("name")?.Value);
             Assert.Equal("SlicerStyleLight1", doc.Root!.Attribute("style")?.Value);
         }
 

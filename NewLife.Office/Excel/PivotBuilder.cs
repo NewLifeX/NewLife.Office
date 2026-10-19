@@ -106,7 +106,7 @@ public class PivotBuilder
             ColumnName = fieldName,
             Caption = caption ?? fieldName,
             Style = style ?? "SlicerStyleLight1",
-            Name = $"切片器_{fieldName}",
+            Name = L.T("Slicer_{0}", fieldName),
         };
         // 名称去重
         var idx = 2;
@@ -276,7 +276,7 @@ public class PivotBuilder
                     if (!text.IsNullOrEmpty() && !items.Contains(text)) items.Add(text);
                 }
             }
-            if (items.Count == 0) items.Add("(空白)"); // 兜底占位
+            if (items.Count == 0) items.Add(L.T("(Blank)")); // 兜底占位
 
             // slicerCacheN.xml（透视表模式：pivotTables 引用 + data pivot="1"）
             var sc = new StringBuilder();

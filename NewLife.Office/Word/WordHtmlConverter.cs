@@ -304,11 +304,11 @@ public sealed class WordHtmlConverter
         {
             if (images.TryGetValue(rId, out var src))
             {
-                sb.Append($"<img src=\"{src}\" alt=\"image\" />");
+                sb.Append("<img src=\"" + src + "\" alt=\"" + L.T("Image") + "\" />");
             }
             else if (rels.TryGetValue(rId, out var target))
             {
-                sb.Append($"<img src=\"word/{HtmlAttrEncode(target)}\" alt=\"image\" />");
+                sb.Append("<img src=\"word/" + HtmlAttrEncode(target) + "\" alt=\"" + L.T("Image") + "\" />");
             }
             return;
         }
@@ -331,11 +331,11 @@ public sealed class WordHtmlConverter
 
         if (images.TryGetValue(rId, out var src))
         {
-            sb.Append($"<img src=\"{src}\" alt=\"image\" />");
+            sb.Append("<img src=\"" + src + "\" alt=\"" + L.T("Image") + "\" />");
         }
         else if (rels.TryGetValue(rId, out var target))
         {
-            sb.Append($"<img src=\"word/{HtmlAttrEncode(target)}\" alt=\"image\" />");
+            sb.Append("<img src=\"word/" + HtmlAttrEncode(target) + "\" alt=\"" + L.T("Image") + "\" />");
         }
     }
 

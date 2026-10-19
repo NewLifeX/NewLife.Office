@@ -94,9 +94,7 @@ public sealed class WordPdfConverter
     /// <exception cref="NotSupportedException">当前版本始终抛出，待引入渲染库后实现</exception>
     public IEnumerable<Byte[]> ConvertToImages(Stream stream, Int32 dpi = 150)
     {
-        throw new NotSupportedException(
-            "渲染为图片需要引入 SkiaSharp/Docnet.Core 等渲染库，当前版本不支持。" +
-            "建议先转换为 PDF，再使用 PdfDocument.RenderToImages 处理。");
+        throw new NotSupportedException(L.T("Rendering to images requires a rendering library such as SkiaSharp, which this version does not support. Convert to PDF first, then use PdfDocument.RenderToImages."));
     }
 
     #endregion

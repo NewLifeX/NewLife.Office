@@ -329,7 +329,7 @@ public static class FormatToMarkdown
         if (reader is not IMarkdownExtractable extractable)
         {
             (reader as IDisposable)?.Dispose();
-            throw ConvertErrorException.Unsupported($"无法识别文件内容或格式不支持: {Path.GetExtension(filePath)}");
+            throw ConvertErrorException.Unsupported(L.T("The stream content cannot be recognized or the format is not supported: {0}", Path.GetExtension(filePath)));
         }
         try
         {

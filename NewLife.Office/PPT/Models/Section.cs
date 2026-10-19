@@ -5,7 +5,7 @@ public class Section
 {
     #region 属性
     /// <summary>节名称</summary>
-    public String Name { get; set; } = "默认节";
+    public String Name { get; set; } = L.T("Default section");
 
     /// <summary>该节包含的幻灯片索引列表（0基）</summary>
     public List<Int32> SlideIndices { get; set; } = [];

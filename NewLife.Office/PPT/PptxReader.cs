@@ -140,7 +140,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var sb = new StringBuilder();
         for (var i = 0; i < count; i++)
         {
-            if (i > 0) sb.AppendLine("--- 幻灯片分隔 ---");
+            if (i > 0) sb.AppendLine(L.T("--- Slide break ---"));
             sb.AppendLine(GetSlideText(i));
         }
         return sb.ToString();
@@ -545,7 +545,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         foreach (XmlElement secEl in sectionNodes)
         {
             var name = secEl.GetAttribute("name");
-            if (String.IsNullOrEmpty(name)) name = "默认节";
+            if (String.IsNullOrEmpty(name)) name = L.T("Default section");
             var indices = new List<Int32>();
 
             var sldNodes = secEl.SelectNodes("p14:sldIdLst/p14:sldId", ns);
@@ -2089,7 +2089,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             var slide = slides[i];
             if (slide == null) continue;
 
-            doc.Blocks.Add(MarkdownBlock.CreateHeading(2, [MarkdownInline.CreateText($"幻灯片 {i + 1}")]));
+            doc.Blocks.Add(MarkdownBlock.CreateHeading(2, [MarkdownInline.CreateText(L.T("Slide {0}", i + 1))]));
 
             // 标题识别：字号最大的文本框作为幻灯片标题
             var maxSize = 0;

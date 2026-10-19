@@ -45,20 +45,20 @@ public class ICalDocument : ITextExtractable, IMarkdownExtractable
         {
             if (sb.Length > 0) sb.AppendLine();
             if (!String.IsNullOrEmpty(ev.Summary)) sb.AppendLine(ev.Summary);
-            if (ev.Start != null) sb.AppendLine($"开始: {ev.Start:yyyy-MM-dd HH:mm}");
-            if (ev.End != null) sb.AppendLine($"结束: {ev.End:yyyy-MM-dd HH:mm}");
-            if (!String.IsNullOrEmpty(ev.Location)) sb.AppendLine($"地点: {ev.Location}");
-            if (!String.IsNullOrEmpty(ev.Description)) sb.AppendLine($"描述: {ev.Description}");
-            if (!String.IsNullOrEmpty(ev.Status)) sb.AppendLine($"状态: {ev.Status}");
+            if (ev.Start != null) sb.AppendLine(L.T("Start: {0:yyyy-MM-dd HH:mm}", ev.Start));
+            if (ev.End != null) sb.AppendLine(L.T("End: {0:yyyy-MM-dd HH:mm}", ev.End));
+            if (!String.IsNullOrEmpty(ev.Location)) sb.AppendLine(L.T("Location: {0}", ev.Location));
+            if (!String.IsNullOrEmpty(ev.Description)) sb.AppendLine(L.T("Description: {0}", ev.Description));
+            if (!String.IsNullOrEmpty(ev.Status)) sb.AppendLine(L.T("Status: {0}", ev.Status));
         }
 
         foreach (var todo in Todos)
         {
             if (sb.Length > 0) sb.AppendLine();
-            if (!String.IsNullOrEmpty(todo.Summary)) sb.AppendLine($"[待办] {todo.Summary}");
-            if (todo.Due != null) sb.AppendLine($"截止: {todo.Due:yyyy-MM-dd HH:mm}");
-            if (!String.IsNullOrEmpty(todo.Description)) sb.AppendLine($"描述: {todo.Description}");
-            if (!String.IsNullOrEmpty(todo.Status)) sb.AppendLine($"状态: {todo.Status}");
+            if (!String.IsNullOrEmpty(todo.Summary)) sb.AppendLine(L.T("[To-do] {0}", todo.Summary));
+            if (todo.Due != null) sb.AppendLine(L.T("Due: {0:yyyy-MM-dd HH:mm}", todo.Due));
+            if (!String.IsNullOrEmpty(todo.Description)) sb.AppendLine(L.T("Description: {0}", todo.Description));
+            if (!String.IsNullOrEmpty(todo.Status)) sb.AppendLine(L.T("Status: {0}", todo.Status));
         }
         return sb.ToString();
     }
@@ -78,26 +78,26 @@ public class ICalDocument : ITextExtractable, IMarkdownExtractable
 
         foreach (var ev in Events)
         {
-            sb.AppendLine($"## {ev.Summary ?? "未命名事件"}");
+            sb.AppendLine("## " + (ev.Summary ?? L.T("Untitled event")));
             sb.AppendLine();
-            if (ev.Start != null) sb.AppendLine($"- **开始**: {ev.Start:yyyy-MM-dd HH:mm}");
-            if (ev.End != null) sb.AppendLine($"- **结束**: {ev.End:yyyy-MM-dd HH:mm}");
-            if (!String.IsNullOrEmpty(ev.Location)) sb.AppendLine($"- **地点**: {ev.Location}");
-            if (!String.IsNullOrEmpty(ev.Description)) sb.AppendLine($"- **描述**: {ev.Description}");
-            if (!String.IsNullOrEmpty(ev.Status)) sb.AppendLine($"- **状态**: {ev.Status}");
-            if (!String.IsNullOrEmpty(ev.Organizer)) sb.AppendLine($"- **组织者**: {ev.Organizer}");
-            if (ev.Attendees.Count > 0) sb.AppendLine($"- **参与者**: {String.Join(", ", ev.Attendees)}");
+            if (ev.Start != null) sb.AppendLine(L.T("- **Start**: {0:yyyy-MM-dd HH:mm}", ev.Start));
+            if (ev.End != null) sb.AppendLine(L.T("- **End**: {0:yyyy-MM-dd HH:mm}", ev.End));
+            if (!String.IsNullOrEmpty(ev.Location)) sb.AppendLine(L.T("- **Location**: {0}", ev.Location));
+            if (!String.IsNullOrEmpty(ev.Description)) sb.AppendLine(L.T("- **Description**: {0}", ev.Description));
+            if (!String.IsNullOrEmpty(ev.Status)) sb.AppendLine(L.T("- **Status**: {0}", ev.Status));
+            if (!String.IsNullOrEmpty(ev.Organizer)) sb.AppendLine(L.T("- **Organizer**: {0}", ev.Organizer));
+            if (ev.Attendees.Count > 0) sb.AppendLine(L.T("- **Attendees**: {0}", String.Join(", ", ev.Attendees)));
             sb.AppendLine();
         }
 
         foreach (var todo in Todos)
         {
-            sb.AppendLine($"## [待办] {todo.Summary ?? "未命名待办"}");
+            sb.AppendLine("## " + L.T("[To-do] {0}", todo.Summary ?? L.T("Untitled to-do")));
             sb.AppendLine();
-            if (todo.Due != null) sb.AppendLine($"- **截止**: {todo.Due:yyyy-MM-dd HH:mm}");
-            if (!String.IsNullOrEmpty(todo.Description)) sb.AppendLine($"- **描述**: {todo.Description}");
-            if (!String.IsNullOrEmpty(todo.Status)) sb.AppendLine($"- **状态**: {todo.Status}");
-            if (todo.PercentComplete != null) sb.AppendLine($"- **进度**: {todo.PercentComplete}%");
+            if (todo.Due != null) sb.AppendLine(L.T("- **Due**: {0:yyyy-MM-dd HH:mm}", todo.Due));
+            if (!String.IsNullOrEmpty(todo.Description)) sb.AppendLine(L.T("- **Description**: {0}", todo.Description));
+            if (!String.IsNullOrEmpty(todo.Status)) sb.AppendLine(L.T("- **Status**: {0}", todo.Status));
+            if (todo.PercentComplete != null) sb.AppendLine(L.T("- **Progress**: {0}%", todo.PercentComplete));
             sb.AppendLine();
         }
         return sb.ToString();

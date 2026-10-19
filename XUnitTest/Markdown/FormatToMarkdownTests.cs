@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using NewLife;
 using NewLife.Office.Excel;
 using NewLife.Office.Markdown;
 using NewLife.Office.Pdf;
@@ -131,7 +132,7 @@ public class FormatToMarkdownTests : IntegrationTestBase
         var md = FormatToMarkdown.FromPpt(path);
 
         Assert.NotNull(md);
-        Assert.Contains("## 幻灯片 1", md);
+        Assert.Contains("## " + Localization.Translate("Slide {0}", 1), md);
         Assert.Contains("演示文稿标题", md);
         Assert.Contains("要点一", md);
     }
@@ -152,7 +153,7 @@ public class FormatToMarkdownTests : IntegrationTestBase
 
         Assert.NotNull(doc);
         // 幻灯片编号标题
-        Assert.Contains(doc.Blocks, b => b.Type == MarkdownBlockType.Heading && b.GetPlainText().Contains("幻灯片 1"));
+        Assert.Contains(doc.Blocks, b => b.Type == MarkdownBlockType.Heading && b.GetPlainText().Contains(Localization.Translate("Slide {0}", 1)));
         // 幻灯片内标题（字号最大）
         Assert.Contains(doc.Blocks, b => b.Type == MarkdownBlockType.Heading && b.GetPlainText().Contains("幻灯片标题"));
         Assert.Contains(doc.Blocks, b => b.Type == MarkdownBlockType.Paragraph && b.GetPlainText().Contains("正文内容"));

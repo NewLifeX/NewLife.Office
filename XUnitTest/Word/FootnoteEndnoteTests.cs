@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
+using NewLife;
 using NewLife.Office.Word;
 using Xunit;
 
@@ -208,8 +209,8 @@ public class FootnoteEndnoteTests
         using var reader = new WordReader(ms);
         var md = reader.ExtractMarkdown();
         Assert.NotNull(md);
-        Assert.Contains("脚注 1: 这是脚注内容", md);
-        Assert.Contains("尾注 2: 这是尾注内容", md);
+        Assert.Contains(Localization.Translate("Footnotes {0}: {1}", 1, "这是脚注内容"), md);
+        Assert.Contains(Localization.Translate("Endnotes {0}: {1}", 2, "这是尾注内容"), md);
     }
 
     [Fact, DisplayName("W22_脚注_模板填充覆盖脚注内占位符")]

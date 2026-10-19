@@ -59,11 +59,11 @@ public class Message : ITextExtractable, IMarkdownExtractable
     public String? ExtractText()
     {
         var sb = new StringBuilder();
-        if (!String.IsNullOrEmpty(From)) sb.AppendLine($"发件人: {From}");
-        if (To.Count > 0) sb.AppendLine($"收件人: {String.Join(", ", To)}");
-        if (Cc.Count > 0) sb.AppendLine($"抄送: {String.Join(", ", Cc)}");
-        if (!String.IsNullOrEmpty(Subject)) sb.AppendLine($"主题: {Subject}");
-        if (Date != null) sb.AppendLine($"日期: {Date:yyyy-MM-dd HH:mm:ss}");
+        if (!String.IsNullOrEmpty(From)) sb.AppendLine(L.T("From: {0}", From));
+        if (To.Count > 0) sb.AppendLine(L.T("To: {0}", String.Join(", ", To)));
+        if (Cc.Count > 0) sb.AppendLine(L.T("Cc: {0}", String.Join(", ", Cc)));
+        if (!String.IsNullOrEmpty(Subject)) sb.AppendLine(L.T("Subject: {0}", Subject));
+        if (Date != null) sb.AppendLine(L.T("Date: {0:yyyy-MM-dd HH:mm:ss}", Date));
         sb.AppendLine();
 
         if (!String.IsNullOrEmpty(TextBody))
@@ -79,11 +79,11 @@ public class Message : ITextExtractable, IMarkdownExtractable
     public String? ExtractMarkdown()
     {
         var sb = new StringBuilder();
-        if (!String.IsNullOrEmpty(From)) sb.AppendLine($"- **发件人**: {From}");
-        if (To.Count > 0) sb.AppendLine($"- **收件人**: {String.Join(", ", To)}");
-        if (Cc.Count > 0) sb.AppendLine($"- **抄送**: {String.Join(", ", Cc)}");
-        if (!String.IsNullOrEmpty(Subject)) sb.AppendLine($"- **主题**: {Subject}");
-        if (Date != null) sb.AppendLine($"- **日期**: {Date:yyyy-MM-dd HH:mm:ss}");
+        if (!String.IsNullOrEmpty(From)) sb.AppendLine(L.T("- **From**: {0}", From));
+        if (To.Count > 0) sb.AppendLine(L.T("- **To**: {0}", String.Join(", ", To)));
+        if (Cc.Count > 0) sb.AppendLine(L.T("- **Cc**: {0}", String.Join(", ", Cc)));
+        if (!String.IsNullOrEmpty(Subject)) sb.AppendLine(L.T("- **Subject**: {0}", Subject));
+        if (Date != null) sb.AppendLine(L.T("- **Date**: {0:yyyy-MM-dd HH:mm:ss}", Date));
         sb.AppendLine();
 
         if (!String.IsNullOrEmpty(TextBody))

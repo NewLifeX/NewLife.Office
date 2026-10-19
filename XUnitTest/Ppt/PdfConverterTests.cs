@@ -164,7 +164,7 @@ public class PptxPdfConverterTests
     {
         var ex = Assert.Throws<NotSupportedException>(
             () => new PptxPdfConverter().ConvertToImages("any.pptx").GetEnumerator().MoveNext());
-        // 错误信息应包含建议使用 Convert → PDF 路径的提示
-        Assert.Contains("Convert", ex.Message);
+        // 错误信息应包含先转 PDF 再走 PdfDocument.RenderToImages 的替代方案（各语言译文均保留该 API 名）
+        Assert.Contains("PdfDocument.RenderToImages", ex.Message);
     }
 }
