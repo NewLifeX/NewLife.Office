@@ -2,17 +2,20 @@
 # 以基准语言文件（默认 zh-Hans.yml）为准，所有语言必须提供完全相同的键集合
 #
 # 用法：
-#   pwsh -File check-locales.ps1                                      # Core 默认目录
+#   pwsh -File check-locales.ps1                                      # 本库默认目录
 #   pwsh -File check-locales.ps1 -LocaleDir src\Lib\Locales -SourceDir src\Lib
 #   pwsh -File check-locales.ps1 -LocaleDir src\Lib\Locales -SkipOrphan   # 下游只想校验词表内部一致性
 param(
-    [String]$LocaleDir = "NewLife.Core\Locales",
+    [String]$LocaleDir = "NewLife.Office\Locales",
     [String]$Baseline = "zh-Hans.yml",
-    [String[]]$SourceDir = @("NewLife.Core", "NewLife.Core.SourceGenerator"),
+    [String[]]$SourceDir = @("NewLife.Office", "NewLife.Office.Rendering", "NewLife.Office.Cli"),
     [Switch]$SkipOrphan
 )
 
 $ErrorActionPreference = "Stop"
+
+# 支持用逗号/分号分隔多个源码目录（CI 以 -File 传参时数组会退化为字符串）
+$SourceDir = @($SourceDir | ForEach-Object { $_ -split '[,;]' } | Where-Object { $_ })
 
 $root = $PSScriptRoot
 $localeDir = if ([IO.Path]::IsPathRooted($LocaleDir)) { $LocaleDir } else { Join-Path $root $LocaleDir }
