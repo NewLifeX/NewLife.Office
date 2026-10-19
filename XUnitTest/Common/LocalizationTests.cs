@@ -37,6 +37,57 @@ public class LocalizationTests
         "PowerPoint Document stream not found; the file may not be a valid .ppt file.",
     ];
 
+    /// <summary>全部已登记词条（12 条核心词条 + 45 条新增异常/CLI 词条）</summary>
+    public static readonly String[] AllKeys =
+    [
+        .. Keys,
+        "File not found: {0}",
+        "The stream content cannot be recognized or the format is not supported: {0}",
+        "The text is too long ({0} bytes); the maximum is 106 bytes. Please shorten the text.",
+        "Signature field '{0}' was not found.",
+        "Signature length {0} exceeds the reserved {1} characters.",
+        "Slide index {0} is out of range (total {1} slides).",
+        "The number of persisted objects {0} exceeds the per-block persistence directory limit of 4095.",
+        "Image index {0} is out of range (total {1} images).",
+        "Slide {0} does not exist in the source file.",
+        "The encrypted PPTX requires an open password.",
+        "Slide {0} does not exist.",
+        "WordDocument stream not found; the file may not be a valid .doc file.",
+        "Unsupported document format: wIdent = 0x{0:X4}. Only Word 97-2003 binary format is supported.",
+        "The EncryptionInfo stream is missing from the CFB container.",
+        "The EncryptedPackage stream is missing from the CFB container.",
+        "The EncryptedPackage data is too short.",
+        "The password is incorrect or the document is corrupted.",
+        "The EncryptionInfo data is too short.",
+        "The XML declaration is missing from EncryptionInfo.",
+        "saltValue is missing from EncryptionInfo.",
+        "The saltValue format in EncryptionInfo is invalid.",
+        "Invalid docx file: word/document.xml is missing.",
+        "Unsupported file format: {0}",
+        "Scaling failed.",
+        "Unable to decode the image data.",
+        "Invalid image dimensions.",
+        "Failed to generate the QR code.",
+        "Page index {0} is out of range [0, {1}].",
+        "Failed to convert Word to PDF.",
+        "Error: {0}",
+        "Usage: convert <input> [output]",
+        "Unable to convert: {0}",
+        "Converted: {0} → {1}",
+        "Usage: doc2docx <input.doc> <output.docx>",
+        "Usage: info <input>",
+        "File: {0}",
+        "Format: {0}",
+        "Unknown",
+        "Size: {0} bytes",
+        "NewLife.Office CLI tool",
+        "Usage:",
+        "  convert <input> [output]   Convert office documents to Markdown (output defaults to stdout)",
+        "  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)",
+        "  info <input>               Show file format information",
+        "Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc.",
+    ];
+
     [Fact(DisplayName = "全部语言表均已翻译全部词条")]
     public void AllKeysTranslated()
     {
@@ -47,6 +98,29 @@ public class LocalizationTests
             {
                 Localization.Culture = CultureInfo.GetCultureInfo(name);
                 foreach (var key in Keys)
+                {
+                    var text = Localization.Translate(key);
+                    Assert.False(String.IsNullOrEmpty(text), $"{name} 缺少译文：{key}");
+                    Assert.False(text == key, $"{name} 缺少译文：{key}");
+                }
+            }
+        }
+        finally
+        {
+            Localization.Culture = saved;
+        }
+    }
+
+    [Fact(DisplayName = "简繁中文已翻译全部词条")]
+    public void ChineseTranslationsComplete()
+    {
+        var saved = Localization.Culture;
+        try
+        {
+            foreach (var name in new[] { "zh-Hans", "zh-Hant" })
+            {
+                Localization.Culture = CultureInfo.GetCultureInfo(name);
+                foreach (var key in AllKeys)
                 {
                     var text = Localization.Translate(key);
                     Assert.False(String.IsNullOrEmpty(text), $"{name} 缺少译文：{key}");
