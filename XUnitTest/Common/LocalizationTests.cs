@@ -88,8 +88,8 @@ public class LocalizationTests
         "Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc.",
     ];
 
-    [Fact(DisplayName = "全部语言表均已翻译全部词条")]
-    public void AllKeysTranslated()
+    [Fact(DisplayName = "31 种语言均已翻译核心词条")]
+    public void CoreKeysTranslated()
     {
         var saved = Localization.Culture;
         try
