@@ -80,6 +80,16 @@ String? text2 = OfficeFactory.ReadText("report.xlsx");
 String? md = OfficeFactory.ReadMarkdown("slides.pptx");
 ```
 
+### Инструмент командной строки (NewLife.Office.Cli)
+
+```bash
+# Любой документ Office → Markdown
+dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
+
+# doc (97-2003) → docx (миграция устаревших документов)
+dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
+```
+
 ### Запись и чтение Excel
 
 ```csharp

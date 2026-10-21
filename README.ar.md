@@ -17,27 +17,101 @@
 
 > قد تتأخر هذه الترجمة عن [نسخة اللغة الإنجليزية](README.md)؛ وفي حال وجود اختلاف، تكون النسخة الإنجليزية هي المرجع.
 
-يقرأ NewLife.Office ويكتب ويعرض مستندات Excel وWord وPowerPoint بمكدس مُدار بالكامل، بما في ذلك Linux والحاويات.
+المصدر: https://github.com/NewLifeX/NewLife.Office  
+NuGet: NewLife.Office (حزمة العرض: NewLife.Office.Rendering)  
 
-## التثبيت
+## نظرة عامة
 
-```bash
-dotnet add package NewLife.Office
-```
+`NewLife.Office` مكتبة شاملة لأتمتة مستندات Office في .NET تغطي **Excel (xlsx/xls) وWord (docx/doc) وPowerPoint (pptx/ppt) وPDF**، إضافة إلى Markdown وRTF وODS وEmail (eml/msg) وiCalendar وvCard وEPUB وXPS والصيغ الثنائية القديمة المبنية على OLE2/BIFF8، وتدعمها حزمة **Rendering** الإضافية (مستندات → صور).
+
+- صفر تبعيات خارجية: تعتمد على `NewLife.Core` فقط، ومبنية مباشرة على بنى ملفات Open XML (ZIP + XML) / PDF / OLE2
+- دعم كامل لأطر .NET: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0`، مع تحليل توافق AOT (IsAotCompatible، صفر تحذيرات IL) على net8.0+
+- ترخيص MIT: مجانًا دون مخاطر ترخيص تجاري
+- واجهة برمجة موحّدة: مساحة الأسماء `NewLife.Office` بأسلوب API متسق وتكلفة تعلّم منخفضة
+
+> تُوفَّر قراءة/كتابة CSV عبر `CsvFile` في `NewLife.Core`؛ هذه المكتبة لا تكرّر CSV.
+
+## أبرز الميزات
+
+- **تغطية كاملة للصيغ**: أربع صيغ أساسية + عشر صيغ خفيفة + صيغ OLE2/BIFF8 القديمة، في مكتبة واحدة
+- **صفر تبعيات خارجية**: تعمل مباشرة على بنى الملفات، وحجم الحزمة أقل من 500KB
+- **استدارة عالية الدقة**: بنية وفاء L2/L3 (نموذج + تمرير RawXml/الأجزاء)، قراءة → تعديل → كتابة دون فقدان التنسيق
+- **مركز تحويل Markdown**: تحويل ثنائي الاتجاه بين MD وdocx/PDF/HTML/Excel/PPT/Word، مدخل موحّد لتغذية قواعد معرفة الذكاء الاصطناعي
+- **امتداد العرض**: `NewLife.Office.Rendering` (حزمة NuGet منفصلة) يوفّر تحويل المستندات إلى صور، ومعالجة الصور، ورموز QR
+- **AOT/متعدد المنصات**: صفر تحذيرات IL على `net8.0` / `net10.0`؛ تغطي CI منصات win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch عبر QEMU)، مع 23 سيناريو اختبار AOT تشمل جداول اللغات الـ31
+- **دعم 31 لغة**: تُترجم رسائل الاستثناءات وتسميات مخرجات المستندات حسب الثقافة الحالية مع الرجوع إلى الإنجليزية؛ تُجمَّع ملفات `Locales/*.yml` داخل التجميع وتعمل تحت NativeAOT
+
+## الصيغ المدعومة
+
+| الصيغة | قراءة | كتابة | قالب | تحويل | عرض | ملاحظات |
+|--------|:---:|:---:|:---:|:---:|:---:|-------|
+| **Excel xlsx** | ✅ | ✅ | ✅ | — | — | الأنماط والرسوم البيانية والجداول المحورية والتنسيق الشرطي والصور والنطاقات المسماة والجداول المنظمة والتعليقات والمخططات المصغرة والمقاطع والمحادثات الموضوعية وإخفاء الصفوف/الأعمدة والقراءة المتدفقة ودعم تواريخ 1904 |
+| **Excel xls** | ✅ | ✅ | — | — | — | OLE2/BIFF8، قراءة/كتابة BiffReader+BiffWriter، الأنماط/الدمج/الارتباطات التشعبية/المرشحات/إعداد الصفحة |
+| **Word docx** | ✅ | ✅ | ✅ | HTML/PDF | — | الفقرات والجداول والصور والرؤوس/التذييلات والتعليقات وعناصر التحكم بالمحتوى وتشفير AES ودمج البريد والبحث/الاستبدال (بما في ذلك مربعات النص) ونموذج الحواشي وأقسام متعددة؛ تحقق متقاطع مع NPOI+OpenXmlValidator |
+| **Word doc** | ✅ | — | — | ✅ doc→docx | — | MS-DOC، استخراج النص العادي وتنسيق الفقرات عبر DocReader (عريض/حجم الخط/المحاذاة، إلخ) + تحويل doc→docx |
+| **PPT pptx** | ✅ | ✅ | ✅ | PDF | — | مربعات النص والصور والجداول والرسوم البيانية والشرائح الرئيسية والحركات والتعليقات والأقسام؛ دمج عبر الملفات (مع الحفاظ على الرسوم/التعليقات/الملاحظات) |
+| **PPT ppt** | ✅ | ✅ | — | — | — | MS-PPT: استخراج النص عبر PptReader + كتابة شرائح نصية عبر PptWriter |
+| **PDF** | ✅ | ✅ | — | — | — | واجهة Fluent API، دمج/تقسيم، تشفير، توقيعات، نماذج، تعليقات توضيحية، PDF-A |
+| **Markdown** | ✅ | ✅ | — | HTML/Word/PDF/all→MD | — | CommonMark + GFM + AST مُنمَّط، مركز تحويل لجميع الصيغ |
+| **RTF** | ✅ | ✅ | ✅ | — | — | فقرات، جداول، تعبئة قوالب، تضمين صور (PNG/JPEG) |
+| **ODS** | ✅ | ✅ | — | — | — | صيغة LibreOffice الأصلية، خلايا مدموجة، أنماط، صيغ رياضية |
+| **EML** | ✅ | ✅ | — | — | — | RFC 5322 + MIME، مرفقات، صور مضمنة |
+| **MSG** | ✅ | — | — | — | — | Outlook، OLE2 + MAPI، الموضوع/النص/المرفقات |
+| **iCalendar** | ✅ | ✅ | — | — | — | RFC 5545 .ics، VEVENT/VTODO/RRULE |
+| **vCard** | ✅ | ✅ | — | — | — | RFC 6350 .vcf، vCard 3.0/4.0 |
+| **EPUB** | ✅ | ✅ | — | — | — | EPUB 2/3، OPF/Nav/الفصول/الغلاف |
+| **XPS** | ✅ | ✅ | — | — | — | ZIP+XML، استخراج نص Glyphs، كتابة متعددة الصفحات، صور، بيانات وصفية |
+| **Rendering** | — | — | — | — | ✅ | حزمة منفصلة (SkiaSharp): PDF/Word/PPT/Markdown → صور |
 
 ## البدء السريع
 
+### استخراج موحّد للنص / Markdown
+
 ```csharp
-var excel = new ExcelFile();
-excel.Load("report.xlsx");
-excel.Save("out.xlsx");
+using NewLife.Office;
+
+// سطر واحد: استخراج النص العادي من أي صيغة مدعومة
+String? text = OfficeFactory.ReadText("document.docx");
+String? text2 = OfficeFactory.ReadText("report.xlsx");
+
+// الاستخراج بصيغة Markdown (مع الحفاظ على البنية)
+String? md = OfficeFactory.ReadMarkdown("slides.pptx");
+
+// تحويل doc (97-2003) → docx
+OfficeFactory.ConvertDocToDocx("legacy.doc", "legacy.docx");
 ```
 
-## الميزات الرئيسية
+### أداة سطر الأوامر (NewLife.Office.Cli)
 
-- تغطية واسعة لإصدارات البروتوكولات والصيغ الشائعة
-- تنفيذ مُدار بالكامل دون تبعيات أصلية
-- متعدد المنصات: Windows وLinux وmacOS وARM64/LoongArch64
+```bash
+# أي مستند Office → Markdown
+dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
+
+# doc (97-2003) → docx (ترحيل المستندات القديمة)
+dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
+```
+
+### كتابة وقراءة Excel
+
+```csharp
+using NewLife.Office;
+
+using var ms = new MemoryStream();
+var writer = new ExcelWriter(ms);
+writer.WriteHeader("Data", new[] { "编号", "姓名", "金额" }, CellStyle.Header);
+writer.WriteRow("Data", new Object?[] { 1, "张三", 1234.56m }, new CellStyle
+{
+    Border = CellBorderStyle.Thin,
+    NumberFormat = "#,##0.00",
+});
+writer.Save();
+
+ms.Position = 0;
+var reader = new ExcelReader(ms, Encoding.UTF8);
+var rows = reader.ReadRows("Data").ToList();
+```
+
+> لمزيد من القدرات (استيراد/تصدير تعيين الكائنات، تعبئة القوالب، تحويل الصيغ، العرض، إلخ) راجع [متطلبات المشروع](Doc/需求文档.md) وأمثلة المصدر.
 
 ## التوثيق
 
@@ -91,7 +165,7 @@ NewLife منظومة متعدّدة الطبقات من مشاريع مفتوح�
 | [GitCandy](https://github.com/NewLifeX/GitCandy) | نظام استضافة ذاتية لإدارة الشيفرة المصدرية Git. | — |
 | [LuckyClover](https://github.com/NewLifeX/LuckyClover) | يثبّت بيئة تشغيل .NET المطابقة تلقائيًا عند التشغيل من مضيف أقدم. | — |
 
-> تعرض الشارات الحزمة الرئيسية لكل مشروع؛ أما حزم السمات والإضافات والحزم التابعة فمذكورة في صفحاتها على NuGet.الحزم التي تتجاوز 30 حزمة وغير المذكورة هنا (FTP وLoRa وإضافات Office وبرامج تشغيل البروتوكولات وغيرها) متاحة في [منظمة NewLifeX](https://github.com/NewLifeX) وعلى [newlifex.com](https://newlifex.com).
+> تعرض الشارات الحزمة الرئيسية لكل مشروع؛ أما حزم السمات والإضافات والحزم التابعة فمذكورة في صفحاتها على NuGet. الحزم التي تتجاوز 30 حزمة وغير المذكورة هنا (FTP وLoRa وإضافات Office وبرامج تشغيل البروتوكولات وغيرها) متاحة في [منظمة NewLifeX](https://github.com/NewLifeX) وعلى [newlifex.com](https://newlifex.com).
 
 ## الفريق
 

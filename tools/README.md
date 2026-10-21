@@ -7,6 +7,7 @@
 | `check-locales.ps1` | 词表键集合、占位符、格式说明符、代码↔词表双向覆盖、翻译完整性；支持待翻译清单与覆盖报告 |
 | `check-english-exceptions.ps1` | 检查异常、日志、控制台消息是否为英文源文，禁止字符串插值 |
 | `sync-readme-languages.ps1` | 按 `readme-languages.json` 生成/校验 README 语言切换行 |
+| `check-readme-languages.ps1` | 校验 11 种 README 的结构、代码块、目标语言书写系统与整段英文残留 |
 | `pending-translations.json` | 迁移期「英文与简体中文已完成、其余语言待补」的键清单 |
 
 ## 常用命令
@@ -23,6 +24,7 @@ pwsh -File tools/check-locales.ps1 -LocaleDir NewLife.Office/Locales -SourceDir 
 
 pwsh -File tools/check-english-exceptions.ps1
 pwsh -File tools/sync-readme-languages.ps1 -Check
+pwsh -File tools/check-readme-languages.ps1
 ```
 
 ## 约定
