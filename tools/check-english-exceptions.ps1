@@ -4,11 +4,12 @@
 # 多行语句会被合并检查，异常工厂（如 ConvertErrorException.Unsupported）同样纳入。
 #
 # 用法：
-#   pwsh -File check-english-exceptions.ps1                         # 本库默认目录，失败退出码 1
-#   pwsh -File check-english-exceptions.ps1 -Dir src -List          # 下游盘点中文消息，不失败
-#   pwsh -File check-english-exceptions.ps1 -Dir src -Csv hits.csv  # 导出待翻译清单
+#   pwsh -File tools/check-english-exceptions.ps1                         # 本库默认目录，失败退出码 1
+#   pwsh -File tools/check-english-exceptions.ps1 -Dir src -List          # 下游盘点中文消息，不失败
+#   pwsh -File tools/check-english-exceptions.ps1 -Dir src -Csv hits.csv  # 导出待翻译清单
 param(
-    [String]$Root = $PSScriptRoot,
+    # 脚本位于 tools，仓库根目录在其上一级
+    [String]$Root = (Split-Path -Parent $PSScriptRoot),
     [String[]]$Dir,
     [String[]]$Exclude = @(),
     [String]$MessageCall = 'throw new|: base\(|Console\.Write|MessageBox\.Show|AppendTag\(|NewError\(|NewSpan\(|Debug\.Fail\(|WriteLog\(|OnWrite\(|XTrace\.|Log\.(Write|Error|Info|Debug|Warn|Fatal)|(Info|Error|Warn|Debug|Fatal)Prefixed\(|WritePrefixed\(|L\.T\(|Localization\.Translate|ApiException\(|HttpException\(|ConvertErrorException(?:\.\w+)?\(',

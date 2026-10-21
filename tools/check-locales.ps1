@@ -2,16 +2,24 @@
 # 以基准语言文件（默认 zh-Hans.yml）为准，所有语言必须提供完全相同的键集合
 #
 # 用法：
-#   pwsh -File check-locales.ps1                                      # 本库默认目录
-#   pwsh -File check-locales.ps1 -LocaleDir src\Lib\Locales -SourceDir src\Lib
-#   pwsh -File check-locales.ps1 -LocaleDir src\Lib\Locales -RequireTranslated   # 禁止英文回退，强制全译
-#   pwsh -File check-locales.ps1 -LocaleDir src\Lib\Locales -SkipOrphan          # 下游只想校验词表内部一致性
+#   pwsh -File tools/check-locales.ps1                                      # 本库默认目录
+#   pwsh -File tools/check-locales.ps1 -LocaleDir src\Lib\Locales -SourceDir src\Lib
+#   pwsh -File tools/check-locales.ps1 -RequireTranslated                   # 禁止英文回退，强制全译
+#   pwsh -File tools/check-locales.ps1 -RequireTranslated -AllowPending     # 迁移期：待翻译键降为告警
+#   pwsh -File tools/check-locales.ps1 -RequireTranslated -FailOnPending    # 发布门禁：待翻译清单必须为空
+#   pwsh -File tools/check-locales.ps1 -SkipOrphan                          # 只校验词表内部一致性
+#   pwsh -File tools/check-locales.ps1 -Report Bin/localization-report.tsv  # 导出各语言覆盖报告
 param(
     [String]$LocaleDir = "NewLife.Office/Locales",
     [String]$Baseline = "zh-Hans.yml",
     [String[]]$SourceDir = @("NewLife.Office", "NewLife.Office.Rendering", "NewLife.Office.Cli"),
+    [String]$MetadataKeys,
+    [String]$PendingFile = "tools/pending-translations.json",
+    [String]$Report,
     [Switch]$SkipOrphan,
-    [Switch]$RequireTranslated
+    [Switch]$RequireTranslated,
+    [Switch]$AllowPending,
+    [Switch]$FailOnPending
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,11 +27,41 @@ $ErrorActionPreference = "Stop"
 # 支持用逗号/分号分隔多个源码目录（CI 以 -File 传参时数组会退化为字符串）
 $SourceDir = @($SourceDir | ForEach-Object { $_ -split '[,;]' } | Where-Object { $_ })
 
-$root = $PSScriptRoot
+# 脚本位于 tools，仓库根目录在其上一级
+$root = Split-Path -Parent $PSScriptRoot
 $localeDir = if ([IO.Path]::IsPathRooted($LocaleDir)) { $LocaleDir } else { Join-Path $root $LocaleDir }
 if (!(Test-Path $localeDir)) {
     Write-Host "未找到语言目录：$localeDir" -ForegroundColor Red
     exit 1
+}
+
+# 非源码来源键（属性元数据、外部 Model.xml 等）豁免孤儿键判定，但仍要求全语言齐全
+if (!$MetadataKeys) {
+    $candidate = Join-Path $localeDir "metadata-keys.json"
+    if (Test-Path -LiteralPath $candidate) { $MetadataKeys = $candidate }
+}
+$metadataKeySet = [Collections.Generic.HashSet[String]]::new([StringComparer]::Ordinal)
+if ($MetadataKeys) {
+    $metadataPath = if ([IO.Path]::IsPathRooted($MetadataKeys)) { $MetadataKeys } else { Join-Path $root $MetadataKeys }
+    if (!(Test-Path -LiteralPath $metadataPath)) {
+        Write-Host "未找到非源码来源键清单：$metadataPath" -ForegroundColor Red
+        exit 1
+    }
+    foreach ($item in (Get-Content -LiteralPath $metadataPath -Encoding UTF8 -Raw | ConvertFrom-Json).keys) {
+        if (![String]::IsNullOrEmpty($item)) { [void]$metadataKeySet.Add($item) }
+    }
+}
+
+# 迁移期待翻译清单：阶段一只维护英文源文与简体中文，其余语言缺失键登记在此
+$pendingKeySet = [Collections.Generic.HashSet[String]]::new([StringComparer]::Ordinal)
+$pendingPath = if ($PendingFile) {
+    if ([IO.Path]::IsPathRooted($PendingFile)) { $PendingFile } else { Join-Path $root $PendingFile }
+}
+if ($pendingPath -and (Test-Path -LiteralPath $pendingPath)) {
+    $pendingData = Get-Content -LiteralPath $pendingPath -Encoding UTF8 -Raw | ConvertFrom-Json
+    foreach ($item in $pendingData.keys) {
+        if (![String]::IsNullOrEmpty($item)) { [void]$pendingKeySet.Add($item) }
+    }
 }
 
 $pattern = '^\s*"((?:[^"\\]|\\.)*)"\s*:\s*"((?:[^"\\]|\\.)*)"\s*$'
@@ -93,6 +131,7 @@ if (!(Test-Path -LiteralPath $referencePath)) {
 $reference = Read-Locale $referencePath
 $allErrors = @($reference.Errors | ForEach-Object { "$($Baseline): $_" })
 $allWarnings = @()
+$pendingMissingCount = 0
 
 foreach ($file in Get-ChildItem $localeDir -Filter *.yml | Sort-Object Name) {
     if ($file.Name -eq $Baseline) { continue }
@@ -101,7 +140,17 @@ foreach ($file in Get-ChildItem $localeDir -Filter *.yml | Sort-Object Name) {
 
     foreach ($key in $reference.Entries.Keys) {
         if (!$locale.Entries.Contains($key)) {
-            $allErrors += "$($file.Name): 缺少键 $key"
+            if ($pendingKeySet.Contains($key)) {
+                if ($FailOnPending) {
+                    $allErrors += "$($file.Name): 缺少键（待翻译） $key"
+                }
+                else {
+                    $pendingMissingCount++
+                }
+            }
+            else {
+                $allErrors += "$($file.Name): 缺少键 $key"
+            }
         }
     }
     foreach ($key in $locale.Entries.Keys) {
@@ -142,9 +191,15 @@ if (!$SkipOrphan) {
 
     $sourceFiles = @($sourceDirs | ForEach-Object { Get-ChildItem $_ -Recurse -Filter *.cs } |
         Where-Object { $_.FullName -notmatch '\\(obj|bin|Locales)\\' })
-    $sourceText = ($sourceFiles | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
+    # 源文范围含 .csproj：程序集标题/描述等元数据写在 csproj 中，同样是词表源文
+    $sourceTextFiles = @($sourceDirs | ForEach-Object { Get-ChildItem $_ -Recurse -Include *.cs, *.csproj } |
+        Where-Object { $_.FullName -notmatch '\\(obj|bin|Locales)\\' })
+    $sourceText = ($sourceTextFiles | ForEach-Object { [IO.File]::ReadAllText($_.FullName) }) -join "`n"
 
     foreach ($key in $reference.Entries.Keys) {
+        # 非源码来源键（属性元数据、外部 Model.xml 等）由外部数据引用，不参与源码归属判定
+        if ($metadataKeySet.Contains($key)) { continue }
+
         # 源码中的字面量形式：制表符写作 \t，引号写作 \"
         $escaped = $key.Replace('\', '\\').Replace('"', '\"').Replace("`t", '\t').Replace("`r", '\r').Replace("`n", '\n')
         if (!$sourceText.Contains($key) -and !$sourceText.Contains($escaped)) {
@@ -154,7 +209,7 @@ if (!$SkipOrphan) {
     foreach ($o in $orphans) { $allErrors += "孤儿键（源码中找不到）：$o" }
 
     # 反向覆盖：源码中 L.T / Localization.Translate 的英文源文必须已登记，否则运行时静默回退英文
-    $usedPattern = '(?:L\.T|Localization\.Translate)\s*\(\s*"((?:[^"\\]|\\.)*)"'
+    $usedPattern = '(?:L\.T|L\.TLog|Localization\.Translate(?:ForLog)?)\s*\(\s*(?:[A-Za-z_][\w\.]*\s*,\s*)?"((?:[^"\\]|\\.)*)"'
     $reported = @{}
     foreach ($file in $sourceFiles) {
         $text = [IO.File]::ReadAllText($file.FullName)
@@ -171,6 +226,39 @@ if (!$SkipOrphan) {
             }
         }
     }
+}
+
+# 迁移期待翻译清单：存在待翻译键时必须显式放行，防止静默长期回退英文
+if ($pendingKeySet.Count -gt 0) {
+    if ($FailOnPending) {
+        $allErrors += "待翻译清单仍有 $($pendingKeySet.Count) 条，发布前必须清零：$pendingPath"
+    }
+    elseif (!$AllowPending) {
+        $allErrors += "存在 $($pendingKeySet.Count) 条待翻译键，请使用 -AllowPending 继续开发，或在发布前补齐：$pendingPath"
+    }
+    else {
+        $allWarnings += "待翻译清单 $($pendingKeySet.Count) 条（-AllowPending 放行，缺失 $pendingMissingCount 处）：$pendingPath"
+    }
+}
+
+# 覆盖报告：各语言键数、缺失键、英文回退数，供批量翻译阶段核对
+if ($Report) {
+    $reportPath = if ([IO.Path]::IsPathRooted($Report)) { $Report } else { Join-Path $root $Report }
+    $reportDir = Split-Path -Parent $reportPath
+    if ($reportDir -and !(Test-Path $reportDir)) { New-Item -ItemType Directory -Force -Path $reportDir | Out-Null }
+    $lines = @("culture`tkeys`tmissing`tfallback")
+    foreach ($file in Get-ChildItem $localeDir -Filter *.yml | Sort-Object Name) {
+        $entry = Read-Locale $file.FullName
+        $missing = 0
+        $fallback = 0
+        foreach ($key in $reference.Entries.Keys) {
+            if (!$entry.Entries.Contains($key)) { $missing++; continue }
+            if ($entry.Entries[$key] -ceq $key) { $fallback++ }
+        }
+        $lines += "{0}`t{1}`t{2}`t{3}" -f $file.BaseName, $entry.Entries.Count, $missing, $fallback
+    }
+    [IO.File]::WriteAllLines($reportPath, $lines, (New-Object System.Text.UTF8Encoding($false)))
+    Write-Host "覆盖报告已写入：$reportPath"
 }
 
 foreach ($e in $allErrors) { Write-Host $e -ForegroundColor Red }

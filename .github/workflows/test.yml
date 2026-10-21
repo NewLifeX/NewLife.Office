@@ -184,14 +184,14 @@ jobs:
         $failed = $false
         Get-ChildItem -Path . -Recurse -Directory -Filter Locales | ForEach-Object {
           if (Test-Path (Join-Path $_.FullName 'zh-Hans.yml')) {
-            pwsh -File ./check-locales.ps1 -LocaleDir $_.FullName -Baseline zh-Hans.yml -SourceDir "NewLife.Office,NewLife.Office.Rendering,NewLife.Office.Cli" -RequireTranslated
+            pwsh -File ./tools/check-locales.ps1 -LocaleDir $_.FullName -Baseline zh-Hans.yml -SourceDir "NewLife.Office,NewLife.Office.Rendering,NewLife.Office.Cli" -RequireTranslated -AllowPending -PendingFile tools/pending-translations.json
             if ($LASTEXITCODE -ne 0) { $failed = $true }
           }
         }
         if ($failed) { exit 1 }
     - name: Check English runtime messages
       shell: pwsh
-      run: pwsh -File ./check-english-exceptions.ps1
+      run: pwsh -File ./tools/check-english-exceptions.ps1
     - name: Check README languages
       shell: pwsh
-      run: pwsh -File ./sync-readme-languages.ps1 -Check
+      run: pwsh -File ./tools/sync-readme-languages.ps1 -Check
