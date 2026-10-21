@@ -175,6 +175,27 @@ public class LocalizationTests
         }
     }
 
+    [Fact(DisplayName = "程序集标题与描述按当前语言翻译")]
+    public void AssemblyMetadataIsLocalized()
+    {
+        const String title = "Office Automation Library";
+        const String description = "Office automation library supporting read/write, template filling and format conversion for Excel (xlsx/xls), Word (docx/doc), PowerPoint (pptx/ppt), PDF, Markdown, RTF, ODS, Email (eml/msg), iCalendar, vCard, EPUB and XPS, with zero external dependencies and an MIT license.";
+        var saved = Localization.Culture;
+        try
+        {
+            Localization.Culture = CultureInfo.GetCultureInfo("zh-Hans");
+            Assert.Equal("办公自动化库", Localization.Translate(title));
+            Assert.StartsWith("办公自动化库", Localization.Translate(description));
+
+            Localization.Culture = CultureInfo.GetCultureInfo("en-US");
+            Assert.Equal(title, Localization.Translate(title));
+        }
+        finally
+        {
+            Localization.Culture = saved;
+        }
+    }
+
     [Fact(DisplayName = "译文格式化与占位符保持一致")]
     public void TranslateWithArguments()
     {

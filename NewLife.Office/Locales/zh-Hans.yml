@@ -126,3 +126,6 @@
 "Image {0}": "图像 {0}"
 "Image": "图像"
 "Table({0} rows)": "表格（{0} 行）"
+# 程序集与包元数据（展示层翻译；NuGet 元数据本身保持英文源文）
+"Office Automation Library": "办公自动化库"
+"Office automation library supporting read/write, template filling and format conversion for Excel (xlsx/xls), Word (docx/doc), PowerPoint (pptx/ppt), PDF, Markdown, RTF, ODS, Email (eml/msg), iCalendar, vCard, EPUB and XPS, with zero external dependencies and an MIT license.": "办公自动化库，支持 Excel（xlsx/xls）、Word（docx/doc）、PPT（pptx/ppt）、PDF、Markdown、RTF、ODS、Email（eml/msg）、iCalendar、vCard、EPUB、XPS 等格式的读写、模板填充与格式转换，零外部依赖，MIT 许可"

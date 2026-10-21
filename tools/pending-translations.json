@@ -1,0 +1,7 @@
+{
+  "note": "阶段一：仅维护英文源文与简体中文，其余语言在批量翻译阶段补齐后清空本清单。",
+  "keys": [
+    "Office Automation Library",
+    "Office automation library supporting read/write, template filling and format conversion for Excel (xlsx/xls), Word (docx/doc), PowerPoint (pptx/ppt), PDF, Markdown, RTF, ODS, Email (eml/msg), iCalendar, vCard, EPUB and XPS, with zero external dependencies and an MIT license."
+  ]
+}
