@@ -180,12 +180,16 @@ public class LocalizationTests
     {
         const String title = "Office Automation Library";
         const String description = "Office automation library supporting read/write, template filling and format conversion for Excel (xlsx/xls), Word (docx/doc), PowerPoint (pptx/ppt), PDF, Markdown, RTF, ODS, Email (eml/msg), iCalendar, vCard, EPUB and XPS, with zero external dependencies and an MIT license.";
+        const String renderingTitle = "Office Document Rendering Extension";
+        const String renderingDescription = "Rendering extension for NewLife.Office, providing document page to image rendering, image processing, watermark overlay and QR code generation, powered by SkiaSharp for cross-platform 2D graphics.";
         var saved = Localization.Culture;
         try
         {
             Localization.Culture = CultureInfo.GetCultureInfo("zh-Hans");
             Assert.Equal("办公自动化库", Localization.Translate(title));
             Assert.StartsWith("办公自动化库", Localization.Translate(description));
+            Assert.Equal("办公文档渲染扩展", Localization.Translate(renderingTitle));
+            Assert.StartsWith("NewLife.Office 的渲染扩展包", Localization.Translate(renderingDescription));
 
             Localization.Culture = CultureInfo.GetCultureInfo("en-US");
             Assert.Equal(title, Localization.Translate(title));

@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFrameworks>net462;netstandard2.0;netstandard2.1</TargetFrameworks>
-    <AssemblyTitle>办公文档渲染扩展</AssemblyTitle>
-    <Description>NewLife.Office 的渲染扩展包，提供文档页面→图片渲染、图片处理、水印叠加、二维码生成等功能。依赖 SkiaSharp 实现跨平台 2D 图形渲染。</Description>
+    <AssemblyTitle>Office Document Rendering Extension</AssemblyTitle>
+    <Description>Rendering extension for NewLife.Office, providing document page to image rendering, image processing, watermark overlay and QR code generation, powered by SkiaSharp for cross-platform 2D graphics.</Description>
     <Company>新生命开发团队</Company>
-    <Copyright>©2002-2026 新生命开发团队</Copyright>
+    <Copyright>©2002-2026 NewLife</Copyright>
     <VersionPrefix>1.0</VersionPrefix>
     <VersionSuffix>$([System.DateTime]::Now.ToString(`yyyy.MMdd`))</VersionSuffix>
     <Version>$(VersionPrefix).$(VersionSuffix)</Version>
@@ -24,6 +24,7 @@
 
   <PropertyGroup>
     <PackageId>$(AssemblyName)</PackageId>
+    <PackageDescription>Rendering extension for NewLife.Office, providing document page to image rendering, image processing, watermark overlay and QR code generation, powered by SkiaSharp for cross-platform 2D graphics. NewLife.Office 的渲染扩展包，提供文档页面→图片渲染、图片处理、水印叠加、二维码生成等功能。依赖 SkiaSharp 实现跨平台 2D 图形渲染。</PackageDescription>
     <Authors>$(Company)</Authors>
     <PackageProjectUrl>https://github.com/NewLifeX/NewLife.Office</PackageProjectUrl>
     <PackageIcon>leaf.png</PackageIcon>
@@ -36,6 +37,7 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageReadmeFile>README.nuget.md</PackageReadmeFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -56,6 +58,7 @@
 
   <ItemGroup>
     <Content Include="..\Doc\leaf.png" Link="leaf.png" PackagePath="\" />
+    <None Include="..\README.nuget.md" Pack="True" PackagePath="\" />
   </ItemGroup>
 
 </Project>

@@ -36,3 +36,6 @@ jobs:
     - name: Check README translation completeness
       shell: pwsh
       run: pwsh -NoProfile -File ./tools/check-readme-languages.ps1
+    - name: Check NuGet package README
+      shell: pwsh
+      run: pwsh -NoProfile -File ./tools/sync-readme-package.ps1 -Check

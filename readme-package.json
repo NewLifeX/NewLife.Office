@@ -1,0 +1,8 @@
+{
+  "updated": "2026-10-22",
+  "repository": "https://github.com/NewLifeX/NewLife.Office",
+  "branch": "master",
+  "items": [
+    { "source": "README.md", "output": "README.nuget.md" }
+  ]
+}

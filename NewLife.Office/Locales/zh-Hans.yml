@@ -129,3 +129,6 @@
 # 程序集与包元数据（展示层翻译；NuGet 元数据本身保持英文源文）
 "Office Automation Library": "办公自动化库"
 "Office automation library supporting read/write, template filling and format conversion for Excel (xlsx/xls), Word (docx/doc), PowerPoint (pptx/ppt), PDF, Markdown, RTF, ODS, Email (eml/msg), iCalendar, vCard, EPUB and XPS, with zero external dependencies and an MIT license.": "办公自动化库，支持 Excel（xlsx/xls）、Word（docx/doc）、PPT（pptx/ppt）、PDF、Markdown、RTF、ODS、Email（eml/msg）、iCalendar、vCard、EPUB、XPS 等格式的读写、模板填充与格式转换，零外部依赖，MIT 许可"
+# 渲染扩展程序集元数据
+"Office Document Rendering Extension": "办公文档渲染扩展"
+"Rendering extension for NewLife.Office, providing document page to image rendering, image processing, watermark overlay and QR code generation, powered by SkiaSharp for cross-platform 2D graphics.": "NewLife.Office 的渲染扩展包，提供文档页面→图片渲染、图片处理、水印叠加、二维码生成等功能。依赖 SkiaSharp 实现跨平台 2D 图形渲染。"
