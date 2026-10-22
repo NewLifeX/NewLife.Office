@@ -66,6 +66,7 @@ $englishPath = Join-Path $Root $english.file
 $englishText = [IO.File]::ReadAllText($englishPath)
 $englishFences = Get-FenceLanguages $englishText
 $englishHeadings = Get-HeadingCounts $englishText
+$englishBullets = ([regex]::Matches($englishText, '(?m)^- \*\*')).Count
 $englishProse = [Collections.Generic.HashSet[String]]::new([StringComparer]::Ordinal)
 foreach ($line in Get-ProseLines $englishText) {
     $t = $line.Trim()
@@ -104,6 +105,11 @@ foreach ($item in $langs) {
         if ($actual -lt $englishHeadings[$level]) {
             $warnings += "$($item.file): 标题层级 $('#' * $level) 数量 $actual < 英文 $($englishHeadings[$level])，可能缺少章节"
         }
+    }
+
+    $bullets = ([regex]::Matches($text, '(?m)^- \*\*')).Count
+    if ($bullets -lt $englishBullets) {
+        $warnings += "$($item.file): 亮点条目 $bullets < 英文 $englishBullets，可能缺少特性说明"
     }
 
     if ($item.code -ne 'en' -and $scriptMap.ContainsKey($item.code)) {

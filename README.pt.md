@@ -42,6 +42,8 @@ NuGet: NewLife.Office (pacote de renderização: NewLife.Office.Rendering)
 - **Roundtrip de alta fidelidade**: arquitetura de fidelidade L2/L3 (modelo + passagem direta de RawXml/partes), ler → modificar → escrever sem perder formatação
 - **Centro de conversão Markdown**: conversão bidirecional MD↔docx/PDF/HTML/Excel/PPT/Word, um ponto de entrada unificado para ingestão de bases de conhecimento de IA
 - **Extensão de renderização**: `NewLife.Office.Rendering` (NuGet independente) fornece renderização de documentos → imagens, processamento de imagens e códigos QR
+- **AOT/multiplataforma**: zero avisos de IL em `net8.0` / `net10.0`; a CI cobre win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch via QEMU), com 23 cenários de teste AOT incluindo as 31 tabelas de idiomas
+- **Localização em 31 idiomas**: mensagens de exceção e rótulos de saída de documentos são traduzidos para a cultura atual e recorrem ao inglês; os arquivos `Locales/*.yml` são compilados no assembly e funcionam sob NativeAOT
 
 ## Formatos suportados
 

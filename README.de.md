@@ -42,6 +42,8 @@ NuGet: NewLife.Office (Render-Erweiterungspaket: NewLife.Office.Rendering)
 - **Hochpräziser Roundtrip**: L2/L3-Treuearchitektur (Modell + RawXml/Teil-Durchreichung), Lesen → Ändern → Schreiben ohne Formatverlust
 - **Markdown-Konvertierungszentrum**: bidirektionale Konvertierung MD↔docx/PDF/HTML/Excel/PPT/Word, ein einheitlicher Einstieg für die KI-Wissensdatenbank-Aufnahme
 - **Render-Erweiterung**: `NewLife.Office.Rendering` (separates NuGet) bietet Dokument→Bild-Rendering, Bildverarbeitung und QR-Codes
+- **AOT/plattformübergreifend**: keine IL-Warnungen unter `net8.0` / `net10.0`; CI deckt win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 ab (LoongArch über QEMU), mit 23 AOT-Smoke-Szenarien inklusive aller 31 Sprachtabellen
+- **Lokalisierung in 31 Sprachen**: Ausnahmemeldungen und Dokument-Ausgabelabels werden für die aktuelle Kultur übersetzt und fallen auf Englisch zurück; `Locales/*.yml` werden in die Assembly kompiliert und funktionieren unter NativeAOT
 
 ## Unterstützte Formate
 
