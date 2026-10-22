@@ -43,7 +43,7 @@ NuGet: NewLife.Office（レンダリング拡張パッケージ: NewLife.Office.
 - **Markdown 変換ハブ**: MD↔docx/PDF/HTML/Excel/PPT/Word 双方向変換、AI ナレッジベース投入の統一エントリ
 - **レンダリング拡張**: `NewLife.Office.Rendering`（独立 NuGet）がドキュメント → 画像レンダリング、画像処理、QR コードを提供
 - **AOT/クロスプラットフォーム**: `net8.0` / `net10.0` で IL 警告ゼロ。CI は win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64（LoongArch は QEMU 経由）をカバーし、31 言語表を含む 23 の AOT スモークシナリオを実行
-- **31 言語のローカライズ**: 例外メッセージとドキュメント出力ラベルを現在のカルチャに合わせて翻訳し、英語にフォールバック。`Locales/*.yml` はアセンブリにコンパイルされ、NativeAOT でも動作
+- **31 言語のローカライズ**: 例外メッセージ、ドキュメント出力ラベル、アセンブリ メタデータを現在のカルチャに合わせて翻訳し、英語にフォールバック。`Locales/*.yml` はアセンブリにコンパイルされ、NativeAOT でも動作
 
 ## 対応形式
 

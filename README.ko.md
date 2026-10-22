@@ -43,7 +43,7 @@ NuGet: NewLife.Office (렌더링 확장 패키지: NewLife.Office.Rendering)
 - **Markdown 변환 허브**: MD↔docx/PDF/HTML/Excel/PPT/Word 양방향 변환, AI 지식 베이스 주입을 위한 통일된 진입점
 - **렌더링 확장**: `NewLife.Office.Rendering`(별도 NuGet)이 문서 → 이미지 렌더링, 이미지 처리, QR 코드 제공
 - **AOT/크로스 플랫폼**: `net8.0` / `net10.0`에서 IL 경고 0개; CI는 win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64(LoongArch는 QEMU 경유)를 포함하며, 31개 언어 테이블을 포함한 23개 AOT 스모크 시나리오를 실행
-- **31개 언어 현지화**: 예외 메시지와 문서 출력 레이블을 현재 문화권에 맞게 번역하고 영어로 대체합니다. `Locales/*.yml`은 어셈블리에 컴파일되어 NativeAOT에서도 작동합니다
+- **31개 언어 현지화**: 예외 메시지, 문서 출력 레이블 및 어셈블리 메타데이터를 현재 문화권에 맞게 번역하고 영어로 대체합니다. `Locales/*.yml`은 어셈블리에 컴파일되어 NativeAOT에서도 작동합니다
 
 ## 지원 형식
 

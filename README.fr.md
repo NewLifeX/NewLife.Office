@@ -43,7 +43,7 @@ NuGet : NewLife.Office (package de rendu : NewLife.Office.Rendering)
 - **Centre de conversion Markdown** : conversion bidirectionnelle MD↔docx/PDF/HTML/Excel/PPT/Word, un point d'entrée unifié pour l'ingestion de bases de connaissances IA
 - **Extension de rendu** : `NewLife.Office.Rendering` (NuGet indépendant) fournit le rendu documents → images, le traitement d'images et les codes QR
 - **AOT/multiplateforme** : aucune alerte IL sous `net8.0` / `net10.0` ; la CI couvre win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch via QEMU), avec 23 scénarios de test AOT incluant les 31 tables de langues
-- **Localisation en 31 langues** : les messages d'exception et les libellés de sortie des documents sont traduits selon la culture courante et reviennent à l'anglais ; les fichiers `Locales/*.yml` sont compilés dans l'assembly et fonctionnent sous NativeAOT
+- **Localisation en 31 langues** : les messages d'exception, les libellés de sortie des documents et les métadonnées d'assembly sont traduits selon la culture courante et reviennent à l'anglais ; les fichiers `Locales/*.yml` sont compilés dans l'assembly et fonctionnent sous NativeAOT
 
 ## Formats pris en charge
 

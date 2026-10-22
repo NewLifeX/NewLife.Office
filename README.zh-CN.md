@@ -45,7 +45,7 @@ Nuget：NewLife.Office（渲染扩展包：NewLife.Office.Rendering）
 - **Markdown 全格式转换中枢**：MD↔docx/PDF/HTML/Excel/PPT/Word 双向转换，为 AI 知识库喂入提供统一入口
 - **渲染扩展包**：`NewLife.Office.Rendering`（独立 NuGet）提供文档 → 图片渲染、图片处理、二维码
 - **AOT/跨平台兼容**：`net8.0` / `net10.0` 零 IL 告警，CI 覆盖 win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64（龙芯 LA64 经 QEMU），23 项 AOT 冒烟场景（含 31 种语言表）
-- **31 种语言本地化**：异常消息与文档输出标签按当前区域自动翻译，缺失译文回退英文；`Locales/*.yml` 编译期生成，NativeAOT 下同样可用
+- **31 种语言本地化**：异常消息、文档输出标签与程序集元数据按当前区域自动翻译，缺失译文回退英文；`Locales/*.yml` 编译期生成，NativeAOT 下同样可用
 
 ## 支持的格式
 

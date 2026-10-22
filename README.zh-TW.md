@@ -43,7 +43,7 @@ NuGet：NewLife.Office（渲染擴充套件：NewLife.Office.Rendering）
 - **Markdown 全格式轉換中樞**：MD↔docx/PDF/HTML/Excel/PPT/Word 雙向轉換，為 AI 知識庫餵入提供統一入口
 - **渲染擴充套件**：`NewLife.Office.Rendering`（獨立 NuGet）提供文件 → 圖片渲染、圖片處理、QR Code
 - **AOT／跨平台**：`net8.0` / `net10.0` 零 IL 警告，CI 覆蓋 win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64（龍芯 LA64 經 QEMU），23 項 AOT 冒煙場景（含 31 種語言表）
-- **31 種語言在地化**：例外訊息與文件輸出標籤依目前區域自動翻譯，缺少譯文時回退英文；`Locales/*.yml` 編譯期產生，NativeAOT 下同樣可用
+- **31 種語言在地化**：例外訊息、文件輸出標籤與組件中繼資料依目前區域自動翻譯，缺少譯文時回退英文；`Locales/*.yml` 編譯期產生，NativeAOT 下同樣可用
 
 ## 支援的格式
 

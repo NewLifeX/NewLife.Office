@@ -45,7 +45,7 @@ NuGet: NewLife.Office (Rendering package: NewLife.Office.Rendering)
 - **Markdown conversion hub**: bidirectional MD↔docx/PDF/HTML/Excel/PPT/Word conversion, a unified entry for AI knowledge base ingestion
 - **Rendering extension**: `NewLife.Office.Rendering` (separate NuGet) provides document → image rendering, image processing, and QR codes
 - **AOT/cross-platform**: zero IL warnings on `net8.0` / `net10.0`; CI covers win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch via QEMU), with 23 AOT smoke scenarios including all 31 language tables
-- **31-language localization**: exception messages and document output labels are translated for the current culture and fall back to English; `Locales/*.yml` are compiled into the assembly and work under NativeAOT
+- **31-language localization**: exception messages, document output labels and assembly metadata are translated for the current culture and fall back to English; `Locales/*.yml` are compiled into the assembly and work under NativeAOT
 
 ## Supported Formats
 
