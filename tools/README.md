@@ -15,8 +15,8 @@
 ## 常用命令
 
 ```powershell
-# 迁移期：待翻译键只告警
-pwsh -File tools/check-locales.ps1 -LocaleDir NewLife.Office/Locales -SourceDir "NewLife.Office,NewLife.Office.Rendering,NewLife.Office.Cli" -RequireTranslated -AllowPending -PendingFile tools/pending-translations.json
+# 迁移期：待翻译键只告警；同时检查非拉丁语言的书写系统
+pwsh -File tools/check-locales.ps1 -LocaleDir NewLife.Office/Locales -SourceDir "NewLife.Office,NewLife.Office.Rendering,NewLife.Office.Cli" -RequireTranslated -AllowPending -PendingFile tools/pending-translations.json -ScriptCheck
 
 # 发布门禁：待翻译清单必须为空
 pwsh -File tools/check-locales.ps1 -LocaleDir NewLife.Office/Locales -SourceDir "NewLife.Office,NewLife.Office.Rendering,NewLife.Office.Cli" -RequireTranslated -FailOnPending

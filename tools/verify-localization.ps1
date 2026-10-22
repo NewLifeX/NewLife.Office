@@ -7,6 +7,7 @@
 #   pwsh -File tools/verify-localization.ps1 -SkipReadme -SkipPackage
 param(
     [Switch]$FailOnPending,
+    [Switch]$StrictScript,
     [Switch]$SkipReadme,
     [Switch]$SkipPackage,
     [String]$Report
@@ -30,9 +31,11 @@ $localeArgs = @(
     '-LocaleDir', 'NewLife.Office/Locales',
     '-SourceDir', 'NewLife.Office,NewLife.Office.Rendering,NewLife.Office.Cli',
     '-RequireTranslated',
-    '-PendingFile', 'tools/pending-translations.json'
+    '-PendingFile', 'tools/pending-translations.json',
+    '-ScriptCheck'
 )
 if ($FailOnPending) { $localeArgs += '-FailOnPending' } else { $localeArgs += '-AllowPending' }
+if ($StrictScript) { $localeArgs += '-StrictScript' }
 if ($Report) { $localeArgs += @('-Report', $Report) }
 
 Invoke-Check '词表一致性' 'check-locales.ps1' $localeArgs

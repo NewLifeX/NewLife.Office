@@ -8,6 +8,7 @@
 #   pwsh -File tools/check-locales.ps1 -RequireTranslated -AllowPending     # 迁移期：待翻译键降为告警
 #   pwsh -File tools/check-locales.ps1 -RequireTranslated -FailOnPending    # 发布门禁：待翻译清单必须为空
 #   pwsh -File tools/check-locales.ps1 -SkipOrphan                          # 只校验词表内部一致性
+#   pwsh -File tools/check-locales.ps1 -ScriptCheck                         # 检查非拉丁语言译文是否含目标书写系统
 #   pwsh -File tools/check-locales.ps1 -Report Bin/localization-report.tsv  # 导出各语言覆盖报告
 param(
     [String]$LocaleDir = "NewLife.Office/Locales",
@@ -19,7 +20,9 @@ param(
     [Switch]$SkipOrphan,
     [Switch]$RequireTranslated,
     [Switch]$AllowPending,
-    [Switch]$FailOnPending
+    [Switch]$FailOnPending,
+    [Switch]$ScriptCheck,
+    [Switch]$StrictScript
 )
 
 $ErrorActionPreference = "Stop"
@@ -101,6 +104,33 @@ function Get-PlaceholderSpecs([string]$text) {
     return $map
 }
 
+# 目标书写系统：只对整句/短语做启发式检查，短标签与技术词不参与
+function Test-TargetScript([String]$culture, [String]$key, [String]$value) {
+    $pattern = switch -Wildcard ($culture) {
+        'zh-*' { '[\u4e00-\u9fff]' }
+        'ja' { '[\u3040-\u30ff\u4e00-\u9fff]' }
+        'ko' { '[\uac00-\ud7af]' }
+        'ru' { '[\u0400-\u04ff]' }
+        'uk' { '[\u0400-\u04ff]' }
+        'el' { '[\u0370-\u03ff]' }
+        'ar' { '[\u0600-\u06ff]' }
+        'fa' { '[\u0600-\u06ff]' }
+        'he' { '[\u0590-\u05ff]' }
+        'hi' { '[\u0900-\u097f]' }
+        'bn' { '[\u0980-\u09ff]' }
+        'th' { '[\u0e00-\u0e7f]' }
+        default { '' }
+    }
+    if (!$pattern) { return $true }
+    if ($key -match '\*\*') { return $true }
+    $letters = ([regex]::Matches($key, '[A-Za-z]')).Count
+    if ($letters -lt 8 -or $key -notmatch ' ') { return $true }
+    if ([regex]::IsMatch($value, $pattern)) { return $true }
+    # 含其它非 ASCII 字符时不判失败，避免误伤音译与符号
+    if ([regex]::IsMatch($value, '[^\x00-\x7F]')) { return $true }
+    return $false
+}
+
 function Read-Locale([string]$path) {
     $entries = [ordered]@{}
     $errors = @()
@@ -162,6 +192,10 @@ foreach ($file in Get-ChildItem $localeDir -Filter *.yml | Sort-Object Name) {
         $value = $locale.Entries[$key]
         if ($RequireTranslated -and $value -ceq $key) {
             $allErrors += "$($file.Name): 未翻译（英文回退）→ $key"
+        }
+        if ($ScriptCheck -and !(Test-TargetScript $file.BaseName $key $value)) {
+            $message = "$($file.Name): 译文不含目标语言书写系统 → $key = $value"
+            if ($StrictScript) { $allErrors += $message } else { $allWarnings += $message }
         }
         $expected = Get-Placeholders $key
         $actual = Get-Placeholders $value
