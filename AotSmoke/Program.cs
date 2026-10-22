@@ -390,6 +390,12 @@ Run("22.多语言 全部内置语言表可用", () =>
             if (text == key || text.Length == 0) missing.Add(name);
         }
         if (missing.Count > 0) throw new Exception("以下语言缺少译文: " + String.Join(", ", missing));
+
+        // 程序集元数据同样要在 AOT 词表中可用（当前仅简体中文有译文，其余语言迁移期回退英文）
+        Localization.Culture = CultureInfo.GetCultureInfo("zh-Hans");
+        if (Localization.Translate("Office Automation Library") != "办公自动化库") return false;
+        if (Localization.Translate("Office Document Rendering Extension") != "办公文档渲染扩展") return false;
+
         return true;
     }
     finally
