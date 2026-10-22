@@ -9,6 +9,7 @@
 | `sync-readme-languages.ps1` | 按 `readme-languages.json` 生成/校验 README 语言切换行 |
 | `check-readme-languages.ps1` | 校验 11 种 README 的结构、代码块、目标语言书写系统与整段英文残留 |
 | `sync-readme-package.ps1` | 按 `readme-package.json` 从英文 README 生成 NuGet 包版（相对链接改写为 GitHub 绝对地址） |
+| `verify-localization.ps1` | 一键运行词表、英文消息、README、NuGet 包版全部门禁 |
 | `pending-translations.json` | 迁移期「英文与简体中文已完成、其余语言待补」的键清单 |
 
 ## 常用命令
@@ -27,6 +28,10 @@ pwsh -File tools/check-english-exceptions.ps1
 pwsh -File tools/sync-readme-languages.ps1 -Check
 pwsh -File tools/check-readme-languages.ps1
 pwsh -File tools/sync-readme-package.ps1 -Check
+
+# 一键门禁（迁移期 / 发布前）
+pwsh -File tools/verify-localization.ps1
+pwsh -File tools/verify-localization.ps1 -FailOnPending
 ```
 
 ## 约定
