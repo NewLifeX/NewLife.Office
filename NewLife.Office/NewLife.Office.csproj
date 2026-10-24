@@ -5,7 +5,7 @@
     <Description>Office automation library supporting read/write, template filling and format conversion for Excel (xlsx/xls), Word (docx/doc), PowerPoint (pptx/ppt), PDF, Markdown, RTF, ODS, Email (eml/msg), iCalendar, vCard, EPUB and XPS, with zero external dependencies and an MIT license.</Description>
     <Company>新生命开发团队</Company>
     <Copyright>©2002-2026 NewLife</Copyright>
-    <VersionPrefix>1.4</VersionPrefix>
+    <VersionPrefix>1.5</VersionPrefix>
     <VersionSuffix>$([System.DateTime]::Now.ToString(`yyyy.MMdd`))</VersionSuffix>
     <Version>$(VersionPrefix).$(VersionSuffix)</Version>
     <FileVersion>$(Version)</FileVersion>
@@ -33,8 +33,8 @@
     <PackageIcon>leaf.png</PackageIcon>
     <RepositoryUrl>https://github.com/NewLifeX/NewLife.Office</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <PackageTags>新生命团队;X组件;NewLife;Office;Excel;Word;PowerPoint;PDF;Markdown;$(AssemblyName)</PackageTags>
-    <PackageReleaseNotes>Word 读取保真修复、日常编辑 API（FindText/ReplaceText）、多节/脚注尾注/文本框、doc→docx 转换与自选图形/公式/图表创建；Excel xls 全面增强、条件格式 dxf、图表类型扩展、切片器/线程化批注、ReadRows 流式读取性能大幅提升；Markdown CommonMark 规范补全与解析性能多轮优化；PPT 形状往返保真与图表/超链接增强；PDF 结构化表格提取与嵌入字体子集化；新增 CLI 命令行转换工具链与 OfficeFactory 内容识别</PackageReleaseNotes>
+    <PackageTags>新生命团队;X组件;NewLife;Office;Excel;Word;PowerPoint;PDF;Markdown;Localization;AOT;$(AssemblyName)</PackageTags>
+    <PackageReleaseNotes>新增 31 种语言运行时本地化（异常消息、文档输出标签与程序集元数据，共 130 条词条）；主库扩展 net8.0/net10.0 目标框架并完成 NativeAOT 兼容改造，新增 23 场景 AOT 冒烟与多平台 CI 矩阵；Word 支持样式表注入与表格默认内边距/垂直居中；Excel 支持默认字体、货币与千分位显示格式；PPT 支持主题字体与图表主题色；修复 PDF 对象流/CJK 元数据、Markdown 紧凑列表与真实文档往返兼容问题</PackageReleaseNotes>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
@@ -51,7 +51,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="NewLife.Core" Version="12.0.2026.1021-beta0321" />
+    <PackageReference Include="NewLife.Core" Version="12.0.2026.1024" />
   </ItemGroup>
 
   <ItemGroup>

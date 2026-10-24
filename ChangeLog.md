@@ -1,5 +1,36 @@
 # NewLife.Office 版本更新记录
 
+## v1.5.2026.1024 (2026-10-24)
+
+### 多语言本地化（31 种语言）
+- **运行时词表**：接入 NewLife.Core 12 本地化体系，异常消息统一英文源文，词表由 11 种语言扩展至 31 种，共 130 条已登记词条（62 条运行时消息 + 64 条文档输出标签 + 4 条程序集元数据）
+- **文档输出标签**：文本提取、模板默认值、EPUB 等文档输出标签按当前区域翻译，导出内容随语言变化
+- **程序集元数据**：AssemblyTitle/Description 改英文源文并接入词表，主包与渲染扩展启用 PackageReadmeFile（NuGet 包内附带英文 README）
+- **质量门禁**：新增 tools/verify-localization.ps1 一键校验（词表双向覆盖、英文源文守卫、待翻译清单、目标书写系统检查、README 完整性），支持 -FailOnPending 发布门禁
+
+### NativeAOT 与多平台
+- **AOT 兼容改造**：主库目标框架扩展为 net45/netstandard2.0/netstandard2.1/net8.0/net10.0，net8.0+ 开启 IsAotCompatible，泛型反射入口补齐 DynamicallyAccessedMembers 标注，IL 告警清零
+- **AOT 冒烟**：新增 AotSmoke 工程，23 个场景覆盖 Markdown/PDF/Excel/Word/PPT/RTF/ODS/EML/ICS/vCard/EPUB/XPS/OLE2 读写与 31 种语言表
+- **CI 矩阵**：win-x64/win-x86/win-arm64、linux-x64/linux-arm64/linux-loongarch64（QEMU）、osx-x64/osx-arm64；新增 riscv64/s390x 指令集冒烟与 Android/iOS 移动端冒烟工程
+
+### 排版能力增强
+- **Word**：支持注入 styles.xml 样式表并美化默认排版；表格默认单元格内边距与垂直居中，避免文字贴边框
+- **Excel**：支持设置工作簿默认字体；写出器识别货币与千分位数值并保留显示格式
+- **PPT**：支持主题字体引用与图表主题色
+
+### 兼容性修复
+- **PDF**：补齐流对象与对象流（含 Flate 解压）解析、嵌套页树遍历、十六进制字符串 UTF-16 BOM/小端识别；元数据超出 WinAnsi 表示范围时按 UTF-16BE 写出，CJK 标题不再丢失；修复 Tokenize 遇未识别字节死循环
+- **Markdown**：列表项子块裁剪结尾空行，紧凑列表序列化不动点成立
+- **PPT/Word/Excel 回读**：回读连接器/动画/批注/文档属性/页眉页脚/节/版式/母版并深度对比，修复动画时长单位与目标序号偏移；补齐编号定义、富文本段落与透视表字段回读
+- **Word**：修复 KPI 行之后正文未排版
+
+### 工程与测试
+- **测试提速**：xunit 并行度收敛至 8 线程、往返用例受限并发、逐字节断言改用 SequenceEqual，CI 增加 NuGet 缓存与挂起超时保护
+- **工程**：解决方案迁移为 slnx 格式；基准项目改用项目引用，兼容 BenchmarkDotNet 确定性构建
+- **依赖**：NewLife.Core 升级至 12.0.2026.1024（正式版），NewLife.UnitTest 升级至 1.1.2026.301-beta0617
+
+---
+
 ## v1.4.2026.0902 (2026-09-02)
 
 ### Word 增强
