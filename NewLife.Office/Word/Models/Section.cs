@@ -27,5 +27,11 @@ public class Section
 
     /// <summary>原始 w:sectPr XML，非空时 Writer 直接使用（完整保真）</summary>
     public String? SectPrXml { get; set; }
+
+    /// <summary>
+    /// 节起始类型（<c>w:sectPr/w:type w:val</c>）：newPage（默认）/ continuous / evenPage / oddPage。
+    /// 仅程序化创建节时生效；<see cref="SectPrXml"/> 非空时以原始 XML 为准。
+    /// </summary>
+    public String? Type { get; set; }
     #endregion
 }

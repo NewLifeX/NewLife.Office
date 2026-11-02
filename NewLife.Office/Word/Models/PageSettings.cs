@@ -58,6 +58,36 @@ public class PageSettings
     /// <summary>页脚引用（类型 → 关系ID），类型为 default/first/even，对应 sectPr 中的 w:footerReference</summary>
     public Dictionary<String, String> FooterRefs { get; } = [];
     #endregion
+
+    #region 方法
+    /// <summary>复制一份页面设置（新增节时派生独立副本，避免两个节共享同一实例）</summary>
+    /// <returns>页面设置副本</returns>
+    public PageSettings Clone()
+    {
+        var ps = new PageSettings
+        {
+            PageWidth = PageWidth,
+            PageHeight = PageHeight,
+            MarginTop = MarginTop,
+            MarginBottom = MarginBottom,
+            MarginLeft = MarginLeft,
+            MarginRight = MarginRight,
+            Landscape = Landscape,
+            HeaderText = HeaderText,
+            FooterText = FooterText,
+            WatermarkText = WatermarkText,
+            ColumnCount = ColumnCount,
+            ColumnSpacing = ColumnSpacing,
+            PageBorder = PageBorder,
+            LineNumber = LineNumber,
+            TitlePage = TitlePage,
+            EvenAndOddHeaders = EvenAndOddHeaders,
+        };
+        foreach (var kv in HeaderRefs) ps.HeaderRefs[kv.Key] = kv.Value;
+        foreach (var kv in FooterRefs) ps.FooterRefs[kv.Key] = kv.Value;
+        return ps;
+    }
+    #endregion
 }
 
 /// <summary>行号设置</summary>

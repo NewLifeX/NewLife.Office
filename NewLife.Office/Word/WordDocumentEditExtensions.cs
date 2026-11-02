@@ -51,6 +51,110 @@ public static class WordDocumentEditExtensions
         return first;
     }
 
+    /// <summary>在正文末尾追加标题段落</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="text">标题文本</param>
+    /// <param name="level">级别（1~6，对应 Heading1~Heading6；超界自动收敛）</param>
+    /// <returns>新增段落的顶层元素</returns>
+    public static Element AddHeading(this Document doc, String text, Int32 level = 1)
+    {
+        if (level < 1) level = 1;
+        if (level > 6) level = 6;
+        return doc.AddParagraph(text, (ParagraphStyle)level);
+    }
+
+    /// <summary>在正文末尾追加空表格</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="rows">行数（至少 1）</param>
+    /// <param name="cols">列数（至少 1）</param>
+    /// <param name="styleId">表格样式 ID（如 TableGrid），null 表示不指定</param>
+    /// <returns>新增表格的顶层元素</returns>
+    /// <exception cref="ArgumentOutOfRangeException">行数或列数小于 1</exception>
+    public static Element AddTable(this Document doc, Int32 rows, Int32 cols, String? styleId = "TableGrid")
+    {
+        if (rows < 1) throw new ArgumentOutOfRangeException(nameof(rows));
+        if (cols < 1) throw new ArgumentOutOfRangeException(nameof(cols));
+
+        var table = new Table { StyleId = styleId, FirstRowHeader = false };
+        for (var r = 0; r < rows; r++)
+        {
+            var row = new TableRow();
+            for (var c = 0; c < cols; c++)
+                row.Cells.Add(new Cell { Paragraphs = { new Paragraph() } });
+            table.Rows.Add(row);
+        }
+        return doc.AppendTopLevel(new Element { Type = ElementType.Table, Table = table });
+    }
+
+    /// <summary>用二维数组在正文末尾追加表格（首行默认作表头）</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="rows">行数据（每行一个字符串数组，列数以最长行为准，缺列补空单元格）</param>
+    /// <param name="firstRowHeader">首行是否作表头（底色加粗 + 跨页重复）</param>
+    /// <param name="styleId">表格样式 ID</param>
+    /// <returns>新增表格的顶层元素</returns>
+    /// <exception cref="ArgumentNullException">rows 为空</exception>
+    /// <exception cref="ArgumentException">rows 无有效行</exception>
+    public static Element AddTable(this Document doc, IEnumerable<String[]> rows, Boolean firstRowHeader = true, String? styleId = "TableGrid")
+    {
+        if (rows == null) throw new ArgumentNullException(nameof(rows));
+
+        var data = rows.ToList();
+        if (data.Count == 0) throw new ArgumentException("Table rows are empty.", nameof(rows));
+
+        var cols = data.Max(r => r?.Length ?? 0);
+        var table = new Table { StyleId = styleId, FirstRowHeader = firstRowHeader };
+        for (var r = 0; r < data.Count; r++)
+        {
+            var row = new TableRow { IsHeader = firstRowHeader && r == 0 };
+            for (var c = 0; c < cols; c++)
+            {
+                var text = c < (data[r]?.Length ?? 0) ? data[r][c] : null;
+                var para = new Paragraph();
+                if (!String.IsNullOrEmpty(text)) para.Runs.Add(new Run { Text = text });
+                row.Cells.Add(new Cell { Paragraphs = { para } });
+            }
+            table.Rows.Add(row);
+        }
+        return doc.AppendTopLevel(new Element { Type = ElementType.Table, Table = table });
+    }
+
+    /// <summary>在正文末尾追加分页符</summary>
+    /// <param name="doc">文档</param>
+    /// <returns>分页符所在段落的顶层元素</returns>
+    public static Element AddPageBreak(this Document doc)
+        => doc.AppendTopLevel(new Element { Type = ElementType.Paragraph, Paragraph = new Paragraph { IsPageBreak = true } });
+
+    /// <summary>追加新节：此后追加的内容归属新节，返回新节</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="startType">节起始类型：newPage（默认）/ continuous / evenPage / oddPage</param>
+    /// <returns>新节（其 <see cref="Section.PageSettings"/> 为当前页设置的副本，可单独调整）</returns>
+    /// <remarks>调用后文档进入多节输出模式，保存前需 <see cref="Document.BeginEdit"/>（与其它模型修改一致）。</remarks>
+    public static Section AddSection(this Document doc, String startType = "newPage")
+    {
+        // 保证已有内容归属第一节：程序化创建时 Sections 为空，需要先把当前元素收进首节（复制列表，避免后续追加同时落入两节）
+        if (doc.Sections.Count == 0)
+            doc.Sections.Add(new Section { Elements = new List<Element>(doc.Elements), PageSettings = doc.PageSettings.Clone() });
+        else if (doc.Sections.Count == 1 && doc.Sections[0].Elements.Count != doc.Elements.Count)
+            doc.Sections[0].Elements = new List<Element>(doc.Elements);
+
+        var sec = new Section { Type = startType, PageSettings = doc.PageSettings.Clone() };
+        doc.Sections.Add(sec);
+        doc.MarkModified();
+        return sec;
+    }
+
+    /// <summary>把元素追加到正文末尾，并同步到最后一节（多节文档的输出来源）</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="element">待追加元素</param>
+    /// <returns>同一个元素（便于链式使用）</returns>
+    private static Element AppendTopLevel(this Document doc, Element element)
+    {
+        doc.Elements.Add(element);
+        if (doc.Sections.Count > 0) doc.Sections[^1].Elements.Add(element);
+        doc.MarkModified();
+        return element;
+    }
+
     /// <summary>在指定段落之后插入新段落（自动适配正文/单元格/页眉页脚/脚注容器）</summary>
     /// <param name="doc">文档</param>
     /// <param name="anchor">锚点段落</param>

@@ -1402,13 +1402,13 @@ public class WordWriter : IDisposable
                 {
                     // 节分隔：空段落携带本节 sectPr（定义已结束的节）
                     sb.Append("<w:p><w:pPr>");
-                    sb.Append(sec.SectPrXml ?? BuildSectPrXml(sec.PageSettings));
+                    sb.Append(BuildSectPrOf(sec));
                     sb.Append("</w:pPr></w:p>");
                 }
             }
             // 最后一节的 sectPr 在 body 级
             var lastSec = _sections[^1];
-            sb.Append(lastSec.SectPrXml ?? BuildSectPrXml(lastSec.PageSettings));
+            sb.Append(BuildSectPrOf(lastSec));
         }
         else
         {
@@ -1432,8 +1432,21 @@ public class WordWriter : IDisposable
         WriteEntry(za, "word/document.xml", sb.ToString());
     }
 
-    /// <summary>从 PageSettings 生成 <c>w:sectPr</c> 节属性 XML</summary>
-    /// <param name="ps">页面设置</param>
+    /// <summary>生成节的 <c>w:sectPr</c> XML（优先原始 XML，否则按页面设置生成并注入起始类型）</summary>
+    /// <param name="sec">节对象</param>
+    /// <returns>完整的 w:sectPr XML</returns>
+    private String BuildSectPrOf(Section sec)
+    {
+        var xml = sec.SectPrXml ?? BuildSectPrXml(sec.PageSettings);
+        if (sec.Type == null) return xml;
+
+        // w:type 必须位于 w:pgSz 之前（header/footer 引用之后），否则 Word 会提示修复
+        var idx = xml.IndexOf("<w:pgSz", StringComparison.Ordinal);
+        var typeXml = $"<w:type w:val=\"{Esc(sec.Type)}\"/>";
+        return idx < 0 ? xml : xml[..idx] + typeXml + xml[idx..];
+    }
+
+    /// <summary>从 PageSettings 生成 <c>w:sectPr</c> 节属性 XML</summary>    /// <param name="ps">页面设置</param>
     /// <returns>完整的 w:sectPr XML 字符串</returns>
     private String BuildSectPrXml(PageSettings ps)
     {
