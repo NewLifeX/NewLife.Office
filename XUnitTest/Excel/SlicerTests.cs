@@ -72,19 +72,23 @@ public class SlicerTests
             Assert.NotNull(items);
             // 产品列唯一值：苹果/香蕉 → 2 项
             Assert.Equal("2", items!.Attribute("count")?.Value);
-            var column = doc.Root!.Descendants().FirstOrDefault(e => e.Name.LocalName == "column");
-            Assert.Equal("产品", column?.Attribute("name")?.Value);
+            // 规范结构：数据区为 tabular，表格名在根属性 sourceName
+            Assert.NotNull(doc.Root!.Descendants().FirstOrDefault(e => e.Name.LocalName == "tabular"));
+            Assert.Equal("销售表", doc.Root!.Attribute("sourceName")?.Value);
         }
 
-        // slicer 部件存在
+        // slicer 部件存在（根元素是 x14:slicers 容器）
         var slicerEntry = za.GetEntry("xl/slicers/slicer1.xml");
         Assert.NotNull(slicerEntry);
         using (var ss = slicerEntry!.Open())
         {
             var doc = XDocument.Load(ss);
             Assert.NotNull(doc.Root);
-            Assert.Equal(Localization.Translate("Slicer_{0}", "产品"), doc.Root!.Attribute("name")?.Value);
-            Assert.Equal("SlicerStyleLight1", doc.Root!.Attribute("style")?.Value);
+            Assert.Equal("slicers", doc.Root!.Name.LocalName);
+            var sliceEl = doc.Root!.Elements().FirstOrDefault(e => e.Name.LocalName == "slicer");
+            Assert.NotNull(sliceEl);
+            Assert.Equal(Localization.Translate("Slicer_{0}", "产品"), sliceEl!.Attribute("name")?.Value);
+            Assert.Equal("SlicerStyleLight1", sliceEl!.Attribute("style")?.Value);
         }
 
         // sheet extLst 含 x14:slicerList

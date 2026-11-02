@@ -2535,7 +2535,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                     ParentId = tc.Attribute("parentId")?.Value,
                     Sheet = sheet,
                 };
-                if (DateTime.TryParse(tc.Attribute("dateTime")?.Value, out var dt))
+                if (DateTime.TryParse(tc.Attribute("dT")?.Value ?? tc.Attribute("dateTime")?.Value, out var dt))
                     comment.Time = dt;
 
                 result.Add(comment);
@@ -2589,8 +2589,12 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             var cdoc = XDocument.Load(css);
             if (cdoc.Root == null) continue;
             var cname = cdoc.Root.Attribute("name")?.Value ?? String.Empty;
+            // 列名在规范结构里不在 slicerCache 中（旧版自产文件才有 column@name），能取到则用，否则后续用 caption 兵底
             var column = cdoc.Root.Descendants().FirstOrDefault(e => e.Name.LocalName == "column")?.Attribute("name")?.Value ?? String.Empty;
-            var table = cdoc.Root.Descendants().FirstOrDefault(e => e.Name.LocalName == "data")?.Attribute("cacheName")?.Value ?? String.Empty;
+            // 表格名：新结构在根属性 sourceName，旧结构在 data@cacheName
+            var table = cdoc.Root.Attribute("sourceName")?.Value
+                ?? cdoc.Root.Descendants().FirstOrDefault(e => e.Name.LocalName == "data")?.Attribute("cacheName")?.Value
+                ?? String.Empty;
             cacheMap[cname] = (column, table);
         }
 
@@ -2608,17 +2612,23 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             var sdoc = XDocument.Load(ss);
             if (sdoc.Root == null) continue;
 
+            // 部件根是 x14:slicers 容器，真正的 slicer 是它的子元素（旧版自产文件根即 slicer）
+            var sEl = sdoc.Root.Name.LocalName == "slicer"
+                ? sdoc.Root
+                : sdoc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "slicer");
+            if (sEl == null) continue;
+
             var slicer = new ExcelSlicer
             {
                 Sheet = sheet,
-                Name = sdoc.Root.Attribute("name")?.Value ?? String.Empty,
-                Caption = sdoc.Root.Attribute("caption")?.Value ?? String.Empty,
-                Style = sdoc.Root.Attribute("style")?.Value ?? String.Empty,
-                CacheName = sdoc.Root.Attribute("cache")?.Value,
+                Name = sEl.Attribute("name")?.Value ?? String.Empty,
+                Caption = sEl.Attribute("caption")?.Value ?? String.Empty,
+                Style = sEl.Attribute("style")?.Value ?? String.Empty,
+                CacheName = sEl.Attribute("cache")?.Value,
             };
             if (!slicer.CacheName.IsNullOrEmpty() && cacheMap.TryGetValue(slicer.CacheName!, out var ci))
             {
-                slicer.ColumnName = ci.Column;
+                slicer.ColumnName = ci.Column.Length > 0 ? ci.Column : slicer.Caption;
                 slicer.TableName = ci.Table;
             }
             result.Add(slicer);

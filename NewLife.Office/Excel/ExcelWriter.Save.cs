@@ -1306,7 +1306,8 @@ partial class ExcelWriter
             using (var psw = new StreamWriter(za.CreateEntry("xl/persons/person.xml").Open(), Encoding))
             {
                 psw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-                psw.Write("<persons xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">");
+                // 根元素必须是 personList（MS-XLSX 定义），写成 persons 会导致整包无法打开
+                psw.Write("<personList xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">");
                 foreach (var kv in personMap)
                 {
                     var tc = _threadedComments.FirstOrDefault(c => c.Author + "\u0001" + (c.UserId ?? "") == kv.Key);
@@ -1314,7 +1315,7 @@ partial class ExcelWriter
                     var uid = tc?.UserId ?? "";
                     psw.Write($"<person displayName=\"{disp}\" id=\"{kv.Value}\" userId=\"{SecurityElement.Escape(uid)}\" providerId=\"None\"/>");
                 }
-                psw.Write("</persons>");
+                psw.Write("</personList>");
             }
 
             // threadedCommentN.xml（每个有线程化批注的 sheet 一个）
@@ -1329,7 +1330,8 @@ partial class ExcelWriter
                 foreach (var tc in tcs)
                 {
                     var cellRef = MakeCellRef(tc.Row - 1, tc.Col);
-                    tcsw.Write($"<threadedComment ref=\"{cellRef}\" personId=\"{tc.PersonId}\" dateTime=\"{tc.Time.ToUniversalTime():yyyy-MM-ddTHH:mm:ssZ}\" id=\"{tc.Id}\"");
+                    // 日期属性名是 dT（ISO 8601），写成 dateTime 会被判为未声明属性
+                    tcsw.Write($"<threadedComment ref=\"{cellRef}\" personId=\"{tc.PersonId}\" dT=\"{tc.Time.ToUniversalTime():yyyy-MM-ddTHH:mm:ssZ}\" id=\"{tc.Id}\"");
                     if (!tc.ParentId.IsNullOrEmpty()) tcsw.Write($" parentId=\"{tc.ParentId}\"");
                     tcsw.Write(">");
                     tcsw.Write($"<text>{SecurityElement.Escape(tc.Text)}</text>");
@@ -1366,42 +1368,25 @@ partial class ExcelWriter
                     items.Add(L.T("(Blank)"));
                 }
 
-                // slicerCacheN.xml
+                // slicerCacheN.xml：根元素必带 sourceName，数据区只能放 olap/tabular
                 using (var scsw = new StreamWriter(za.CreateEntry($"xl/slicerCaches/slicerCache{si + 1}.xml").Open(), Encoding))
                 {
                     scsw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-                    scsw.Write($"<slicerCacheDefinition xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\" name=\"{SecurityElement.Escape(cacheName)}\">");
-                    scsw.Write($"<data cacheName=\"{SecurityElement.Escape(slicer.TableName)}\" sourceName=\"{SecurityElement.Escape(table?.Range ?? slicer.TableName)}\">");
-                    scsw.Write($"<columns count=\"1\"><column dataType=\"string\" name=\"{SecurityElement.Escape(slicer.ColumnName)}\" uniqueCount=\"{items.Count}\"/></columns>");
-                    scsw.Write($"<items count=\"{items.Count}\">");
+                    scsw.Write($"<slicerCacheDefinition xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\" name=\"{SecurityElement.Escape(cacheName)}\" sourceName=\"{SecurityElement.Escape(slicer.TableName)}\">");
+                    scsw.Write($"<data><tabular pivotCacheId=\"0\" sortOrder=\"ascending\"><items count=\"{items.Count}\">");
                     for (var x = 0; x < items.Count; x++)
-                        scsw.Write($"<i x=\"{x}\" s=\"0\" d=\"0\"/>");
-                    scsw.Write("</items>");
-                    scsw.Write("</data>");
-                    scsw.Write("<sortOrder>0</sortOrder>");
+                        scsw.Write($"<i x=\"{x}\" s=\"0\"/>");
+                    scsw.Write("</items></tabular></data>");
                     scsw.Write("</slicerCacheDefinition>");
                 }
 
-                // slicerN.xml
+                // slicerN.xml：slicer 元素只有属性（无子元素），且 SlicersPart 不能直接关联 SlicerCachePart
                 using (var ssw = new StreamWriter(za.CreateEntry($"xl/slicers/slicer{si + 1}.xml").Open(), Encoding))
                 {
                     ssw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-                    ssw.Write($"<slicer xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\" name=\"{SecurityElement.Escape(slicer.Name)}\" cache=\"{SecurityElement.Escape(cacheName)}\" caption=\"{SecurityElement.Escape(slicer.Caption)}\" uiLevel=\"2\" style=\"{SecurityElement.Escape(slicer.Style)}\" rowHeight=\"138\" columnCount=\"1\" showCaption=\"1\">");
-                    ssw.Write("<columns><column w=\"72\"/></columns>");
-                    ssw.Write("<data>");
-                    for (var x = 0; x < items.Count; x++)
-                        ssw.Write($"<dataItem x=\"{x}\" s=\"0\"/>");
-                    ssw.Write("</data>");
-                    ssw.Write("</slicer>");
-                }
-
-                // slicerN.xml.rels（关联 slicerCache）
-                using (var srsw = new StreamWriter(za.CreateEntry($"xl/slicers/_rels/slicer{si + 1}.xml.rels").Open(), Encoding))
-                {
-                    srsw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-                    srsw.Write("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
-                    srsw.Write($"<Relationship Id=\"rId1\" Type=\"http://schemas.microsoft.com/office/2007/relationships/slicerCache\" Target=\"../slicerCaches/slicerCache{si + 1}.xml\"/>");
-                    srsw.Write("</Relationships>");
+                    ssw.Write("<slicers xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\">");
+                    ssw.Write($"<slicer name=\"{SecurityElement.Escape(slicer.Name)}\" cache=\"{SecurityElement.Escape(cacheName)}\" caption=\"{SecurityElement.Escape(slicer.Caption)}\" style=\"{SecurityElement.Escape(slicer.Style)}\" rowHeight=\"138\" columnCount=\"1\" showCaption=\"1\"/>");
+                    ssw.Write("</slicers>");
                 }
             }
         }
