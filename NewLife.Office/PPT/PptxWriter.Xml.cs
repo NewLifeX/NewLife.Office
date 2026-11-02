@@ -588,7 +588,9 @@ partial class PptxWriter
                 sb.Append($"<a:prstDash val=\"{sp.DashStyle}\"/>");
             sb.Append("</a:ln>");
             sb.Append("</p:spPr>");
-            if (!String.IsNullOrEmpty(sp.Text))
+            // 有文本，或仅带 bodyPr 级排版属性（文本方向/自适配）时都要输出 txBody，
+            // 否则空文本形状的这些属性会在往返中丢失
+            if (!String.IsNullOrEmpty(sp.Text) || sp.TextDirection != null || sp.TextAutoFit != null)
             {
                 // bodyPr with text direction, autofit, and insets
                 var vertAttr = sp.TextDirection != null ? $" vert=\"{sp.TextDirection}\"" : "";
@@ -597,14 +599,19 @@ partial class PptxWriter
                 var insetR = sp.RightInset ?? 25400;
                 var insetT = sp.TopInset ?? 12700;
                 var insetB = sp.BottomInset ?? 12700;
-                var autoFitXml = sp.TextAutoFit == "norm" ? "<a:normAutofit/>" : sp.TextAutoFit == "noAuto" ? "<a:noAutofit/>" : "";
-                sb.Append($"<p:txBody><a:bodyPr lIns=\"{insetL}\" rIns=\"{insetR}\" tIns=\"{insetT}\" bIns=\"{insetB}\"{vertAttr}{anchorAttr}>{autoFitXml}</a:bodyPr><a:lstStyle/><a:p><a:r>");
-                sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{sp.FontSize * 100}\"{(sp.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
-                WriteFontColor(sb, sp.FontColor);
-                WriteFontElements(sb, sp.LatinFontName, sp.EastAsianFontName, sp.ComplexScriptFontName, sp.SymbolFontName);
-                sb.Append("</a:rPr>");
-                sb.Append($"<a:t>{EscXml(sp.Text)}</a:t>");
-                sb.Append("</a:r></a:p></p:txBody>");
+                var autoFitXml = sp.TextAutoFit == "norm" ? "<a:normAutofit/>" : sp.TextAutoFit == "noAuto" ? "<a:noAutofit/>" : sp.TextAutoFit == "spAuto" ? "<a:spAutoFit/>" : "";
+                sb.Append($"<p:txBody><a:bodyPr lIns=\"{insetL}\" rIns=\"{insetR}\" tIns=\"{insetT}\" bIns=\"{insetB}\"{vertAttr}{anchorAttr}>{autoFitXml}</a:bodyPr><a:lstStyle/>");
+                if (!String.IsNullOrEmpty(sp.Text))
+                {
+                    sb.Append("<a:p><a:r>");
+                    sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{sp.FontSize * 100}\"{(sp.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
+                    WriteFontColor(sb, sp.FontColor);
+                    WriteFontElements(sb, sp.LatinFontName, sp.EastAsianFontName, sp.ComplexScriptFontName, sp.SymbolFontName);
+                    sb.Append("</a:rPr>");
+                    sb.Append($"<a:t>{EscXml(sp.Text)}</a:t>");
+                    sb.Append("</a:r></a:p>");
+                }
+                sb.Append("</p:txBody>");
             }
             sb.Append("</p:sp>");
         }
@@ -1750,7 +1757,10 @@ partial class PptxWriter
         else
             sb.Append("<a:noFill/>");
         sb.Append("</p:spPr>");
-        sb.Append("<p:txBody><a:bodyPr wrap=\"square\" rtlCol=\"0\"><a:normAutofit/></a:bodyPr><a:lstStyle/>");
+        // bodyPr：自适配 + 文本方向（与完整文本框写入路径保持一致）
+        var fitTag2 = tb.AutoFit switch { 1 => "<a:spAutoFit/>", 2 => "<a:noAutofit/>", _ => "<a:normAutofit/>" };
+        var vertAttr2 = tb.TextDirection != null ? $" vert=\"{tb.TextDirection}\"" : "";
+        sb.Append($"<p:txBody><a:bodyPr wrap=\"square\" rtlCol=\"0\"{vertAttr2}>{fitTag2}</a:bodyPr><a:lstStyle/>");
         sb.Append($"<a:p><a:pPr algn=\"{tb.Alignment}\"/><a:r>");
         sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{tb.FontSize * 100}\"{(tb.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
         WriteFontColor(sb, tb.FontColor);

@@ -810,6 +810,21 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         // 文本框判定：cNvSpPr txBox="1" 或 prstGeom="textBox"；带文本的基本形状应读为 Shape 而非文本框
         var isTextBox = hasTxBody && (shapeType == "textBox" || IsTxBox(sp));
 
+        // 形状文本方向与自适配（写入端由 PptShape.TextDirection/TextAutoFit 输出到 bodyPr）
+        String? shapeTextDir = null, shapeAutoFit = null;
+        if (!isTextBox)
+        {
+            var spBodyPr = sp.SelectSingleNode(".//*[local-name()='txBody']/*[local-name()='bodyPr']") as XmlElement;
+            if (spBodyPr != null)
+            {
+                var v = spBodyPr.GetAttribute("vert");
+                if (v.Length > 0) shapeTextDir = v;
+                if (spBodyPr.SelectSingleNode("*[local-name()='spAutoFit']") != null) shapeAutoFit = "spAuto";
+                else if (spBodyPr.SelectSingleNode("*[local-name()='noAutofit']") != null) shapeAutoFit = "noAuto";
+                else if (spBodyPr.SelectSingleNode("*[local-name()='normAutofit']") != null) shapeAutoFit = "norm";
+            }
+        }
+
         if (isTextBox)
         {
             var tb = new TextBox { Left = left, Top = top, Width = width, Height = height, Rotation = rotation, AltText = altText };
@@ -832,9 +847,10 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             var bodyPr = txBody.SelectSingleNode("*[local-name()='bodyPr']") as XmlElement;
             if (bodyPr != null)
             {
-                if (bodyPr.SelectSingleNode("*[local-name()='spAutoFit']") != null) tb.AutoFit = 1;
-                else if (bodyPr.SelectSingleNode("*[local-name()='noAutofit']") != null) tb.AutoFit = 2;
-                else tb.AutoFit = 0; // normAutofit
+                // auto-fit 模式（AutoFit 数值 + 原始名称，便于与写入端 TextAutoFit 对齐）
+                if (bodyPr.SelectSingleNode("*[local-name()='spAutoFit']") != null) { tb.AutoFit = 1; tb.TextAutoFit = "spAuto"; }
+                else if (bodyPr.SelectSingleNode("*[local-name()='noAutofit']") != null) { tb.AutoFit = 2; tb.TextAutoFit = "noAuto"; }
+                else { tb.AutoFit = 0; tb.TextAutoFit = "norm"; } // normAutofit
                 // 内边距（EMU）
                 var lIns = bodyPr.GetAttribute("lIns"); if (lIns.Length > 0 && Int32.TryParse(lIns, out var li)) tb.LeftInset = li;
                 var rIns = bodyPr.GetAttribute("rIns"); if (rIns.Length > 0 && Int32.TryParse(rIns, out var ri)) tb.RightInset = ri;
@@ -989,6 +1005,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                     Rotation = rotation, FlipHorizontal = flipH, FlipVertical = flipV,
                     GradientType = gradType, GradientColor1 = gradC1, GradientColor2 = gradC2, GradientAngle = gradAngle,
                     DashStyle = dashStyle, HyperlinkUrl = shapeHyperlink,
+                    TextDirection = shapeTextDir, TextAutoFit = shapeAutoFit,
                 });
             }
             else
@@ -1004,6 +1021,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                     Text = text, FontSize = fontSize > 0 ? fontSize : 14, Bold = bold, FontColor = fontColor,
                     LatinFontName = latinFn, EastAsianFontName = eaFn,
                     ComplexScriptFontName = csFn, SymbolFontName = symFn,
+                    TextDirection = shapeTextDir, TextAutoFit = shapeAutoFit,
                 });
             }
         }
