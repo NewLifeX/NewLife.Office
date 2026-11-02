@@ -42,6 +42,7 @@ public static class Program
                 "info" => Info(args.Skip(1).ToArray()),
                 "read" => ReadOutline(args.Skip(1).ToArray()),
                 "apply" => ApplyPatch(args.Skip(1).ToArray()),
+                "mcp" => McpServer.Run(),
                 _ => PrintUsageAndReturn(),
             };
         }
@@ -249,6 +250,7 @@ public static class Program
         Console.WriteLine(Localization.Translate("  info <input>               Show file format information"));
         Console.WriteLine(Localization.Translate("  read <input.docx>          Dump docx structure snapshot as JSON (for agents)"));
         Console.WriteLine(Localization.Translate("  apply <in> <patch> <out>   Apply JSON patch to docx (no output file if any op fails)"));
+        Console.WriteLine(Localization.Translate("  mcp                        Start MCP stdio server (tools for agents)"));
         Console.WriteLine();
         Console.WriteLine(Localization.Translate("Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc."));
     }
