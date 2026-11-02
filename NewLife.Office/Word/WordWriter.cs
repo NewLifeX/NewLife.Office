@@ -82,6 +82,10 @@ public class WordWriter : IDisposable
     private List<Footnote> _footnotes = [];
     private List<Footnote> _endnotes = [];
     private Int32 _nextNoteId = 1;
+
+    // 批注（仅在段落挂了 CommentRanges 时才重建 comments.xml，避免把已读到的批注位置写丢）
+    private List<Comment> _comments = [];
+    private Boolean _rebuildComments;
     #endregion
 
     #region 构造
@@ -584,6 +588,9 @@ public class WordWriter : IDisposable
             // 脚注/尾注（模型重建且用户修改/新增时）：重新生成部件，覆盖透传的旧文件
             if (_footnotes.Count > 0 || _endnotes.Count > 0)
                 WriteNotes(za);
+            // 批注：程序化新增时重写 comments.xml
+            if (_rebuildComments && _comments.Count > 0)
+                WriteComments(za);
             WriteDocument(za);
             return;
         }
@@ -597,6 +604,7 @@ public class WordWriter : IDisposable
         WriteNumbering(za);
         WriteDocumentRels(za);
         WriteNotes(za);
+        if (_comments.Count > 0) WriteComments(za);
         var psave = PageSettings;
         var hdrInOther = _otherParts.ContainsKey("word/header1.xml");
         var ftrInOther = _otherParts.ContainsKey("word/footer1.xml");
@@ -646,6 +654,8 @@ public class WordWriter : IDisposable
         _rebuildHeaderFooter = false;
         _mergeContentTypes = null;
         _mergeDocumentRels = null;
+        _rebuildComments = false;
+        _comments = [];
         _stylesXml = document.StylesXml;
         _numberingXml = document.NumberingXml;
         _numbering = document.Numbering;
@@ -670,6 +680,9 @@ public class WordWriter : IDisposable
         foreach (var kv in document.CustomXmlParts)
             _otherParts[$"customXml/{kv.Key}"] = kv.Value;
         _elements.AddRange(document.Elements);
+        // 批注：仅当段落挂了锚点（程序化新增批注）时才重建 comments.xml，避免把"只读到批注"的位置写丢
+        _rebuildComments = document.Elements.Exists(e => e.Paragraph != null && e.Paragraph.CommentRanges.Count > 0);
+        if (_rebuildComments) _comments = document.Comments;
         foreach (var kv in document.Images) _imageRels.Add((kv.Key, kv.Value.Extension, kv.Value.Data));
         foreach (var item in document.Hyperlinks) _hyperlinkRels.Add(item);
         PageSettings = document.PageSettings;
@@ -687,7 +700,7 @@ public class WordWriter : IDisposable
         // 从透传中移除旧部件与其引用，改由 Writer 生成新部件并合并更新
         // [Content_Types].xml 与 word/_rels/document.xml.rels 引用（含脚注/尾注防重复条目）
         if (document.DocumentXml == null
-            && (_headers.Count > 0 || _footers.Count > 0 || _footnotes.Count > 0 || _endnotes.Count > 0))
+            && (_headers.Count > 0 || _footers.Count > 0 || _footnotes.Count > 0 || _endnotes.Count > 0 || _rebuildComments))
         {
             _rebuildHeaderFooter = true;
             _mergeContentTypes = document.OtherParts.TryGetValue("[Content_Types].xml", out var ct0)
@@ -702,6 +715,7 @@ public class WordWriter : IDisposable
                     || k.StartsWith("word/_rels/footer", StringComparison.OrdinalIgnoreCase)
                     || (_footnotes.Count > 0 && k.Equals("word/footnotes.xml", StringComparison.OrdinalIgnoreCase))
                     || (_endnotes.Count > 0 && k.Equals("word/endnotes.xml", StringComparison.OrdinalIgnoreCase))
+                    || (_rebuildComments && k.StartsWith("word/comments", StringComparison.OrdinalIgnoreCase))
                     || k.Equals("[Content_Types].xml", StringComparison.OrdinalIgnoreCase)
                     || k.Equals("word/_rels/document.xml.rels", StringComparison.OrdinalIgnoreCase))
                 .ToList();
@@ -773,6 +787,35 @@ public class WordWriter : IDisposable
         var selfClose = xml.LastIndexOf("/>", StringComparison.Ordinal);
         if (selfClose < 0) return xml;
         return xml[..selfClose] + ">" + insertion + $"</{name}>" + xml[(selfClose + 2)..];
+    }
+
+    /// <summary>写入批注部件（word/comments.xml）</summary>
+    /// <param name="za">目标压缩包</param>
+    private void WriteComments(ZipArchive za)
+    {
+        var sb = new StringBuilder();
+        sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        sb.Append("<w:comments xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">");
+        foreach (var c in _comments)
+        {
+            var date = c.Date ?? DateTime.Now;
+            sb.Append($"<w:comment w:id=\"{c.Id}\" w:author=\"{Esc(c.Author ?? String.Empty)}\" w:date=\"{date:yyyy-MM-ddTHH:mm:ssZ}\"");
+            if (!String.IsNullOrEmpty(c.Initials)) sb.Append($" w:initials=\"{Esc(c.Initials)}\"");
+            sb.Append('>');
+            if (c.Paragraphs.Count > 0)
+            {
+                foreach (var p in c.Paragraphs) BuildParagraphXml(sb, p);
+            }
+            else
+            {
+                sb.Append("<w:p><w:r><w:t xml:space=\"preserve\">");
+                sb.Append(Esc(c.Text ?? String.Empty));
+                sb.Append("</w:t></w:r></w:p>");
+            }
+            sb.Append("</w:comment>");
+        }
+        sb.Append("</w:comments>");
+        WriteEntry(za, "word/comments.xml", sb.ToString());
     }
 
     private void WriteEntry(ZipArchive za, String path, String content)
@@ -872,6 +915,8 @@ public class WordWriter : IDisposable
             sb.Append("<Override PartName=\"/word/footnotes.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml\"/>");
         if (_endnotes.Count > 0)
             sb.Append("<Override PartName=\"/word/endnotes.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml\"/>");
+        if (_comments.Count > 0)
+            sb.Append("<Override PartName=\"/word/comments.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml\"/>");
         // 图表（W13）：chart 部件 + 嵌入式 xlsx
         if (_elements.Any(e => e.Type == ElementType.Chart && e.Chart != null))
         {
@@ -954,6 +999,8 @@ public class WordWriter : IDisposable
             sb.Append("<Relationship Id=\"rFootnotes\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes\" Target=\"footnotes.xml\"/>");
         if (_endnotes.Count > 0)
             sb.Append("<Relationship Id=\"rEndnotes\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes\" Target=\"endnotes.xml\"/>");
+        if (_comments.Count > 0)
+            sb.Append("<Relationship Id=\"rComments\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments\" Target=\"comments.xml\"/>");
         foreach (var (relId, url) in _hyperlinkRels)
         {
             sb.Append($"<Relationship Id=\"{relId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"{Esc(url)}\" TargetMode=\"External\"/>");
@@ -1756,6 +1803,9 @@ public class WordWriter : IDisposable
         if (_endnotes.Count > 0)
             contentTypes = InjectOneOverride(contentTypes, "/word/endnotes.xml",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml");
+        if (_rebuildComments && _comments.Count > 0)
+            contentTypes = InjectOneOverride(contentTypes, "/word/comments.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml");
         return contentTypes;
     }
 
@@ -1785,6 +1835,8 @@ public class WordWriter : IDisposable
             sb.Append("<Relationship Id=\"rFootnotes\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes\" Target=\"footnotes.xml\"/>");
         if (_endnotes.Count > 0)
             sb.Append("<Relationship Id=\"rEndnotes\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes\" Target=\"endnotes.xml\"/>");
+        if (_comments.Count > 0)
+            sb.Append("<Relationship Id=\"rComments\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments\" Target=\"comments.xml\"/>");
         var idx = relsXml.LastIndexOf("</Relationships>", StringComparison.Ordinal);
         if (idx < 0) return relsXml;
         return relsXml[..idx] + sb + relsXml[idx..];
@@ -1929,9 +1981,34 @@ public class WordWriter : IDisposable
         }
         else
         {
+            // 逐 Run 输出，并在锚点处插入批注范围标记（commentRangeStart/End + 引用 run）
+            var runIndex = 0;
             foreach (var run in para.Runs)
             {
+                foreach (var cr in para.CommentRanges)
+                    if (cr.StartRunIndex == runIndex)
+                        sb.Append($"<w:commentRangeStart w:id=\"{cr.Id}\"/>");
+
                 BuildRunXml(sb, run);
+
+                foreach (var cr in para.CommentRanges)
+                {
+                    if (cr.EndRunIndex != runIndex) continue;
+                    sb.Append($"<w:commentRangeEnd w:id=\"{cr.Id}\"/>");
+                    sb.Append($"<w:r><w:commentReference w:id=\"{cr.Id}\"/></w:r>");
+                }
+                runIndex++;
+            }
+
+            // 空段落批注：无 Run 可锚定，直接在段落内输出标记与引用
+            if (para.Runs.Count == 0)
+            {
+                foreach (var cr in para.CommentRanges)
+                {
+                    sb.Append($"<w:commentRangeStart w:id=\"{cr.Id}\"/>");
+                    sb.Append($"<w:commentRangeEnd w:id=\"{cr.Id}\"/>");
+                    sb.Append($"<w:r><w:commentReference w:id=\"{cr.Id}\"/></w:r>");
+                }
             }
         }
         if (para.BookmarkName != null)

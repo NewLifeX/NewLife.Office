@@ -399,6 +399,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         ParseNotes(ReadZipEntryText("word/footnotes.xml"), doc.Footnotes);
         ParseNotes(ReadZipEntryText("word/endnotes.xml"), doc.Endnotes);
 
+        // 批注（W26）：解析 comments.xml 到模型（Writer 仅在段落挂了锚点时才重建该部件）
+        ParseComments(ReadZipEntryText("word/comments.xml"), doc.Comments);
+
         // 收集所有 ZIP 部件（除 document.xml 外全部透传）
         CollectOtherParts(doc);
 
@@ -449,6 +452,55 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             }
         }
         catch { /* 脚注 XML 损坏时静默跳过 */ }
+    }
+
+    /// <summary>解析批注 XML 到模型（w:comment：id/author/date/initials/内容段落）</summary>
+    /// <param name="xml">comments.xml 内容</param>
+    /// <param name="target">目标列表（Document.Comments）</param>
+    private static void ParseComments(String? xml, List<Comment> target)
+    {
+        if (String.IsNullOrEmpty(xml)) return;
+        try
+        {
+            var doc = new XmlDocument();
+            doc.LoadXml(xml);
+            var ns = new XmlNamespaceManager(doc.NameTable);
+            ns.AddNamespace("w", Wns);
+            foreach (XmlElement ce in doc.SelectNodes("//w:comment", ns)!)
+            {
+                if (!Int32.TryParse(ce.GetAttribute("w:id") ?? ce.GetAttribute("id"), out var id)) continue;
+
+                var comment = new Comment
+                {
+                    Id = id,
+                    Author = ce.GetAttribute("w:author") ?? ce.GetAttribute("author"),
+                    Initials = ce.GetAttribute("w:initials") ?? ce.GetAttribute("initials"),
+                };
+                var dateText = ce.GetAttribute("w:date") ?? ce.GetAttribute("date");
+                if (!String.IsNullOrEmpty(dateText) && DateTime.TryParse(dateText, out var date)) comment.Date = date;
+
+                var sb = new StringBuilder();
+                foreach (XmlElement p in ce.SelectNodes("w:p", ns)!)
+                {
+                    var para = new Paragraph();
+                    foreach (XmlElement r in p.SelectNodes("w:r", ns)!)
+                        para.Runs.Add(ParseRun(r, ns, null));
+                    if (para.Runs.Count == 0) continue;
+
+                    var text = new StringBuilder();
+                    foreach (var r in para.Runs) text.Append(r.Text);
+                    if (text.Length > 0)
+                    {
+                        if (sb.Length > 0) sb.Append('\n');
+                        sb.Append(text);
+                    }
+                    comment.Paragraphs.Add(para);
+                }
+                comment.Text = sb.ToString();
+                target.Add(comment);
+            }
+        }
+        catch { /* 批注 XML 损坏时静默跳过 */ }
     }
 
     /// <summary>读取 ZIP 入口的文本内容</summary>

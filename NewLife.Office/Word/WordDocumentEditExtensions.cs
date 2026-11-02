@@ -438,6 +438,57 @@ public static class WordDocumentEditExtensions
     }
     #endregion
 
+    #region 批注
+    /// <summary>给段落加批注（AI 审阅场景）：批注锚定该段全部 Run</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="paragraph">目标段落</param>
+    /// <param name="text">批注内容</param>
+    /// <param name="author">作者，默认 NewLife.Office</param>
+    /// <param name="initials">作者缩写（可选）</param>
+    /// <param name="date">时间，默认当前时间</param>
+    /// <returns>新增的批注模型</returns>
+    /// <exception cref="ArgumentNullException">doc 或 paragraph 为空</exception>
+    /// <example>
+    /// <code>
+    /// doc.BeginEdit();
+    /// var para = doc.FindParagraph(p => p.Runs[0].Text.Contains("待确认"));
+    /// if (para != null) doc.AddComment(para, "此结论缺少数据支撑，请补充。", "AI 审阅");
+    /// </code>
+    /// </example>
+    public static Comment AddComment(this Document doc, Paragraph paragraph, String text, String? author = null, String? initials = null, DateTime? date = null)
+    {
+        if (doc == null) throw new ArgumentNullException(nameof(doc));
+        if (paragraph == null) throw new ArgumentNullException(nameof(paragraph));
+
+        // 文档内唯一 ID
+        var id = 0;
+        foreach (var c in doc.Comments)
+            if (c.Id >= id) id = c.Id + 1;
+
+        var comment = new Comment
+        {
+            Id = id,
+            Text = text,
+            Author = author ?? "NewLife.Office",
+            Initials = initials,
+            Date = date ?? DateTime.Now,
+        };
+        doc.Comments.Add(comment);
+
+        // 锚定整段（空段落也输出锚点，由 Writer 特殊处理）
+        paragraph.RawXml = null;
+        paragraph.CommentRanges.Add(new CommentRange
+        {
+            Id = id,
+            StartRunIndex = 0,
+            EndRunIndex = Math.Max(0, paragraph.Runs.Count - 1),
+        });
+
+        doc.MarkModified();
+        return comment;
+    }
+    #endregion
+
     #region 域
     /// <summary>在当前段落末尾追加域（复杂域：begin/instrText/separate/结果/end）</summary>
     /// <param name="paragraph">段落</param>

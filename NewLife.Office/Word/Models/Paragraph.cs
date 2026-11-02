@@ -106,5 +106,8 @@ public class Paragraph
     /// Reader 解析时填充，供 AI/调用方在清 <see cref="RawXml"/> 前判断“改这段会不会丢东西”。
     /// </summary>
     public Boolean HasUnmodeledContent { get; set; }
+
+    /// <summary>批注锚点范围（Writer 输出 <c>w:commentRangeStart/End</c> 与引用 run）</summary>
+    public List<CommentRange> CommentRanges { get; } = [];
     #endregion
 }
