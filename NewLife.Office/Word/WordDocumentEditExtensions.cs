@@ -261,10 +261,10 @@ public static class WordDocumentEditExtensions
 
     /// <summary>追加新节：此后追加的内容归属新节，返回新节</summary>
     /// <param name="doc">文档</param>
-    /// <param name="startType">节起始类型：newPage（默认）/ continuous / evenPage / oddPage</param>
+    /// <param name="startType">节起始类型：nextPage（默认）/ continuous / evenPage / oddPage（传 newPage 会自动纠正为 nextPage）</param>
     /// <returns>新节（其 <see cref="Section.PageSettings"/> 为当前页设置的副本，可单独调整）</returns>
     /// <remarks>调用后文档进入多节输出模式，保存前需 <see cref="Document.BeginEdit"/>（与其它模型修改一致）。</remarks>
-    public static Section AddSection(this Document doc, String startType = "newPage")
+    public static Section AddSection(this Document doc, String startType = "nextPage")
     {
         // 保证已有内容归属第一节：程序化创建时 Sections 为空，需要先把当前元素收进首节（复制列表，避免后续追加同时落入两节）
         if (doc.Sections.Count == 0)

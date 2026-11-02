@@ -1639,7 +1639,10 @@ public class WordWriter : IDisposable
 
         // w:type 必须位于 w:pgSz 之前（header/footer 引用之后），否则 Word 会提示修复
         var idx = xml.IndexOf("<w:pgSz", StringComparison.Ordinal);
-        var typeXml = $"<w:type w:val=\"{Esc(sec.Type)}\"/>";
+        // ST_SectionMark 枚举只有 nextPage/nextColumn/continuous/evenPage/oddPage，
+        // 历史代码常写 newPage，这里归一化以免生成非法值
+        var type = String.Equals(sec.Type, "newPage", StringComparison.OrdinalIgnoreCase) ? "nextPage" : sec.Type;
+        var typeXml = $"<w:type w:val=\"{Esc(type)}\"/>";
         return idx < 0 ? xml : xml[..idx] + typeXml + xml[idx..];
     }
 

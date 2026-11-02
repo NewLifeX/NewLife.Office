@@ -29,7 +29,8 @@ public class Section
     public String? SectPrXml { get; set; }
 
     /// <summary>
-    /// 节起始类型（<c>w:sectPr/w:type w:val</c>）：newPage（默认）/ continuous / evenPage / oddPage。
+    /// 节起始类型（<c>w:sectPr/w:type w:val</c>）：nextPage（默认）/ continuous / evenPage / oddPage。
+    /// <remarks>OOXML 的 <c>ST_SectionMark</c> 枚举不含 <c>newPage</c>，写入时会自动归一为 <c>nextPage</c>。</remarks>
     /// 仅程序化创建节时生效；<see cref="SectPrXml"/> 非空时以原始 XML 为准。
     /// </summary>
     public String? Type { get; set; }

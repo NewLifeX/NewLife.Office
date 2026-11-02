@@ -143,6 +143,87 @@ public class WordCrossCompatibilityTests
         finally { if (File.Exists(path)) File.Delete(path); }
     }
 
+    [Fact, DisplayName("F1_我写你读_多节独立页眉页脚通过 NPOI 与规范校验")]
+    public void F1_NPOI_Reads_Our_SectionHeadersFooters()
+    {
+        var path = TempFile("docx");
+        try
+        {
+            var doc = new NewLife.Office.Word.Document();
+            doc.AddParagraph("第一节正文");
+            doc.Footers.Add(new Footer
+            {
+                Type = "default",
+                Elements = [new Element { Type = ElementType.Paragraph, Paragraph = new Paragraph { Runs = { new Run { Text = "全文页脚" } } } }],
+            });
+            var sec = doc.AddSection("nextPage");
+            doc.AddParagraph("第二节正文");
+            // 第二节：断链页脚 + 断链清空页眉（生成空部件）
+            sec.LinkFootersToPrevious = false;
+            sec.Footers.Add(new Footer
+            {
+                Type = "default",
+                Elements = [new Element { Type = ElementType.Paragraph, Paragraph = new Paragraph { Runs = { new Run { Text = "第二节页脚" } } } }],
+            });
+            sec.LinkHeadersToPrevious = false;
+
+            using (var writer = new WordWriter())
+                writer.Save(path, doc);
+
+            // 关键：取消链接 + 空部件这类新生成的结构必须符合规范（0 错误）
+            AssertValidDocx(path);
+
+            // NPOI 能正常打开，正文可读
+            using (var fs = File.OpenRead(path))
+            {
+                var npoi = new XWPFDocument(fs);
+                var text = NpoiText(npoi);
+                Assert.Contains("第一节正文", text);
+                Assert.Contains("第二节正文", text);
+            }
+
+            // 我们自己的读取端能读回两节独立页脚
+            using var reader = new WordReader(path);
+            var back = reader.ReadDocument();
+            Assert.Equal(2, back.Sections.Count);
+            Assert.Equal("第二节页脚", back.Sections[1].Footers[0].Elements[0].Paragraph!.Runs[0].Text);
+            Assert.False(back.Sections[1].LinkHeadersToPrevious);
+            // 断链清空：部件存在但没有任何文本（空部件里只有一个空段落）
+            Assert.DoesNotContain(back.Sections[1].Headers,
+                h => h.Elements.Any(e => e.Paragraph != null && e.Paragraph.Runs.Any(r => !String.IsNullOrEmpty(r.Text))));
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact, DisplayName("F1_我写你读_超链接与首页不同的页眉页脚通过规范校验")]
+    public void F1_NPOI_Reads_Our_HyperlinkAndTitlePage()
+    {
+        var path = TempFile("docx");
+        try
+        {
+            var doc = new NewLife.Office.Word.Document();
+            doc.PageSettings.TitlePage = true;
+            doc.PageSettings.EvenAndOddHeaders = true;
+            var p = doc.AddParagraph("前文");
+            // 超链接必须同时登记关系，否则 r:id 悬空（校验器会报 Semantic 错误）
+            doc.Hyperlinks.Add(("rLink1", "https://example.com"));
+            p.Paragraph!.Runs.Add(new Run { Text = "官网链接", HyperlinkRelId = "rLink1", Properties = new RunProperties() });
+
+            using (var writer = new WordWriter())
+                writer.Save(path, doc);
+
+            // 超链接 rPr 不得重复 color/u；evenAndOddHeaders 不得出现在 sectPr —— 一律由规范校验兜底
+            AssertValidDocx(path);
+
+            using (var fs = File.OpenRead(path))
+            {
+                var npoi = new XWPFDocument(fs);
+                Assert.Contains("官网链接", NpoiText(npoi));
+            }
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
     [Fact, DisplayName("F1_我写你读_NPOI能读取我们生成的图片与列表")]
     public void F1_NPOI_Reads_Our_ImageAndList()
     {

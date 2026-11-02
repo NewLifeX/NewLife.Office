@@ -52,7 +52,7 @@ public class SectionHeaderFooterTests
     {
         var doc = new Document();
         doc.AddParagraph("第一节内容");
-        doc.AddSection("newPage");
+        doc.AddSection("nextPage");
         doc.AddParagraph("第二节内容");
         return doc;
     }
