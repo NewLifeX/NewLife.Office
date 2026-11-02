@@ -167,6 +167,8 @@ partial class PptxWriter
         sb.Append("<Default Extension=\"xml\" ContentType=\"application/xml\"/>");
         sb.Append("<Override PartName=\"/ppt/presentation.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml\"/>");
         var masterCount = Math.Max(1, _masterContents.Count);
+        if (_masterContents.Count == 0 && _progMasters.Count > 0)
+            masterCount = Math.Max(1, _progMasters.Count);
         for (var i = 1; i <= masterCount; i++)
             sb.Append($"<Override PartName=\"/ppt/slideMasters/slideMaster{i}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml\"/>");
         var layoutCount = Math.Max(1, _layoutContents.Count);
@@ -237,6 +239,28 @@ partial class PptxWriter
         // 嵌入字体类型
         if (_embeddedFonts.Count > 0)
             sb.Append("<Default Extension=\"fntdata\" ContentType=\"application/vnd.ms-office.activeX+xml\"/>");
+
+        // 视频类型：缺少内容类型声明的媒体部件会让整包被判为损坏
+        var videoExts = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
+        foreach (var slide in Slides)
+        {
+            foreach (var vid in slide.Videos)
+                videoExts.Add(vid.Extension);
+        }
+        foreach (var ext in videoExts)
+        {
+            var ct = ext.ToLowerInvariant() switch
+            {
+                "mp4" or "m4v" => "video/mp4",
+                "mov" => "video/quicktime",
+                "avi" => "video/x-msvideo",
+                "wmv" => "video/x-ms-wmv",
+                "webm" => "video/webm",
+                "mkv" => "video/x-matroska",
+                _ => "video/mp4",
+            };
+            sb.Append($"<Default Extension=\"{ext}\" ContentType=\"{ct}\"/>");
+        }
 
         // docProps（S14）
         if (_documentProperties != null)
@@ -683,7 +707,7 @@ partial class PptxWriter
                 vid.ThumbnailData = MinimalPng;
                 vid.ThumbnailExtension = "png";
             }
-            sb.Append($"<p:pic><p:nvPicPr><p:cNvPr id=\"{shapeId++}\" name=\"Video\"><a:hlinkClick action=\"ppaction://media\"/></p:cNvPr>");
+            sb.Append($"<p:pic><p:nvPicPr><p:cNvPr id=\"{shapeId++}\" name=\"Video\"><a:hlinkClick r:id=\"\" action=\"ppaction://media\"/></p:cNvPr>");
             sb.Append("<p:cNvPicPr><a:picLocks noChangeAspect=\"1\"/></p:cNvPicPr>");
             sb.Append($"<p:nvPr><a:videoFile r:link=\"{vid.RelId}\"/></p:nvPr></p:nvPicPr>");
             sb.Append($"<p:blipFill><a:blip r:embed=\"{vid.ThumbnailRelId}\"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>");
@@ -1166,11 +1190,11 @@ partial class PptxWriter
         foreach (var kv in uniqueAuthors)
         {
             var name = kv.Key;
-            var uid = kv.Value;
             authorIdMap[name] = authId;
             var initial = name.Length > 2 ? name.Substring(0, 2) : name;
+            // CT_CommentAuthor 只有 id/name/initials/lastIdx/clrIdx；uid 是 p14 扩展，写在这里会被严格校验判为未声明属性
             authSb.Append($"<p:cmAuthor id=\"{authId}\" name=\"{EscXml(name)}\" initials=\"{EscXml(initial)}\"");
-            authSb.Append($" uid=\"{EscXml(uid)}\" lastIdx=\"{allCommentItems.Count}\"/>");
+            authSb.Append($" lastIdx=\"{allCommentItems.Count}\" clrIdx=\"{authId}\"/>");
             authId++;
         }
         authSb.Append("</p:cmAuthorLst>");
@@ -1220,6 +1244,39 @@ partial class PptxWriter
         }
     }
 
+    /// <summary>写出数值缓存引用（c:val / c:xVal / c:yVal / c:bubbleSize 通用结构）</summary>
+    /// <param name="sb">目标构建器</param>
+    /// <param name="tag">元素名（val、xVal、yVal、bubbleSize）</param>
+    /// <param name="values">数值序列</param>
+    private static void AppendNumRef(StringBuilder sb, String tag, Double[] values)
+    {
+        sb.Append($"<c:{tag}><c:numRef><c:f/><c:numCache>");
+        sb.Append($"<c:ptCount val=\"{values.Length}\"/>");
+        for (var i = 0; i < values.Length; i++)
+            sb.Append($"<c:pt idx=\"{i}\"><c:v>{values[i]}</c:v></c:pt>");
+        sb.Append("</c:numCache></c:numRef>");
+        sb.Append($"</c:{tag}>");
+    }
+
+    /// <summary>写出数值轴定义</summary>
+    /// <param name="sb">目标构建器</param>
+    /// <param name="axId">轴 ID</param>
+    /// <param name="axPos">轴位置（b/l/r/t）</param>
+    /// <param name="crossAxId">交叉轴 ID</param>
+    /// <param name="chart">图表对象（提供轴范围设置）</param>
+    private static void AppendValueAxis(StringBuilder sb, Int32 axId, String axPos, Int32 crossAxId, Chart chart)
+    {
+        sb.Append($"<c:valAx><c:axId val=\"{axId}\"/><c:scaling><c:orientation val=\"minMax\"/>");
+        if (chart.AxisMinValue.HasValue)
+            sb.Append($"<c:min val=\"{chart.AxisMinValue.Value}\"/>");
+        if (chart.AxisMaxValue.HasValue)
+            sb.Append($"<c:max val=\"{chart.AxisMaxValue.Value}\"/>");
+        sb.Append($"</c:scaling><c:delete val=\"0\"/><c:axPos val=\"{axPos}\"/><c:crossAx val=\"{crossAxId}\"/></c:valAx>");
+    }
+
+    /// <summary>写出图表 XML 到包内</summary>
+    /// <param name="za">目标包</param>
+    /// <param name="chart">图表对象</param>
     private void WriteChartXml(ZipArchive za, Chart chart)
     {
         const String C = "http://schemas.openxmlformats.org/drawingml/2006/chart";
@@ -1251,25 +1308,47 @@ partial class PptxWriter
             _ => "barChart",
         };
         sb.Append($"<c:{chartElem}>");
-        if (chart.ChartType == "bar")
-            sb.Append("<c:barDir val=\"col\"/><c:grouping val=\"clustered\"/>");
-        if (chart.ChartType == "scatter")
-            sb.Append("<c:scatterStyle val=\"lineMarker\"/>");
-        if (chart.ChartType == "bubble")
-            sb.Append("<c:bubbleScale val=\"100\"/>");
-        if (chart.ChartType == "radar")
-            sb.Append("<c:radarStyle val=\"marker\"/>");
-
-        for (var si = 0; si < chart.Series.Count; si++)
+        // 各图表的首部元素必须按 CT_xxxChart 定义顺序：<样式元素> → varyColors → ser*
+        switch (chart.ChartType)
         {
-            var ser = chart.Series[si];
+            case "bar":
+                sb.Append("<c:barDir val=\"col\"/><c:grouping val=\"clustered\"/>");
+                break;
+            case "line":
+                sb.Append("<c:grouping val=\"standard\"/><c:varyColors val=\"0\"/>");
+                break;
+            case "area":
+                sb.Append("<c:grouping val=\"standard\"/><c:varyColors val=\"0\"/>");
+                break;
+            case "scatter":
+                sb.Append("<c:scatterStyle val=\"lineMarker\"/><c:varyColors val=\"0\"/>");
+                break;
+            case "bubble":
+                sb.Append("<c:varyColors val=\"0\"/>");
+                break;
+            case "radar":
+                sb.Append("<c:radarStyle val=\"marker\"/><c:varyColors val=\"0\"/>");
+                break;
+            case "surface":
+                sb.Append("<c:wireframe val=\"0\"/>");
+                break;
+        }
+
+        // 股价图要求 3~4 个系列（CT_StockChart 的 ser minOccurs=3），系列不足时按最后一条补足，
+        // 否则校验器会报 "unexpected child element axId, expected ser"，PowerPoint 打开即报错。
+        var seriesCount = chart.ChartType == "stock" ? Math.Max(3, chart.Series.Count) : chart.Series.Count;
+        for (var si = 0; si < seriesCount; si++)
+        {
+            var ser = chart.Series.Count == 0
+                ? new ChartSeries { Name = "Series1", Values = [] }
+                : chart.Series[Math.Min(si, chart.Series.Count - 1)];
             // 未显式指定颜色的系列：回退主题强调色，保证 SetAccentColors 对图表生效
             var color = ser.Color ?? AccentColors[si % AccentColors.Length];
             sb.Append("<c:ser>");
             sb.Append($"<c:idx val=\"{si}\"/><c:order val=\"{si}\"/>");
             sb.Append($"<c:tx><c:strRef><c:f/><c:strCache><c:ptCount val=\"1\"/><c:pt idx=\"0\"><c:v>{EscXml(ser.Name)}</c:v></c:pt></c:strCache></c:strRef></c:tx>");
             sb.Append($"<c:spPr><a:solidFill><a:srgbClr val=\"{color}\"/></a:solidFill></c:spPr>");
-            // categories — for scatter/bubble, skip and use per-series xVal
+            // categories — 散点/气泡系列用 xVal/yVal，没有分类轴
             var isXy = chart.ChartType is "scatter" or "bubble";
             if (!isXy && chart.Categories.Length > 0)
             {
@@ -1281,38 +1360,50 @@ partial class PptxWriter
                 }
                 sb.Append("</c:strCache></c:strRef></c:cat>");
             }
-            // xVal for scatter/bubble
-            if (isXy && ser.XValues is { Length: > 0 })
+            if (isXy)
             {
-                sb.Append("<c:xVal><c:numRef><c:f/><c:numCache>");
-                sb.Append($"<c:ptCount val=\"{ser.XValues.Length}\"/>");
-                for (var xi = 0; xi < ser.XValues.Length; xi++)
-                    sb.Append($"<c:pt idx=\"{xi}\"><c:v>{ser.XValues[xi]}</c:v></c:pt>");
-                sb.Append("</c:numCache></c:numRef></c:xVal>");
+                // 散点/气泡系列的结构是 xVal + yVal（+ bubbleSize），没有 c:val
+                AppendNumRef(sb, "xVal", ser.XValues is { Length: > 0 } ? ser.XValues : ser.Values);
+                AppendNumRef(sb, "yVal", ser.Values);
+                if (chart.ChartType == "bubble")
+                {
+                    // 气泡大小：缺省用 y 值，保证 bubbleSize 必填项存在
+                    var sizes = new Double[ser.Values.Length];
+                    for (var bi = 0; bi < sizes.Length; bi++) sizes[bi] = Math.Abs(ser.Values[bi]);
+                    AppendNumRef(sb, "bubbleSize", sizes);
+                }
             }
-            // values
-            sb.Append("<c:val><c:numRef><c:f/><c:numCache>");
-            sb.Append($"<c:ptCount val=\"{ser.Values.Length}\"/>");
-            for (var vi = 0; vi < ser.Values.Length; vi++)
+            else
             {
-                sb.Append($"<c:pt idx=\"{vi}\"><c:v>{ser.Values[vi]}</c:v></c:pt>");
+                AppendNumRef(sb, "val", ser.Values);
             }
-            sb.Append("</c:numCache></c:numRef></c:val>");
             sb.Append("</c:ser>");
         }
+
+        // 尾部的类型专属元素（必须在 ser 之后、axId 之前）
+        if (chart.ChartType == "bubble")
+            sb.Append("<c:bubbleScale val=\"100\"/><c:showNegBubbles val=\"0\"/>");
+
         if (chart.ChartType != "pie")
         {
-            sb.Append("<c:axId val=\"1\"/><c:axId val=\"2\"/>");
+            // 轴 ID 数量按各 CT 定义：曲面图为 3 个，其余（含股价图）为 2 个
+            var axisCount = chart.ChartType == "surface" ? 3 : 2;
+            for (var ai = 1; ai <= axisCount; ai++)
+                sb.Append($"<c:axId val=\"{ai}\"/>");
             sb.Append($"</c:{chartElem}>");
-            // category axis
-            sb.Append("<c:catAx><c:axId val=\"1\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"b\"/><c:crossAx val=\"2\"/></c:catAx>");
-            // value axis
-            sb.Append("<c:valAx><c:axId val=\"2\"/><c:scaling><c:orientation val=\"minMax\"/>");
-            if (chart.AxisMinValue.HasValue)
-                sb.Append($"<c:min val=\"{chart.AxisMinValue.Value}\"/>");
-            if (chart.AxisMaxValue.HasValue)
-                sb.Append($"<c:max val=\"{chart.AxisMaxValue.Value}\"/>");
-            sb.Append("</c:scaling><c:delete val=\"0\"/><c:axPos val=\"l\"/><c:crossAx val=\"1\"/></c:valAx>");
+            // 轴定义：散点/气泡用双数值轴；曲面/股价补第三个数值轴
+            if (chart.ChartType is "scatter" or "bubble")
+            {
+                AppendValueAxis(sb, 1, "b", 2, chart);
+                AppendValueAxis(sb, 2, "l", 1, chart);
+            }
+            else
+            {
+                sb.Append("<c:catAx><c:axId val=\"1\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"0\"/><c:axPos val=\"b\"/><c:crossAx val=\"2\"/></c:catAx>");
+                AppendValueAxis(sb, 2, "l", 1, chart);
+                if (axisCount > 2)
+                    AppendValueAxis(sb, 3, "r", 1, chart);
+            }
         }
         else
         {
