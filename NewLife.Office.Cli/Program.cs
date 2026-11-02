@@ -41,6 +41,7 @@ public static class Program
                 "doc2docx" or "d2x" => Doc2Docx(args.Skip(1).ToArray()),
                 "info" => Info(args.Skip(1).ToArray()),
                 "read" => ReadOutline(args.Skip(1).ToArray()),
+                "apply" => ApplyPatch(args.Skip(1).ToArray()),
                 _ => PrintUsageAndReturn(),
             };
         }
@@ -173,21 +174,68 @@ public static class Program
         }
 
         using var reader = new NewLife.Office.Word.WordReader(input);
-        var json = reader.ReadOutline().ToJson();
+        WriteStdout(reader.ReadOutline().ToJson());
+        return 0;
+    }
 
-        // 输出被重定向（管道/文件）时按 UTF-8 写字节，避免被控制台代码页转成乱码；
-        // 直接输出到终端时走 Console.Write，交给终端自身编码处理
+    /// <summary>apply 命令：按补丁 JSON 修改 docx；任一条失败则不写出文件（原子）</summary>
+    /// <param name="args">参数（&lt;in.docx&gt; &lt;patch.json&gt; &lt;out.docx&gt;）</param>
+    /// <returns>退出码（0=全部成功，1=参数/文件错误，3=有操作失败）</returns>
+    private static Int32 ApplyPatch(String[] args)
+    {
+        if (args.Length < 3)
+        {
+            Console.Error.WriteLine(Localization.Translate("Usage: apply <in.docx> <patch.json> <out.docx>"));
+            return 1;
+        }
+        var input = args[0];
+        var patchPath = args[1];
+        var output = args[2];
+        if (!File.Exists(input))
+        {
+            Console.Error.WriteLine(Localization.Translate("File not found: {0}", input));
+            return 1;
+        }
+        if (!File.Exists(patchPath))
+        {
+            Console.Error.WriteLine(Localization.Translate("File not found: {0}", patchPath));
+            return 1;
+        }
+
+        var patch = NewLife.Office.Word.DocxPatch.ParseJson(File.ReadAllText(patchPath));
+        using var reader = new NewLife.Office.Word.WordReader(input);
+        var doc = reader.ReadDocument();
+        doc.BeginEdit();
+
+        var result = NewLife.Office.Word.DocxPatch.Apply(doc, patch);
+        if (!result.Success)
+        {
+            foreach (var item in result.Failed)
+                Console.Error.WriteLine(item);
+            return 3;
+        }
+
+        using (var writer = new NewLife.Office.Word.WordWriter())
+            writer.Save(output, doc);
+
+        Console.WriteLine(Localization.Translate("Applied {0} operation(s): {1} → {2}", result.Applied.Count, Path.GetFileName(input), output));
+        return 0;
+    }
+
+    /// <summary>向标准输出写文本；重定向/管道时按 UTF-8 写字节（避免控制台代码页转码乱码）</summary>
+    /// <param name="text">输出文本</param>
+    private static void WriteStdout(String text)
+    {
         if (Console.IsOutputRedirected)
         {
             using var stdout = Console.OpenStandardOutput();
             using var writer = new StreamWriter(stdout, new UTF8Encoding(false)) { AutoFlush = true };
-            writer.Write(json);
+            writer.Write(text);
         }
         else
         {
-            Console.Write(json);
+            Console.Write(text);
         }
-        return 0;
     }
 
     /// <summary>打印用法</summary>
@@ -200,6 +248,7 @@ public static class Program
         Console.WriteLine(Localization.Translate("  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)"));
         Console.WriteLine(Localization.Translate("  info <input>               Show file format information"));
         Console.WriteLine(Localization.Translate("  read <input.docx>          Dump docx structure snapshot as JSON (for agents)"));
+        Console.WriteLine(Localization.Translate("  apply <in> <patch> <out>   Apply JSON patch to docx (no output file if any op fails)"));
         Console.WriteLine();
         Console.WriteLine(Localization.Translate("Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc."));
     }
