@@ -26,10 +26,14 @@ NewLife.Office.Cli apply report.docx patch.json out.docx
 
 # 文档转 Markdown（已有能力）
 NewLife.Office.Cli convert report.docx
+
+# 图片落地成文件 + 输出页眉页脚（Agent 可直接读图片文件）
+NewLife.Office.Cli convert report.docx report.md --images ./report-images --header-footer
 ```
 
 - `read` 输出到 stdout；**被管道/重定向时按 UTF-8 写字节**，避免控制台代码页把中文转成乱码。
 - `apply` 退出码：`0` 全部成功、`1` 参数/文件错误、`3` 有操作失败（此时**不产生输出文件**）。
+- `convert` 的 `--images <dir>` 把图片写成 `image1.png`… 并在 Markdown 中以文件名引用；`--header-footer` 把页眉页脚以引用块标注输出（默认均关闭，避免污染正文）。
 
 ---
 
