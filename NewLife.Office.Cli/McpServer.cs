@@ -44,6 +44,9 @@ internal static class McpServer
     }
 
     #region 协议
+    /// <summary>处理一行 JSON-RPC 请求，返回响应文本（通知返回 null）</summary>
+    /// <param name="line">一行 JSON-RPC 请求文本</param>
+    /// <returns>响应 JSON 文本；通知类消息返回 null</returns>
     private static String? Handle(String line)
     {
         using var doc = JsonDocument.Parse(line);
