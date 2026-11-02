@@ -83,10 +83,10 @@ public static class Program
             Console.Error.WriteLine(Localization.Translate("Usage: convert <input> [output] [--images <dir>] [--header-footer]"));
             return 1;
         }
-        var input = positional[0];
+        var input = ResolvePath(positional[0]);
         if (!File.Exists(input))
         {
-            Console.Error.WriteLine(Localization.Translate("File not found: {0}", input));
+            Console.Error.WriteLine(Localization.Translate("File not found: {0}", positional[0]));
             return 1;
         }
 
@@ -97,7 +97,7 @@ public static class Program
             options = new MarkdownConverterOptions
             {
                 IncludeHeadersFooters = includeHeaderFooter,
-                ImageDirectory = imageDir,
+                ImageDirectory = imageDir != null ? ResolvePath(imageDir) : null,
                 ImageHandling = imageDir != null ? MarkdownImageHandling.Reference : MarkdownImageHandling.Skip,
             };
         }
@@ -132,8 +132,9 @@ public static class Program
 
         if (positional.Count >= 2)
         {
-            File.WriteAllText(positional[1], md);
-            Console.WriteLine(Localization.Translate("Converted: {0} → {1}", Path.GetFileName(input), positional[1]));
+            var output = ResolvePath(positional[1]);
+            File.WriteAllText(output, md);
+            Console.WriteLine(Localization.Translate("Converted: {0} → {1}", Path.GetFileName(input), output));
         }
         else
         {
@@ -152,11 +153,11 @@ public static class Program
             Console.Error.WriteLine(Localization.Translate("Usage: doc2docx <input.doc> <output.docx>"));
             return 1;
         }
-        var input = args[0];
-        var output = args[1];
+        var input = ResolvePath(args[0]);
+        var output = ResolvePath(args[1]);
         if (!File.Exists(input))
         {
-            Console.Error.WriteLine(Localization.Translate("File not found: {0}", input));
+            Console.Error.WriteLine(Localization.Translate("File not found: {0}", args[0]));
             return 1;
         }
 
@@ -175,10 +176,10 @@ public static class Program
             Console.Error.WriteLine(Localization.Translate("Usage: info <input>"));
             return 1;
         }
-        var input = args[0];
+        var input = ResolvePath(args[0]);
         if (!File.Exists(input))
         {
-            Console.Error.WriteLine(Localization.Translate("File not found: {0}", input));
+            Console.Error.WriteLine(Localization.Translate("File not found: {0}", args[0]));
             return 1;
         }
 
@@ -200,10 +201,10 @@ public static class Program
             Console.Error.WriteLine(Localization.Translate("Usage: read <input.docx>"));
             return 1;
         }
-        var input = args[0];
+        var input = ResolvePath(args[0]);
         if (!File.Exists(input))
         {
-            Console.Error.WriteLine(Localization.Translate("File not found: {0}", input));
+            Console.Error.WriteLine(Localization.Translate("File not found: {0}", args[0]));
             return 1;
         }
 
@@ -222,17 +223,17 @@ public static class Program
             Console.Error.WriteLine(Localization.Translate("Usage: apply <in.docx> <patch.json> <out.docx>"));
             return 1;
         }
-        var input = args[0];
-        var patchPath = args[1];
-        var output = args[2];
+        var input = ResolvePath(args[0]);
+        var patchPath = ResolvePath(args[1]);
+        var output = ResolvePath(args[2]);
         if (!File.Exists(input))
         {
-            Console.Error.WriteLine(Localization.Translate("File not found: {0}", input));
+            Console.Error.WriteLine(Localization.Translate("File not found: {0}", args[0]));
             return 1;
         }
         if (!File.Exists(patchPath))
         {
-            Console.Error.WriteLine(Localization.Translate("File not found: {0}", patchPath));
+            Console.Error.WriteLine(Localization.Translate("File not found: {0}", args[1]));
             return 1;
         }
 
@@ -255,6 +256,16 @@ public static class Program
         Console.WriteLine(Localization.Translate("Applied {0} operation(s): {1} → {2}", result.Applied.Count, Path.GetFileName(input), output));
         return 0;
     }
+
+    /// <summary>把用户传入的路径解析为绝对路径</summary>
+    /// <remarks>
+    /// 统一按“当前工作目录”解析相对路径。必须与 <see cref="File.Exists"/> 的基准一致：
+    /// NewLife 的 <c>GetFullPath()</c> 扩展以程序目录为基准，直接用相对路径会出现
+    /// “File.Exists 通过但真正打开时报找不到路径”的假故障。
+    /// </remarks>
+    /// <param name="path">用户输入的路径（绝对或相对）</param>
+    /// <returns>绝对路径</returns>
+    internal static String ResolvePath(String path) => Path.GetFullPath(path);
 
     /// <summary>向标准输出写文本；重定向/管道时按 UTF-8 写字节（避免控制台代码页转码乱码）</summary>
     /// <param name="text">输出文本</param>

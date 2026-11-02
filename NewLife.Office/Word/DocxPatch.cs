@@ -3,7 +3,10 @@ namespace NewLife.Office.Word;
 /// <summary>文档补丁：按锚点批量修改文档，供 AI/Agent 以 JSON 驱动（对应结构快照里的 <c>p#3</c>/<c>tbl#5</c>）</summary>
 /// <remarks>
 /// 工作流：<c>read</c> 取 <see cref="DocxOutline"/> 看清结构与锚点 → 生成补丁 JSON → <see cref="Apply"/> 批量执行。
-/// 所有操作在内存模型上进行，任一条失败即整体不保存（天然回滚），不会产生半成品文件。
+/// 所有操作在内存模型上进行，由调用方根据 <see cref="DocxPatchResult.Success"/> 决定是否落盘；
+/// <b>注意：失败时不会回滚</b>——已执行成功的操作仍留在内存模型上，因此失败后必须丢弃该 <see cref="Document"/> 实例（重新读取源文件），否则会得到“部分修改”的文档。
+/// <para>锚点指的是 <b>read 时刻</b> 的 <see cref="Document.Elements"/> 下标。补丁中存在 <c>insert_paragraph</c> / <c>insert_table</c> / <c>delete</c>
+/// 时，其后的元素下标会整体位移，后续操作的锚点会对不上。请把结构性操作排在补丁最后，或按锚点从大到小安排顺序。</para>
 /// <para>支持的操作：<c>replace_text</c> / <c>set_text</c> / <c>insert_paragraph</c> / <c>delete</c> /
 /// <c>set_style</c> / <c>set_cell_text</c> / <c>insert_table</c> / <c>add_comment</c>。</para>
 /// <example>
@@ -97,7 +100,7 @@ public class DocxPatch
     /// <summary>在文档模型上执行补丁（调用前请先 <see cref="Document.BeginEdit"/>）</summary>
     /// <param name="doc">文档</param>
     /// <param name="patch">补丁</param>
-    /// <returns>逐条执行结果；<see cref="DocxPatchResult.Success"/> 为 false 时不应保存</returns>
+    /// <returns>逐条执行结果；<see cref="DocxPatchResult.Success"/> 为 false 时不应保存，且应丢弃当前文档重新读取（无回滚）</returns>
     /// <exception cref="ArgumentNullException">doc 或 patch 为空</exception>
     public static DocxPatchResult Apply(Document doc, DocxPatch patch)
     {

@@ -106,7 +106,7 @@ internal static class McpServer
         var apply = new JsonObject
         {
             ["name"] = "docx_apply_patch",
-            ["description"] = "按锚点批量修改 docx：replace_text/set_text/insert_paragraph/delete/set_style/set_cell_text/insert_table/add_comment。任一条失败则不写文件",
+            ["description"] = "按锚点批量修改 docx：replace_text/set_text/insert_paragraph/delete/set_style/set_cell_text/insert_table/add_comment。任一条失败则不写文件。注意：锚点指 read 时刻的元素下标，insert/delete 会让后续锚点偏移，请把结构性操作排在补丁最后",
             ["inputSchema"] = new JsonObject
             {
                 ["type"] = "object",
@@ -150,15 +150,15 @@ internal static class McpServer
     #region 工具实现
     private static String ReadOutline(JsonElement id, JsonElement args)
     {
-        var path = GetString(args, "path") ?? throw new ArgumentException("缺少 path");
+        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException("缺少 path"));
         using var reader = new WordReader(path);
         return ToolText(id, reader.ReadOutline().ToJson());
     }
 
     private static String ApplyPatch(JsonElement id, JsonElement args)
     {
-        var path = GetString(args, "path") ?? throw new ArgumentException("缺少 path");
-        var output = GetString(args, "output") ?? throw new ArgumentException("缺少 output");
+        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException("缺少 path"));
+        var output = Program.ResolvePath(GetString(args, "output") ?? throw new ArgumentException("缺少 output"));
         if (!args.TryGetProperty("patch", out var patchEl)) throw new ArgumentException("缺少 patch");
 
         var patch = DocxPatch.ParseJson(patchEl.GetRawText());

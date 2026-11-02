@@ -727,7 +727,8 @@ public class WordWriter : IDisposable
         // [Content_Types].xml 与 word/_rels/document.xml.rels 引用（含脚注/尾注防重复条目）
         if (document.DocumentXml == null
             && (_headers.Count > 0 || _footers.Count > 0 || _footnotes.Count > 0 || _endnotes.Count > 0 || _rebuildComments
-                || document.Sections.Exists(e => !e.LinkHeadersToPrevious || !e.LinkFootersToPrevious)))
+                || document.Sections.Exists(e => !e.LinkHeadersToPrevious || !e.LinkFootersToPrevious
+                    || e.Headers.Count > 0 || e.Footers.Count > 0)))
         {
             _rebuildHeaderFooter = true;
             _mergeContentTypes = document.OtherParts.TryGetValue("[Content_Types].xml", out var ct0)
@@ -748,10 +749,11 @@ public class WordWriter : IDisposable
                 .ToList();
             foreach (var k in removeKeys) _otherParts.Remove(k);
             _sectPrXml = null; // 重建 sectPr 以生成新的 headerReference/footerReference
-            // 取消“链接到上一节”的节必须重建 sectPr，否则原始 XML 里的旧引用会盖掉新的独立页眉页脚
+            // 取消“链接到上一节”或带有独立页眉页脚的节必须重建 sectPr，否则原始 XML 里的旧引用会盖掉新的独立页眉页脚
             foreach (var sec in document.Sections)
             {
-                if (!sec.LinkHeadersToPrevious || !sec.LinkFootersToPrevious) sec.SectPrXml = null;
+                if (!sec.LinkHeadersToPrevious || !sec.LinkFootersToPrevious || sec.Headers.Count > 0 || sec.Footers.Count > 0)
+                    sec.SectPrXml = null;
             }
         }
 
@@ -1946,8 +1948,8 @@ public class WordWriter : IDisposable
         for (var si = 0; si < _sections.Count; si++)
         {
             var sec = _sections[si];
-            // 第一节没有上一节，链接标志无意义
-            if (si > 0 && !sec.LinkHeadersToPrevious)
+            // 第一节没有上一节，“链接”对它无意义；但用户显式设置本节独立内容时仍应生效
+            if (!sec.LinkHeadersToPrevious || (si == 0 && sec.Headers.Count > 0))
             {
                 if (sec.Headers.Count == 0)
                     _headerSlots.Add(new HdrFtrSlot { SectionIndex = si, Ordinal = _headerSlots.Count + 1 });
@@ -1955,7 +1957,7 @@ public class WordWriter : IDisposable
                     foreach (var h in sec.Headers)
                         _headerSlots.Add(new HdrFtrSlot { SectionIndex = si, Type = h.Type, Header = h, Ordinal = _headerSlots.Count + 1 });
             }
-            if (si > 0 && !sec.LinkFootersToPrevious)
+            if (!sec.LinkFootersToPrevious || (si == 0 && sec.Footers.Count > 0))
             {
                 if (sec.Footers.Count == 0)
                     _footerSlots.Add(new HdrFtrSlot { SectionIndex = si, Ordinal = _footerSlots.Count + 1 });
@@ -1966,13 +1968,18 @@ public class WordWriter : IDisposable
         }
     }
 
-    /// <summary>取某节实际生效的页眉槽位：本节独立时返回本节槽位，第一节返回文档级槽位，后续链接节返回空（继承上一节）</summary>
+    /// <summary>取某节实际生效的页眉槽位：本节有独立槽位时用本节的，否则第一节用文档级、后续链接节为空（继承上一节）</summary>
     /// <param name="sectionIndex">节索引，-1 表示单节/无节信息</param>
     /// <param name="slots">全部槽位</param>
     /// <returns>该节应引用的槽位列表；空表示不输出引用（继承上一节）</returns>
     private static List<HdrFtrSlot> SlotsFor(Int32 sectionIndex, List<HdrFtrSlot> slots)
     {
-        if (sectionIndex > 0) return slots.Where(e => e.SectionIndex == sectionIndex).ToList();
+        if (sectionIndex >= 0)
+        {
+            var own = slots.Where(e => e.SectionIndex == sectionIndex).ToList();
+            if (own.Count > 0) return own;
+        }
+        if (sectionIndex > 0) return [];
 
         return slots.Where(e => e.SectionIndex < 0).ToList();
     }
