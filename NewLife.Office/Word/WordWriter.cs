@@ -60,6 +60,10 @@ public class WordWriter : IDisposable
     private List<Header> _headers = [];
     private List<Footer> _footers = [];
 
+    // 页眉/页脚部件槽位：全局（文档级 Document.Headers/Footers）+ 各节独立（Section.Headers/Footers）
+    private readonly List<HdrFtrSlot> _headerSlots = [];
+    private readonly List<HdrFtrSlot> _footerSlots = [];
+
     // 多节模型（程序化创建时由 Document.Sections 导入，Count>1 时按节输出）
     private List<Section> _sections = [];
 
@@ -563,6 +567,9 @@ public class WordWriter : IDisposable
     {
         using var za = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true, entryNameEncoding: Encoding);
 
+        // 汇总页眉/页脚部件槽位（文档级 + 各节独立），后续 sectPr/部件/rels/Content_Types 均按槽位输出
+        BuildHdrFtrSlots();
+
         // 透传模式：保留所有原始 ZIP 部件（包含 [Content_Types].xml、rels、主题、字体表等），
         // 仅重新生成 word/document.xml 以支持用户对 Elements 的修改。
         if (_otherParts.Count > 0)
@@ -593,8 +600,8 @@ public class WordWriter : IDisposable
             // 富文本页眉页脚（用户显式重建时）：生成新部件 + 合并更新 content types/rels 引用
             if (_rebuildHeaderFooter)
             {
-                if (_headers.Count > 0) WriteHeaderParts(za);
-                if (_footers.Count > 0) WriteFooterParts(za);
+                if (_headerSlots.Count > 0) WriteHeaderParts(za);
+                if (_footerSlots.Count > 0) WriteFooterParts(za);
                 if (_mergeContentTypes != null)
                     WriteEntry(za, "[Content_Types].xml", InjectContentTypeOverrides(_mergeContentTypes));
                 if (_mergeDocumentRels != null)
@@ -623,11 +630,11 @@ public class WordWriter : IDisposable
         var psave = PageSettings;
         var hdrInOther = _otherParts.ContainsKey("word/header1.xml");
         var ftrInOther = _otherParts.ContainsKey("word/footer1.xml");
-        if (_headers.Count > 0)
+        if (_headerSlots.Count > 0)
             WriteHeaderParts(za);
         else if ((psave.HeaderText != null || psave.WatermarkText != null) && !hdrInOther)
             WriteHeaderXml(za);
-        if (_footers.Count > 0)
+        if (_footerSlots.Count > 0)
             WriteFooterParts(za);
         else if (psave.FooterText != null && !ftrInOther)
             WriteFooterXml(za);
@@ -719,7 +726,8 @@ public class WordWriter : IDisposable
         // 从透传中移除旧部件与其引用，改由 Writer 生成新部件并合并更新
         // [Content_Types].xml 与 word/_rels/document.xml.rels 引用（含脚注/尾注防重复条目）
         if (document.DocumentXml == null
-            && (_headers.Count > 0 || _footers.Count > 0 || _footnotes.Count > 0 || _endnotes.Count > 0 || _rebuildComments))
+            && (_headers.Count > 0 || _footers.Count > 0 || _footnotes.Count > 0 || _endnotes.Count > 0 || _rebuildComments
+                || document.Sections.Exists(e => !e.LinkHeadersToPrevious || !e.LinkFootersToPrevious)))
         {
             _rebuildHeaderFooter = true;
             _mergeContentTypes = document.OtherParts.TryGetValue("[Content_Types].xml", out var ct0)
@@ -740,6 +748,11 @@ public class WordWriter : IDisposable
                 .ToList();
             foreach (var k in removeKeys) _otherParts.Remove(k);
             _sectPrXml = null; // 重建 sectPr 以生成新的 headerReference/footerReference
+            // 取消“链接到上一节”的节必须重建 sectPr，否则原始 XML 里的旧引用会盖掉新的独立页眉页脚
+            foreach (var sec in document.Sections)
+            {
+                if (!sec.LinkHeadersToPrevious || !sec.LinkFootersToPrevious) sec.SectPrXml = null;
+            }
         }
 
         Save(stream);
@@ -907,19 +920,19 @@ public class WordWriter : IDisposable
         if (_numberingXml != null || _elements.Any(e => e.Type == ElementType.Paragraph && e.Paragraph?.IsBullet == true))
             sb.Append("<Override PartName=\"/word/numbering.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml\"/>");
         var ps = PageSettings;
-        if (_headers.Count > 0)
+        if (_headerSlots.Count > 0)
         {
-            for (var i = 0; i < _headers.Count; i++)
-                sb.Append($"<Override PartName=\"/word/header{i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml\"/>");
+            foreach (var slot in _headerSlots)
+                sb.Append($"<Override PartName=\"/word/header{slot.Ordinal}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml\"/>");
         }
         else if (ps.HeaderText != null || ps.WatermarkText != null)
         {
             sb.Append("<Override PartName=\"/word/header1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml\"/>");
         }
-        if (_footers.Count > 0)
+        if (_footerSlots.Count > 0)
         {
-            for (var i = 0; i < _footers.Count; i++)
-                sb.Append($"<Override PartName=\"/word/footer{i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml\"/>");
+            foreach (var slot in _footerSlots)
+                sb.Append($"<Override PartName=\"/word/footer{slot.Ordinal}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml\"/>");
         }
         else if (ps.FooterText != null)
         {
@@ -995,19 +1008,19 @@ public class WordWriter : IDisposable
         sb.Append("<Relationship Id=\"rStyles\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>");
         sb.Append("<Relationship Id=\"rSettings\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings\" Target=\"settings.xml\"/>");
         var psRels = PageSettings;
-        if (_headers.Count > 0)
+        if (_headerSlots.Count > 0)
         {
-            for (var i = 0; i < _headers.Count; i++)
-                sb.Append($"<Relationship Id=\"rHdr{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header\" Target=\"header{i + 1}.xml\"/>");
+            foreach (var slot in _headerSlots)
+                sb.Append($"<Relationship Id=\"rHdr{slot.Ordinal}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header\" Target=\"header{slot.Ordinal}.xml\"/>");
         }
         else if (psRels.HeaderText != null || psRels.WatermarkText != null)
         {
             sb.Append("<Relationship Id=\"rHdr1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header\" Target=\"header1.xml\"/>");
         }
-        if (_footers.Count > 0)
+        if (_footerSlots.Count > 0)
         {
-            for (var i = 0; i < _footers.Count; i++)
-                sb.Append($"<Relationship Id=\"rFtr{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer\" Target=\"footer{i + 1}.xml\"/>");
+            foreach (var slot in _footerSlots)
+                sb.Append($"<Relationship Id=\"rFtr{slot.Ordinal}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer\" Target=\"footer{slot.Ordinal}.xml\"/>");
         }
         else if (psRels.FooterText != null)
         {
@@ -1595,7 +1608,8 @@ public class WordWriter : IDisposable
     /// <returns>完整的 w:sectPr XML</returns>
     private String BuildSectPrOf(Section sec)
     {
-        var xml = sec.SectPrXml ?? BuildSectPrXml(sec.PageSettings);
+        var si = _sections.IndexOf(sec);
+        var xml = sec.SectPrXml ?? BuildSectPrXml(sec.PageSettings, si);
         if (sec.Type == null) return xml;
 
         // w:type 必须位于 w:pgSz 之前（header/footer 引用之后），否则 Word 会提示修复
@@ -1604,9 +1618,11 @@ public class WordWriter : IDisposable
         return idx < 0 ? xml : xml[..idx] + typeXml + xml[idx..];
     }
 
-    /// <summary>从 PageSettings 生成 <c>w:sectPr</c> 节属性 XML</summary>    /// <param name="ps">页面设置</param>
+    /// <summary>从 PageSettings 生成 <c>w:sectPr</c> 节属性 XML</summary>
+    /// <param name="ps">页面设置</param>
+    /// <param name="sectionIndex">节索引（-1 表示单节/无节信息，使用文档级页眉页脚）</param>
     /// <returns>完整的 w:sectPr XML 字符串</returns>
-    private String BuildSectPrXml(PageSettings ps)
+    private String BuildSectPrXml(PageSettings ps, Int32 sectionIndex = -1)
     {
         var sb = new StringBuilder();
         var pgW = ps.Landscape ? ps.PageHeight : ps.PageWidth;
@@ -1614,22 +1630,24 @@ public class WordWriter : IDisposable
         sb.Append("<w:sectPr>");
         if (ps.TitlePage) sb.Append("<w:titlePg/>");
         if (ps.EvenAndOddHeaders) sb.Append("<w:evenAndOddHeaders/>");
-        // 富文本页眉页脚（按类型引用），否则回退简单文本页眉页脚
-        if (_headers.Count > 0)
+        // 富文本页眉页脚（按类型引用）：该节取消“链接到上一节”时用本节独立部件，否则用文档级部件
+        var hdrSlots = SlotsFor(sectionIndex, _headerSlots);
+        var ftrSlots = SlotsFor(sectionIndex, _footerSlots);
+        if (hdrSlots.Count > 0)
         {
-            for (var i = 0; i < _headers.Count; i++)
-                sb.Append($"<w:headerReference w:type=\"{_headers[i].Type}\" r:id=\"rHdr{i + 1}\"/>");
+            foreach (var slot in hdrSlots)
+                sb.Append($"<w:headerReference w:type=\"{slot.Type}\" r:id=\"rHdr{slot.Ordinal}\"/>");
         }
-        else if (ps.HeaderText != null || ps.WatermarkText != null)
+        else if (sectionIndex <= 0 && (ps.HeaderText != null || ps.WatermarkText != null))
         {
             sb.Append("<w:headerReference w:type=\"default\" r:id=\"rHdr1\"/>");
         }
-        if (_footers.Count > 0)
+        if (ftrSlots.Count > 0)
         {
-            for (var i = 0; i < _footers.Count; i++)
-                sb.Append($"<w:footerReference w:type=\"{_footers[i].Type}\" r:id=\"rFtr{i + 1}\"/>");
+            foreach (var slot in ftrSlots)
+                sb.Append($"<w:footerReference w:type=\"{slot.Type}\" r:id=\"rFtr{slot.Ordinal}\"/>");
         }
-        else if (ps.FooterText != null)
+        else if (sectionIndex <= 0 && ps.FooterText != null)
         {
             sb.Append("<w:footerReference w:type=\"default\" r:id=\"rFtr1\"/>");
         }
@@ -1817,24 +1835,34 @@ public class WordWriter : IDisposable
         }
     }
 
-    /// <summary>写入富文本页眉部件（每个 Header 生成 header{N}.xml）</summary>
+    /// <summary>写入富文本页眉部件（每个槽位生成 header{N}.xml，含各节独立页眉）</summary>
     private void WriteHeaderParts(ZipArchive za)
     {
-        for (var i = 0; i < _headers.Count; i++)
+        foreach (var slot in _headerSlots)
         {
-            var xml = BuildHdrFtrXml("w:hdr", _headers[i].Elements);
-            WriteEntry(za, $"word/header{i + 1}.xml", xml);
+            var elements = slot.Header?.Elements ?? [];
+            WriteEntry(za, $"word/header{slot.Ordinal}.xml", BuildHdrFtrXml("w:hdr", elements));
+        }
+    }
+
+    /// <summary>写入富文本页脚部件（每个槽位生成 footer{N}.xml，含各节独立页脚）</summary>
+    private void WriteFooterParts(ZipArchive za)
+    {
+        foreach (var slot in _footerSlots)
+        {
+            var elements = slot.Footer?.Elements ?? [];
+            WriteEntry(za, $"word/footer{slot.Ordinal}.xml", BuildHdrFtrXml("w:ftr", elements));
         }
     }
 
     /// <summary>向 [Content_Types].xml 注入 header/footer/脚注/尾注 Override（去重）</summary>
     private String InjectContentTypeOverrides(String contentTypes)
     {
-        for (var i = 0; i < _headers.Count; i++)
-            contentTypes = InjectOneOverride(contentTypes, $"/word/header{i + 1}.xml",
+        foreach (var slot in _headerSlots)
+            contentTypes = InjectOneOverride(contentTypes, $"/word/header{slot.Ordinal}.xml",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml");
-        for (var i = 0; i < _footers.Count; i++)
-            contentTypes = InjectOneOverride(contentTypes, $"/word/footer{i + 1}.xml",
+        foreach (var slot in _footerSlots)
+            contentTypes = InjectOneOverride(contentTypes, $"/word/footer{slot.Ordinal}.xml",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml");
         if (_footnotes.Count > 0)
             contentTypes = InjectOneOverride(contentTypes, "/word/footnotes.xml",
@@ -1866,10 +1894,10 @@ public class WordWriter : IDisposable
             "");
         // 注入新关系
         var sb = new StringBuilder();
-        for (var i = 0; i < _headers.Count; i++)
-            sb.Append($"<Relationship Id=\"rHdr{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header\" Target=\"header{i + 1}.xml\"/>");
-        for (var i = 0; i < _footers.Count; i++)
-            sb.Append($"<Relationship Id=\"rFtr{i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer\" Target=\"footer{i + 1}.xml\"/>");
+        foreach (var slot in _headerSlots)
+            sb.Append($"<Relationship Id=\"rHdr{slot.Ordinal}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header\" Target=\"header{slot.Ordinal}.xml\"/>");
+        foreach (var slot in _footerSlots)
+            sb.Append($"<Relationship Id=\"rFtr{slot.Ordinal}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer\" Target=\"footer{slot.Ordinal}.xml\"/>");
         if (_footnotes.Count > 0)
             sb.Append("<Relationship Id=\"rFootnotes\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes\" Target=\"footnotes.xml\"/>");
         if (_endnotes.Count > 0)
@@ -1881,14 +1909,72 @@ public class WordWriter : IDisposable
         return relsXml[..idx] + sb + relsXml[idx..];
     }
 
-    /// <summary>写入富文本页脚部件（每个 Footer 生成 footer{N}.xml）</summary>
-    private void WriteFooterParts(ZipArchive za)
+    /// <summary>页眉/页脚部件槽位：-1 表示全局（文档级），否则为节索引</summary>
+    private sealed class HdrFtrSlot
     {
-        for (var i = 0; i < _footers.Count; i++)
+        /// <summary>所属节索引，-1 表示文档级</summary>
+        public Int32 SectionIndex { get; set; } = -1;
+
+        /// <summary>页眉页脚类型（default/first/even）</summary>
+        public String Type { get; set; } = "default";
+
+        /// <summary>页眉内容（页脚槽位为 null）</summary>
+        public Header? Header { get; set; }
+
+        /// <summary>页脚内容（页眉槽位为 null）</summary>
+        public Footer? Footer { get; set; }
+
+        /// <summary>部件序号（header{N}.xml / footer{N}.xml 的 N，从 1 起）</summary>
+        public Int32 Ordinal { get; set; }
+    }
+
+    /// <summary>构建页眉/页脚槽位：文档级在前，各节独立页眉页脚随后</summary>
+    /// <remarks>
+    /// 取消“链接到上一节”（<see cref="Section.LinkHeadersToPrevious"/>=false）的节会获得独立部件；
+    /// 若该节的 <see cref="Section.Headers"/> 为空，则生成一个空部件，用于显式清空继承来的页眉页脚。
+    /// </remarks>
+    private void BuildHdrFtrSlots()
+    {
+        _headerSlots.Clear();
+        _footerSlots.Clear();
+
+        foreach (var h in _headers)
+            _headerSlots.Add(new HdrFtrSlot { Type = h.Type, Header = h, Ordinal = _headerSlots.Count + 1 });
+        foreach (var f in _footers)
+            _footerSlots.Add(new HdrFtrSlot { Type = f.Type, Footer = f, Ordinal = _footerSlots.Count + 1 });
+
+        for (var si = 0; si < _sections.Count; si++)
         {
-            var xml = BuildHdrFtrXml("w:ftr", _footers[i].Elements);
-            WriteEntry(za, $"word/footer{i + 1}.xml", xml);
+            var sec = _sections[si];
+            // 第一节没有上一节，链接标志无意义
+            if (si > 0 && !sec.LinkHeadersToPrevious)
+            {
+                if (sec.Headers.Count == 0)
+                    _headerSlots.Add(new HdrFtrSlot { SectionIndex = si, Ordinal = _headerSlots.Count + 1 });
+                else
+                    foreach (var h in sec.Headers)
+                        _headerSlots.Add(new HdrFtrSlot { SectionIndex = si, Type = h.Type, Header = h, Ordinal = _headerSlots.Count + 1 });
+            }
+            if (si > 0 && !sec.LinkFootersToPrevious)
+            {
+                if (sec.Footers.Count == 0)
+                    _footerSlots.Add(new HdrFtrSlot { SectionIndex = si, Ordinal = _footerSlots.Count + 1 });
+                else
+                    foreach (var f in sec.Footers)
+                        _footerSlots.Add(new HdrFtrSlot { SectionIndex = si, Type = f.Type, Footer = f, Ordinal = _footerSlots.Count + 1 });
+            }
         }
+    }
+
+    /// <summary>取某节实际生效的页眉槽位：本节独立时返回本节槽位，第一节返回文档级槽位，后续链接节返回空（继承上一节）</summary>
+    /// <param name="sectionIndex">节索引，-1 表示单节/无节信息</param>
+    /// <param name="slots">全部槽位</param>
+    /// <returns>该节应引用的槽位列表；空表示不输出引用（继承上一节）</returns>
+    private static List<HdrFtrSlot> SlotsFor(Int32 sectionIndex, List<HdrFtrSlot> slots)
+    {
+        if (sectionIndex > 0) return slots.Where(e => e.SectionIndex == sectionIndex).ToList();
+
+        return slots.Where(e => e.SectionIndex < 0).ToList();
     }
 
     /// <summary>从元素列表构建页眉/页脚 XML（含必要的命名空间声明）</summary>

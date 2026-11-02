@@ -389,7 +389,8 @@ public static class FormatToMarkdown
         if (reader == null) return null;
         try
         {
-            var doc = (reader as IMarkdownDocumentExtractable)?.ToMarkdownDocument();
+            var doc = (reader as IMarkdownOptionExtractable)?.ToMarkdownDocument(options)
+                ?? (reader as IMarkdownDocumentExtractable)?.ToMarkdownDocument();
             if (doc != null) return ApplyOptions(doc, filePath, options);
 
             // 回退：旧字符串实现 → 解析
@@ -413,7 +414,8 @@ public static class FormatToMarkdown
     /// <returns>Markdown 字符串</returns>
     private static String? ToMarkdownString(IMarkdownExtractable reader, String? filePath, MarkdownConverterOptions? options)
     {
-        var doc = (reader as IMarkdownDocumentExtractable)?.ToMarkdownDocument();
+        var doc = (reader as IMarkdownOptionExtractable)?.ToMarkdownDocument(options)
+            ?? (reader as IMarkdownDocumentExtractable)?.ToMarkdownDocument();
         if (doc != null)
         {
             doc = ApplyOptions(doc, filePath, options);

@@ -54,20 +54,52 @@ public static class Program
     }
 
     /// <summary>convert 命令：办公文档 → Markdown</summary>
-    /// <param name="args">参数（&lt;input&gt; [output]）</param>
+    /// <param name="args">参数（&lt;input&gt; [output] [--images &lt;dir&gt;] [--header-footer]）</param>
     /// <returns>退出码</returns>
     private static Int32 Convert(String[] args)
     {
-        if (args.Length < 1)
+        // 选项解析：--images <dir> 图片落地目录，--header-footer 输出页眉页脚
+        String? imageDir = null;
+        var includeHeaderFooter = false;
+        var positional = new List<String>();
+        for (var i = 0; i < args.Length; i++)
         {
-            Console.Error.WriteLine(Localization.Translate("Usage: convert <input> [output]"));
+            switch (args[i].ToLowerInvariant())
+            {
+                case "--images":
+                    if (i + 1 < args.Length) imageDir = args[++i];
+                    break;
+                case "--header-footer":
+                    includeHeaderFooter = true;
+                    break;
+                default:
+                    positional.Add(args[i]);
+                    break;
+            }
+        }
+
+        if (positional.Count < 1)
+        {
+            Console.Error.WriteLine(Localization.Translate("Usage: convert <input> [output] [--images <dir>] [--header-footer]"));
             return 1;
         }
-        var input = args[0];
+        var input = positional[0];
         if (!File.Exists(input))
         {
             Console.Error.WriteLine(Localization.Translate("File not found: {0}", input));
             return 1;
+        }
+
+        // 仅在显式指定选项时构造，避免改变默认转换行为
+        MarkdownConverterOptions? options = null;
+        if (imageDir != null || includeHeaderFooter)
+        {
+            options = new MarkdownConverterOptions
+            {
+                IncludeHeadersFooters = includeHeaderFooter,
+                ImageDirectory = imageDir,
+                ImageHandling = imageDir != null ? MarkdownImageHandling.Reference : MarkdownImageHandling.Skip,
+            };
         }
 
         // Markdown 直接透传，其余格式走转换中枢（失败时内容识别兜底，GEN-2b）
@@ -81,13 +113,14 @@ public static class Program
         {
             try
             {
-                md = FormatToMarkdown.Convert(input);
+                md = FormatToMarkdown.Convert(input, options);
             }
             catch (ConvertErrorException)
             {
                 // 扩展名缺失/错误：按文件头内容识别路由（GEN-2b）
                 var reader = OfficeFactory.CreateReaderByContent(input);
-                md = (reader as IMarkdownExtractable)?.ExtractMarkdown();
+                md = (reader as IMarkdownOptionExtractable)?.ToMarkdownDocument(options)?.ToMarkdown()
+                    ?? (reader as IMarkdownExtractable)?.ExtractMarkdown();
             }
         }
 
@@ -97,10 +130,10 @@ public static class Program
             return 1;
         }
 
-        if (args.Length >= 2)
+        if (positional.Count >= 2)
         {
-            File.WriteAllText(args[1], md);
-            Console.WriteLine(Localization.Translate("Converted: {0} → {1}", Path.GetFileName(input), args[1]));
+            File.WriteAllText(positional[1], md);
+            Console.WriteLine(Localization.Translate("Converted: {0} → {1}", Path.GetFileName(input), positional[1]));
         }
         else
         {
@@ -246,6 +279,8 @@ public static class Program
         Console.WriteLine();
         Console.WriteLine(Localization.Translate("Usage:"));
         Console.WriteLine(Localization.Translate("  convert <input> [output]   Convert office documents to Markdown (output defaults to stdout)"));
+        Console.WriteLine(Localization.Translate("      --images <dir>         Write images to <dir> and reference them by file name"));
+        Console.WriteLine(Localization.Translate("      --header-footer        Include headers/footers as blockquotes (Word)"));
         Console.WriteLine(Localization.Translate("  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)"));
         Console.WriteLine(Localization.Translate("  info <input>               Show file format information"));
         Console.WriteLine(Localization.Translate("  read <input.docx>          Dump docx structure snapshot as JSON (for agents)"));

@@ -10,7 +10,7 @@ namespace NewLife.Office.Word;
 /// <remarks>
 /// 直接解析 Open XML（ZIP+XML）提取文本、表格、图片等内容。
 /// </remarks>
-public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, IMarkdownDocumentExtractable
+public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, IMarkdownDocumentExtractable, IMarkdownOptionExtractable
 {
     #region 属性
     /// <summary>源文件路径（从文件构造时有效）</summary>
@@ -26,6 +26,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     private readonly List<(Int32 Num, List<MarkdownInline> Inlines)> _orderedItems = [];
     private Int32 _orderedNum;
     private Int32 _imageIdx;
+    private MarkdownConverterOptions? _mdOptions;   // 当前转换选项（图片落地/页眉页脚）
     #endregion
 
     #region 构造
@@ -1624,6 +1625,8 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             HeightEmu = cy > 0 ? cy : 2700000,
             IsSvg = isSvg,
             Extension = doc.Images.TryGetValue(rId, out var imgData) ? imgData.Extension : (isSvg ? "svg" : "png"),
+            // 带上图片字节，便于 Markdown 导出落地文件/内嵌（同一引用，不复制数据）
+            ImageData = doc.Images.TryGetValue(rId, out var imgBytes) ? imgBytes.Data : [],
         };
 
         // wp:anchor 浮动定位与环绕
@@ -1978,6 +1981,36 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
 
         ps.HeaderText = doc.HeaderText;
         ps.FooterText = doc.FooterText;
+
+        // 各节独立页眉页脚：第一节由文档级（Document.Headers/Footers）承载，
+        // 后续节若自带 headerReference/footerReference 则视为“已取消链接到上一节”
+        for (var si = 1; si < doc.Sections.Count; si++)
+        {
+            var sec = doc.Sections[si];
+            var sps = sec.PageSettings;
+
+            sec.LinkHeadersToPrevious = sps.HeaderRefs.Count == 0;
+            if (!sec.LinkHeadersToPrevious)
+            {
+                sec.Headers.Clear();
+                foreach (var kv in sps.HeaderRefs)
+                {
+                    if (!rels.TryGetValue(kv.Value, out var target)) continue;
+                    sec.Headers.Add(new Header { Type = kv.Key, Elements = LoadHdrFtrElements(target, rels, styleMap, numIdFormats, doc) });
+                }
+            }
+
+            sec.LinkFootersToPrevious = sps.FooterRefs.Count == 0;
+            if (!sec.LinkFootersToPrevious)
+            {
+                sec.Footers.Clear();
+                foreach (var kv in sps.FooterRefs)
+                {
+                    if (!rels.TryGetValue(kv.Value, out var target)) continue;
+                    sec.Footers.Add(new Footer { Type = kv.Key, Elements = LoadHdrFtrElements(target, rels, styleMap, numIdFormats, doc) });
+                }
+            }
+        }
     }
 
     /// <summary>解析页眉/页脚部件内容为元素列表（段落/表格/内容控件 + 图片提取）</summary>
@@ -2101,8 +2134,14 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     /// 图片 → 引用形式、SDT 内容 → 段落。解析失败时回退纯文本+表格。
     /// </remarks>
     /// <returns>Markdown 文档对象，无内容返回 null</returns>
-    public MarkdownDocument? ToMarkdownDocument()
+    public MarkdownDocument? ToMarkdownDocument() => ToMarkdownDocument(null);
+
+    /// <summary>按选项提取 Markdown 文档对象（AST）</summary>
+    /// <param name="options">转换选项：控制图片落地策略与页眉页脚输出；null 使用默认（图片输出占位引用、不含页眉页脚）</param>
+    /// <returns>Markdown 文档对象，无内容返回 null</returns>
+    public MarkdownDocument? ToMarkdownDocument(MarkdownConverterOptions? options)
     {
+        _mdOptions = options;
         try
         {
             var doc = ReadDocument();
@@ -2147,6 +2186,13 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             // 脚注/尾注（W22：AI 知识库场景包含脚注内容）
             AppendNotesToMarkdown(md, doc.Footnotes, "Footnotes {0}: {1}");
             AppendNotesToMarkdown(md, doc.Endnotes, "Endnotes {0}: {1}");
+
+            // 页眉页脚（可选）：页眉插到开头、页脚追加到末尾，均以引用块标注来源
+            if (options?.IncludeHeadersFooters == true)
+            {
+                PrependHeadersFooters(md, doc.Headers, "Header: {0}", true);
+                PrependHeadersFooters(md, doc.Footers, "Footer: {0}", false);
+            }
 
             return md.Blocks.Count > 0 ? md : null;
         }
@@ -2453,14 +2499,87 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
 
     private MarkdownBlock? ImageToBlock(Image image)
     {
+        // 图片策略：null 选项保持历史行为（输出占位引用）；Skip 直接跳过
+        var handling = _mdOptions?.ImageHandling ?? MarkdownImageHandling.Reference;
+        if (handling == MarkdownImageHandling.Skip) return null;
+
         _imageIdx++;
         var ext = image.Extension ?? "png";
         if (ext.IsNullOrEmpty()) ext = "png";
 
-        // 图片以引用形式输出（对标 anydoc：图片渲染为 alt 文本，字节留在模型层）
         var name = "image" + _imageIdx + "." + ext;
-        var inline = MarkdownInline.CreateImage(name, L.T("Image {0}", _imageIdx), "");
+        var alt = L.T("Image {0}", _imageIdx);
+        var src = name;
+
+        // 落地到文件：Markdown 用文件名引用，Agent 可直接打开图片
+        var dir = _mdOptions?.ImageDirectory;
+        if (!dir.IsNullOrEmpty() && image.ImageData.Length > 0)
+        {
+            try
+            {
+                Directory.CreateDirectory(dir);
+                File.WriteAllBytes(Path.Combine(dir, name), image.ImageData);
+            }
+            catch
+            {
+                // 写文件失败不影响 Markdown 输出，退化为引用形式
+            }
+        }
+        else if (handling == MarkdownImageHandling.Embed && image.ImageData.Length > 0)
+        {
+            // 未指定输出目录时内嵌为 data URI
+            src = "data:image/" + ext + ";base64," + Convert.ToBase64String(image.ImageData);
+        }
+
+        var inline = MarkdownInline.CreateImage(src, alt, "");
         return MarkdownBlock.CreateParagraph([inline]);
+    }
+
+    /// <summary>把页眉/页脚文本以引用块插入 Markdown（页眉在前、页脚在后）</summary>
+    private static void PrependHeadersFooters(MarkdownDocument md, List<Header> headers, String format, Boolean atStart) => PrependHeadersFooters(md, headers.ConvertAll(e => e.Elements), format, atStart);
+
+    /// <summary>把页眉/页脚文本以引用块插入 Markdown（页眉在前、页脚在后）</summary>
+    private static void PrependHeadersFooters(MarkdownDocument md, List<Footer> footers, String format, Boolean atStart) => PrependHeadersFooters(md, footers.ConvertAll(e => e.Elements), format, atStart);
+
+    /// <summary>把页眉/页脚文本以引用块插入 Markdown（页眉在前、页脚在后）</summary>
+    /// <param name="md">目标文档</param>
+    /// <param name="elements">各页眉/页脚的内容元素（每个类型一组）</param>
+    /// <param name="format">文本格式（含 {0} 占位）</param>
+    /// <param name="atStart">true 插到开头（页眉），false 追加到末尾（页脚）</param>
+    private static void PrependHeadersFooters(MarkdownDocument md, List<List<Element>> elements, String format, Boolean atStart)
+    {
+        var sb = new StringBuilder();
+        foreach (var el in elements)
+        {
+            var text = BuildElementsText(el);
+            if (text.IsNullOrEmpty()) continue;
+            if (sb.Length > 0) sb.Append('\n');
+            sb.Append(L.T(format, text));
+        }
+        if (sb.Length == 0) return;
+
+        var block = MarkdownBlock.CreateBlockQuote([MarkdownBlock.CreateParagraph([MarkdownInline.CreateText(sb.ToString())])]);
+        if (atStart) md.Blocks.Insert(0, block);
+        else md.Blocks.Add(block);
+    }
+
+    /// <summary>拼接元素列表的纯文本（段落间空格连接）</summary>
+    /// <param name="elements">元素列表</param>
+    /// <returns>纯文本</returns>
+    private static String BuildElementsText(List<Element> elements)
+    {
+        var sb = new StringBuilder();
+        foreach (var el in elements)
+        {
+            if (el.Paragraph == null) continue;
+            foreach (var run in el.Paragraph.Runs)
+            {
+                if (run.Text.IsNullOrEmpty()) continue;
+                if (sb.Length > 0) sb.Append(' ');
+                sb.Append(run.Text);
+            }
+        }
+        return sb.ToString().Trim();
     }
 
     private static void SdtToBlocks(MarkdownDocument md, SdtElement sdt)

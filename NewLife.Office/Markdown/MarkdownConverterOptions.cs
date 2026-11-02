@@ -26,8 +26,16 @@ public class MarkdownConverterOptions
     /// <summary>图片处理策略，默认跳过</summary>
     public MarkdownImageHandling ImageHandling { get; set; } = MarkdownImageHandling.Skip;
 
-    /// <summary>是否包含页眉页脚（RTF 等），默认 false（对标 anydoc 固定策略）</summary>
+    /// <summary>是否包含页眉页脚（RTF/Word 等），默认 false（对标 anydoc 固定策略）</summary>
     public Boolean IncludeHeadersFooters { get; set; }
+
+    /// <summary>图片落地目录（null 表示不写文件，仅输出引用）</summary>
+    /// <remarks>
+    /// 非空时，<see cref="ImageHandling"/> 为 <see cref="MarkdownImageHandling.Reference"/> 或
+    /// <see cref="MarkdownImageHandling.Embed"/> 的图片会被写入该目录（image1.png / image2.jpg …），
+    /// Markdown 中以文件名引用，便于 Agent 直接读取图片文件。
+    /// </remarks>
+    public String? ImageDirectory { get; set; }
 
     /// <summary>是否过滤噪音（空段落/重复空白行），默认 true</summary>
     public Boolean CleanNoise { get; set; } = true;

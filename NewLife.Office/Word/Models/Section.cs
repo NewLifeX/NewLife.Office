@@ -33,5 +33,23 @@ public class Section
     /// 仅程序化创建节时生效；<see cref="SectPrXml"/> 非空时以原始 XML 为准。
     /// </summary>
     public String? Type { get; set; }
+
+    /// <summary>页眉是否链接到上一节（默认 true = 继承上一节页眉）</summary>
+    /// <remarks>
+    /// 置为 false 表示本节不继承上一节，改用 <see cref="Headers"/> 中的内容；
+    /// <see cref="Headers"/> 为空时本节将没有页眉（Word 中“取消链接到前一节”后删除内容的效果）。
+    /// 第一节没有上一节，该标志无实际作用。
+    /// </remarks>
+    public Boolean LinkHeadersToPrevious { get; set; } = true;
+
+    /// <summary>页脚是否链接到上一节（默认 true = 继承上一节页脚）</summary>
+    /// <remarks>置为 false 表示本节使用 <see cref="Footers"/> 中的独立页脚；为空时本节没有页脚。</remarks>
+    public Boolean LinkFootersToPrevious { get; set; } = true;
+
+    /// <summary>本节独立页眉（<see cref="LinkHeadersToPrevious"/> 为 false 时生效），可按 default/first/even 定义多个</summary>
+    public List<Header> Headers { get; set; } = [];
+
+    /// <summary>本节独立页脚（<see cref="LinkFootersToPrevious"/> 为 false 时生效），可按 default/first/even 定义多个</summary>
+    public List<Footer> Footers { get; set; } = [];
     #endregion
 }
