@@ -124,6 +124,141 @@ public static class WordDocumentEditExtensions
     public static Element AddPageBreak(this Document doc)
         => doc.AppendTopLevel(new Element { Type = ElementType.Paragraph, Paragraph = new Paragraph { IsPageBreak = true } });
 
+    /// <summary>在正文末尾追加图片：按像素与 DPI 计算自然尺寸，只给一个方向时按比例缩放</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="data">图片字节（PNG/JPEG/GIF/BMP/SVG）</param>
+    /// <param name="extension">扩展名（不含点），null 时按文件头识别，无法识别按 png</param>
+    /// <param name="width">显示宽度，null 表示用自然宽度</param>
+    /// <param name="height">显示高度，null 表示用自然高度或按宽高等比换算</param>
+    /// <param name="altText">替代文本（无障碍/检索）</param>
+    /// <returns>新增的图片模型（<see cref="Image.RelId"/> 已分配到 <see cref="Document.Images"/></returns>
+    /// <example>
+    /// <code>
+    /// doc.BeginEdit();
+    /// doc.AddPicture("logo.png", width: Length.FromCm(4));   // 只给宽度，高度按比例
+    /// doc.AddPictureBase64("data:image/png;base64,iVBORw0...");
+    /// </code>
+    /// </example>
+    public static Image AddPicture(this Document doc, Byte[] data, String? extension = null, Length? width = null, Length? height = null, String? altText = null)
+    {
+        if (data == null) throw new ArgumentNullException(nameof(data));
+        if (data.Length == 0) throw new ArgumentException("Image data is empty.", nameof(data));
+
+        var ext = extension?.TrimStart('.').ToLowerInvariant();
+        if (String.IsNullOrEmpty(ext)) ext = ImageInfo.DetectExtension(data) ?? "png";
+
+        // 自然尺寸：像素按 DPI 折算为物理尺寸
+        Length? natW = null;
+        Length? natH = null;
+        if (ImageInfo.TryGetPixelSize(data, out var px, out var py, out var dpi) && px > 0 && py > 0)
+        {
+            natW = Length.FromInches(px / dpi);
+            natH = Length.FromInches(py / dpi);
+        }
+
+        Length w, h;
+        if (width == null && height == null)
+        {
+            w = natW ?? Length.FromCm(10);
+            h = natH ?? Length.FromCm(7.5);
+        }
+        else if (width != null && height == null)
+        {
+            // 只给宽度：按自然宽高比换算高度，无法探测时按 4:3
+            w = width.Value;
+            h = natW is { } nw && natH is { } nh && nw.Emu > 0 ? Length.FromEmu(w.Emu * nh.Emu / nw.Emu) : Length.FromEmu(w.Emu * 0.75);
+        }
+        else if (width == null && height != null)
+        {
+            // 只给高度：按自然宽高比换算宽度，无法探测时按 4:3
+            h = height.Value;
+            w = natW is { } nw2 && natH is { } nh2 && nh2.Emu > 0 ? Length.FromEmu(h.Emu * nw2.Emu / nh2.Emu) : Length.FromEmu(h.Emu * 4 / 3);
+        }
+        else
+        {
+            w = width!.Value;
+            h = height!.Value;
+        }
+
+        // 关系 ID 必须在文档内唯一
+        var index = 1;
+        String relId;
+        do { relId = $"rPic{index++}"; } while (doc.Images.ContainsKey(relId));
+
+        doc.Images[relId] = (ext, data);
+        var img = new Image
+        {
+            ImageData = data,
+            Extension = ext,
+            RelId = relId,
+            WidthEmu = w.ToEmuInt64(),
+            HeightEmu = h.ToEmuInt64(),
+            IsSvg = ext == "svg",
+            AnchorType = "inline",
+            AltText = altText,
+        };
+        doc.AppendTopLevel(new Element { Type = ElementType.Image, Image = img });
+        return img;
+    }
+
+    /// <summary>从文件追加图片</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="path">图片文件路径</param>
+    /// <param name="width">显示宽度，null 表示用自然宽度</param>
+    /// <param name="height">显示高度，null 表示用自然高度或等比换算</param>
+    /// <param name="altText">替代文本</param>
+    /// <returns>新增的图片模型</returns>
+    public static Image AddPicture(this Document doc, String path, Length? width = null, Length? height = null, String? altText = null)
+    {
+        if (path == null) throw new ArgumentNullException(nameof(path));
+        return doc.AddPicture(File.ReadAllBytes(path.GetFullPath()), Path.GetExtension(path), width, height, altText);
+    }
+
+    /// <summary>从流追加图片（流不会被关闭）</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="stream">图片流</param>
+    /// <param name="extension">扩展名，null 时按文件头识别</param>
+    /// <param name="width">显示宽度，null 表示用自然宽度</param>
+    /// <param name="height">显示高度，null 表示用自然高度或等比换算</param>
+    /// <param name="altText">替代文本</param>
+    /// <returns>新增的图片模型</returns>
+    public static Image AddPicture(this Document doc, Stream stream, String? extension = null, Length? width = null, Length? height = null, String? altText = null)
+    {
+        if (stream == null) throw new ArgumentNullException(nameof(stream));
+
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        return doc.AddPicture(ms.ToArray(), extension, width, height, altText);
+    }
+
+    /// <summary>从 Base64（含 data URI）追加图片</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="base64">Base64 文本，或 <c>data:image/png;base64,...</c> 形式</param>
+    /// <param name="extension">扩展名，null 时从 data URI 或文件头识别</param>
+    /// <param name="width">显示宽度，null 表示用自然宽度</param>
+    /// <param name="height">显示高度，null 表示用自然高度或等比换算</param>
+    /// <param name="altText">替代文本</param>
+    /// <returns>新增的图片模型</returns>
+    /// <exception cref="ArgumentNullException">base64 为空</exception>
+    /// <exception cref="FormatException">data URI 缺少 base64 标记，或 Base64 内容非法</exception>
+    public static Image AddPictureBase64(this Document doc, String base64, String? extension = null, Length? width = null, Length? height = null, String? altText = null)
+    {
+        if (String.IsNullOrEmpty(base64)) throw new ArgumentNullException(nameof(base64));
+
+        var text = base64.Trim();
+        if (text.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            var idx = text.IndexOf("base64,", StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) throw new FormatException("Unsupported data URI (missing 'base64,' marker).");
+
+            var mime = text[5..idx].TrimEnd(';');
+            if (extension == null && mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                extension = mime[6..];
+            text = text[(idx + 7)..];
+        }
+        return doc.AddPicture(Convert.FromBase64String(text), extension, width, height, altText);
+    }
+
     /// <summary>追加新节：此后追加的内容归属新节，返回新节</summary>
     /// <param name="doc">文档</param>
     /// <param name="startType">节起始类型：newPage（默认）/ continuous / evenPage / oddPage</param>

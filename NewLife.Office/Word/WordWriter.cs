@@ -552,12 +552,17 @@ public class WordWriter : IDisposable
         // 仅重新生成 word/document.xml 以支持用户对 Elements 的修改。
         if (_otherParts.Count > 0)
         {
+            // 新增图片（AddPicture）：先改写透传的 rels/Content_Types，media 部件在透传部件之后补写
+            var newMedia = _imageRels.Count > 0 ? PrepareNewImages() : new List<(String Path, Byte[] Data)>();
             // 有文档变量变更时，从透传中移除 settings.xml 以便重新生成
             if (_documentVariables.Count > 0 && _settingsXml != null && !DocVarsMatch(_settingsXml, _documentVariables))
                 _otherParts.Remove("word/settings.xml");
             foreach (var kv in _otherParts)
                 using (var e = za.CreateEntry(kv.Key).Open())
                     e.Write(kv.Value, 0, kv.Value.Length);
+            foreach (var (path, bytes) in newMedia)
+                using (var e = za.CreateEntry(path).Open())
+                    e.Write(bytes, 0, bytes.Length);
             if (_documentVariables.Count > 0 && _settingsXml != null && !DocVarsMatch(_settingsXml, _documentVariables))
                 WriteSettings(za);
             // 富文本页眉页脚（用户显式重建时）：生成新部件 + 合并更新 content types/rels 引用
@@ -710,6 +715,59 @@ public class WordWriter : IDisposable
     #endregion
 
     #region 私有方法
+    /// <summary>准备透传模式下新增的图片：改写 document.xml.rels 与 Content_Types，返回待写入的 media 部件</summary>
+    /// <returns>待写入的 (ZIP 路径, 字节) 列表；无新增图片时为空</returns>
+    private List<(String Path, Byte[] Data)> PrepareNewImages()
+    {
+        var media = new List<(String Path, Byte[] Data)>();
+
+        _otherParts.TryGetValue("word/_rels/document.xml.rels", out var relsBytes);
+        var relsXml = relsBytes != null ? Encoding.UTF8.GetString(relsBytes) : null;
+        _otherParts.TryGetValue("[Content_Types].xml", out var ctBytes);
+        var ctXml = ctBytes != null ? Encoding.UTF8.GetString(ctBytes) : null;
+
+        var newRels = new StringBuilder();
+        var newDefaults = new StringBuilder();
+        foreach (var (relId, ext, data) in _imageRels)
+        {
+            var path = $"word/media/{relId}.{ext}";
+            // 原始包中已有的图片（关系已存在或 media 已在透传部件中）不重复写入
+            if ((relsXml != null && relsXml.Contains($"Id=\"{relId}\"")) || _otherParts.ContainsKey(path)) continue;
+
+            newRels.Append($"<Relationship Id=\"{relId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"media/{relId}.{ext}\"/>");
+            if (ctXml != null
+                && ctXml.IndexOf($"Extension=\"{ext}\"", StringComparison.OrdinalIgnoreCase) < 0
+                && newDefaults.ToString().IndexOf($"Extension=\"{ext}\"", StringComparison.OrdinalIgnoreCase) < 0)
+                newDefaults.Append($"<Default Extension=\"{ext}\" ContentType=\"{GetImageContentType(ext)}\"/>");
+            media.Add((path, data));
+        }
+        if (media.Count == 0) return media;
+
+        if (relsXml != null && newRels.Length > 0)
+            _otherParts["word/_rels/document.xml.rels"] = Encoding.UTF8.GetBytes(InjectXml(relsXml, "</Relationships>", newRels.ToString()));
+        if (ctXml != null && newDefaults.Length > 0)
+            _otherParts["[Content_Types].xml"] = Encoding.UTF8.GetBytes(InjectXml(ctXml, "</Types>", newDefaults.ToString()));
+
+        return media;
+    }
+
+    /// <summary>在 XML 根元素闭合前插入内容，兼容自闭合根元素（<c>&lt;Root/&gt;</c>）</summary>
+    /// <param name="xml">原始 XML</param>
+    /// <param name="closeTag">根元素闭合标签，如 <c>&lt;/Types&gt;</c></param>
+    /// <param name="insertion">待插入内容</param>
+    /// <returns>插入后的 XML</returns>
+    private static String InjectXml(String xml, String closeTag, String insertion)
+    {
+        var idx = xml.LastIndexOf(closeTag, StringComparison.Ordinal);
+        if (idx >= 0) return xml[..idx] + insertion + xml[idx..];
+
+        // 自闭合根元素：<Root .../> → <Root ...>insertion</Root>
+        var name = closeTag.TrimStart('<', '/').TrimEnd('>');
+        var selfClose = xml.LastIndexOf("/>", StringComparison.Ordinal);
+        if (selfClose < 0) return xml;
+        return xml[..selfClose] + ">" + insertion + $"</{name}>" + xml[(selfClose + 2)..];
+    }
+
     private void WriteEntry(ZipArchive za, String path, String content)
     {
         using var sw = new StreamWriter(za.CreateEntry(path).Open(), Encoding);
