@@ -329,5 +329,70 @@ public class PptxSchemaTests
         var rels2 = ReadPart(data, "ppt/slideMasters/_rels/slideMaster2.xml.rels")!;
         Assert.Contains("slideLayout3.xml", rels2);
     }
+
+    [Fact(DisplayName = "规范-克隆/删除/移动幻灯片后0校验错误")]
+    public void CloneRemoveMoveSlides_NoSchemaErrors()
+    {
+        var data = Build(w =>
+        {
+            w.AddSlide(0);
+            w.AddTextBox(0, "第一页", 2, 2, 10, 2, 20, false);
+            w.SetNotes(0, "第一页备注");
+            w.AddSlide(0);
+            w.AddTextBox(1, "第二页", 2, 2, 10, 2, 20, false);
+            w.CloneSlide(0);
+            w.MoveSlide(2, 0);
+            w.RemoveSlide(1);
+        });
+
+        var errors = Validate(data);
+        Assert.True(errors.Count == 0, Describe(errors));
+
+        // 引用完整性：slide rels 指向的 layout / notesSlide 必须都存在
+        var slideRels = ReadPart(data, "ppt/slides/_rels/slide1.xml.rels")!;
+        Assert.Contains("slideLayout", slideRels);
+    }
+
+    [Fact(DisplayName = "规范-合并两个演示文稿后0校验错误")]
+    public void MergeDecks_NoSchemaErrors()
+    {
+        var a = Build(w =>
+        {
+            w.AddSlide(0);
+            w.AddTextBox(0, "甲页", 2, 2, 10, 2, 20, false);
+            w.SetNotes(0, "甲页备注");
+        });
+        var b = Build(w =>
+        {
+            w.AddSlide(0);
+            w.AddTextBox(0, "乙页", 2, 2, 10, 2, 20, false);
+            w.AddTable(0, [["A"], ["1"]], 2, 8, 10, true);
+        });
+
+        using var ms = new MemoryStream();
+        PptxWriter.Merge([a, b], ms);
+        var errors = Validate(ms.ToArray());
+        Assert.True(errors.Count == 0, Describe(errors));
+    }
+
+    [Fact(DisplayName = "规范-以生成文件作模板加载后0校验错误")]
+    public void LoadMasterFromGenerated_NoSchemaErrors()
+    {
+        var template = Build(w =>
+        {
+            w.AddSlide(0);
+            w.AddTextBox(0, "模板页", 2, 2, 10, 2, 20, false);
+        });
+
+        var data = Build(w =>
+        {
+            w.LoadMaster(template);
+            w.AddSlide(0);
+            w.AddTextBox(0, "新页", 2, 2, 10, 2, 20, false);
+        });
+
+        var errors = Validate(data);
+        Assert.True(errors.Count == 0, Describe(errors));
+    }
     #endregion
 }
