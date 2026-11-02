@@ -1165,7 +1165,7 @@ public class WordWriterTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
 
-    [Fact(DisplayName = "页面设置—TitlePage和EvenAndOddHeaders输出w:titlePg/w:evenAndOddHeaders")]
+    [Fact(DisplayName = "页面设置—TitlePage 输出 w:titlePg，EvenAndOddHeaders 写入 settings.xml")]
     public void TitlePage_And_EvenAndOddHeaders_OutputXml()
     {
         var tempFile = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".docx");
@@ -1179,12 +1179,19 @@ public class WordWriterTests
 
             Assert.True(File.Exists(tempFile));
             using var za = ZipFile.OpenRead(tempFile);
-            var entry = za.GetEntry("word/document.xml");
-            Assert.NotNull(entry);
-            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
-            var xml = sr.ReadToEnd();
+            String ReadAll(String name)
+            {
+                var entry = za.GetEntry(name);
+                Assert.NotNull(entry);
+                using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
+                return sr.ReadToEnd();
+            }
+
+            var xml = ReadAll("word/document.xml");
             Assert.Contains("<w:titlePg/>", xml);
-            Assert.Contains("<w:evenAndOddHeaders/>", xml);
+            // 奇偶页不同属于 settings.xml 的 CT_Settings，不能写在 sectPr 里
+            Assert.DoesNotContain("evenAndOddHeaders", xml);
+            Assert.Contains("<w:evenAndOddHeaders/>", ReadAll("word/settings.xml"));
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }

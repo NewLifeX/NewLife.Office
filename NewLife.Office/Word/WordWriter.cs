@@ -1263,6 +1263,7 @@ public class WordWriter : IDisposable
 
     private void WriteSettings(ZipArchive za)
     {
+        var evenOdd = PageSettings.EvenAndOddHeaders;
         if (_settingsXml != null)
         {
             // 当文档变量与源 settings.xml 一致时，直接透传（保持字节精确）
@@ -1270,6 +1271,9 @@ public class WordWriter : IDisposable
                 ? InjectDocVars(_settingsXml, _documentVariables)
                 : _settingsXml;
             if (_updateFields) xml = EnsureUpdateFields(xml);
+            // 奇偶页不同属于 CT_Settings，不能写进 sectPr
+            if (evenOdd && xml.IndexOf("evenAndOddHeaders", StringComparison.Ordinal) < 0)
+                xml = InjectXml(xml, "</w:settings>", "<w:evenAndOddHeaders/>");
             WriteEntry(za, "word/settings.xml", xml);
             return;
         }
@@ -1280,6 +1284,8 @@ public class WordWriter : IDisposable
         sb.Append("<w:defaultTabStop w:val=\"720\"/>");
         if (ProtectionReadOnly)
             sb.Append("<w:documentProtection w:edit=\"readOnly\" w:enforcement=\"1\"/>");
+        if (evenOdd)
+            sb.Append("<w:evenAndOddHeaders/>");
         if (_updateFields)
             sb.Append("<w:updateFields w:val=\"true\"/>");
         if (_documentVariables.Count > 0)
@@ -1647,8 +1653,8 @@ public class WordWriter : IDisposable
         var pgW = ps.Landscape ? ps.PageHeight : ps.PageWidth;
         var pgH = ps.Landscape ? ps.PageWidth : ps.PageHeight;
         sb.Append("<w:sectPr>");
-        if (ps.TitlePage) sb.Append("<w:titlePg/>");
-        if (ps.EvenAndOddHeaders) sb.Append("<w:evenAndOddHeaders/>");
+        // 注意：w:titlePg 必须位于 w:cols 之后（见下方），w:evenAndOddHeaders 不属于 sectPr
+        // （它属于 settings.xml 的 CT_Settings），放到这里会被判为非法子元素
         // 富文本页眉页脚（按类型引用）：该节取消“链接到上一节”时用本节独立部件，否则用文档级部件
         var hdrSlots = SlotsFor(sectionIndex, _headerSlots);
         var ftrSlots = SlotsFor(sectionIndex, _footerSlots);
@@ -1671,7 +1677,7 @@ public class WordWriter : IDisposable
             sb.Append("<w:footerReference w:type=\"default\" r:id=\"rFtr1\"/>");
         }
         // 以下严格按 CT_SectPr 顺序：header/footerReference → type → pgSz → pgMar → pgBorders
-        // → lnNumType → cols → titlePg → evenAndOddHeaders（顺序错误会被判定为非法子元素）
+        // → lnNumType → cols → titlePg（顺序错误会被判定为非法子元素）
         var orientAttr = ps.Landscape ? " w:orient=\"landscape\"" : String.Empty;
         sb.Append($"<w:pgSz w:w=\"{pgW}\" w:h=\"{pgH}\"{orientAttr}/>");
         sb.Append($"<w:pgMar w:top=\"{ps.MarginTop}\" w:right=\"{ps.MarginRight}\" w:bottom=\"{ps.MarginBottom}\" w:left=\"{ps.MarginLeft}\" w:header=\"720\" w:footer=\"720\"/>");
@@ -1694,6 +1700,8 @@ public class WordWriter : IDisposable
         // 分栏设置
         if (ps.ColumnCount > 1)
             sb.Append($"<w:cols w:num=\"{ps.ColumnCount}\" w:space=\"{ps.ColumnSpacing}\"/>");
+        // 首页不同页眉页脚（titlePg 在 cols 之后）
+        if (ps.TitlePage) sb.Append("<w:titlePg/>");
         sb.Append("</w:sectPr>");
         return sb.ToString();
     }
@@ -2340,6 +2348,12 @@ public class WordWriter : IDisposable
         // → color → spacing → w → sz → highlight → u → vertAlign → lang → 扩展效果），
         // 顺序错误会被 OpenXmlValidator 判为 "unexpected child element"，Word 亦可能提示修复
         if (isHyperlink) sb.Append("<w:rStyle w:val=\"Hyperlink\"/>");
+        // 超链接默认蓝色+下划线：并入正常位置输出（color 在 sz 前、u 在 vertAlign 前），
+        // 不能末尾再补，否则同一个 rPr 会出现两个 color/u（maxOccurs=1）
+        var foreColor = p.ForeColor ?? (isHyperlink ? "0563C1" : null);
+        var underline = p.Underline;
+        var underlineStyle = p.UnderlineStyle;
+        if (isHyperlink && underline == null && underlineStyle == null) underlineStyle = "single";
         // 字体：西文/东亚字体独立设置（eastAsia 单独可控）
         if (p.FontName != null || p.EastAsiaFontName != null)
         {
@@ -2357,16 +2371,16 @@ public class WordWriter : IDisposable
         AppendSwitchXml(sb, "smallCaps", p.SmallCaps);
         AppendSwitchXml(sb, "strike", p.Strikethrough);
         AppendSwitchXml(sb, "vanish", p.Hidden);
-        if (p.ForeColor != null) sb.Append($"<w:color w:val=\"{p.ForeColor.TrimStart('#')}\"/>");
+        if (foreColor != null) sb.Append($"<w:color w:val=\"{foreColor.TrimStart('#')}\"/>");
         if (p.CharacterSpacing.HasValue) sb.Append($"<w:spacing w:val=\"{p.CharacterSpacing.Value}\"/>");
         if (p.CharacterScaling.HasValue) sb.Append($"<w:w w:val=\"{p.CharacterScaling.Value}\"/>");
         if (p.FontSize.HasValue) sb.Append($"<w:sz w:val=\"{(Int32)(p.FontSize.Value * 2)}\"/>");
         if (p.HighlightColor != null)
             sb.Append($"<w:highlight w:val=\"{Esc(p.HighlightColor.TrimStart('#'))}\"/>");
         // 下划线（支持样式）
-        if (p.Underline != null || p.UnderlineStyle != null)
+        if (underline != null || underlineStyle != null)
         {
-            var uVal = p.Underline == false && p.UnderlineStyle == null ? "none" : (p.UnderlineStyle ?? "single");
+            var uVal = underline == false && underlineStyle == null ? "none" : (underlineStyle ?? "single");
             sb.Append($"<w:u w:val=\"{uVal}\"/>");
         }
         if (p.Superscript == true) sb.Append("<w:vertAlign w:val=\"superscript\"/>");
@@ -2374,7 +2388,6 @@ public class WordWriter : IDisposable
         else if (p.Superscript == false || p.Subscript == false) sb.Append("<w:vertAlign w:val=\"baseline\"/>");
         if (p.Language != null)
             sb.Append($"<w:lang w:val=\"{Esc(p.Language)}\"/>");
-        if (isHyperlink) sb.Append("<w:color w:val=\"0563C1\"/><w:u w:val=\"single\"/>");
         // 文字发光效果 (w14:glow)
         if (p.GlowColor != null)
         {

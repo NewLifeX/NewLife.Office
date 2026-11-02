@@ -104,7 +104,7 @@ public class SchemaOrderTests
         AssertOrder(tcPr, "<w:tcPr>", "<w:tcW", "<w:gridSpan", "<w:tcBorders", "<w:shd", "<w:vAlign");
     }
 
-    [Fact(DisplayName = "顺序-sectPr 中 pgSz/pgMar 在 pgBorders 之前，cols 在最后")]
+    [Fact(DisplayName = "顺序-sectPr 中 pgSz/pgMar 在 pgBorders 之前，titlePg 在 cols 之后")]
     public void SectionProperties_SchemaOrder()
     {
         var doc = new Document();
@@ -112,10 +112,48 @@ public class SchemaOrderTests
         doc.PageSettings.PageBorder = new PageBorder { Top = "single" };
         doc.PageSettings.ColumnCount = 2;
         doc.PageSettings.LineNumber = new LineNumberSettings();
+        doc.PageSettings.TitlePage = true;
 
         var sectPr = Slice(ReadDocumentXml(Save(doc)), "<w:sectPr", "</w:sectPr>");
 
-        AssertOrder(sectPr, "<w:sectPr", "<w:pgSz", "<w:pgMar", "<w:pgBorders", "<w:lnNumType", "<w:cols");
+        AssertOrder(sectPr, "<w:sectPr", "<w:pgSz", "<w:pgMar", "<w:pgBorders", "<w:lnNumType", "<w:cols", "<w:titlePg");
+    }
+
+    [Fact(DisplayName = "顺序-奇偶页不同写入 settings.xml 而非 sectPr")]
+    public void EvenAndOddHeaders_GoesToSettings()
+    {
+        var doc = new Document();
+        doc.AddParagraph("正文");
+        doc.PageSettings.EvenAndOddHeaders = true;
+
+        var bytes = Save(doc);
+        var documentXml = ReadDocumentXml(bytes);
+        Assert.DoesNotContain("evenAndOddHeaders", documentXml);
+
+        using var za = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
+        using var sr = new StreamReader(za.GetEntry("word/settings.xml")!.Open(), Encoding.UTF8);
+        Assert.Contains("evenAndOddHeaders", sr.ReadToEnd());
+    }
+
+    [Fact(DisplayName = "顺序-超链接 run 的 color/u 只出现一次且位置合法")]
+    public void Hyperlink_RunProperties_NoDuplicate()
+    {
+        var doc = new Document();
+        var p = doc.AddParagraph("");
+        p.Paragraph!.Runs.Add(new Run { Text = "链接文字", HyperlinkRelId = "rLink1", Properties = new RunProperties() });
+
+        var xml = ReadDocumentXml(Save(doc));
+
+        // 取出带 Hyperlink 样式的那段 rPr
+        var idx = xml.IndexOf("w:rStyle w:val=\"Hyperlink\"", StringComparison.Ordinal);
+        Assert.True(idx > 0);
+        var from = xml.LastIndexOf("<w:rPr>", idx, StringComparison.Ordinal);
+        var to = xml.IndexOf("</w:rPr>", idx, StringComparison.Ordinal);
+        var rPr = xml[from..(to + "</w:rPr>".Length)];
+
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(rPr, "<w:color "));
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(rPr, "<w:u "));
+        AssertOrder(rPr, "<w:rStyle", "<w:color", "<w:u");
     }
 
     [Fact(DisplayName = "顺序-单元格 tcBorders 不得重复输出")]
