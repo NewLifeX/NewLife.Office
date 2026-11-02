@@ -22,11 +22,15 @@ public class XlsxSchemaTests
     private static List<String> Validate(Byte[] data)
     {
         var list = new List<String>();
-        using var ms = new MemoryStream(data);
-        using var doc = SpreadsheetDocument.Open(ms, false);
-        var validator = new OpenXmlValidator(FileFormatVersions.Office2019);
-        foreach (var e in validator.Validate(doc))
-            list.Add($"{e.Part?.Uri} | {e.Path?.XPath} | {e.Description}");
+        try
+        {
+            using var ms = new MemoryStream(data);
+            using var doc = SpreadsheetDocument.Open(ms, false);
+            var validator = new OpenXmlValidator(FileFormatVersions.Office2019);
+            foreach (var e in validator.Validate(doc))
+                list.Add($"{e.Part?.Uri} | {e.Path?.XPath} | {e.Description}");
+        }
+        catch (Exception ex) { list.Add("EX " + ex.GetType().Name + ": " + ex.Message); }
         return list;
     }
 
@@ -177,8 +181,7 @@ public class XlsxSchemaTests
 
     [Fact(DisplayName = "规范-综合特性工作簿0校验错误")]
     public void RichSheet_NoSchemaErrors()
-    {
-        var data = Build(w =>
+    {        var data = Build(w =>
         {
             w.WriteHeader("S1", ["Id", "Name", "Amount", "Flag"]);
             w.WriteRows("S1", [
@@ -201,6 +204,40 @@ public class XlsxSchemaTests
             w.AddExpressionConditionalFormat("S1", "C2:C3", "$C2>0", "C6EFCE");
             w.ProtectSheet("S1", "123");
             w.AddChart("S1", BarChart());
+        });
+
+        var errors = Validate(data);
+        Assert.True(errors.Count == 0, Describe(errors));
+    }
+
+    [Fact(DisplayName = "规范-图片与多工作表0校验错误")]
+    public void ImageAndMultiSheet_NoSchemaErrors()
+    {
+        var data = Build(w =>
+        {
+            w.WriteHeader("S1", ["A", "B"]);
+            w.WriteRows("S1", [new Object?[] { 1, 2 }]);
+            w.AddImage("S1", 2, 0, [0x89, 0x50, 0x4E, 0x47], "png", 80, 60);
+            w.WriteHeader("S2", ["X", "Y"]);
+            w.WriteRows("S2", [new Object?[] { 3, 4 }]);
+            w.AddChart("S2", BarChart());
+            w.AddTable("S2", "A1:B2", "T2", null, ["X", "Y"]);
+        });
+
+        var errors = Validate(data);
+        Assert.True(errors.Count == 0, Describe(errors));
+    }
+
+    [Fact(DisplayName = "规范-线程化批注与切片器0校验错误")]
+    public void ThreadedCommentAndSlicer_NoSchemaErrors()
+    {
+        var data = Build(w =>
+        {
+            w.WriteHeader("S1", ["A", "B"]);
+            w.WriteRows("S1", [new Object?[] { 1, 2 }, new Object?[] { 3, 4 }]);
+            w.AddTable("S1", "A1:B3", "T1", null, ["A", "B"]);
+            w.AddSlicer("S1", "T1", "A");
+            w.AddThreadedComment("S1", 1, 1, "线程批注", "作者");
         });
 
         var errors = Validate(data);

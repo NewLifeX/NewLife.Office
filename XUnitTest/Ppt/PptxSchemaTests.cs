@@ -23,11 +23,18 @@ public class PptxSchemaTests
     private static List<String> Validate(Byte[] data)
     {
         var list = new List<String>();
-        using var ms = new MemoryStream(data);
-        using var doc = PresentationDocument.Open(ms, false);
-        var validator = new OpenXmlValidator(FileFormatVersions.Office2019);
-        foreach (var e in validator.Validate(doc))
-            list.Add($"{e.Part?.Uri} | {e.Path?.XPath} | {e.Description}");
+        try
+        {
+            using var ms = new MemoryStream(data);
+            using var doc = PresentationDocument.Open(ms, false);
+            var validator = new OpenXmlValidator(FileFormatVersions.Office2019);
+            foreach (var e in validator.Validate(doc))
+                list.Add($"{e.Part?.Uri} | {e.Path?.XPath} | {e.Description}");
+        }
+        catch (Exception ex)
+        {
+            list.Add("EX " + ex.GetType().Name + ": " + ex.Message);
+        }
         return list;
     }
 
@@ -35,6 +42,7 @@ public class PptxSchemaTests
     /// <param name="errors">错误列表</param>
     /// <returns>单行描述</returns>
     private static String Describe(List<String> errors) => String.Join("\n", errors);
+
 
     /// <summary>读取 zip 中的文本部件</summary>
     /// <param name="data">pptx 包字节</param>
@@ -252,6 +260,74 @@ public class PptxSchemaTests
         var xml = ReadPart(data, "ppt/slides/slide1.xml")!;
         Assert.Contains("algn=\"ctr\"", xml);
         Assert.DoesNotContain("algn=\"center\"", xml);
+    }
+
+    [Fact(DisplayName = "规范-全部图表类型0校验错误")]
+    public void AllChartTypes_NoSchemaErrors()
+    {
+        var data = Build(w =>
+        {
+            w.AddSlide(0);
+            var cats = new[] { "甲", "乙", "丙" };
+            void AddSeries(Chart c) => c.Series.Add(new ChartSeries { Name = "S1", Values = [1, 2, 3], XValues = [1, 2, 3] });
+
+            AddSeries(w.AddBarChart(0, cats, 1, 1));
+            AddSeries(w.AddLineChart(0, cats, 1, 6));
+            AddSeries(w.AddAreaChart(0, cats, 1, 11));
+            AddSeries(w.AddPieChart(0, cats, 12, 1));
+            AddSeries(w.AddRadarChart(0, cats, 12, 6));
+            AddSeries(w.AddSurfaceChart(0, cats, 12, 11));
+            w.AddSlide(1);
+            AddSeries(w.AddScatterChart(1, cats, 1, 1));
+            AddSeries(w.AddBubbleChart(1, cats, 1, 8));
+            AddSeries(w.AddStockChart(1, cats, 12, 1));
+        });
+
+        var errors = Validate(data);
+        Assert.True(errors.Count == 0, Describe(errors));
+    }
+
+    [Fact(DisplayName = "规范-图片/组/视频/批注0校验错误")]
+    public void PictureGroupVideoComment_NoSchemaErrors()
+    {
+        var data = Build(w =>
+        {
+            w.AddSlide(0);
+            w.AddImage(0, [0x89, 0x50, 0x4E, 0x47], "png", 2, 2, 8, 6);
+            var grp = w.GroupShapes(0, 2, 10, 8, 6);
+            grp.TextBoxes.Add(new TextBox { Text = "组内文本", Left = 100, Top = 100, Width = 1000, Height = 500 });
+            grp.Shapes.Add(new Shape { ShapeType = "rect", Left = 100, Top = 800, Width = 900, Height = 400, FillColor = "00AAFF" });
+            w.AddSlide(1);
+            w.AddVideo(1, [0, 0, 0, 24], "mp4", 2, 2, 8, 6);
+            w.Slides[1].Comments.Add(new Comment { Text = "批注内容", Author = "作者", X = 100, Y = 100 });
+        });
+
+        var errors = Validate(data);
+        Assert.True(errors.Count == 0, Describe(errors));
+    }
+
+    [Fact(DisplayName = "规范-多母版多版式0校验错误")]
+    public void MultipleMasters_NoSchemaErrors()
+    {
+        var data = Build(w =>
+        {
+            w.AddSlide(0);
+            w.AddSlide(1);
+            var m1 = w.CreateMaster();
+            m1.AddLayout("标题版式", "title");
+            m1.AddLayout("空白版式", "blank");
+            var m2 = w.CreateMaster();
+            m2.AddLayout("内容版式", "obj");
+        });
+
+        var errors = Validate(data);
+        Assert.True(errors.Count == 0, Describe(errors));
+
+        // 每个母版至少一个版式 + 母版 rels 数量匹配
+        Assert.NotNull(ReadPart(data, "ppt/slideMasters/slideMaster2.xml"));
+        Assert.NotNull(ReadPart(data, "ppt/slideLayouts/slideLayout3.xml"));
+        var rels2 = ReadPart(data, "ppt/slideMasters/_rels/slideMaster2.xml.rels")!;
+        Assert.Contains("slideLayout3.xml", rels2);
     }
     #endregion
 }
