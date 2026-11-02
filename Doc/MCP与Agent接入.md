@@ -83,6 +83,10 @@ stdio 传输，每行一条 JSON-RPC 2.0 消息；实现了 `initialize` / `tool
 | `insert_table` | `anchor`，`cells` 或 `rows`/`columns` | 插入表格（`cells` 为二维数组时首行作表头） |
 | `add_comment` | `anchor`、`text`，可选 `author` | 给整段加批注 |
 
+> **两条必须遵守的契约**
+> 1. **锚点是 read 时刻的元素下标**：补丁里只要含 `insert_paragraph` / `insert_table` / `delete`，其后的元素下标就整体位移，后续锚点会对不上。请把结构性操作排在补丁最后，或按锚点从大到小排列。
+> 2. **失败不回滚**：某条失败时已成功的操作仍留在内存模型上，CLI/MCP 因此**不写出文件**；如需重试，必须重新读取源文件，不要复用已部分修改的文档对象。
+
 示例：
 
 ```json

@@ -313,5 +313,34 @@ public class PatchApiTests
         // 调用方按契约不保存 → 重读原字节仍是原文
         Assert.Equal(beforeText, BodyText(ReadBack(originalBytes)));
     }
+
+    [Fact(DisplayName = "补丁-部分失败不回滚（内存模型已被改动，必须丢弃重读）")]
+    public void Apply_PartialFailure_DoesNotRollback()
+    {
+        var doc = BuildSample();
+        doc.BeginEdit();
+        var result = DocxPatch.Apply(doc, DocxPatch.ParseJson(
+            """{"ops":[{"op":"set_text","anchor":"p#1","text":"已改"},{"op":"delete","anchor":"p#99"}]}"""));
+
+        Assert.False(result.Success);
+        Assert.Single(result.Applied);
+        // 契约：无回滚——成功的那条仍留在内存模型上，调用方须丢弃该 Document 重新读取
+        Assert.Equal("已改", doc.Elements[1].Paragraph!.Runs[0].Text);
+    }
+
+    [Fact(DisplayName = "补丁-结构性操作会使后续锚点偏移（须排在最后）")]
+    public void Apply_InsertShiftsFollowingAnchors()
+    {
+        var doc = BuildSample();
+        doc.BeginEdit();
+        // p#0 前插入新段 → 原 p#1 变成 p#2，因此这里用 p#1 会命中“原 p#0”
+        var result = DocxPatch.Apply(doc, DocxPatch.ParseJson(
+            """{"ops":[{"op":"insert_paragraph","anchor":"p#0","position":"before","text":"插入"},{"op":"set_text","anchor":"p#1","text":"改"}]}"""));
+
+        Assert.True(result.Success);
+        Assert.Equal("插入", doc.Elements[0].Paragraph!.Runs[0].Text);
+        // 命中偏移后的元素（原 p#0），而非原始的 p#1——这正是要求结构性操作排最后的原因
+        Assert.Equal("改", doc.Elements[1].Paragraph!.Runs[0].Text);
+    }
     #endregion
 }

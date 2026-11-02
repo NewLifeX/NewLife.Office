@@ -171,4 +171,21 @@ public class SectionHeaderFooterTests
         var back = Read(bytes);
         Assert.True(back.Sections[0].LinkFootersToPrevious);
     }
+
+    [Fact(DisplayName = "第一节独立页脚-显式设置本节内容后生效")]
+    public void FirstSection_OwnFooterUsed()
+    {
+        var doc = BuildTwoSections();
+        doc.Footers.Add(BuildFooter("全文页脚"));
+        // 第一节没有“上一节”，但显式给本节页脚时不应被静默忽略
+        doc.Sections[0].Footers.Add(BuildFooter("第一节专属页脚"));
+
+        var bytes = Save(doc);
+
+        Assert.True(HasEntry(bytes, "word/footer2.xml"));
+        Assert.Contains("第一节专属页脚", ReadEntry(bytes, "word/footer2.xml")!);
+        Assert.Contains("全文页脚", ReadEntry(bytes, "word/footer1.xml")!);
+        // 第一节的 sectPr 引用本节独立部件
+        Assert.Contains("rFtr2", ReadEntry(bytes, "word/document.xml")!);
+    }
 }
