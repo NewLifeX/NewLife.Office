@@ -278,6 +278,42 @@ public static class WordDocumentEditExtensions
         return sec;
     }
 
+    /// <summary>在正文指定位置插入元素（自动同步所属节，多节文档输出以节为准）</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="index">插入位置（0=最前，超出则追加到末尾）</param>
+    /// <param name="element">待插入元素</param>
+    /// <returns>同一个元素（便于链式使用）</returns>
+    /// <exception cref="ArgumentNullException">element 为空</exception>
+    public static Element InsertElementAt(this Document doc, Int32 index, Element element)
+    {
+        if (element == null) throw new ArgumentNullException(nameof(element));
+
+        index = Math.Max(0, Math.Min(index, doc.Elements.Count));
+        var anchorEl = index > 0 ? doc.Elements[index - 1] : null;
+        doc.Elements.Insert(index, element);
+
+        if (doc.Sections.Count > 0)
+        {
+            var inserted = false;
+            if (anchorEl != null)
+            {
+                foreach (var sec in doc.Sections)
+                {
+                    var i = sec.Elements.IndexOf(anchorEl);
+                    if (i < 0) continue;
+
+                    sec.Elements.Insert(i + 1, element);
+                    inserted = true;
+                    break;
+                }
+            }
+            if (!inserted) doc.Sections[0].Elements.Insert(0, element);
+        }
+
+        doc.MarkModified();
+        return element;
+    }
+
     /// <summary>把元素追加到正文末尾，并同步到最后一节（多节文档的输出来源）</summary>
     /// <param name="doc">文档</param>
     /// <param name="element">待追加元素</param>
@@ -644,6 +680,83 @@ public static class WordDocumentEditExtensions
 
         doc.UpdateFields = true;
         return doc.AddField($"TOC \\o \"1-{levels}\" \\h \\z \\u");
+    }
+    #endregion
+
+    #region 目录
+    /// <summary>插入静态目录：按标题段落生成缩进条目，离线可见、不依赖 Word 更新域</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="levels">收录的标题级别（1~6），默认 3 级</param>
+    /// <param name="title">目录标题文本（null 表示不输出标题行）</param>
+    /// <param name="insertAt">插入位置（0=文档最前，默认）</param>
+    /// <returns>插入的标题元素（无标题可收录时返回 null）</returns>
+    /// <remarks>
+    /// 条目为纯文本段落（按级别缩进），不含超链接跳转；需要可点击/自动更新的目录请用 <see cref="AddTableOfContents"/>。
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// doc.BeginEdit();
+    /// doc.AddStaticTableOfContents(levels: 3, title: "目录");
+    /// </code>
+    /// </example>
+    public static Element? AddStaticTableOfContents(this Document doc, Int32 levels = 3, String? title = "目录", Int32 insertAt = 0)
+    {
+        if (doc == null) throw new ArgumentNullException(nameof(doc));
+        if (levels < 1) levels = 1;
+        if (levels > 6) levels = 6;
+
+        // 只收录正文顶层的标题段落
+        var headings = new List<(Int32 Level, String Text)>();
+        foreach (var el in doc.Elements)
+        {
+            var para = el.Paragraph;
+            if (para == null) continue;
+            if (para.Style < ParagraphStyle.Heading1 || para.Style > ParagraphStyle.Heading6) continue;
+
+            var level = (Int32)para.Style;
+            if (level > levels) continue;
+            headings.Add((level, BuildParagraphText(para)));
+        }
+        if (headings.Count == 0) return null;
+
+        var elements = new List<Element>();
+
+        // 标题行：加粗普通段落，避免它自己被算作目录条目
+        if (!String.IsNullOrEmpty(title))
+        {
+            var titlePara = new Paragraph();
+            titlePara.Runs.Add(new Run { Text = title!, Properties = new RunProperties { Bold = true, FontSize = 14 } });
+            elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = titlePara });
+        }
+
+        foreach (var (level, text) in headings)
+        {
+            var para = new Paragraph();
+            if (level > 1) para.IndentLeft = (level - 1) * 360;
+            if (text.Length > 0) para.Runs.Add(new Run { Text = text });
+            elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para });
+        }
+
+        for (var i = 0; i < elements.Count; i++)
+            doc.InsertElementAt(insertAt + i, elements[i]);
+
+        return elements.Count > 0 ? elements[0] : null;
+    }
+
+    /// <summary>拼接段落纯文本（域 Run 取缓存结果）</summary>
+    private static String BuildParagraphText(Paragraph para)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var run in para.Runs)
+        {
+            if (!String.IsNullOrEmpty(run.FieldCode))
+            {
+                if (!String.IsNullOrEmpty(run.FieldResult)) sb.Append(run.FieldResult);
+                continue;
+            }
+            sb.Append(run.Text);
+        }
+        return sb.ToString();
     }
     #endregion
 

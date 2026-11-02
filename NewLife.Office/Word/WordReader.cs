@@ -2214,11 +2214,11 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             return;
         }
 
-        // 无序列表
+        // 无序列表（按 ListLevel 生成嵌套）
         if (para.IsBullet)
         {
             FlushOrdered(md);
-            _bulletItems.Add(MarkdownBlock.CreateListItem(BuildRunInlines(para.Runs, doc)));
+            AddBulletItem(_bulletItems, MarkdownBlock.CreateListItem(BuildRunInlines(para.Runs, doc)), para.ListLevel);
             return;
         }
 
@@ -2277,7 +2277,9 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     {
         if (_bulletItems.Count > 0)
         {
-            md.Blocks.Add(MarkdownBlock.CreateBulletList(_bulletItems));
+            // 注意：CreateBulletList(List) 会直接接管列表，而 _bulletItems 随后会被 Clear，
+            // 必须先复制，否则列表块内容被清空（表现为渲染出空行）
+            md.Blocks.Add(MarkdownBlock.CreateBulletList(_bulletItems.ToList()));
             _bulletItems.Clear();
         }
     }
@@ -2294,6 +2296,54 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             _orderedItems.Clear();
         }
         _orderedNum = 0;
+    }
+
+    /// <summary>把无序列表项按 ListLevel 挂到父项下，生成真正的嵌套列表（而非拍平）</summary>
+    /// <param name="roots">顶层列表项集合</param>
+    /// <param name="item">待加入的列表项</param>
+    /// <param name="level">层级（0=顶层）</param>
+    private static void AddBulletItem(List<MarkdownBlock> roots, MarkdownBlock item, Int32 level)
+    {
+        if (level <= 0 || roots.Count == 0)
+        {
+            roots.Add(item);
+            return;
+        }
+
+        // 逐级向下找父项：每一层取上一项的子列表，再取该列表最后一项
+        var parent = roots[^1];
+        for (var l = 1; l < level; l++)
+        {
+            var list = FindChildList(parent);
+            if (list == null || list.Children.Count == 0)
+            {
+                roots.Add(item);
+                return;
+            }
+            parent = list.Children[^1];
+        }
+
+        var childList = FindChildList(parent);
+        if (childList == null)
+        {
+            childList = MarkdownBlock.CreateBulletList([item]);
+            parent.Children.Add(childList);
+        }
+        else
+        {
+            childList.Children.Add(item);
+        }
+    }
+
+    /// <summary>在块的子块中找最后一个列表块（子块均为 ListItemBlock 的块即列表）</summary>
+    private static MarkdownBlock? FindChildList(MarkdownBlock parent)
+    {
+        for (var i = parent.Children.Count - 1; i >= 0; i--)
+        {
+            var child = parent.Children[i];
+            if (child.Children.Count > 0 && child.Children[0] is ListItemBlock) return child;
+        }
+        return null;
     }
 
     private List<MarkdownInline> BuildRunInlines(List<Run> runs, Document doc)
