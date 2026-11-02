@@ -689,7 +689,9 @@ public class WordWriter : IDisposable
         _headers = document.Headers;
         _footers = document.Footers;
         _sections = document.Sections;
-        // 脚注/尾注：模型输出（DocumentXml=null）时由 Writer 生成部件，否则走 OtherParts 透传
+        // 脚注/尾注：先清空，避免复用同一个 Writer 时残留上一份文档的内容
+        _footnotes = [];
+        _endnotes = [];
         if (document.DocumentXml == null)
         {
             _footnotes = document.Footnotes;
@@ -749,10 +751,13 @@ public class WordWriter : IDisposable
                 .ToList();
             foreach (var k in removeKeys) _otherParts.Remove(k);
             _sectPrXml = null; // 重建 sectPr 以生成新的 headerReference/footerReference
-            // 取消“链接到上一节”或带有独立页眉页脚的节必须重建 sectPr，否则原始 XML 里的旧引用会盖掉新的独立页眉页脚
+            // 原始 sectPr 里只要带 header/footer 引用、或该节有独立页眉页脚，就必须重建：
+            // 重建已把旧的关系与部件整体删除，继续用旧 XML 会留下悬空 r:id（Word 提示文档损坏）
             foreach (var sec in document.Sections)
             {
-                if (!sec.LinkHeadersToPrevious || !sec.LinkFootersToPrevious || sec.Headers.Count > 0 || sec.Footers.Count > 0)
+                var hasRefs = sec.SectPrXml != null
+                    && (sec.SectPrXml.Contains("headerReference") || sec.SectPrXml.Contains("footerReference"));
+                if (hasRefs || !sec.LinkHeadersToPrevious || !sec.LinkFootersToPrevious || sec.Headers.Count > 0 || sec.Footers.Count > 0)
                     sec.SectPrXml = null;
             }
         }
@@ -776,10 +781,14 @@ public class WordWriter : IDisposable
     {
         var media = new List<(String Path, Byte[] Data)>();
 
+        // 重建页眉页脚模式下，这两份部件已从 _otherParts 移除（稍后由 _merge* 重写），
+        // 这里必须以 _merge* 为基线，否则新增图片的关系/内容类型会整个丢失
         _otherParts.TryGetValue("word/_rels/document.xml.rels", out var relsBytes);
-        var relsXml = relsBytes != null ? Encoding.UTF8.GetString(relsBytes) : null;
+        var relsXml = relsBytes != null ? Encoding.UTF8.GetString(relsBytes) : _mergeDocumentRels;
+        var relsInOther = relsBytes != null;
         _otherParts.TryGetValue("[Content_Types].xml", out var ctBytes);
-        var ctXml = ctBytes != null ? Encoding.UTF8.GetString(ctBytes) : null;
+        var ctXml = ctBytes != null ? Encoding.UTF8.GetString(ctBytes) : _mergeContentTypes;
+        var ctInOther = ctBytes != null;
 
         var newRels = new StringBuilder();
         var newDefaults = new StringBuilder();
@@ -799,9 +808,17 @@ public class WordWriter : IDisposable
         if (media.Count == 0) return media;
 
         if (relsXml != null && newRels.Length > 0)
-            _otherParts["word/_rels/document.xml.rels"] = Encoding.UTF8.GetBytes(InjectXml(relsXml, "</Relationships>", newRels.ToString()));
+        {
+            var merged = InjectXml(relsXml, "</Relationships>", newRels.ToString());
+            if (relsInOther) _otherParts["word/_rels/document.xml.rels"] = Encoding.UTF8.GetBytes(merged);
+            else _mergeDocumentRels = merged;
+        }
         if (ctXml != null && newDefaults.Length > 0)
-            _otherParts["[Content_Types].xml"] = Encoding.UTF8.GetBytes(InjectXml(ctXml, "</Types>", newDefaults.ToString()));
+        {
+            var merged = InjectXml(ctXml, "</Types>", newDefaults.ToString());
+            if (ctInOther) _otherParts["[Content_Types].xml"] = Encoding.UTF8.GetBytes(merged);
+            else _mergeContentTypes = merged;
+        }
 
         return media;
     }
@@ -1653,9 +1670,11 @@ public class WordWriter : IDisposable
         {
             sb.Append("<w:footerReference w:type=\"default\" r:id=\"rFtr1\"/>");
         }
-        // 分栏设置
-        if (ps.ColumnCount > 1)
-            sb.Append($"<w:cols w:num=\"{ps.ColumnCount}\" w:space=\"{ps.ColumnSpacing}\"/>");
+        // 以下严格按 CT_SectPr 顺序：header/footerReference → type → pgSz → pgMar → pgBorders
+        // → lnNumType → cols → titlePg → evenAndOddHeaders（顺序错误会被判定为非法子元素）
+        var orientAttr = ps.Landscape ? " w:orient=\"landscape\"" : String.Empty;
+        sb.Append($"<w:pgSz w:w=\"{pgW}\" w:h=\"{pgH}\"{orientAttr}/>");
+        sb.Append($"<w:pgMar w:top=\"{ps.MarginTop}\" w:right=\"{ps.MarginRight}\" w:bottom=\"{ps.MarginBottom}\" w:left=\"{ps.MarginLeft}\" w:header=\"720\" w:footer=\"720\"/>");
         // 页面边框
         var pb = ps.PageBorder;
         if (pb != null)
@@ -1668,13 +1687,13 @@ public class WordWriter : IDisposable
             AppendPgBorderXml(sb, "right", pb.Right, pb);
             sb.Append("</w:pgBorders>");
         }
-        var orientAttr = ps.Landscape ? " w:orient=\"landscape\"" : String.Empty;
-        sb.Append($"<w:pgSz w:w=\"{pgW}\" w:h=\"{pgH}\"{orientAttr}/>");
-        sb.Append($"<w:pgMar w:top=\"{ps.MarginTop}\" w:right=\"{ps.MarginRight}\" w:bottom=\"{ps.MarginBottom}\" w:left=\"{ps.MarginLeft}\" w:header=\"720\" w:footer=\"720\"/>");
         // 行号
         var ln = ps.LineNumber;
         if (ln != null)
             sb.Append($"<w:lnNumType w:countBy=\"{ln.CountBy}\" w:start=\"{ln.Start}\" w:distance=\"{ln.Distance}\" w:restart=\"{ln.Restart}\"/>");
+        // 分栏设置
+        if (ps.ColumnCount > 1)
+            sb.Append($"<w:cols w:num=\"{ps.ColumnCount}\" w:space=\"{ps.ColumnSpacing}\"/>");
         sb.Append("</w:sectPr>");
         return sb.ToString();
     }
@@ -1844,9 +1863,11 @@ public class WordWriter : IDisposable
         {
             var elements = slot.Header?.Elements ?? [];
             WriteEntry(za, $"word/header{slot.Ordinal}.xml", BuildHdrFtrXml("w:hdr", elements));
+            // 页眉里的图片/超链接靠部件自身 rels 解析，不写回就是悬空引用
+            if (slot.Header?.RelsXml != null)
+                WriteEntry(za, $"word/_rels/header{slot.Ordinal}.xml.rels", slot.Header.RelsXml);
         }
     }
-
     /// <summary>写入富文本页脚部件（每个槽位生成 footer{N}.xml，含各节独立页脚）</summary>
     private void WriteFooterParts(ZipArchive za)
     {
@@ -1854,12 +1875,19 @@ public class WordWriter : IDisposable
         {
             var elements = slot.Footer?.Elements ?? [];
             WriteEntry(za, $"word/footer{slot.Ordinal}.xml", BuildHdrFtrXml("w:ftr", elements));
+            if (slot.Footer?.RelsXml != null)
+                WriteEntry(za, $"word/_rels/footer{slot.Ordinal}.xml.rels", slot.Footer.RelsXml);
         }
     }
 
     /// <summary>向 [Content_Types].xml 注入 header/footer/脚注/尾注 Override（去重）</summary>
     private String InjectContentTypeOverrides(String contentTypes)
     {
+        // 先清掉源包中指向已删部件的旧 header/footer Override，避免声明不存在的部件
+        contentTypes = System.Text.RegularExpressions.Regex.Replace(
+            contentTypes,
+            "<Override[^>]*PartName=\"/word/(?:header|footer)\\d+\\.xml\"[^>]*/>",
+            "");
         foreach (var slot in _headerSlots)
             contentTypes = InjectOneOverride(contentTypes, $"/word/header{slot.Ordinal}.xml",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml");
@@ -2004,6 +2032,9 @@ public class WordWriter : IDisposable
         var chartCounter = 0;
         foreach (var el in elements)
             AppendElementXml(sb, el, ref chartCounter);
+        // CT_HdrFtr 要求至少一个块级子元素（EG_BlockLevelElts minOccurs=1）；
+        // “取消链接并清空页眉”生成的空部件必须补一个空段落，否则文件不符合模式
+        if (elements.Count == 0) sb.Append("<w:p/>");
         sb.Append($"</{rootTag}>");
         return sb.ToString();
     }
@@ -2029,18 +2060,54 @@ public class WordWriter : IDisposable
             || !para.WidowControl;
         if (hasPPr)
         {
+            // 必须严格按 CT_PPr 顺序输出：pStyle → keepNext → keepLines → framePr → widowControl
+            // → numPr → pBdr → shd → tabs → spacing → ind → jc；顺序错误会被 OpenXmlValidator 判为非法
             sb.Append("<w:pPr>");
-            if (para.KeepNext) sb.Append("<w:keepNext/>");
-            if (para.KeepLines) sb.Append("<w:keepLines/>");
-            if (!para.WidowControl) sb.Append("<w:widowControl w:val=\"0\"/>");
             if (para.StyleId != null)
                 sb.Append($"<w:pStyle w:val=\"{Esc(para.StyleId)}\"/>");
             else if (para.Style != ParagraphStyle.Normal)
                 sb.Append($"<w:pStyle w:val=\"Heading{(Int32)para.Style}\"/>");
-            if (para.Alignment != null)
-                sb.Append($"<w:jc w:val=\"{para.Alignment}\"/>");
+            if (para.KeepNext) sb.Append("<w:keepNext/>");
+            if (para.KeepLines) sb.Append("<w:keepLines/>");
+            // 首字下沉（framePr 必须在 widowControl 之前）
+            if (para.DropCapLines.HasValue)
+            {
+                sb.Append($"<w:framePr w:dropCap=\"drop\" w:lines=\"{para.DropCapLines}\" w:hSpace=\"144\" w:vSpace=\"0\" w:wrap=\"around\" w:hAnchor=\"text\" w:vAnchor=\"text\"/>");
+            }
+            if (!para.WidowControl) sb.Append("<w:widowControl w:val=\"0\"/>");
+            if (para.IsBullet || para.IsOrderedList || para.NumId.HasValue)
+            {
+                // 优先保留原始 numId（真实文档往返保真，引用透传的 numbering.xml），
+                // 程序化创建时映射 1/2/3（对应 WriteNumbering 生成的编号定义）
+                var numId = para.NumId ?? (para.IsBullet ? 1 : (para.ListStartOverride.HasValue ? 3 : 2));
+                sb.Append($"<w:numPr><w:ilvl w:val=\"{para.ListLevel}\"/><w:numId w:val=\"{numId}\"/></w:numPr>");
+                if (para.IsOrderedList && para.ListStartOverride.HasValue && !para.NumId.HasValue)
+                    _orderedStartOverrides[para.ListLevel] = para.ListStartOverride.Value;
+            }
+            // 段落边框（pBdr 在 shd 之前）
+            if (para.Borders != null)
+            {
+                sb.Append("<w:pBdr>");
+                AppendBorderXml(sb, "top",    para.Borders.Top);
+                AppendBorderXml(sb, "left",   para.Borders.Left);
+                AppendBorderXml(sb, "bottom", para.Borders.Bottom);
+                AppendBorderXml(sb, "right",  para.Borders.Right);
+                sb.Append("</w:pBdr>");
+            }
             if (para.BackgroundColor != null)
                 sb.Append($"<w:shd w:fill=\"{para.BackgroundColor.TrimStart('#')}\" w:val=\"clear\"/>");
+            // 制表位
+            if (para.TabStops != null && para.TabStops.Count > 0)
+            {
+                sb.Append("<w:tabs>");
+                foreach (var ts in para.TabStops)
+                {
+                    sb.Append($"<w:tab w:val=\"{Esc(ts.Alignment)}\" w:pos=\"{ts.Position}\"");
+                    if (ts.Leader != null) sb.Append($" w:leader=\"{Esc(ts.Leader)}\"");
+                    sb.Append("/>");
+                }
+                sb.Append("</w:tabs>");
+            }
             if (para.SpaceBefore.HasValue || para.SpaceAfter.HasValue || para.LineSpacingPct.HasValue)
             {
                 sb.Append("<w:spacing");
@@ -2068,43 +2135,8 @@ public class WordWriter : IDisposable
                 }
                 sb.Append("/>");
             }
-            if (para.IsBullet || para.IsOrderedList || para.NumId.HasValue)
-            {
-                // 优先保留原始 numId（真实文档往返保真，引用透传的 numbering.xml），
-                // 程序化创建时映射 1/2/3（对应 WriteNumbering 生成的编号定义）
-                var numId = para.NumId ?? (para.IsBullet ? 1 : (para.ListStartOverride.HasValue ? 3 : 2));
-                sb.Append($"<w:numPr><w:ilvl w:val=\"{para.ListLevel}\"/><w:numId w:val=\"{numId}\"/></w:numPr>");
-                if (para.IsOrderedList && para.ListStartOverride.HasValue && !para.NumId.HasValue)
-                    _orderedStartOverrides[para.ListLevel] = para.ListStartOverride.Value;
-            }
-            // 段落边框
-            if (para.Borders != null)
-            {
-                sb.Append("<w:pBdr>");
-                AppendBorderXml(sb, "top",    para.Borders.Top);
-                AppendBorderXml(sb, "left",   para.Borders.Left);
-                AppendBorderXml(sb, "bottom", para.Borders.Bottom);
-                AppendBorderXml(sb, "right",  para.Borders.Right);
-                sb.Append("</w:pBdr>");
-            }
-            // 制表位
-            if (para.TabStops != null && para.TabStops.Count > 0)
-            {
-                sb.Append("<w:tabs>");
-                foreach (var ts in para.TabStops)
-                {
-                    sb.Append($"<w:tab w:val=\"{Esc(ts.Alignment)}\" w:pos=\"{ts.Position}\"");
-                    if (ts.Leader != null) sb.Append($" w:leader=\"{Esc(ts.Leader)}\"");
-                    sb.Append("/>");
-                }
-                sb.Append("</w:tabs>");
-            }
-            // 首字下沉
-            if (para.DropCapLines.HasValue)
-            {
-                var chars = para.DropCapChars ?? 1;
-                sb.Append($"<w:framePr w:dropCap=\"drop\" w:lines=\"{para.DropCapLines}\" w:hSpace=\"144\" w:vSpace=\"0\" w:wrap=\"around\" w:hAnchor=\"text\" w:vAnchor=\"text\"/>");
-            }
+            if (para.Alignment != null)
+                sb.Append($"<w:jc w:val=\"{para.Alignment}\"/>");
             sb.Append("</w:pPr>");
         }
         if (para.IsPageBreak)
@@ -2304,26 +2336,10 @@ public class WordWriter : IDisposable
         }
 
         sb.Append("<w:rPr>");
-        // 三态写回：true=开启，false=显式关闭（w:val="0"），null=不输出（继承样式）
-        AppendSwitchXml(sb, "b", p.Bold);
-        AppendSwitchXml(sb, "i", p.Italic);
-        AppendSwitchXml(sb, "strike", p.Strikethrough);
-        AppendSwitchXml(sb, "smallCaps", p.SmallCaps);
-        AppendSwitchXml(sb, "caps", p.AllCaps);
-        AppendSwitchXml(sb, "vanish", p.Hidden);
-        if (p.Superscript == true) sb.Append("<w:vertAlign w:val=\"superscript\"/>");
-        else if (p.Subscript == true) sb.Append("<w:vertAlign w:val=\"subscript\"/>");
-        else if (p.Superscript == false || p.Subscript == false) sb.Append("<w:vertAlign w:val=\"baseline\"/>");
-        // 下划线（支持样式）
-        if (p.Underline != null || p.UnderlineStyle != null)
-        {
-            var uVal = p.Underline == false && p.UnderlineStyle == null ? "none" : (p.UnderlineStyle ?? "single");
-            sb.Append($"<w:u w:val=\"{uVal}\"/>");
-        }
-        if (p.ForeColor != null) sb.Append($"<w:color w:val=\"{p.ForeColor.TrimStart('#')}\"/>");
-        if (p.FontSize.HasValue) sb.Append($"<w:sz w:val=\"{(Int32)(p.FontSize.Value * 2)}\"/>");
-        if (p.CharacterSpacing.HasValue) sb.Append($"<w:spacing w:val=\"{p.CharacterSpacing.Value}\"/>");
-        if (p.CharacterScaling.HasValue) sb.Append($"<w:w w:val=\"{p.CharacterScaling.Value}\"/>");
+        // 必须严格按 CT_RPr 顺序输出（rStyle → rFonts → b → i → caps → smallCaps → strike → vanish
+        // → color → spacing → w → sz → highlight → u → vertAlign → lang → 扩展效果），
+        // 顺序错误会被 OpenXmlValidator 判为 "unexpected child element"，Word 亦可能提示修复
+        if (isHyperlink) sb.Append("<w:rStyle w:val=\"Hyperlink\"/>");
         // 字体：西文/东亚字体独立设置（eastAsia 单独可控）
         if (p.FontName != null || p.EastAsiaFontName != null)
         {
@@ -2334,11 +2350,31 @@ public class WordWriter : IDisposable
                 rf.Append($" w:eastAsia=\"{Esc(p.EastAsiaFontName)}\"");
             sb.Append($"<w:rFonts{rf}/>");
         }
+        // 三态写回：true=开启，false=显式关闭（w:val="0"），null=不输出（继承样式）
+        AppendSwitchXml(sb, "b", p.Bold);
+        AppendSwitchXml(sb, "i", p.Italic);
+        AppendSwitchXml(sb, "caps", p.AllCaps);
+        AppendSwitchXml(sb, "smallCaps", p.SmallCaps);
+        AppendSwitchXml(sb, "strike", p.Strikethrough);
+        AppendSwitchXml(sb, "vanish", p.Hidden);
+        if (p.ForeColor != null) sb.Append($"<w:color w:val=\"{p.ForeColor.TrimStart('#')}\"/>");
+        if (p.CharacterSpacing.HasValue) sb.Append($"<w:spacing w:val=\"{p.CharacterSpacing.Value}\"/>");
+        if (p.CharacterScaling.HasValue) sb.Append($"<w:w w:val=\"{p.CharacterScaling.Value}\"/>");
+        if (p.FontSize.HasValue) sb.Append($"<w:sz w:val=\"{(Int32)(p.FontSize.Value * 2)}\"/>");
         if (p.HighlightColor != null)
             sb.Append($"<w:highlight w:val=\"{Esc(p.HighlightColor.TrimStart('#'))}\"/>");
+        // 下划线（支持样式）
+        if (p.Underline != null || p.UnderlineStyle != null)
+        {
+            var uVal = p.Underline == false && p.UnderlineStyle == null ? "none" : (p.UnderlineStyle ?? "single");
+            sb.Append($"<w:u w:val=\"{uVal}\"/>");
+        }
+        if (p.Superscript == true) sb.Append("<w:vertAlign w:val=\"superscript\"/>");
+        else if (p.Subscript == true) sb.Append("<w:vertAlign w:val=\"subscript\"/>");
+        else if (p.Superscript == false || p.Subscript == false) sb.Append("<w:vertAlign w:val=\"baseline\"/>");
         if (p.Language != null)
             sb.Append($"<w:lang w:val=\"{Esc(p.Language)}\"/>");
-        if (isHyperlink) sb.Append("<w:rStyle w:val=\"Hyperlink\"/><w:color w:val=\"0563C1\"/><w:u w:val=\"single\"/>");
+        if (isHyperlink) sb.Append("<w:color w:val=\"0563C1\"/><w:u w:val=\"single\"/>");
         // 文字发光效果 (w14:glow)
         if (p.GlowColor != null)
         {
@@ -2466,18 +2502,35 @@ public class WordWriter : IDisposable
                     colW = colCount > 0 ? availW / colCount : availW;
 
                 sb.Append("<w:tc><w:tcPr>");
+                // 必须按 CT_TcPr 顺序：tcW → gridSpan → vMerge → tcBorders → shd → vAlign
                 // 列宽：优先单元格自身 tcW，其次 TableStyle.ColumnWidths，最后均分
                 if (cell.Width.HasValue)
                     sb.Append($"<w:tcW w:w=\"{cell.Width}\" w:type=\"dxa\"/>");
                 else
                     sb.Append($"<w:tcW w:w=\"{colW}\" w:type=\"dxa\"/>");
-                // 内联边框（自定义样式时）
-                if (style != null)
+                if (cell.ColSpan > 1)
+                    sb.Append($"<w:gridSpan w:val=\"{cell.ColSpan}\"/>");
+                // 垂直合并：RowSpan>1 或 -1（reader 的 restart）= 合并起点；0 = 继续合并
+                if (cell.RowSpan > 1 || cell.RowSpan == -1)
+                    sb.Append("<w:vMerge w:val=\"restart\"/>");
+                else if (cell.RowSpan == 0)
+                    sb.Append("<w:vMerge/>");
+                // 单元格边框：一个单元格只能有一个 w:tcBorders——先取单元格自定义边，
+                // 缺边时回退到表格样式统一边框（否则会输出两个 tcBorders，元素重复非法）
+                if (style != null || cell.Borders != null)
                 {
                     sb.Append("<w:tcBorders>");
-                    foreach (var edge in new[] { "top", "left", "bottom", "right" })
+                    if (cell.Borders?.Top != null || cell.Borders?.Left != null || cell.Borders?.Bottom != null || cell.Borders?.Right != null)
                     {
-                        sb.Append($"<w:{edge} w:val=\"single\" w:sz=\"{borderSize}\" w:space=\"0\" w:color=\"{borderColor}\"/>");
+                        AppendBorderXml(sb, "top", cell.Borders.Top);
+                        AppendBorderXml(sb, "left", cell.Borders.Left);
+                        AppendBorderXml(sb, "bottom", cell.Borders.Bottom);
+                        AppendBorderXml(sb, "right", cell.Borders.Right);
+                    }
+                    else
+                    {
+                        foreach (var edge in new[] { "top", "left", "bottom", "right" })
+                            sb.Append($"<w:{edge} w:val=\"single\" w:sz=\"{borderSize}\" w:space=\"0\" w:color=\"{borderColor}\"/>");
                     }
                     sb.Append("</w:tcBorders>");
                 }
@@ -2491,23 +2544,6 @@ public class WordWriter : IDisposable
                     sb.Append($"<w:shd w:fill=\"{bgColor.TrimStart('#')}\" w:val=\"clear\"/>");
                 // 垂直对齐：未显式指定时默认居中，表格整体观感更平衡
                 sb.Append($"<w:vAlign w:val=\"{cell.VerticalAlignment ?? "center"}\"/>");
-                if (cell.ColSpan > 1)
-                    sb.Append($"<w:gridSpan w:val=\"{cell.ColSpan}\"/>");
-                // 垂直合并：RowSpan>1 或 -1（reader 的 restart）= 合并起点；0 = 继续合并
-                if (cell.RowSpan > 1 || cell.RowSpan == -1)
-                    sb.Append("<w:vMerge w:val=\"restart\"/>");
-                else if (cell.RowSpan == 0)
-                    sb.Append("<w:vMerge/>");
-                // 单元格边框 w:tcBorders
-                if (cell.Borders != null)
-                {
-                    sb.Append("<w:tcBorders>");
-                    AppendBorderXml(sb, "top", cell.Borders.Top);
-                    AppendBorderXml(sb, "left", cell.Borders.Left);
-                    AppendBorderXml(sb, "bottom", cell.Borders.Bottom);
-                    AppendBorderXml(sb, "right", cell.Borders.Right);
-                    sb.Append("</w:tcBorders>");
-                }
                 sb.Append("</w:tcPr>");
 
                 // 嵌套表格（W46）：单元格内的 w:tbl
@@ -2637,18 +2673,14 @@ public class WordWriter : IDisposable
                     colW = cellCount > 0 ? availW / cellCount : availW;
 
                 sb.Append("<w:tc><w:tcPr>");
+                // 顺序：tcW → gridSpan → vMerge → tcBorders → shd → vAlign（CT_TcPr）
                 sb.Append($"<w:tcW w:w=\"{colW}\" w:type=\"dxa\"/>");
-                if (cell.BackgroundColor != null)
-                    sb.Append($"<w:shd w:fill=\"{cell.BackgroundColor.TrimStart('#')}\" w:val=\"clear\"/>");
-                if (cell.VerticalAlignment != null)
-                    sb.Append($"<w:vAlign w:val=\"{cell.VerticalAlignment}\"/>");
                 if (cell.ColSpan > 1)
                     sb.Append($"<w:gridSpan w:val=\"{cell.ColSpan}\"/>");
                 if (cell.RowSpan > 1 || cell.RowSpan == -1)
                     sb.Append("<w:vMerge w:val=\"restart\"/>");
                 else if (cell.RowSpan == 0)
                     sb.Append("<w:vMerge/>");
-                // 单元格边框 w:tcBorders
                 if (cell.Borders != null)
                 {
                     sb.Append("<w:tcBorders>");
@@ -2658,6 +2690,10 @@ public class WordWriter : IDisposable
                     AppendBorderXml(sb, "right", cell.Borders.Right);
                     sb.Append("</w:tcBorders>");
                 }
+                if (cell.BackgroundColor != null)
+                    sb.Append($"<w:shd w:fill=\"{cell.BackgroundColor.TrimStart('#')}\" w:val=\"clear\"/>");
+                if (cell.VerticalAlignment != null)
+                    sb.Append($"<w:vAlign w:val=\"{cell.VerticalAlignment}\"/>");
                 sb.Append("</w:tcPr>");
 
                 // 嵌套表格（W46）：单元格内的 w:tbl

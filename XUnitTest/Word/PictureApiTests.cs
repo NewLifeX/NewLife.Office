@@ -83,6 +83,46 @@ public class PictureApiTests
         using var reader = new StreamReader(za.GetEntry(path)!.Open(), Encoding.UTF8);
         return reader.ReadToEnd();
     }
+
+    /// <summary>构造带页眉的 docx（读入后 <see cref="Document.Headers"/> 非空 → 保存走重建分支）</summary>
+    private static Byte[] BuildDocxWithHeader()
+    {
+        const String R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+        var documentXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+            + $"<w:document xmlns:w=\"{W}\" xmlns:r=\"{R}\"><w:body>"
+            + "<w:p><w:r><w:t>正文</w:t></w:r></w:p>"
+            + "<w:sectPr><w:headerReference w:type=\"default\" r:id=\"rHdr1\"/>"
+            + "<w:pgSz w:w=\"11906\" w:h=\"16838\"/><w:pgMar w:top=\"1440\" w:right=\"1800\" w:bottom=\"1440\" w:left=\"1800\"/></w:sectPr>"
+            + "</w:body></w:document>";
+        var headerXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+            + $"<w:hdr xmlns:w=\"{W}\"><w:p><w:r><w:t>公司页眉</w:t></w:r></w:p></w:hdr>";
+        var relsXml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+            + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+            + "<Relationship Id=\"rHdr1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/header\" Target=\"header1.xml\"/>"
+            + "</Relationships>";
+
+        using var ms = new MemoryStream();
+        using (var za = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            WriteEntry(za, "[Content_Types].xml",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
+                + "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>"
+                + "<Default Extension=\"xml\" ContentType=\"application/xml\"/>"
+                + "<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>"
+                + "<Override PartName=\"/word/header1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml\"/>"
+                + "</Types>");
+            WriteEntry(za, "_rels/.rels",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>"
+                + "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+                + "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/>"
+                + "</Relationships>");
+            WriteEntry(za, "word/document.xml", documentXml);
+            WriteEntry(za, "word/_rels/document.xml.rels", relsXml);
+            WriteEntry(za, "word/header1.xml", headerXml);
+        }
+        return ms.ToArray();
+    }
     #endregion
 
     #region 插入
@@ -105,6 +145,33 @@ public class PictureApiTests
         var back = ReadBack(bytes);
         Assert.Contains(back.Elements, e => e.Type == ElementType.Image);
         Assert.True(back.Images.ContainsKey("rPic1"));
+    }
+
+    [Fact(DisplayName = "图片-页眉重建模式下插入图片仍补齐 rels 与 content-types")]
+    public void AddPicture_WithHeaderRebuild_PersistsParts()
+    {
+        Document doc;
+        using (var ms = new MemoryStream(BuildDocxWithHeader()))
+        using (var reader = new WordReader(ms))
+            doc = reader.ReadDocument();
+
+        // 前提：有页眉 → 保存时走重建分支（[Content_Types].xml 与 document.xml.rels 会从透传集中移除）
+        Assert.NotEmpty(doc.Headers);
+        doc.BeginEdit();
+
+        var img = doc.AddPicture(Convert.FromBase64String(Png1X1), "png");
+        var bytes = Save(doc);
+
+        Assert.True(HasEntry(bytes, $"word/media/{img.RelId}.png"));
+        var rels = ReadEntry(bytes, "word/_rels/document.xml.rels");
+        Assert.Contains($"Id=\"{img.RelId}\"", rels);
+        Assert.Contains("Extension=\"png\"", ReadEntry(bytes, "[Content_Types].xml"));
+        // 页眉关系仍需保留（重建不得把页眉一起丢掉）
+        Assert.Contains("header", rels);
+
+        var back = ReadBack(bytes);
+        Assert.True(back.Images.ContainsKey(img.RelId));
+        Assert.Contains(back.Elements, e => e.Type == ElementType.Image);
     }
 
     [Fact(DisplayName = "图片-只给宽度时按自然宽高比换算高度")]

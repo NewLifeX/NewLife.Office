@@ -24,5 +24,12 @@ public class Footer
 
     /// <summary>页脚内容元素列表（段落/图片/表格），与文档正文结构相同</summary>
     public List<Element> Elements { get; set; } = [];
+
+    /// <summary>原始页脚部件的关系 XML（<c>word/_rels/footerN.xml.rels</c>）</summary>
+    /// <remarks>
+    /// 从文件读取时保留，写回时随部件一并写出。不保留会导致页脚里的图片引用（<c>r:embed</c>）
+    /// 没有对应关系，输出包不符合 OPC（Word 提示文档损坏）。程序化构造时为空即可。
+    /// </remarks>
+    public String? RelsXml { get; set; }
     #endregion
 }

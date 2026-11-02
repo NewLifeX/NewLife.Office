@@ -1944,7 +1944,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             if (!rels.TryGetValue(kv.Value, out var target)) continue;
             var elements = LoadHdrFtrElements(target, rels, styleMap, numIdFormats, doc);
             if (elements.Count == 0) continue;
-            doc.Headers.Add(new Header { Type = kv.Key, Elements = elements });
+            doc.Headers.Add(new Header { Type = kv.Key, Elements = elements, RelsXml = ReadHdrFtrRels(target) });
             if (kv.Key == "default")
             {
                 var text = LoadHdrFtrText(target, doc);
@@ -1959,7 +1959,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             if (!rels.TryGetValue(kv.Value, out var target)) continue;
             var elements = LoadHdrFtrElements(target, rels, styleMap, numIdFormats, doc);
             if (elements.Count == 0) continue;
-            doc.Footers.Add(new Footer { Type = kv.Key, Elements = elements });
+            doc.Footers.Add(new Footer { Type = kv.Key, Elements = elements, RelsXml = ReadHdrFtrRels(target) });
             if (kv.Key == "default")
             {
                 var text = LoadHdrFtrText(target, doc);
@@ -1982,36 +1982,46 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         ps.HeaderText = doc.HeaderText;
         ps.FooterText = doc.FooterText;
 
-        // 各节独立页眉页脚：第一节由文档级（Document.Headers/Footers）承载，
-        // 后续节若自带 headerReference/footerReference 则视为“已取消链接到上一节”
-        for (var si = 1; si < doc.Sections.Count; si++)
+        // 各节独立页眉页脚：单节文档由文档级（Document.Headers/Footers）承载，无需重复；
+        // 多节文档逐节还原，**首节也必须有自己的一份**——Document.Headers 取的是 body 级（末节）sectPr，
+        // 若首节页眉只存在于首节 sectPr，跳过首节会导致重建保存时页眉丢失并留下悬空 r:id。
+        if (doc.Sections.Count > 1)
         {
-            var sec = doc.Sections[si];
-            var sps = sec.PageSettings;
-
-            sec.LinkHeadersToPrevious = sps.HeaderRefs.Count == 0;
-            if (!sec.LinkHeadersToPrevious)
+            for (var si = 0; si < doc.Sections.Count; si++)
             {
-                sec.Headers.Clear();
-                foreach (var kv in sps.HeaderRefs)
+                var sec = doc.Sections[si];
+                var sps = sec.PageSettings;
+
+                // 首节没有“上一节”，链接标志恒为 true；但它自带的引用仍要读出来
+                sec.LinkHeadersToPrevious = si == 0 || sps.HeaderRefs.Count == 0;
+                if (sps.HeaderRefs.Count > 0)
                 {
-                    if (!rels.TryGetValue(kv.Value, out var target)) continue;
-                    sec.Headers.Add(new Header { Type = kv.Key, Elements = LoadHdrFtrElements(target, rels, styleMap, numIdFormats, doc) });
+                    sec.Headers.Clear();
+                    foreach (var kv in sps.HeaderRefs)
+                    {
+                        if (!rels.TryGetValue(kv.Value, out var target)) continue;
+                        sec.Headers.Add(new Header { Type = kv.Key, Elements = LoadHdrFtrElements(target, rels, styleMap, numIdFormats, doc), RelsXml = ReadHdrFtrRels(target) });
+                    }
                 }
-            }
 
-            sec.LinkFootersToPrevious = sps.FooterRefs.Count == 0;
-            if (!sec.LinkFootersToPrevious)
-            {
-                sec.Footers.Clear();
-                foreach (var kv in sps.FooterRefs)
+                sec.LinkFootersToPrevious = si == 0 || sps.FooterRefs.Count == 0;
+                if (sps.FooterRefs.Count > 0)
                 {
-                    if (!rels.TryGetValue(kv.Value, out var target)) continue;
-                    sec.Footers.Add(new Footer { Type = kv.Key, Elements = LoadHdrFtrElements(target, rels, styleMap, numIdFormats, doc) });
+                    sec.Footers.Clear();
+                    foreach (var kv in sps.FooterRefs)
+                    {
+                        if (!rels.TryGetValue(kv.Value, out var target)) continue;
+                        sec.Footers.Add(new Footer { Type = kv.Key, Elements = LoadHdrFtrElements(target, rels, styleMap, numIdFormats, doc), RelsXml = ReadHdrFtrRels(target) });
+                    }
                 }
             }
         }
     }
+
+    /// <summary>读取页眉/页脚部件自身的关系 XML（写回时随部件一并输出，避免图片引用悬空）</summary>
+    /// <param name="target">部件相对路径（如 <c>header1.xml</c>）</param>
+    /// <returns>关系 XML，不存在时返回 null</returns>
+    private String? ReadHdrFtrRels(String target) => ReadZipEntryText($"word/_rels/{target}.rels");
 
     /// <summary>解析页眉/页脚部件内容为元素列表（段落/表格/内容控件 + 图片提取）</summary>
     private List<Element> LoadHdrFtrElements(String target, Dictionary<String, String> rels,

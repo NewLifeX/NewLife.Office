@@ -44,7 +44,7 @@ public class DocxPatch
         var root = JsonLite.Parse(json) as Dictionary<String, Object?>
             ?? throw new FormatException("Patch root must be a JSON object.");
 
-        // 允许省略外层对象，直接给数组
+        // 顶层必须是对象：{"ops":[...]}；只给数组会解析失败
         List<Object?>? ops = null;
         if (root.TryGetValue("ops", out var opsValue)) ops = opsValue as List<Object?>;
         else if (root.Count == 0) ops = [];
@@ -207,7 +207,8 @@ public class DocxPatch
                     el = temp.Elements[0];
                 }
 
-                var index = ResolveIndex(doc, op.Anchor) ?? doc.Elements.Count;
+                var index = ResolveIndex(doc, op.Anchor)
+                    ?? throw new ArgumentException($"锚点不存在: {op.Anchor}（insert_table 不再静默追加到末尾）");
                 if (String.Equals(op.Position, "before", StringComparison.OrdinalIgnoreCase)) index--;
                 doc.InsertElementAt(index, el);
                 return;
