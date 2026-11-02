@@ -464,15 +464,13 @@ public class WordRoundTripTests : IntegrationTestBase
         Assert.Equal(a.HeaderText ?? "", b.HeaderText ?? "");
         Assert.Equal(a.FooterText ?? "", b.FooterText ?? "");
 
-        // W11: 页眉页脚富文本/内容控件/自定义XML/只读保护/超链接/文档变量（双方都有数据时比较）
-        if (a.Headers.Count > 0 && b.Headers.Count > 0)
-            Assert.Equal(a.Headers.Count, b.Headers.Count);
-        if (a.Footers.Count > 0 && b.Footers.Count > 0)
-            Assert.Equal(a.Footers.Count, b.Footers.Count);
-        if (a.SdtElements.Count > 0 && b.SdtElements.Count > 0)
-            Assert.Equal(a.SdtElements.Count, b.SdtElements.Count);
-        if (a.ProtectionReadOnly || b.ProtectionReadOnly)
-            Assert.Equal(a.ProtectionReadOnly, b.ProtectionReadOnly);
+        // W11: 页眉页脚富文本/内容控件/自定义XML/只读保护/超链接/文档变量
+        AssertHdrFtrEqual(a.Headers, b.Headers, context, "页眉");
+        AssertHdrFtrEqual(a.Footers, b.Footers, context, "页脚");
+        Assert.Equal(a.SdtElements.Count, b.SdtElements.Count);
+        for (var i = 0; i < a.SdtElements.Count; i++)
+            Assert.Equal(a.SdtElements[i].Content ?? "", b.SdtElements[i].Content ?? "");
+        Assert.Equal(a.ProtectionReadOnly, b.ProtectionReadOnly);
 
         // 批注数量
         Assert.Equal(a.Comments.Count, b.Comments.Count);
@@ -489,38 +487,43 @@ public class WordRoundTripTests : IntegrationTestBase
                 Assert.Equal(a.Comments[ci].Initials, b.Comments[ci].Initials);
         }
 
-        // W11: 超链接（双方都有数据时比较完整列表）
-        if (a.Hyperlinks.Count > 0 && b.Hyperlinks.Count > 0)
+        // W11: 超链接完整列表
+        Assert.Equal(a.Hyperlinks.Count, b.Hyperlinks.Count);
+        for (var hi = 0; hi < a.Hyperlinks.Count; hi++)
         {
-            Assert.Equal(a.Hyperlinks.Count, b.Hyperlinks.Count);
-            for (var hi = 0; hi < a.Hyperlinks.Count; hi++)
-            {
-                Assert.Equal(a.Hyperlinks[hi].Item1, b.Hyperlinks[hi].Item1);
-                Assert.Equal(a.Hyperlinks[hi].Item2, b.Hyperlinks[hi].Item2);
-            }
+            Assert.Equal(a.Hyperlinks[hi].Item1, b.Hyperlinks[hi].Item1);
+            Assert.Equal(a.Hyperlinks[hi].Item2, b.Hyperlinks[hi].Item2);
         }
         // W11: 自定义XML部件
-        if (a.CustomXmlParts.Count > 0 && b.CustomXmlParts.Count > 0)
+        Assert.Equal(a.CustomXmlParts.Count, b.CustomXmlParts.Count);
+        foreach (var kv in a.CustomXmlParts)
         {
-            Assert.Equal(a.CustomXmlParts.Count, b.CustomXmlParts.Count);
-            foreach (var kv in a.CustomXmlParts)
-            {
-                Assert.True(b.CustomXmlParts.TryGetValue(kv.Key, out var bv),
-                    $"[{context}] 缺失 CustomXmlPart: {kv.Key}");
-                Assert.True(kv.Value.SequenceEqual(bv),
-                    $"[{context}] CustomXmlPart[{kv.Key}] 字节不一致");
-            }
+            Assert.True(b.CustomXmlParts.TryGetValue(kv.Key, out var bv),
+                $"[{context}] 缺失 CustomXmlPart: {kv.Key}");
+            Assert.True(kv.Value.SequenceEqual(bv),
+                $"[{context}] CustomXmlPart[{kv.Key}] 字节不一致");
         }
         // W06-15: 文档变量
-        if (a.DocumentVariables.Count > 0 && b.DocumentVariables.Count > 0)
+        Assert.Equal(a.DocumentVariables.Count, b.DocumentVariables.Count);
+        foreach (var kv in a.DocumentVariables)
         {
-            Assert.Equal(a.DocumentVariables.Count, b.DocumentVariables.Count);
-            foreach (var kv in a.DocumentVariables)
-            {
-                Assert.True(b.DocumentVariables.TryGetValue(kv.Key, out var bv),
-                    $"[{context}] 缺失 DocumentVariable: {kv.Key}");
-                Assert.Equal(kv.Value, bv);
-            }
+            Assert.True(b.DocumentVariables.TryGetValue(kv.Key, out var bv),
+                $"[{context}] 缺失 DocumentVariable: {kv.Key}");
+            Assert.Equal(kv.Value, bv);
+        }
+
+        // 各节：链接标志与节内独立页眉页脚内容（多节文档才比较）
+        Assert.Equal(a.Sections.Count, b.Sections.Count);
+        for (var si = 0; si < a.Sections.Count; si++)
+        {
+            var sa = a.Sections[si];
+            var sb = b.Sections[si];
+            Assert.True(sa.LinkHeadersToPrevious == sb.LinkHeadersToPrevious,
+                $"[{context}] 第{si + 1}节 页眉链接标志不一致: 源={sa.LinkHeadersToPrevious}, 输出={sb.LinkHeadersToPrevious}");
+            Assert.True(sa.LinkFootersToPrevious == sb.LinkFootersToPrevious,
+                $"[{context}] 第{si + 1}节 页脚链接标志不一致: 源={sa.LinkFootersToPrevious}, 输出={sb.LinkFootersToPrevious}");
+            AssertHdrFtrEqual(sa.Headers, sb.Headers, context, $"第{si + 1}节页眉");
+            AssertHdrFtrEqual(sa.Footers, sb.Footers, context, $"第{si + 1}节页脚");
         }
 
         // ★ 最严格的断言：document.xml 原文完全一致——保证任何视觉效果都不丢失
@@ -551,6 +554,49 @@ public class WordRoundTripTests : IntegrationTestBase
             Assert.True(kv.Value.SequenceEqual(bBytes),
                 $"[{context}] OtherParts[{kv.Key}] 字节内容不一致（应原样透传）");
         }
+    }
+
+    /// <summary>W11/W14: 页眉页脚列表逐项对比（类型 + 内容文本），不做"双方都有才算"的宽松跳过</summary>
+    private static void AssertHdrFtrEqual<T>(List<T> a, List<T> b, String context, String name) where T : class
+    {
+        Assert.True(a.Count == b.Count, $"[{context}] {name}数量不匹配: 源={a.Count}, 输出={b.Count}");
+
+        for (var i = 0; i < a.Count; i++)
+        {
+            var (typeA, elemsA) = Extract(a[i]);
+            var (typeB, elemsB) = Extract(b[i]);
+            Assert.True(typeA == typeB, $"[{context}] {name}[{i}] 类型不匹配: 源={typeA}, 输出={typeB}");
+
+            var textA = String.Join("|", elemsA.Select(BuildElementText));
+            var textB = String.Join("|", elemsB.Select(BuildElementText));
+            Assert.True(textA == textB, $"[{context}] {name}[{i}] 内容不匹配: 源=[{textA}], 输出=[{textB}]");
+        }
+
+        static (String?, List<Element>) Extract(T item) => item switch
+        {
+            Header h => (h.Type, h.Elements),
+            Footer f => (f.Type, f.Elements),
+            _ => (null, []),
+        };
+    }
+
+    /// <summary>提取元素可见文本（段落 Run 拼接，表格单元格递归）</summary>
+    private static String BuildElementText(Element el)
+    {
+        if (el.Paragraph != null) return String.Join("", el.Paragraph.Runs.Select(e => e.Text ?? ""));
+
+        var table = el.Table;
+        if (table != null)
+        {
+            var cells = new List<String>();
+            foreach (var row in table.Rows)
+                foreach (var cell in row.Cells)
+                    foreach (var para in cell.Paragraphs)
+                        cells.Add(String.Join("", para.Runs.Select(e => e.Text ?? "")));
+            return String.Join(",", cells);
+        }
+
+        return "";
     }
 
     /// <summary>W15: 编号定义模型级对比（Numbering.Levels 逐级属性）</summary>
@@ -626,18 +672,15 @@ public class WordRoundTripTests : IntegrationTestBase
             Assert.Equal(a.IsOrderedList, b.IsOrderedList);
         if (a.ListLevel > 0 || b.ListLevel > 0)
             Assert.Equal(a.ListLevel, b.ListLevel);
-        if (a.ListStartOverride != null && b.ListStartOverride != null)
-            Assert.Equal(a.ListStartOverride, b.ListStartOverride);
+        Assert.Equal(a.ListStartOverride, b.ListStartOverride);
         if (a.KeepNext || b.KeepNext)
             Assert.Equal(a.KeepNext, b.KeepNext);
         if (a.KeepLines || b.KeepLines)
             Assert.Equal(a.KeepLines, b.KeepLines);
         if (!a.WidowControl || !b.WidowControl)
             Assert.Equal(a.WidowControl, b.WidowControl);
-        if (a.DropCapLines != null && b.DropCapLines != null)
-            Assert.Equal(a.DropCapLines, b.DropCapLines);
-        if (a.DropCapChars != null && b.DropCapChars != null)
-            Assert.Equal(a.DropCapChars, b.DropCapChars);
+        Assert.Equal(a.DropCapLines, b.DropCapLines);
+        Assert.Equal(a.DropCapChars, b.DropCapChars);
 
         // W09: 制表位比较
         if (a.TabStops != null || b.TabStops != null)
@@ -727,19 +770,14 @@ public class WordRoundTripTests : IntegrationTestBase
             // W09: 字符缩放
             Assert.True(arp.CharacterScaling == brp.CharacterScaling,
                 $"[{context}] 段落[{idx}] Run[{ri}] 字符缩放不匹配: 源={arp.CharacterScaling}, 输出={brp.CharacterScaling}");
-            // W07: 发光/阴影（双方都有值时才比较）
-            if (arp.GlowColor != null && brp.GlowColor != null)
-                Assert.True(arp.GlowColor == brp.GlowColor,
-                    $"[{context}] 段落[{idx}] Run[{ri}] 发光颜色不匹配");
-            if (arp.GlowSize != null && brp.GlowSize != null)
-                Assert.Equal(arp.GlowSize, brp.GlowSize);
-            if (arp.ShadowColor != null && brp.ShadowColor != null)
-                Assert.True(arp.ShadowColor == brp.ShadowColor,
-                    $"[{context}] 段落[{idx}] Run[{ri}] 阴影颜色不匹配");
-            if (arp.ShadowOffsetX != null && brp.ShadowOffsetX != null)
-                Assert.Equal(arp.ShadowOffsetX, brp.ShadowOffsetX);
-            if (arp.ShadowOffsetY != null && brp.ShadowOffsetY != null)
-                Assert.Equal(arp.ShadowOffsetY, brp.ShadowOffsetY);
+            // W07: 发光/阴影（可空属性同样严格比较，null 对 null 通过）
+            Assert.True(arp.GlowColor == brp.GlowColor,
+                $"[{context}] 段落[{idx}] Run[{ri}] 发光颜色不匹配: 源={arp.GlowColor}, 输出={brp.GlowColor}");
+            Assert.Equal(arp.GlowSize, brp.GlowSize);
+            Assert.True(arp.ShadowColor == brp.ShadowColor,
+                $"[{context}] 段落[{idx}] Run[{ri}] 阴影颜色不匹配: 源={arp.ShadowColor}, 输出={brp.ShadowColor}");
+            Assert.Equal(arp.ShadowOffsetX, brp.ShadowOffsetX);
+            Assert.Equal(arp.ShadowOffsetY, brp.ShadowOffsetY);
         }
     }
 
@@ -789,13 +827,10 @@ public class WordRoundTripTests : IntegrationTestBase
 
                 Assert.True(aCell.BackgroundColor == bCell.BackgroundColor,
                     $"[{context}] 表格[{idx}] 单元格[{ri},{ci}] 背景色不匹配");
-                // W09: 单元格合并/垂直对齐（双方都有非默认值时才比较）
-                if (aCell.ColSpan > 1 || bCell.ColSpan > 1)
-                    Assert.Equal(aCell.ColSpan, bCell.ColSpan);
-                if (aCell.RowSpan > 1 || bCell.RowSpan > 1)
-                    Assert.Equal(aCell.RowSpan, bCell.RowSpan);
-                if (aCell.VerticalAlignment != null && bCell.VerticalAlignment != null)
-                    Assert.Equal(aCell.VerticalAlignment, bCell.VerticalAlignment);
+                // W09: 单元格合并/垂直对齐（可空/默认值同样严格比较）
+                Assert.Equal(aCell.ColSpan, bCell.ColSpan);
+                Assert.Equal(aCell.RowSpan, bCell.RowSpan);
+                Assert.Equal(aCell.VerticalAlignment, bCell.VerticalAlignment);
             }
         }
 
@@ -819,12 +854,13 @@ public class WordRoundTripTests : IntegrationTestBase
             $"[{context}] 图片[{idx}] 扩展名不匹配: 源={ai.Extension}, 输出={bi.Extension}");
         Assert.Equal(ai.WidthEmu, bi.WidthEmu);
         Assert.Equal(ai.HeightEmu, bi.HeightEmu);
-        // W12: 图片关系 ID（双方都有值时比较）
-        if (ai.RelId != null && bi.RelId != null)
-            Assert.True(ai.RelId == bi.RelId,
-                $"[{context}] 图片[{idx}] RelId 不匹配: 源={ai.RelId}, 输出={bi.RelId}");
-        // 图片数据逐字节比较
-        if (ai.ImageData.Length > 0 && bi.ImageData.Length > 0)
+        // W12: 图片关系 ID / 矢量标记 / 浮动定位（双向往返后应完全一致）
+        Assert.Equal(ai.RelId, bi.RelId);
+        Assert.Equal(ai.IsSvg, bi.IsSvg);
+        Assert.Equal(ai.AnchorType, bi.AnchorType);
+        Assert.Equal(ai.Wrap, bi.Wrap);
+        // 图片数据逐字节比较（读取时已把字节填入 Image.ImageData，任何一方有数据就比）
+        if (ai.ImageData.Length > 0 || bi.ImageData.Length > 0)
         {
             Assert.Equal(ai.ImageData.Length, bi.ImageData.Length);
             if (!ai.ImageData.AsSpan().SequenceEqual(bi.ImageData))

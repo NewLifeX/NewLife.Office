@@ -146,7 +146,11 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.Equal(src.BackgroundColor ?? "", dst.BackgroundColor ?? "");
         Assert.Equal(src.HyperlinkUrl ?? "", dst.HyperlinkUrl ?? "");
         Assert.Equal(src.AutoFit, dst.AutoFit);
-        // AltText/TextDirection/TextAutoFit/Role: Reader 可能未正确回读，暂不比较
+        // P7: 扩展文本属性（Reader 已回读 altText/vert/autoFit）
+        Assert.Equal(src.AltText ?? "", dst.AltText ?? "");
+        Assert.Equal(src.TextDirection ?? "", dst.TextDirection ?? "");
+        Assert.Equal(src.TextAutoFit ?? "", dst.TextAutoFit ?? "");
+        // Role 是 LayoutEngine 的版面角色（不写入 pptx），因此不参与往返对比
     }
 
     /// <summary>验证文本框段落属性（行距/段前距）</summary>
@@ -225,9 +229,12 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.Equal(src.ComplexScriptFontName ?? "", dst.ComplexScriptFontName ?? "");
         Assert.Equal(src.SymbolFontName ?? "", dst.SymbolFontName ?? "");
 
-        // P8: 扩展属性（Reader 可能未回读部分属性，双方都有非默认值时才比较）
+        // P8: 扩展属性
         Assert.Equal(src.Id, dst.Id);
-        if (src.Rotation != 0 && dst.Rotation != 0)
+        Assert.Equal(src.AltText ?? "", dst.AltText ?? "");
+        Assert.Equal(src.TextDirection ?? "", dst.TextDirection ?? "");
+        Assert.Equal(src.TextAutoFit ?? "", dst.TextAutoFit ?? "");
+        if (src.Rotation != 0 || dst.Rotation != 0)
             Assert.Equal(src.Rotation, dst.Rotation);
         // 圆角以 adj 比率存储，往返存在 ≤2 EMU 的固有精度极限，按位置惯例用容差比较
         if (src.CornerRadius != 0 && dst.CornerRadius != 0)
@@ -268,13 +275,12 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.True(EmuClose(src.Height, dst.Height), $"{tag}.Height");
         // 完整逐字节比较图片数据
         AssertBytesEqual(src.Data, dst.Data, $"{tag}.Data");
-        // P9: 扩展属性（双方都有非空值时才比较）
-        if (src.RelId != null && dst.RelId != null)
-            Assert.Equal(src.RelId, dst.RelId);
+        // P9: 扩展属性
+        Assert.Equal(src.RelId ?? "", dst.RelId ?? "");
         Assert.Equal(src.IsSvg, dst.IsSvg);
-        if (src.Rotation != 0 && dst.Rotation != 0)
+        if (src.Rotation != 0 || dst.Rotation != 0)
             Assert.Equal(src.Rotation, dst.Rotation);
-        if (src.CornerRadius != 0 && dst.CornerRadius != 0)
+        if (src.CornerRadius != 0 || dst.CornerRadius != 0)
             Assert.Equal(src.CornerRadius, dst.CornerRadius);
     }
 
@@ -293,23 +299,17 @@ public class PptxRoundTripTests : IntegrationTestBase
             for (var ci = 0; ci < src.Rows[ri].Length; ci++)
                 Assert.Equal(src.Rows[ri][ci], dst.Rows[ri][ci]);
         }
-        // P10: 表格扩展属性（双方都有值时才比较—Reader 可能未回读）
-        if (src.MergedCells.Count > 0 && dst.MergedCells.Count > 0)
+        // P10: 表格扩展属性（无条件严格比较）
+        Assert.Equal(src.MergedCells.Count, dst.MergedCells.Count);
+        foreach (var kv in src.MergedCells)
         {
-            Assert.Equal(src.MergedCells.Count, dst.MergedCells.Count);
-            foreach (var kv in src.MergedCells)
-            {
-                Assert.True(dst.MergedCells.TryGetValue(kv.Key, out var dv), $"{tag}.MergedCells 缺失 ({kv.Key})");
-                Assert.Equal(kv.Value.ColSpan, dv.ColSpan);
-                Assert.Equal(kv.Value.RowSpan, dv.RowSpan);
-            }
+            Assert.True(dst.MergedCells.TryGetValue(kv.Key, out var dv), $"{tag}.MergedCells 缺失 ({kv.Key})");
+            Assert.Equal(kv.Value.ColSpan, dv.ColSpan);
+            Assert.Equal(kv.Value.RowSpan, dv.RowSpan);
         }
-        if (src.CellBorders.Count > 0 && dst.CellBorders.Count > 0)
-            Assert.Equal(src.CellBorders.Count, dst.CellBorders.Count);
-        if (src.TableStyleGuid != null && dst.TableStyleGuid != null)
-            Assert.Equal(src.TableStyleGuid, dst.TableStyleGuid);
-        if (src.CellStyles.Count > 0 && dst.CellStyles.Count > 0)
-            Assert.Equal(src.CellStyles.Count, dst.CellStyles.Count);
+        Assert.Equal(src.CellBorders.Count, dst.CellBorders.Count);
+        Assert.Equal(src.TableStyleGuid ?? "", dst.TableStyleGuid ?? "");
+        Assert.Equal(src.CellStyles.Count, dst.CellStyles.Count);
     }
 
     /// <summary>验证图表</summary>
@@ -383,11 +383,9 @@ public class PptxRoundTripTests : IntegrationTestBase
         Assert.Equal(srcThumb, dstThumb);
         if (src.ThumbnailData != null && dst.ThumbnailData != null)
             AssertBytesEqual(src.ThumbnailData, dst.ThumbnailData, $"{tag}.Thumb");
-        // P11: 视频扩展属性（双方都有非空值时才比较）
-        if (src.RelId != null && dst.RelId != null)
-            Assert.Equal(src.RelId, dst.RelId);
-        if (src.ThumbnailExtension != null && dst.ThumbnailExtension != null)
-            Assert.Equal(src.ThumbnailExtension, dst.ThumbnailExtension);
+        // P11: 视频扩展属性（RelId/缩略图扩展名严格比较；ThumbnailRelId 由写入端生成，保留条件比较）
+        Assert.Equal(src.RelId ?? "", dst.RelId ?? "");
+        Assert.Equal(src.ThumbnailExtension ?? "", dst.ThumbnailExtension ?? "");
         if (src.ThumbnailRelId != null && dst.ThumbnailRelId != null)
             Assert.Equal(src.ThumbnailRelId, dst.ThumbnailRelId);
     }
@@ -870,6 +868,8 @@ public class PptxRoundTripTests : IntegrationTestBase
                     newTb.Anchor = tb.Anchor;
                     newTb.Rotation = tb.Rotation;
                     newTb.AltText = tb.AltText;
+                    newTb.TextDirection = tb.TextDirection;
+                    newTb.TextAutoFit = tb.TextAutoFit;
 
                     if (tb.Paragraphs.Count > 0)
                     {
@@ -955,6 +955,8 @@ public class PptxRoundTripTests : IntegrationTestBase
                     newSp.DashStyle = sp.DashStyle;
                     newSp.CornerRadius = sp.CornerRadius;
                     newSp.AltText = sp.AltText;
+                    newSp.TextDirection = sp.TextDirection;
+                    newSp.TextAutoFit = sp.TextAutoFit;
                 }
 
                 foreach (var img in src.Images)
@@ -979,6 +981,9 @@ public class PptxRoundTripTests : IntegrationTestBase
                     newTbl.Height = tbl.Height;
                     if (tbl.ColWidths.Length > 0) newTbl.ColWidths = tbl.ColWidths;
                     foreach (var kv in tbl.CellStyles) newTbl.CellStyles[kv.Key] = kv.Value;
+                    foreach (var kv in tbl.MergedCells) newTbl.MergedCells[kv.Key] = kv.Value;
+                    foreach (var kv in tbl.CellBorders) newTbl.CellBorders[kv.Key] = kv.Value;
+                    newTbl.TableStyleGuid = tbl.TableStyleGuid;
                 }
 
                 foreach (var chart in src.Charts)

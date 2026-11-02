@@ -194,6 +194,17 @@ public class ExcelRoundTripTests
                 if (s.NumberFormat != null)
                     Assert.True((s.NumberFormat ?? "") == (d.NumberFormat ?? ""), $"{sp}: NumberFormat ({r},{c}) src={s.NumberFormat} dst={d.NumberFormat}");
                 Assert.True(s.Strike == d.Strike, $"{sp}: Strike ({r},{c})");
+                // E9: 四边独立边框 + 对角线（Reader 已回读 styles.xml 各边样式/颜色）
+                Assert.True(s.LeftBorder == d.LeftBorder, $"{sp}: LeftBorder ({r},{c}) src={s.LeftBorder} dst={d.LeftBorder}");
+                Assert.True((s.LeftBorderColor ?? "") == (d.LeftBorderColor ?? ""), $"{sp}: LeftBorderColor ({r},{c}) src={s.LeftBorderColor} dst={d.LeftBorderColor}");
+                Assert.True(s.RightBorder == d.RightBorder, $"{sp}: RightBorder ({r},{c}) src={s.RightBorder} dst={d.RightBorder}");
+                Assert.True((s.RightBorderColor ?? "") == (d.RightBorderColor ?? ""), $"{sp}: RightBorderColor ({r},{c}) src={s.RightBorderColor} dst={d.RightBorderColor}");
+                Assert.True(s.TopBorder == d.TopBorder, $"{sp}: TopBorder ({r},{c}) src={s.TopBorder} dst={d.TopBorder}");
+                Assert.True((s.TopBorderColor ?? "") == (d.TopBorderColor ?? ""), $"{sp}: TopBorderColor ({r},{c}) src={s.TopBorderColor} dst={d.TopBorderColor}");
+                Assert.True(s.BottomBorder == d.BottomBorder, $"{sp}: BottomBorder ({r},{c}) src={s.BottomBorder} dst={d.BottomBorder}");
+                Assert.True((s.BottomBorderColor ?? "") == (d.BottomBorderColor ?? ""), $"{sp}: BottomBorderColor ({r},{c}) src={s.BottomBorderColor} dst={d.BottomBorderColor}");
+                Assert.True(s.DiagonalBorder == d.DiagonalBorder, $"{sp}: DiagonalBorder ({r},{c}) src={s.DiagonalBorder} dst={d.DiagonalBorder}");
+                Assert.True((s.DiagonalBorderColor ?? "") == (d.DiagonalBorderColor ?? ""), $"{sp}: DiagonalBorderColor ({r},{c}) src={s.DiagonalBorderColor} dst={d.DiagonalBorderColor}");
 
                 // E15: 单元格富文本 run 逐段深度比较
                 var srcRuns = s.RichTextRuns;
@@ -335,15 +346,12 @@ public class ExcelRoundTripTests
                 Assert.Equal(kv.Value.Visible, dc.Visible);
             }
 
-            // 公式（双方都有数据时比较）
-            if (src.Formulas.Count > 0 && dst.Formulas.Count > 0)
+            // 公式（无条件比较）
+            Assert.Equal(src.Formulas.Count, dst.Formulas.Count);
+            foreach (var kv in src.Formulas)
             {
-                Assert.Equal(src.Formulas.Count, dst.Formulas.Count);
-                foreach (var kv in src.Formulas)
-                {
-                    Assert.True(dst.Formulas.TryGetValue(kv.Key, out var dv), $"{sp}: 缺失公式 ({kv.Key})");
-                    Assert.Equal(kv.Value, dv);
-                }
+                Assert.True(dst.Formulas.TryGetValue(kv.Key, out var dv), $"{sp}: 缺失公式 ({kv.Key})");
+                Assert.Equal(kv.Value, dv);
             }
 
             // 数据验证（逐项比较详细属性）
@@ -357,6 +365,10 @@ public class ExcelRoundTripTests
                 Assert.Equal(sv.Operator, dv.Operator);
                 Assert.Equal(sv.Formula1 ?? "", dv.Formula1 ?? "");
                 Assert.Equal(sv.Formula2 ?? "", dv.Formula2 ?? "");
+                // E11: 下拉项列表（Reader 从 Formula1 拆分，逐项对比）
+                Assert.Equal((sv.Items ?? []).Length, (dv.Items ?? []).Length);
+                for (var ii = 0; ii < (sv.Items ?? []).Length; ii++)
+                    Assert.Equal(sv.Items![ii], dv.Items![ii]);
             }
 
             // 图表（数量+类型+标题+系列数据+位置）
@@ -383,24 +395,22 @@ public class ExcelRoundTripTests
                 Assert.Equal(sc.HeightPx, dc.HeightPx);
             }
 
-            // E14/E18: 结构化表格（双方都有数据时比较）
-            if (src.Tables.Count > 0 && dst.Tables.Count > 0)
+            // E14/E18: 结构化表格（无条件逐项比较）
+            Assert.Equal(src.Tables.Count, dst.Tables.Count);
+            for (var ti = 0; ti < src.Tables.Count; ti++)
             {
-                Assert.Equal(src.Tables.Count, dst.Tables.Count);
-                for (var ti = 0; ti < src.Tables.Count; ti++)
-                {
-                    Assert.Equal(src.Tables[ti].Name, dst.Tables[ti].Name);
-                    Assert.Equal(src.Tables[ti].Range, dst.Tables[ti].Range);
-                }
+                Assert.Equal(src.Tables[ti].Name, dst.Tables[ti].Name);
+                Assert.Equal(src.Tables[ti].Range, dst.Tables[ti].Range);
             }
-            // E16: 迷你图组（双方都有数据时比较）
-            if (src.SparklineGroups.Count > 0 && dst.SparklineGroups.Count > 0)
-                Assert.Equal(src.SparklineGroups.Count, dst.SparklineGroups.Count);
+            // E16: 迷你图组（无条件比较数量）
+            Assert.Equal(src.SparklineGroups.Count, dst.SparklineGroups.Count);
         }
 
-        // E19: 默认字体（双方都有数据时比较）
-        if (expected.DefaultFont != null && actual.DefaultFont != null)
+        // E19: 默认字体（无条件比较）
+        if (expected.DefaultFont != null || actual.DefaultFont != null)
         {
+            Assert.NotNull(expected.DefaultFont);
+            Assert.NotNull(actual.DefaultFont);
             Assert.Equal(expected.DefaultFont.Name, actual.DefaultFont.Name);
             Assert.True(Math.Abs(expected.DefaultFont.Size - actual.DefaultFont.Size) < 0.5,
                 $"DefaultFont Size: {expected.DefaultFont.Size} vs {actual.DefaultFont.Size}");

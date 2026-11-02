@@ -374,25 +374,19 @@ public class PdfRoundTripTests : IntegrationTestBase
                 }
             }
 
-            // D5: 页面扩展属性（双方都有数据时比较）
-            if (sp.ContentBytes.Length > 0 && dp.ContentBytes.Length > 0)
-                Assert.Equal(sp.ContentBytes.Length, dp.ContentBytes.Length);
-            if (sp.Images.Count > 0 && dp.Images.Count > 0)
-                Assert.Equal(sp.Images.Count, dp.Images.Count);
-            if (sp.LinkAnnotations.Count > 0 && dp.LinkAnnotations.Count > 0)
+            // D5: 页面扩展属性
+            // ContentBytes 长度不做严格比较：PDF 重建后内容流会被压缩/重排，长度必然变化（D2 已按字符多重集校验）
+            Assert.Equal(sp.Images.Count, dp.Images.Count);
+            Assert.Equal(sp.LinkAnnotations.Count, dp.LinkAnnotations.Count);
+            for (var li = 0; li < sp.LinkAnnotations.Count; li++)
             {
-                Assert.Equal(sp.LinkAnnotations.Count, dp.LinkAnnotations.Count);
-                for (var li = 0; li < sp.LinkAnnotations.Count; li++)
-                {
-                    Assert.True(Math.Abs(sp.LinkAnnotations[li].X - dp.LinkAnnotations[li].X) <= 1f,
-                        $"{pt}.LinkAnnot[{li}] X");
-                    Assert.True(Math.Abs(sp.LinkAnnotations[li].Y - dp.LinkAnnotations[li].Y) <= 1f,
-                        $"{pt}.LinkAnnot[{li}] Y");
-                    Assert.Equal(sp.LinkAnnotations[li].Url ?? "", dp.LinkAnnotations[li].Url ?? "");
-                }
+                Assert.True(Math.Abs(sp.LinkAnnotations[li].X - dp.LinkAnnotations[li].X) <= 1f,
+                    $"{pt}.LinkAnnot[{li}] X");
+                Assert.True(Math.Abs(sp.LinkAnnotations[li].Y - dp.LinkAnnotations[li].Y) <= 1f,
+                    $"{pt}.LinkAnnot[{li}] Y");
+                Assert.Equal(sp.LinkAnnotations[li].Url ?? "", dp.LinkAnnotations[li].Url ?? "");
             }
-            if (sp.ExtGStates.Count > 0 && dp.ExtGStates.Count > 0)
-                Assert.Equal(sp.ExtGStates.Count, dp.ExtGStates.Count);
+            Assert.Equal(sp.ExtGStates.Count, dp.ExtGStates.Count);
         }
 
         // ③ 文本内容
