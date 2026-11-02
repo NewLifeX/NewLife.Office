@@ -77,11 +77,7 @@ public static class WordDocumentExtensions
         var comparer = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
         // 脚注/尾注是独立部件，命中它们不影响正文；用于区分“仅部件修改”与“正文修改”
-        var noteParagraphs = new HashSet<Paragraph>();
-        foreach (var fn in doc.Footnotes)
-            foreach (var p in fn.Paragraphs) noteParagraphs.Add(p);
-        foreach (var en in doc.Endnotes)
-            foreach (var p in en.Paragraphs) noteParagraphs.Add(p);
+        var noteParagraphs = CollectNoteParagraphs(doc);
 
         var count = 0;
         var bodyCount = 0;
@@ -172,6 +168,67 @@ public static class WordDocumentExtensions
     private static Boolean IsWordChar(Char c) => Char.IsLetterOrDigit(c) || c == '_';
     #endregion
 
+    #region 正则查找替换
+    /// <summary>按正则表达式查找文本（跨 Run 匹配），返回所有匹配位置</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="pattern">正则表达式</param>
+    /// <param name="options">正则选项（如 <see cref="System.Text.RegularExpressions.RegexOptions.IgnoreCase"/>）</param>
+    /// <returns>匹配结果列表（段落 + 偏移 + 长度 + 匹配文本）</returns>
+    public static List<TextMatch> FindRegex(this Document doc, String pattern, System.Text.RegularExpressions.RegexOptions options = System.Text.RegularExpressions.RegexOptions.None)
+    {
+        var matches = new List<TextMatch>();
+        if (String.IsNullOrEmpty(pattern)) return matches;
+
+        var regex = new System.Text.RegularExpressions.Regex(pattern, options);
+        foreach (var para in EnumerateParagraphs(doc))
+        {
+            var text = FlattenRuns(para, out _);
+            foreach (System.Text.RegularExpressions.Match m in regex.Matches(text))
+                matches.Add(new TextMatch(para, m.Index, m.Length, m.Value));
+        }
+        return matches;
+    }
+
+    /// <summary>按正则表达式替换文本（跨 Run，保留首 Run 格式），返回替换次数</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="pattern">正则表达式</param>
+    /// <param name="replacement">替换文本，支持 <c>$1</c> 等分组引用</param>
+    /// <param name="options">正则选项</param>
+    /// <returns>替换次数</returns>
+    public static Int32 ReplaceRegex(this Document doc, String pattern, String replacement, System.Text.RegularExpressions.RegexOptions options = System.Text.RegularExpressions.RegexOptions.None)
+    {
+        if (String.IsNullOrEmpty(pattern)) return 0;
+
+        var regex = new System.Text.RegularExpressions.Regex(pattern, options);
+        var noteParagraphs = CollectNoteParagraphs(doc);
+        var count = 0;
+        var bodyCount = 0;
+        foreach (var para in EnumerateParagraphs(doc))
+        {
+            var text = FlattenRuns(para, out var boundaries);
+            var ms = regex.Matches(text);
+            if (ms.Count == 0) continue;
+
+            // 从后往前替换，保持偏移有效
+            for (var i = ms.Count - 1; i >= 0; i--)
+            {
+                var m = ms[i];
+                ReplaceRange(para, boundaries, m.Index, m.Index + m.Length, m.Result(replacement));
+            }
+            count += ms.Count;
+            if (!noteParagraphs.Contains(para)) bodyCount += ms.Count;
+        }
+
+        if (count > 0)
+        {
+            SyncTextBoxesRawXml(doc);
+            SyncNotesXml(doc);
+            doc.MarkModified(bodyCount > 0);
+        }
+        return count;
+    }
+    #endregion
+
     #region 辅助
     /// <summary>扁平化段落 Run 文本，输出每个 Run 在扁平文本中的起始偏移</summary>
     private static String FlattenRuns(Paragraph para, out Int32[] boundaries)
@@ -196,7 +253,22 @@ public static class WordDocumentExtensions
         return -1;
     }
 
+    /// <summary>收集脚注/尾注段落（位于独立部件，修改它们不影响正文）</summary>
+    /// <param name="doc">文档</param>
+    /// <returns>脚注与尾注段落集合</returns>
+    private static HashSet<Paragraph> CollectNoteParagraphs(Document doc)
+    {
+        var set = new HashSet<Paragraph>();
+        foreach (var fn in doc.Footnotes)
+            foreach (var p in fn.Paragraphs) set.Add(p);
+        foreach (var en in doc.Endnotes)
+            foreach (var p in en.Paragraphs) set.Add(p);
+        return set;
+    }
+
     /// <summary>枚举文档中所有可替换的段落（正文/表格单元格/页眉页脚/文本框/脚注/尾注）</summary>
+    /// <param name="doc">文档</param>
+    /// <returns>段落序列</returns>
     private static IEnumerable<Paragraph> EnumerateParagraphs(Document doc)
     {
         foreach (var el in doc.Elements)
