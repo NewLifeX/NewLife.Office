@@ -75,6 +75,165 @@ partial class ExcelWriter
         return id;
     }
 
+    /// <summary>把 SetCellFormat 的单元格样式覆盖应用到已生成的行 XML</summary>
+    /// <remarks>
+    /// 行 XML 在 WriteRows/WriteHeader 时就已固化，因此"先写数据、后调 SetCellFormat"必须在这里补写样式；
+    /// 该方法须在 styles.xml 写出之前调用，新增的 XF 才会进入 cellXfs。
+    /// </remarks>
+    private void PrepareCellFormatOverrides()
+    {
+        if (_cellFormatOverrides.Count == 0) return;
+
+        foreach (var kv in _sheetRows)
+        {
+            if (!_cellFormatOverrides.TryGetValue(kv.Key, out var dict) || dict.Count == 0) continue;
+
+            var rows = kv.Value;
+            var rowNums = rows.Select(ReadRowNumber).ToArray();
+
+            // 逐行应用：缺失的行（指向尚未写入的行号）按行号顺序补一个空行，再由 ApplyCellOverrides 补单元格
+            foreach (var rowNum in dict.Keys.Select(e => e.Row + 1).Distinct().OrderBy(e => e))
+            {
+                var idx = Array.IndexOf(rowNums, rowNum);
+                if (idx < 0)
+                {
+                    var insertAt = rows.Count;
+                    for (var i = 0; i < rowNums.Length; i++)
+                    {
+                        if (rowNums[i] > rowNum) { insertAt = i; break; }
+                    }
+                    rows.Insert(insertAt, $"<row r=\"{rowNum}\"></row>");
+                    rowNums = rows.Select(ReadRowNumber).ToArray();
+                    idx = insertAt;
+                }
+                rows[idx] = ApplyCellOverrides(rows[idx], dict);
+            }
+        }
+    }
+
+    /// <summary>读取行 XML 的行号（1基），解析失败返回 0</summary>
+    /// <param name="rowXml">行 XML</param>
+    /// <returns>行号</returns>
+    private static Int32 ReadRowNumber(String rowXml)
+    {
+        var p = rowXml.IndexOf("<row r=\"", StringComparison.Ordinal);
+        if (p < 0) return 0;
+        var s = p + 8;
+        var e = rowXml.IndexOf('"', s);
+        if (e < 0) return 0;
+        return rowXml.Substring(s, e - s).ToInt();
+    }
+
+    /// <summary>把某一行的所有单元格样式覆盖写进行 XML</summary>
+    /// <param name="rowXml">原始行 XML</param>
+    /// <param name="dict">单元格（0基行列）到样式的映射</param>
+    /// <returns>应用覆盖后的行 XML</returns>
+    private String ApplyCellOverrides(String rowXml, Dictionary<(Int32 Row, Int32 Col), CellFormat> dict)
+    {
+        // 行号以行 XML 为准（写入时可能因 AdvanceToRow 跳行，索引与行号并不总是相等）
+        var p = rowXml.IndexOf("<row r=\"", StringComparison.Ordinal);
+        if (p < 0) return rowXml;
+        var s = p + 8;
+        var e = rowXml.IndexOf('"', s);
+        if (e < 0) return rowXml;
+        var rowNum = rowXml.Substring(s, e - s).ToInt();
+        if (rowNum <= 0) return rowXml;
+        var row0 = rowNum - 1;
+
+        var hits = dict.Where(item => item.Key.Row == row0).OrderBy(item => item.Key.Col).ToList();
+        if (hits.Count == 0) return rowXml;
+
+        var xml = rowXml;
+        foreach (var kv in hits)
+            xml = ApplyOneCell(xml, MakeCellRef(row0, kv.Key.Col), kv.Key.Col, kv.Value);
+        return xml;
+    }
+
+    /// <summary>把单个单元格的样式覆盖写入行 XML（已有单元格改 s 属性，缺失单元格按列序补空单元格）</summary>
+    /// <param name="rowXml">行 XML</param>
+    /// <param name="cellRef">单元格引用（如 A1）</param>
+    /// <param name="col">列号（0基）</param>
+    /// <param name="style">目标样式</param>
+    /// <returns>处理后的行 XML</returns>
+    private String ApplyOneCell(String rowXml, String cellRef, Int32 col, CellFormat style)
+    {
+        var marker = "<c r=\"" + cellRef + "\"";
+        var idx = rowXml.IndexOf(marker, StringComparison.Ordinal);
+        if (idx >= 0)
+        {
+            var tagEnd = rowXml.IndexOf('>', idx);
+            if (tagEnd < 0) return rowXml;
+
+            // 沿用原有样式里的数字格式，避免日期/百分比被覆盖成常规
+            var numFmtId = (Int32)NumFmtStyle.General;
+            var oldS = ReadIntAttr(rowXml.Substring(idx, tagEnd - idx + 1), "s");
+            if (oldS >= 0 && oldS < _xfEntries.Count) numFmtId = _xfEntries[oldS].NumFmtId;
+            if (!style.NumberFormat.IsNullOrEmpty()) numFmtId = GetOrCreateNumFmt(style.NumberFormat!);
+
+            var newIdx = GetOrCreateXf(style, numFmtId);
+            var tag = rowXml.Substring(idx, tagEnd - idx + 1);
+            var newTag = oldS >= 0 ? ReplaceIntAttr(tag, "s", newIdx) : tag.Insert(marker.Length, $" s=\"{newIdx}\"");
+            return rowXml.Substring(0, idx) + newTag + rowXml.Substring(tagEnd + 1);
+        }
+
+        // 单元格不存在（值为空且写入时被跳过）：补一个带样式的空单元格，并按列序插入
+        var fmt = style.NumberFormat.IsNullOrEmpty() ? (Int32)NumFmtStyle.General : GetOrCreateNumFmt(style.NumberFormat!);
+        var sIdx = GetOrCreateXf(style, fmt);
+        var newCell = $"<c r=\"{cellRef}\" s=\"{sIdx}\"/>";
+
+        var rowClose = rowXml.LastIndexOf("</row>", StringComparison.Ordinal);
+        if (rowClose < 0) return rowXml;
+
+        var insertAt = rowClose;
+        var search = 0;
+        while (true)
+        {
+            var c = rowXml.IndexOf("<c r=\"", search, StringComparison.Ordinal);
+            if (c < 0 || c >= rowClose) break;
+            var cs = c + 6;
+            var ce = rowXml.IndexOf('"', cs);
+            if (ce < 0) break;
+            if (ParseCellRef(rowXml.Substring(cs, ce - cs)).Col > col)
+            {
+                insertAt = c;
+                break;
+            }
+            search = ce;
+        }
+        return rowXml.Substring(0, insertAt) + newCell + rowXml.Substring(insertAt);
+    }
+
+    /// <summary>读取标签中的整数属性值，不存在返回 -1</summary>
+    /// <param name="tag">XML 标签文本</param>
+    /// <param name="name">属性名</param>
+    /// <returns>属性值，缺失或非法时返回 -1</returns>
+    private static Int32 ReadIntAttr(String tag, String name)
+    {
+        var key = " " + name + "=\"";
+        var i = tag.IndexOf(key, StringComparison.Ordinal);
+        if (i < 0) return -1;
+        var s = i + key.Length;
+        var e = tag.IndexOf('"', s);
+        if (e < 0) return -1;
+        return tag.Substring(s, e - s).ToInt(-1);
+    }
+
+    /// <summary>替换标签中的整数属性值</summary>
+    /// <param name="tag">XML 标签文本</param>
+    /// <param name="name">属性名</param>
+    /// <param name="value">新值</param>
+    /// <returns>替换后的标签</returns>
+    private static String ReplaceIntAttr(String tag, String name, Int32 value)
+    {
+        var key = " " + name + "=\"";
+        var i = tag.IndexOf(key, StringComparison.Ordinal);
+        if (i < 0) return tag;
+        var s = i + key.Length;
+        var e = tag.IndexOf('"', s);
+        if (e < 0) return tag;
+        return tag.Substring(0, s) + value + tag.Substring(e);
+    }
+
     private static Int32 FindOrAdd<T>(List<T> list, T item) where T : notnull
     {
         for (var i = 0; i < list.Count; i++)
@@ -509,6 +668,9 @@ partial class ExcelWriter
         var globalChartId = 0; // 全局图表编号（1基）
 
         using var za = new ZipArchive(target, ZipArchiveMode.Create, leaveOpen: Stream != null, entryNameEncoding: Encoding);
+
+        // 单元格样式覆盖必须在此应用：styles.xml 稍后写出，新增 XF 才能进入 cellXfs
+        PrepareCellFormatOverrides();
 
         // docProps/core.xml (document properties)
         var props = DocumentProperties;
