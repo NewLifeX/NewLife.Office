@@ -623,6 +623,12 @@ public class WordWriter : IDisposable
     /// <summary>保存文档模型到流</summary>
     public void Save(Stream stream, Document document)
     {
+        if (document == null) throw new ArgumentNullException(nameof(document));
+
+        // 保存前自检：正文模型已修改但 document.xml 透传仍开启，说明修改会被静默覆盖
+        if (document.DocumentXml != null && document.BodyModified)
+            throw new InvalidOperationException(L.T("Document body was modified, but DocumentXml passthrough is still enabled so the changes would be discarded. Call Document.BeginEdit() before editing, or set DocumentXml = null before saving."));
+
         _elements.Clear(); _imageRels.Clear(); _hyperlinkRels.Clear();
         _relCounter = 1; _imgCounter = 1; _bookmarkId = 1;
         _orderedStartOverrides.Clear();
@@ -1633,6 +1639,9 @@ public class WordWriter : IDisposable
                     sb.Append(el.RawXml);
                 else if (el.Sdt != null)
                     BuildSdtXml(sb, el.Sdt);
+                break;
+            case ElementType.Unknown:
+                // 未建模元素只能靠 RawXml 输出；为 null 表示无法还原（已被 ClearRawXml 清理），跳过
                 break;
         }
     }

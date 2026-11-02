@@ -75,14 +75,30 @@ public static class WordDocumentExtensions
     {
         if (String.IsNullOrEmpty(find)) return 0;
         var comparer = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+
+        // 脚注/尾注是独立部件，命中它们不影响正文；用于区分“仅部件修改”与“正文修改”
+        var noteParagraphs = new HashSet<Paragraph>();
+        foreach (var fn in doc.Footnotes)
+            foreach (var p in fn.Paragraphs) noteParagraphs.Add(p);
+        foreach (var en in doc.Endnotes)
+            foreach (var p in en.Paragraphs) noteParagraphs.Add(p);
+
         var count = 0;
+        var bodyCount = 0;
         foreach (var para in EnumerateParagraphs(doc))
-            count += ReplaceInParagraph(para, find, replace, comparer, wholeWord);
+        {
+            var n = ReplaceInParagraph(para, find, replace, comparer, wholeWord);
+            if (n == 0) continue;
+            count += n;
+            if (!noteParagraphs.Contains(para)) bodyCount += n;
+        }
         // 文本框/脚注/尾注替换后同步对应原始 XML 部件，保证保存时修改生效
         if (count > 0)
         {
             SyncTextBoxesRawXml(doc);
             SyncNotesXml(doc);
+            // 标记模型已修改，保存前自检可拦截“改了但被 document.xml 透传覆盖”的静默失败
+            doc.MarkModified(bodyCount > 0);
         }
         return count;
     }
@@ -274,6 +290,14 @@ public static class WordDocumentExtensions
     /// 解决"读入→通过模型修改→写回"时 RawXml 兜底覆盖模型修改的问题。
     /// </summary>
     /// <param name="doc">文档</param>
+    /// <param name="keepUnknown">
+    /// 是否保留未建模元素（<see cref="ElementType.Unknown"/>）的原始 XML，默认 false。
+    /// 这些元素没有模型可重建，保留它们才能在重建 document.xml 时不丢内容；
+    /// 由 <see cref="Document.BeginEdit"/> 以 true 调用。
+    /// </param>
+    /// <remarks>
+    /// 推荐直接用 <see cref="Document.BeginEdit"/> 代替本方法与 <c>DocumentXml = null</c> 的手工组合。
+    /// </remarks>
     /// <example>
     /// <code>
     /// var doc = reader.ReadDocument();
@@ -283,12 +307,14 @@ public static class WordDocumentExtensions
     /// writer.Save("output.docx", doc);
     /// </code>
     /// </example>
-    public static void ClearRawXml(this Document doc)
+    public static void ClearRawXml(this Document doc, Boolean keepUnknown = false)
     {
         void Clear(List<Element> list)
         {
             foreach (var el in list)
             {
+                // 未建模元素没有模型可重建，清掉 RawXml 等于删除内容
+                if (keepUnknown && el.Type == ElementType.Unknown) continue;
                 el.RawXml = null;
                 if (el.Paragraph != null)
                 {

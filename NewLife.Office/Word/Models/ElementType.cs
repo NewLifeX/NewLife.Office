@@ -15,4 +15,9 @@ public enum ElementType
     Shape,
     /// <summary>图表（W13）</summary>
     Chart,
+    /// <summary>
+    /// 未建模的元素。Reader 遇到无法解析的 body 级子元素（域、批注锚点、扩展块等）时原样收入，
+    /// Writer 直接输出其 <see cref="Element.RawXml"/>，保证「读入→修改→保存」不丢内容。
+    /// </summary>
+    Unknown,
 }

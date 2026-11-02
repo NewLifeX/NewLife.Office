@@ -117,6 +117,77 @@ public class Document
 
     /// <summary>文档变量（settings.xml w:docVars），Key=变量名 Value=变量值，用于企业模板元数据驱动</summary>
     public Dictionary<String, String> DocumentVariables { get; set; } = [];
+
+    /// <summary>是否处于编辑模式。由 <see cref="BeginEdit"/> 置位，表示已关闭 RawXml 兜底、模型修改会真正写入文件</summary>
+    public Boolean IsEditing { get; private set; }
+
+    /// <summary>
+    /// 模型修改计数。编辑 API（替换文本、增删段落/表格等）每次修改递增。
+    /// 配合 <see cref="WordWriter.Save(String, Document)"/> 的保存前自检：
+    /// 计数大于 0 但 <see cref="DocumentXml"/> 仍非空时直接抛异常，避免修改被透传静默丢弃。
+    /// </summary>
+    public Int32 ModelRevision { get; internal set; }
+
+    /// <summary>编辑诊断信息。由 <see cref="BeginEdit"/> 收集，如“N 个段落含域/图形等未建模内容，重建后可能丢失”</summary>
+    public List<String> EditWarnings { get; } = [];
+
+    /// <summary>
+    /// 正文（word/document.xml）模型是否被修改过。
+    /// 透传模式下只有正文修改会丢失（页眉页脚/脚注等独立部件仍会同步），保存前据此自检。
+    /// </summary>
+    public Boolean BodyModified { get; internal set; }
+    #endregion
+
+    #region 编辑
+    /// <summary>进入编辑模式：关闭 document.xml 全文透传与元素级 RawXml 兜底，使模型修改真正写入文件</summary>
+    /// <param name="keepUnknown">
+    /// 是否保留未建模元素（<see cref="ElementType.Unknown"/>）的原始 XML，默认 true。
+    /// 这些元素没有模型可以重建，清理 RawXml 等于删除它们，因此默认保留。
+    /// </param>
+    /// <remarks>
+    /// 本方法是「读入 → 修改 → 保存」的唯一推荐入口，等价于
+    /// <c>DocumentXml = null; ClearRawXml();</c>，额外提供编辑态标记与诊断信息。
+    /// <para>保留的 Unknown 元素按原位置输出，但对其内容的修改无效（模型无法表达）。</para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// using var reader = new WordReader("source.docx");
+    /// var doc = reader.ReadDocument();
+    ///
+    /// doc.BeginEdit();
+    /// doc.ReplaceText("旧公司名", "新公司名");
+    ///
+    /// using var writer = new WordWriter();
+    /// writer.Save("output.docx", doc);
+    /// </code>
+    /// </example>
+    public void BeginEdit(Boolean keepUnknown = true)
+    {
+        DocumentXml = null;
+        this.ClearRawXml(keepUnknown);
+        IsEditing = true;
+
+        EditWarnings.Clear();
+        var unmodeled = 0;
+        foreach (var para in this.AllParagraphs())
+            if (para.HasUnmodeledContent) unmodeled++;
+        if (unmodeled > 0)
+            EditWarnings.Add(L.T("{0} paragraph(s) contain fields, objects or comment anchors that cannot be rebuilt from the model; editing those paragraphs drops their original XML.", unmodeled));
+
+        var unknown = 0;
+        foreach (var el in Elements)
+            if (el.Type == ElementType.Unknown) unknown++;
+        if (unknown > 0)
+            EditWarnings.Add(L.T("{0} unsupported element(s) are kept as-is (ElementType.Unknown); edits to their content are ignored.", unknown));
+    }
+
+    /// <summary>标记模型已被修改（供外部直接改模型的代码调用，触发保存前自检）</summary>
+    /// <param name="body">修改是否影响正文（word/document.xml）；页眉页脚/脚注等独立部件传 false</param>
+    public void MarkModified(Boolean body = true)
+    {
+        ModelRevision++;
+        if (body) BodyModified = true;
+    }
     #endregion
 
     #region 方法

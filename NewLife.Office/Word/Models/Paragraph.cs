@@ -99,5 +99,12 @@ public class Paragraph
 
     /// <summary>孤行控制（w:widowControl），true=防止首行孤悬页尾/末行孤悬页首，默认 true</summary>
     public Boolean WidowControl { get; set; } = true;
+
+    /// <summary>
+    /// 该段落含模型无法表达的内容（如域 <c>w:fldSimple</c>、OLE 对象 <c>w:object</c>、
+    /// 批注锚点 <c>w:commentRangeStart</c>、脚注引用 <c>w:footnoteReference</c> 等）。
+    /// Reader 解析时填充，供 AI/调用方在清 <see cref="RawXml"/> 前判断“改这段会不会丢东西”。
+    /// </summary>
+    public Boolean HasUnmodeledContent { get; set; }
     #endregion
 }

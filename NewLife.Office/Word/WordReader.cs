@@ -524,6 +524,8 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 // 保留空段落（含书签/分页符的段落），保证"读入→写出"结构完整（空行/占位段落不丢失）
                 var pe = ParsePara(el, ns, rels, styleMap, numIdFormats);
                 pe.RawXml = el.OuterXml;
+                if (pe.Paragraph != null && HasUnmodeledContent(el, ns))
+                    pe.Paragraph.HasUnmodeledContent = true;
                 doc.Elements.Add(pe);
                 // 加载图片数据到 doc.Images（需要，即使 RawXml 已包含 XML）
                 if (drawing != null)
@@ -560,7 +562,23 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                     ProcessBodyElement(innerEl, ns, rels, styleMap, numIdFormats, doc);
             }
         }
+        else
+        {
+            // 未建模的 body 级子元素（批注锚点、范围标记、扩展块等）：原样保留为 Unknown 元素，
+            // Writer 重建 document.xml 时直接输出其 RawXml，避免"读入→修改→保存"丢内容
+            doc.Elements.Add(new Element { Type = ElementType.Unknown, RawXml = el.OuterXml });
+        }
     }
+
+    /// <summary>判断段落是否含模型无法表达的内容（域/OLE/批注锚点/脚注引用/非图片图形）</summary>
+    /// <param name="paragraph">段落元素</param>
+    /// <param name="ns">命名空间管理器</param>
+    /// <returns>含未建模内容返回 true</returns>
+    private static Boolean HasUnmodeledContent(XmlElement paragraph, XmlNamespaceManager ns)
+        => paragraph.SelectSingleNode(
+            "w:fldSimple | .//w:object | .//w:fldSimple | .//w:commentRangeStart | .//w:commentRangeEnd"
+            + " | .//w:commentReference | .//w:footnoteReference | .//w:endnoteReference | .//w:sym"
+            + " | .//w:drawing[not(.//a:blip) and not(.//w:txbxContent)]", ns) != null;
 
     /// <summary>收集全文修订追踪记录（w:ins 插入 / w:del 删除，W11）</summary>
     /// <param name="doc">文档对象（填充 TrackChanges）</param>
