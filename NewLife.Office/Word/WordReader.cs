@@ -15,6 +15,13 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     #region 属性
     /// <summary>源文件路径（从文件构造时有效）</summary>
     public String? FilePath { get; private set; }
+
+    /// <summary>最近一次文本/Markdown 提取失败的原因（成功时清空）</summary>
+    /// <remarks>
+    /// 提取入口以“返回 null 表示无法转换”为契约，但 null 本身分不清“文档没内容”和“解析出错”。
+    /// 失败原因记录在本属性里，供调用方/CLI 输出可诊断信息（不改变原有返回 null 的行为）。
+    /// </remarks>
+    public String? LastError { get; private set; }
     #endregion
 
     #region 私有字段
@@ -2152,6 +2159,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     public MarkdownDocument? ToMarkdownDocument(MarkdownConverterOptions? options)
     {
         _mdOptions = options;
+        LastError = null;
         try
         {
             var doc = ReadDocument();
@@ -2206,8 +2214,10 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
 
             return md.Blocks.Count > 0 ? md : null;
         }
-        catch
+        catch (Exception ex)
         {
+            // 契约仍是「失败返回 null」，但把原因留在 LastError，避免“没内容”和“解析出错”无法区分
+            LastError = ex.Message;
             return null;
         }
     }
@@ -2517,7 +2527,11 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var ext = image.Extension ?? "png";
         if (ext.IsNullOrEmpty()) ext = "png";
 
-        var name = "image" + _imageIdx + "." + ext;
+        // 文件名带源文档前缀：多个文档落到同一目录时不会互相覆盖同名图片
+        var prefix = _mdOptions?.ImageNamePrefix;
+        if (prefix == null && FilePath != null) prefix = Path.GetFileNameWithoutExtension(FilePath) + "-";
+
+        var name = prefix + "image" + _imageIdx + "." + ext;
         var alt = L.T("Image {0}", _imageIdx);
         var src = name;
 
@@ -2530,9 +2544,10 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 Directory.CreateDirectory(dir);
                 File.WriteAllBytes(Path.Combine(dir, name), image.ImageData);
             }
-            catch
+            catch (Exception ex)
             {
-                // 写文件失败不影响 Markdown 输出，退化为引用形式
+                // 写文件失败不影响 Markdown 输出，退化为引用形式，但把原因记下来便于排查
+                LastError = L.T("Failed to write image {0}: {1}", name, ex.Message);
             }
         }
         else if (handling == MarkdownImageHandling.Embed && image.ImageData.Length > 0)

@@ -142,4 +142,78 @@ public class MarkdownExportOptionsTests
         Assert.NotNull(md);
         Assert.Contains("data:image/png;base64,", md!.ToMarkdown());
     }
+
+    [Fact(DisplayName = "Markdown-图片来源文件时文件名带文档名前缀，避免同名覆盖")]
+    public void Markdown_ImageNamesPrefixedByFileName()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "nlo-md-" + Guid.NewGuid().ToString("N"));
+        var docxPath = Path.Combine(Path.GetTempPath(), $"报表-{Guid.NewGuid():N}.docx");
+        try
+        {
+            var doc = new Document();
+            doc.AddParagraph("正文");
+            doc.AddPicture(PngBytes(), "png");
+            File.WriteAllBytes(docxPath, Save(doc));
+
+            var imgDir = Path.Combine(dir, "img");
+            using (var reader = new WordReader(docxPath))
+            {
+                var md = reader.ToMarkdownDocument(new MarkdownConverterOptions
+                {
+                    ImageHandling = MarkdownImageHandling.Reference,
+                    ImageDirectory = imgDir,
+                });
+
+                Assert.NotNull(md);
+                var expected = Path.GetFileNameWithoutExtension(docxPath) + "-image1.png";
+                Assert.Contains(expected, md!.ToMarkdown());
+                Assert.True(File.Exists(Path.Combine(imgDir, expected)));
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(dir)) Directory.Delete(dir, true);
+            if (File.Exists(docxPath)) File.Delete(docxPath);
+        }
+    }
+
+    [Fact(DisplayName = "Markdown-图片写盘失败时记录 LastError 且不中断转换")]
+    public void Markdown_ImageWriteFailure_RecordsLastError()
+    {
+        // 用一个「文件」当输出目录，Directory.CreateDirectory 必然失败
+        var blocker = Path.Combine(Path.GetTempPath(), "nlo-blocker-" + Guid.NewGuid().ToString("N"));
+        File.WriteAllText(blocker, "x");
+        try
+        {
+            var doc = new Document();
+            doc.AddParagraph("正文");
+            doc.AddPicture(PngBytes(), "png");
+
+            using var ms = new MemoryStream(Save(doc));
+            using var reader = new WordReader(ms);
+            var md = reader.ToMarkdownDocument(new MarkdownConverterOptions
+            {
+                ImageHandling = MarkdownImageHandling.Reference,
+                ImageDirectory = blocker,
+            });
+
+            // 转换不中断，但仍输出引用；失败原因可从 LastError 取到
+            Assert.NotNull(md);
+            Assert.Contains("image1.png", md!.ToMarkdown());
+            Assert.False(String.IsNullOrEmpty(reader.LastError), "写盘失败应记录 LastError");
+        }
+        finally { if (File.Exists(blocker)) File.Delete(blocker); }
+    }
+
+    [Fact(DisplayName = "Markdown-成功转换时 LastError 为空")]
+    public void Markdown_Success_ClearsLastError()
+    {
+        var doc = new Document();
+        doc.AddParagraph("正文");
+
+        using var ms = new MemoryStream(Save(doc));
+        using var reader = new WordReader(ms);
+        Assert.NotNull(reader.ToMarkdownDocument());
+        Assert.Null(reader.LastError);
+    }
 }

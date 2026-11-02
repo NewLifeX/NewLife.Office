@@ -37,6 +37,12 @@ public class MarkdownConverterOptions
     /// </remarks>
     public String? ImageDirectory { get; set; }
 
+    /// <summary>图片文件名前缀（null 时优先用源文档名，如 <c>report-image1.png</c>）</summary>
+    /// <remarks>
+    /// 多个文档转换到同一目录时，靠前缀避免同名图片互相覆盖；单一文档场景可不设置。
+    /// </remarks>
+    public String? ImageNamePrefix { get; set; }
+
     /// <summary>是否过滤噪音（空段落/重复空白行），默认 true</summary>
     public Boolean CleanNoise { get; set; } = true;
 }
