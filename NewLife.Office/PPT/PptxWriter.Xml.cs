@@ -62,6 +62,7 @@ partial class PptxWriter
         WritePresentationRels(za);
         WriteSlideLayout(za);
         WriteSlideMaster(za);
+        WriteNotesMaster(za);
         WriteInfraMedia(za);
         for (var i = 0; i < Slides.Count; i++)
         {
@@ -170,7 +171,7 @@ partial class PptxWriter
             sb.Append($"<Override PartName=\"/ppt/slideMasters/slideMaster{i}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml\"/>");
         var layoutCount = Math.Max(1, _layoutContents.Count);
         if (_layoutContents.Count == 0 && _progMasters.Count > 0)
-            layoutCount = Math.Max(1, _progMasters.Sum(m => m.Layouts.Count));
+            layoutCount = _progMasters.Sum(m => Math.Max(1, m.Layouts.Count));
         for (var i = 1; i <= layoutCount; i++)
             sb.Append($"<Override PartName=\"/ppt/slideLayouts/slideLayout{i}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml\"/>");
         sb.Append("<Override PartName=\"/ppt/theme/theme1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.theme+xml\"/>");
@@ -182,6 +183,16 @@ partial class PptxWriter
         for (var i = 0; i < _rawSlides.Count; i++)
         {
             sb.Append($"<Override PartName=\"/ppt/slides/slide{Slides.Count + i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.slide+xml\"/>");
+        }
+        // 备注母版与备注页（仅在存在备注时）
+        if (Slides.Any(s => s.Notes != null))
+        {
+            sb.Append("<Override PartName=\"/ppt/notesMasters/notesMaster1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml\"/>");
+            for (var i = 0; i < Slides.Count; i++)
+            {
+                if (Slides[i].Notes != null)
+                    sb.Append($"<Override PartName=\"/ppt/notesSlides/notesSlide{i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml\"/>");
+            }
         }
         // 跨文件复制的动态部件内容类型（S10-04）
         var rawExt = new HashSet<String>();
@@ -264,9 +275,12 @@ partial class PptxWriter
         var sb = new StringBuilder();
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
         var hasSections = Sections != null && Sections.Count > 0;
+        var hf = HeaderFooter;
+        var hasHf = hf != null && (hf.ShowFooter || hf.ShowPageNumber || hf.ShowDate);
         var nsExt = hasSections ? " xmlns:p14=\"http://schemas.microsoft.com/office/powerpoint/2010/main\"" : "";
+        // 自建扩展命名空间：页眉页脚数据按 ECMA-376 只能落在 extLst（CT_Presentation 无 hf 子元素）
+        if (hasHf) nsExt += " xmlns:nlhf=\"urn:newlife:office:pptx:hf\"";
         sb.Append($"<p:presentation xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\"{nsExt} saveSubsetFonts=\"1\">");
-        sb.Append($"<p:sldSz cx=\"{SlideWidth}\" cy=\"{SlideHeight}\"/>");
         var masterCount = Math.Max(1, _masterContents.Count);
         if (_masterContents.Count == 0 && _progMasters.Count > 0)
             masterCount = Math.Max(1, _progMasters.Count);
@@ -274,6 +288,9 @@ partial class PptxWriter
         for (var i = 0; i < masterCount; i++)
             sb.Append($"<p:sldMasterId id=\"{2147483648 + i}\" r:id=\"rMaster{i + 1}\"/>");
         sb.Append("</p:sldMasterIdLst>");
+        // 备注母版引用（存在备注文本时）：紧跟在 sldMasterIdLst 之后
+        if (Slides.Any(s => s.Notes != null))
+            sb.Append("<p:notesMasterIdLst><p:notesMasterId r:id=\"rNotesMaster\"/></p:notesMasterIdLst>");
         sb.Append("<p:sldIdLst>");
         for (var i = 0; i < Slides.Count; i++)
         {
@@ -285,43 +302,49 @@ partial class PptxWriter
             sb.Append($"<p:sldId id=\"{256 + Slides.Count + i}\" r:id=\"rSlide{Slides.Count + i + 1}\"/>");
         }
         sb.Append("</p:sldIdLst>");
-
-        // Section 列表（S13-04）
-        if (hasSections)
-        {
-            sb.Append("<p:extLst><p:ext uri=\"{521415D9-36F7-43E2-AB2F-B90AF26B5E84}\">");
-            sb.Append("<p14:sectionLst>");
-            for (var si = 0; si < Sections!.Count; si++)
-            {
-                var sec = Sections[si];
-                sb.Append($"<p14:section name=\"{EscXml(sec.Name)}\"><p14:sldIdLst>");
-                foreach (var idx in sec.SlideIndices)
-                    sb.Append($"<p14:sldId id=\"{256 + idx}\"/>");
-                sb.Append("</p14:sldIdLst></p14:section>");
-            }
-            sb.Append("</p14:sectionLst></p:ext></p:extLst>");
-        }
-        // 全局页眉页脚（S13-03）
-        var hf = HeaderFooter;
-        if (hf != null && (hf.ShowFooter || hf.ShowPageNumber || hf.ShowDate))
-        {
-            sb.Append("<p:hf");
-            if (hf.ShowFooter) sb.Append($" footer=\"{EscXml(hf.FooterText ?? String.Empty)}\"");
-            if (hf.ShowPageNumber) sb.Append(" showSlideNum=\"1\"");
-            if (hf.ShowDate)
-            {
-                sb.Append(" dt=\"1\"");
-                if (!hf.DateAutomatic && hf.FixedDate != null)
-                    sb.Append($" fdt=\"{EscXml(hf.FixedDate)}\"");
-                if (hf.DateFormat != null)
-                    sb.Append($" dfmt=\"{EscXml(hf.DateFormat)}\"");
-            }
-            sb.Append("/>");
-        }
+        // CT_Presentation 子元素顺序：sldMasterIdLst → sldIdLst → sldSz → notesSz → … → modifyVerifier → extLst
+        sb.Append($"<p:sldSz cx=\"{SlideWidth}\" cy=\"{SlideHeight}\"/>");
+        sb.Append("<p:notesSz cx=\"6858000\" cy=\"9144000\"/>");
 
         // 演示文稿保护（S07-04）
         if (_protectionHash != null)
             sb.Append($"<p:modifyVerifier algorithmName=\"SHA-512\" hashData=\"{_protectionHash}\" saltData=\"{_protectionSalt}\" spinCount=\"100000\"/>");
+
+        // extLst 必须是最后一个子元素：分区列表（S13-04）与页眉页脚（S13-03）都放这里
+        if (hasSections || hasHf)
+        {
+            sb.Append("<p:extLst>");
+            if (hasSections)
+            {
+                sb.Append("<p:ext uri=\"{521415D9-36F7-43E2-AB2F-B90AF26B5E84}\">");
+                sb.Append("<p14:sectionLst>");
+                for (var si = 0; si < Sections!.Count; si++)
+                {
+                    var sec = Sections[si];
+                    sb.Append($"<p14:section name=\"{EscXml(sec.Name)}\"><p14:sldIdLst>");
+                    foreach (var idx in sec.SlideIndices)
+                        sb.Append($"<p14:sldId id=\"{256 + idx}\"/>");
+                    sb.Append("</p14:sldIdLst></p14:section>");
+                }
+                sb.Append("</p14:sectionLst></p:ext>");
+            }
+            if (hasHf)
+            {
+                sb.Append("<p:ext uri=\"{A7B3C1D2-5E4F-4A6B-9C8D-0E1F2A3B4C5D}\"><nlhf:hf");
+                if (hf!.ShowFooter) sb.Append($" footer=\"{EscXml(hf.FooterText ?? String.Empty)}\"");
+                if (hf.ShowPageNumber) sb.Append(" showSlideNum=\"1\"");
+                if (hf.ShowDate)
+                {
+                    sb.Append(" dt=\"1\"");
+                    if (!hf.DateAutomatic && hf.FixedDate != null)
+                        sb.Append($" fdt=\"{EscXml(hf.FixedDate)}\"");
+                    if (hf.DateFormat != null)
+                        sb.Append($" dfmt=\"{EscXml(hf.DateFormat)}\"");
+                }
+                sb.Append("/></p:ext>");
+            }
+            sb.Append("</p:extLst>");
+        }
         sb.Append("</p:presentation>");
         WriteEntry(za, "ppt/presentation.xml", sb.ToString());
     }
@@ -349,6 +372,9 @@ partial class PptxWriter
         {
             sb.Append($"<Relationship Id=\"rSlide{Slides.Count + i + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide\" Target=\"slides/slide{Slides.Count + i + 1}.xml\"/>");
         }
+        // 备注母版关系（存在备注文本时）
+        if (Slides.Any(s => s.Notes != null))
+            sb.Append("<Relationship Id=\"rNotesMaster\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster\" Target=\"notesMasters/notesMaster1.xml\"/>");
         // 批注作者关系（S13-01）
         if (Slides.Any(s => s.Comments.Count > 0) || _rawHasComments)
         {
@@ -390,6 +416,8 @@ partial class PptxWriter
         sb.Append($"<p:sld xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\"");
         if (slide.Hidden) sb.Append(" show=\"0\"");
         sb.Append('>');
+        // CT_Slide 子元素顺序：cSld → clrMapOvr → transition → timing → extLst；背景属于 cSld 的子元素
+        sb.Append("<p:cSld>");
 
         // background
         if (slide.BackgroundImage != null)
@@ -418,7 +446,7 @@ partial class PptxWriter
             sb.Append("<a:effectLst/></p:bgPr></p:bg>");
         }
 
-        sb.Append("<p:cSld><p:spTree>");
+        sb.Append("<p:spTree>");
         sb.Append("<p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>");
         sb.Append("<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>");
 
@@ -460,7 +488,8 @@ partial class PptxWriter
                 foreach (var pp in tb.Paragraphs)
                 {
                     var hasPPrChildren = pp.LineSpacingPct > 0 || pp.LineSpacingPts > 0 || pp.SpaceBeforePt > 0 || pp.SpaceAfterPt > 0 || pp.BulletChar != null || pp.BulletNone;
-                    sb.Append($"<a:p><a:pPr{(pp.Alignment.Length > 0 && pp.Alignment != "l" ? " algn=\"" + pp.Alignment + "\"" : "")}");
+                    var ppAlgn = NormalizeAlign(pp.Alignment);
+                    sb.Append($"<a:p><a:pPr{(ppAlgn.Length > 0 && ppAlgn != "l" ? " algn=\"" + ppAlgn + "\"" : "")}");
                     if (pp.Level > 0)
                         sb.Append($" lvl=\"{pp.Level}\"");
                     if (hasPPrChildren)
@@ -494,7 +523,8 @@ partial class PptxWriter
             {
                 // 向后兼容：Runs 单段模式
                 var hasPPrChildren = tb.LineSpacingPct > 0 || tb.SpaceBeforePt > 0;
-                sb.Append($"<a:p><a:pPr{(tb.Alignment.Length > 0 ? " algn=\"" + tb.Alignment + "\"" : "")}");
+                var tbAlgn = NormalizeAlign(tb.Alignment);
+                sb.Append($"<a:p><a:pPr{(tbAlgn.Length > 0 ? " algn=\"" + tbAlgn + "\"" : "")}");
                 if (hasPPrChildren)
                 {
                     sb.Append('>');
@@ -772,7 +802,7 @@ partial class PptxWriter
                 sb.Append("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom><a:noFill/>");
                 sb.Append("</p:spPr>");
                 sb.Append("<p:txBody><a:bodyPr wrap=\"square\" rtlCol=\"0\"><a:normAutofit/></a:bodyPr><a:lstStyle/>");
-                sb.Append($"<a:p><a:pPr algn=\"{tb.Alignment}\"/><a:r>");
+                sb.Append($"<a:p><a:pPr algn=\"{NormalizeAlign(tb.Alignment)}\"/><a:r>");
                 sb.Append($"<a:rPr lang=\"zh-CN\" sz=\"{tb.FontSize * 100}\"{(tb.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
                 WriteFontColor(sb, tb.FontColor);
                 WriteFontElements(sb, tb.LatinFontName, tb.EastAsianFontName, tb.ComplexScriptFontName, tb.SymbolFontName);
@@ -824,22 +854,17 @@ partial class PptxWriter
 
         sb.Append("</p:spTree></p:cSld>");
 
-        // notes
-        if (slide.Notes != null)
-        {
-            sb.Append("<p:notes><p:cSld><p:spTree>");
-            sb.Append("<p:sp><p:nvSpPr><p:cNvPr id=\"1\" name=\"notes\"/><p:cNvSpPr><a:spLocks noGrp=\"1\"/></p:cNvSpPr><p:nvPr><p:ph type=\"body\"/></p:nvPr></p:nvSpPr>");
-            sb.Append("<p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/>");
-            sb.Append($"<a:p><a:r><a:rPr lang=\"zh-CN\" dirty=\"0\"/><a:t>{EscXml(slide.Notes)}</a:t></a:r></a:p>");
-            sb.Append("</p:txBody></p:sp></p:spTree></p:cSld></p:notes>");
-        }
+        // 备注文本写在独立的 notesSlide 部件里（p:notes 不是 p:sld 的合法子元素，内联会被 PowerPoint 丢弃）
 
         // 转场动画
         if (slide.Transition != null)
         {
             var t = slide.Transition;
-            sb.Append($"<p:transition dur=\"{t.DurationMs}\" {(t.AdvanceOnClick ? "advClick=\"1\"" : "advClick=\"0\"")}>");
-            sb.Append(t.Type switch
+            // ECMA-376 的 p:transition 只有 spd / advClick，毫秒时长是 p14:dur，
+            // morph 更是 p15 命名空间元素，两者都必须包在 mc:AlternateContent 里才对严格消费者合法。
+            var spd = t.DurationMs <= 500 ? "fast" : t.DurationMs <= 1000 ? "med" : "slow";
+            var adv = t.AdvanceOnClick ? "1" : "0";
+            var body = t.Type switch
             {
                 "fade" => "<p:fade/>",
                 "push" => $"<p:push dir=\"{t.Direction}\"/>",
@@ -847,10 +872,16 @@ partial class PptxWriter
                 "zoom" => "<p:zoom/>",
                 "split" => "<p:split/>",
                 "cut" => "<p:cut/>",
-                "morph" => "<p:morph option=\"byObject\"/>",
+                "morph" => "<p15:morph option=\"byObject\"/>",
                 _ => "<p:fade/>",
-            });
-            sb.Append("</p:transition>");
+            };
+            var fallback = t.Type == "morph" ? "<p:fade/>" : body;
+            sb.Append("<mc:AlternateContent xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\">");
+            sb.Append("<mc:Choice xmlns:p14=\"http://schemas.microsoft.com/office/powerpoint/2010/main\" xmlns:p15=\"http://schemas.microsoft.com/office/powerpoint/2015/main\" Requires=\"p14 p15\">");
+            sb.Append($"<p:transition spd=\"{spd}\" p14:dur=\"{t.DurationMs}\" advClick=\"{adv}\">{body}</p:transition>");
+            sb.Append("</mc:Choice><mc:Fallback>");
+            sb.Append($"<p:transition spd=\"{spd}\" advClick=\"{adv}\">{fallback}</p:transition>");
+            sb.Append("</mc:Fallback></mc:AlternateContent>");
         }
 
         // 元素动画（S12-01）
@@ -931,6 +962,8 @@ partial class PptxWriter
         var layoutIdx = Math.Max(0, Math.Min(slide.LayoutIndex, layoutCount - 1));
         var layoutNum = layoutIdx + 1;
         relsSb.Append($"<Relationship Id=\"rLayout1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout{layoutNum}.xml\"/>");
+        if (slide.Notes != null)
+            relsSb.Append($"<Relationship Id=\"rNotes1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide\" Target=\"../notesSlides/notesSlide{idx + 1}.xml\"/>");
         foreach (var img in slide.Images)
         {
             relsSb.Append($"<Relationship Id=\"{img.RelId}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\" Target=\"../media/{img.RelId}.{img.Extension}\"/>");
@@ -978,6 +1011,28 @@ partial class PptxWriter
         }
         relsSb.Append("</Relationships>");
         WriteEntry(za, $"ppt/slides/_rels/slide{idx + 1}.xml.rels", relsSb.ToString());
+
+        // notesSlide 部件：备注文本的合法归宿（p:sld 下不允许 p:notes）
+        if (slide.Notes != null)
+        {
+            var nsb = new StringBuilder();
+            nsb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+            nsb.Append($"<p:notes xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\">");
+            nsb.Append("<p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>");
+            nsb.Append("<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>");
+            nsb.Append("<p:sp><p:nvSpPr><p:cNvPr id=\"2\" name=\"Notes Placeholder\"/><p:cNvSpPr><a:spLocks noGrp=\"1\" noRot=\"1\" noChangeAspect=\"1\"/></p:cNvSpPr>");
+            nsb.Append("<p:nvPr><p:ph type=\"body\" idx=\"1\"/></p:nvPr></p:nvSpPr>");
+            nsb.Append("<p:spPr><a:xfrm><a:off x=\"685800\" y=\"4343400\"/><a:ext cx=\"5486400\" cy=\"4114800\"/></a:xfrm><a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></p:spPr>");
+            nsb.Append("<p:txBody><a:bodyPr/><a:lstStyle/>");
+            nsb.Append($"<a:p><a:r><a:rPr lang=\"zh-CN\" dirty=\"0\"/><a:t>{EscXml(slide.Notes)}</a:t></a:r></a:p>");
+            nsb.Append("</p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>");
+            WriteEntry(za, $"ppt/notesSlides/notesSlide{idx + 1}.xml", nsb.ToString());
+            WriteEntry(za, $"ppt/notesSlides/_rels/notesSlide{idx + 1}.xml.rels",
+                "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+                "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+                "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster\" Target=\"../notesMasters/notesMaster1.xml\"/>" +
+                "</Relationships>");
+        }
 
         // write image media
         foreach (var img in slide.Images)
@@ -1468,9 +1523,37 @@ partial class PptxWriter
             "</Relationships>");
     }
 
-    private void WriteSlideMaster(ZipArchive za)
+    /// <summary>写出备注母版（仅当存在备注文本时）</summary>
+    /// <remarks>notesSlide 部件必须通过关系指向 notesMaster，缺母版会让 PowerPoint 判定备注损坏。</remarks>
+    private void WriteNotesMaster(ZipArchive za)
     {
-        if (_masterContents.Count > 0)
+        if (!Slides.Any(s => s.Notes != null)) return;
+
+        const String P = "http://schemas.openxmlformats.org/presentationml/2006/main";
+        const String A = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        const String R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+
+        var sb = new StringBuilder();
+        sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
+        sb.Append($"<p:notesMaster xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\">");
+        sb.Append("<p:cSld><p:bg><p:bgRef idx=\"1001\"><a:schemeClr val=\"bg1\"/></p:bgRef></p:bg>");
+        sb.Append("<p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>");
+        sb.Append("<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>");
+        sb.Append("</p:spTree></p:cSld>");
+        // CT_NotesMaster 子元素顺序：cSld → clrMap（必需）→ hf → notesStyle → extLst
+        sb.Append("<p:clrMap bg1=\"lt1\" tx1=\"dk1\" bg2=\"lt2\" tx2=\"dk2\" accent1=\"accent1\" accent2=\"accent2\" accent3=\"accent3\" accent4=\"accent4\" accent5=\"accent5\" accent6=\"accent6\" hlink=\"hlink\" folHlink=\"folHlink\"/>");
+        sb.Append("<p:notesStyle><a:lvl1pPr><a:defRPr sz=\"1200\"/></a:lvl1pPr></p:notesStyle>");
+        sb.Append("</p:notesMaster>");
+        WriteEntry(za, "ppt/notesMasters/notesMaster1.xml", sb.ToString());
+        WriteEntry(za, "ppt/notesMasters/_rels/notesMaster1.xml.rels",
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
+            "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+            "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"../theme/theme1.xml\"/>" +
+            "</Relationships>");
+    }
+
+    private void WriteSlideMaster(ZipArchive za)
+    {        if (_masterContents.Count > 0)
         {
             for (var i = 0; i < _masterContents.Count; i++)
             {
@@ -1497,8 +1580,9 @@ partial class PptxWriter
             "<p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>" +
             "<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>" +
             "</p:spTree></p:cSld>" +
-            "<p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles>" +
+            "<p:clrMap bg1=\"lt1\" tx1=\"dk1\" bg2=\"lt2\" tx2=\"dk2\" accent1=\"accent1\" accent2=\"accent2\" accent3=\"accent3\" accent4=\"accent4\" accent5=\"accent5\" accent6=\"accent6\" hlink=\"hlink\" folHlink=\"folHlink\"/>" +
             "<p:sldLayoutIdLst><p:sldLayoutId id=\"2147483649\" r:id=\"rLayout1\"/></p:sldLayoutIdLst>" +
+            "<p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles>" +
             "</p:sldMaster>");
         WriteEntry(za, "ppt/slideMasters/_rels/slideMaster1.xml.rels",
             "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
@@ -1633,16 +1717,19 @@ partial class PptxWriter
                 WriteShapeXml(sb, sp, ref mShapeId, A);
             }
             sb.Append("</p:spTree></p:cSld>");
-            // txStyles
-            sb.Append("<p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles>");
-            // 版式 ID 列表
+            // CT_SlideMaster 子元素顺序：cSld → clrMap（必需）→ sldLayoutIdLst → transition → timing → hf → txStyles → extLst
+            sb.Append("<p:clrMap bg1=\"lt1\" tx1=\"dk1\" bg2=\"lt2\" tx2=\"dk2\" accent1=\"accent1\" accent2=\"accent2\" accent3=\"accent3\" accent4=\"accent4\" accent5=\"accent5\" accent6=\"accent6\" hlink=\"hlink\" folHlink=\"folHlink\"/>");
+            // 版式 ID 列表（母版至少需要一个版式，否者幻灯片引用的 slideLayoutN.xml 将缺失）
+            var mLayoutCount = Math.Max(1, master.Layouts.Count);
             sb.Append("<p:sldLayoutIdLst>");
-            for (var li = 0; li < master.Layouts.Count; li++)
+            for (var li = 0; li < mLayoutCount; li++)
             {
                 var layoutGlobalIdx = layoutOffset + li + 1;
                 sb.Append($"<p:sldLayoutId id=\"{2147483649 + layoutGlobalIdx}\" r:id=\"rLayout{layoutGlobalIdx}\"/>");
             }
             sb.Append("</p:sldLayoutIdLst>");
+            // txStyles（必须在 sldLayoutIdLst 之后）
+            sb.Append("<p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles>");
             sb.Append("</p:sldMaster>");
             WriteZipEntryText(za, $"ppt/slideMasters/slideMaster{masterId}.xml", sb.ToString());
 
@@ -1651,7 +1738,7 @@ partial class PptxWriter
             relsSb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             relsSb.Append("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">");
             relsSb.Append("<Relationship Id=\"rTheme1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme\" Target=\"../theme/theme1.xml\"/>");
-            for (var li = 0; li < master.Layouts.Count; li++)
+            for (var li = 0; li < mLayoutCount; li++)
             {
                 var layoutGlobalIdx = layoutOffset + li + 1;
                 relsSb.Append($"<Relationship Id=\"rLayout{layoutGlobalIdx}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout\" Target=\"../slideLayouts/slideLayout{layoutGlobalIdx}.xml\"/>");
@@ -1667,7 +1754,7 @@ partial class PptxWriter
         var offset = 0;
         for (var i = 0; i < masterIndex; i++)
         {
-            offset += _progMasters[i].Layouts.Count;
+            offset += Math.Max(1, _progMasters[i].Layouts.Count);
         }
         return offset;
     }
@@ -1683,27 +1770,40 @@ partial class PptxWriter
         for (var mi = 0; mi < _progMasters.Count; mi++)
         {
             var master = _progMasters[mi];
-            for (var li = 0; li < master.Layouts.Count; li++)
+            // 母版至少补一个空白版式：幻灯片 rels 总是指向 slideLayout1.xml，缺版式会导致包内断链
+            var layoutCount = Math.Max(1, master.Layouts.Count);
+            for (var li = 0; li < layoutCount; li++)
             {
                 globalIdx++;
-                var layout = master.Layouts[li];
+                var layout = li < master.Layouts.Count ? master.Layouts[li] : null;
                 var sb = new StringBuilder();
                 sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
                 sb.Append($"<p:sldLayout xmlns:p=\"{P}\" xmlns:a=\"{A}\" xmlns:r=\"{R}\"");
-                sb.Append($" type=\"{EscXml(layout.LayoutType)}\" preserve=\"1\">");
-                sb.Append($"<p:cSld name=\"{EscXml(layout.Name)}\">");
-                sb.Append("<p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>");
-                sb.Append("<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>");
-                var shapeId = 2;
-                foreach (var sp in layout.Shapes)
+                if (layout == null)
                 {
-                    WriteShapeXml(sb, sp, ref shapeId, A);
+                    // 空白版式（母版未显式添加版式时的兜底）
+                    sb.Append(" type=\"blank\" preserve=\"1\">");
+                    sb.Append("<p:cSld name=\"Blank\"><p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>");
+                    sb.Append("<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>");
+                    sb.Append("</p:spTree></p:cSld></p:sldLayout>");
                 }
-                foreach (var tb in layout.TextBoxes)
+                else
                 {
-                    WriteTextBoxXml(sb, tb, ref shapeId, A);
+                    sb.Append($" type=\"{EscXml(layout.LayoutType)}\" preserve=\"1\">");
+                    sb.Append($"<p:cSld name=\"{EscXml(layout.Name)}\">");
+                    sb.Append("<p:spTree><p:nvGrpSpPr><p:cNvPr id=\"1\" name=\"\"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>");
+                    sb.Append("<p:grpSpPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"0\" cy=\"0\"/><a:chOff x=\"0\" y=\"0\"/><a:chExt cx=\"0\" cy=\"0\"/></a:xfrm></p:grpSpPr>");
+                    var shapeId = 2;
+                    foreach (var sp in layout.Shapes)
+                    {
+                        WriteShapeXml(sb, sp, ref shapeId, A);
+                    }
+                    foreach (var tb in layout.TextBoxes)
+                    {
+                        WriteTextBoxXml(sb, tb, ref shapeId, A);
+                    }
+                    sb.Append("</p:spTree></p:cSld></p:sldLayout>");
                 }
-                sb.Append("</p:spTree></p:cSld></p:sldLayout>");
                 WriteZipEntryText(za, $"ppt/slideLayouts/slideLayout{globalIdx}.xml", sb.ToString());
 
                 // 版式 rels
@@ -1761,7 +1861,7 @@ partial class PptxWriter
         var fitTag2 = tb.AutoFit switch { 1 => "<a:spAutoFit/>", 2 => "<a:noAutofit/>", _ => "<a:normAutofit/>" };
         var vertAttr2 = tb.TextDirection != null ? $" vert=\"{tb.TextDirection}\"" : "";
         sb.Append($"<p:txBody><a:bodyPr wrap=\"square\" rtlCol=\"0\"{vertAttr2}>{fitTag2}</a:bodyPr><a:lstStyle/>");
-        sb.Append($"<a:p><a:pPr algn=\"{tb.Alignment}\"/><a:r>");
+        sb.Append($"<a:p><a:pPr algn=\"{NormalizeAlign(tb.Alignment)}\"/><a:r>");
         sb.Append($"<a:rPr lang=\"zh-CN\" altLang=\"en-US\" sz=\"{tb.FontSize * 100}\"{(tb.Bold ? " b=\"1\"" : "")} dirty=\"0\">");
         WriteFontColor(sb, tb.FontColor);
         WriteFontElements(sb, tb.LatinFontName, tb.EastAsianFontName, tb.ComplexScriptFontName, tb.SymbolFontName);
@@ -1781,6 +1881,31 @@ partial class PptxWriter
         s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
          .Replace("\"", "&quot;").Replace("'", "&apos;")
          .Replace("\r", "&#xD;");
+
+    /// <summary>把对齐值归一化为 ST_TextAlignType 合法取值</summary>
+    /// <remarks>
+    /// ST_TextAlignType 仅允许 l / ctr / r / just / justLow / dist / thaiDist。调用方常写 "left"/"center"/"right"
+    /// 这类友好名称（.NET 与 HTML 习惯），直接写入会产生 <c>algn="center"</c> 的非法值，PowerPoint 打开即报"需要修复"。
+    /// 本方法把常见别名映射到合法值；无法识别时返回空串（调用方据此省略 algn，走继承值），保证输出始终合法。
+    /// </remarks>
+    /// <param name="alignment">原始对齐值，可为 null 或空</param>
+    /// <returns>合法的 ST_TextAlignType 取值；无法识别时为空串</returns>
+    private static String NormalizeAlign(String? alignment)
+    {
+        if (alignment == null) return String.Empty;
+        switch (alignment.Trim().ToLowerInvariant())
+        {
+            case "": return String.Empty;
+            case "l" or "left" or "start": return "l";
+            case "ctr" or "center" or "centre" or "middle": return "ctr";
+            case "r" or "right" or "end": return "r";
+            case "just" or "justify" or "both": return "just";
+            case "justlow": return "justLow";
+            case "dist" or "distributed": return "dist";
+            case "thaidist": return "thaiDist";
+            default: return String.Empty;
+        }
+    }
 
     /// <summary>写出渐变填充</summary>
     private static void WriteGradFill(StringBuilder sb, String[] colors, Int32 angle)

@@ -451,7 +451,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             }
         }
 
-        ParseNotes(doc, slide);
+        ParseNotes(doc, slide, slideIndex);
         ParseTransition(doc, slide);
         ParseSlideComments(slideIndex, slide);
         ParseSlideAnimations(doc, slide);
@@ -1745,28 +1745,53 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         }
     }
 
-    private static void ParseNotes(XmlDocument doc, Slide slide)
+    private void ParseNotes(XmlDocument doc, Slide slide, Int32 slideIndex)
     {
+        // 规范位置：ppt/notesSlides/notesSlide{N}.xml（按 1 基幻灯片序号）
+        var notesEntry = _zip.GetEntry($"ppt/notesSlides/notesSlide{slideIndex + 1}.xml");
+        if (notesEntry != null)
+        {
+            using var ns = notesEntry.Open();
+            var nd = new XmlDocument();
+            nd.Load(ns);
+            var text = CollectText(nd.DocumentElement);
+            if (text.Length > 0) slide.Notes = text;
+            return;
+        }
+        // 兼容旧版本自产文件：备注曾内联在 slide XML 的 p:notes 节点
         var n = doc.SelectSingleNode("//*[local-name()='notes']");
         if (n == null) return;
+        var legacy = CollectText(n as XmlElement);
+        if (legacy.Length > 0) slide.Notes = legacy;
+    }
+
+    /// <summary>收集元素下所有 a:t 文本</summary>
+    /// <param name="root">根元素，可为 null</param>
+    /// <returns>拼接后的文本</returns>
+    private static String CollectText(XmlElement? root)
+    {
+        if (root == null) return String.Empty;
         var sb = new StringBuilder();
-        foreach (XmlElement t in n.SelectNodes(".//*[local-name()='t']")!) sb.Append(t.InnerText);
-        var text = sb.ToString();
-        if (text.Length > 0) slide.Notes = text;
+        foreach (XmlElement t in root.SelectNodes(".//*[local-name()='t']")!) sb.Append(t.InnerText);
+        return sb.ToString();
     }
 
     private static void ParseTransition(XmlDocument doc, Slide slide)
     {
         var trans = doc.SelectSingleNode("//*[local-name()='transition']") as XmlElement;
         if (trans == null) return;
+        // 时长写在 p14:dur（带命名空间前缀），非 ECMA-376 的无前缀 dur
         var dur = trans.GetAttribute("dur");
+        if (dur.Length == 0)
+            dur = trans.Attributes.Cast<XmlAttribute>()
+                .FirstOrDefault(a => a.LocalName == "dur")?.Value ?? String.Empty;
         var ac = trans.GetAttribute("advClick");
         var tr = new Transition
         {
             DurationMs = dur.Length > 0 && Int32.TryParse(dur, out var d) ? d : 500,
             AdvanceOnClick = ac != "0",
         };
-        foreach (var tp in new[] { "fade", "push", "wipe", "zoom", "split", "cut" })
+        foreach (var tp in new[] { "fade", "push", "wipe", "zoom", "split", "cut", "morph" })
         {
             var ch = trans.SelectSingleNode($"*[local-name()='{tp}']") as XmlElement;
             if (ch == null) continue;

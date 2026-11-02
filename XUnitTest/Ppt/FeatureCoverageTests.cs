@@ -256,7 +256,7 @@ public class FeatureCoverageTests
         Assert.Contains("dash", xml);
     }
 
-    [Fact, DisplayName("S13-03 全局页眉页脚：presentation.xml p:hf 写入")]
+    [Fact, DisplayName("S13-03 全局页眉页脚：presentation.xml 扩展内 hf 写入")]
     public void HeaderFooter_WriteXml()
     {
         var bytes = BuildPptx(w =>
@@ -272,10 +272,13 @@ public class FeatureCoverageTests
         });
 
         var xml = ReadZipEntry(bytes, "ppt/presentation.xml");
-        Assert.Contains("<p:hf", xml);
+        // CT_Presentation 无 hf 子元素，页眉页脚只能落在 extLst 的自建扩展里，位置须在 extLst 内
+        Assert.DoesNotContain("<p:hf", xml);
+        Assert.Contains("nlhf:hf", xml);
         Assert.Contains("内部资料", xml);
         Assert.Contains("showSlideNum=\"1\"", xml);
         Assert.Contains("dfmt=\"yyyy/MM/dd\"", xml);
+        Assert.True(xml.IndexOf("nlhf:hf", StringComparison.Ordinal) > xml.IndexOf("<p:extLst", StringComparison.Ordinal));
     }
     #endregion
 }

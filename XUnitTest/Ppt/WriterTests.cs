@@ -924,8 +924,10 @@ public class PptxWriterTests
         Assert.NotNull(slideEntry);
         using var sr = new StreamReader(slideEntry!.Open(), Encoding.UTF8);
         var xml = sr.ReadToEnd();
-        Assert.Contains("p:morph", xml);
+        Assert.Contains("p15:morph", xml);
         Assert.Contains("byObject", xml);
+        // 毫秒时长是 p14:dur，必须成对出现
+        Assert.Contains("p14:dur=\"1000\"", xml);
     }
 
     [Fact, System.ComponentModel.DisplayName("形状克隆—模型级Clone含新ID和偏移")]
@@ -1187,7 +1189,7 @@ public class PptxWriterTests
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
 
-    [Fact(DisplayName = "演讲者备注—SetNotes写入notesSlide")]
+    [Fact(DisplayName = "演讲者备注—SetNotes写入notesSlide部件")]
     public void SetNotes_WritesNotesSlide()
     {
         using var writer = new PptxWriter();
@@ -1199,11 +1201,24 @@ public class PptxWriterTests
             writer.Save(tempFile);
             Assert.True(File.Exists(tempFile));
             using var za = ZipFile.OpenRead(tempFile);
-            var entry = za.GetEntry("ppt/slides/slide1.xml");
-            Assert.NotNull(entry);
-            using var sr = new StreamReader(entry!.Open(), Encoding.UTF8);
-            var xml = sr.ReadToEnd();
-            Assert.Contains("演讲者备注内容", xml);
+            // 备注必须落在独立 notesSlide 部件里（p:notes 不是 p:sld 的合法子元素）
+            var slideEntry = za.GetEntry("ppt/slides/slide1.xml");
+            Assert.NotNull(slideEntry);
+            using (var sr = new StreamReader(slideEntry!.Open(), Encoding.UTF8))
+                Assert.DoesNotContain("演讲者备注内容", sr.ReadToEnd());
+
+            var notesEntry = za.GetEntry("ppt/notesSlides/notesSlide1.xml");
+            Assert.NotNull(notesEntry);
+            using (var nr = new StreamReader(notesEntry!.Open(), Encoding.UTF8))
+                Assert.Contains("演讲者备注内容", nr.ReadToEnd());
+
+            Assert.NotNull(za.GetEntry("ppt/notesMasters/notesMaster1.xml"));
+            Assert.NotNull(za.GetEntry("ppt/notesSlides/_rels/notesSlide1.xml.rels"));
+
+            // 回读仍能拿到备注文本
+            using var readerStream = File.OpenRead(tempFile);
+            var doc = new PptxReader(readerStream).ReadDocument();
+            Assert.Equal("这是演讲者备注内容", doc.Slides[0].Notes);
         }
         finally { if (File.Exists(tempFile)) File.Delete(tempFile); }
     }
