@@ -40,6 +40,7 @@ public static class Program
                 "convert" or "conv" => Convert(args.Skip(1).ToArray()),
                 "doc2docx" or "d2x" => Doc2Docx(args.Skip(1).ToArray()),
                 "info" => Info(args.Skip(1).ToArray()),
+                "read" => ReadOutline(args.Skip(1).ToArray()),
                 _ => PrintUsageAndReturn(),
             };
         }
@@ -154,6 +155,41 @@ public static class Program
         return 0;
     }
 
+    /// <summary>read 命令：输出 docx 结构快照（JSON），供 Agent 看清结构后按锚点修改</summary>
+    /// <param name="args">参数（&lt;input.docx&gt;）</param>
+    /// <returns>退出码</returns>
+    private static Int32 ReadOutline(String[] args)
+    {
+        if (args.Length < 1)
+        {
+            Console.Error.WriteLine(Localization.Translate("Usage: read <input.docx>"));
+            return 1;
+        }
+        var input = args[0];
+        if (!File.Exists(input))
+        {
+            Console.Error.WriteLine(Localization.Translate("File not found: {0}", input));
+            return 1;
+        }
+
+        using var reader = new NewLife.Office.Word.WordReader(input);
+        var json = reader.ReadOutline().ToJson();
+
+        // 输出被重定向（管道/文件）时按 UTF-8 写字节，避免被控制台代码页转成乱码；
+        // 直接输出到终端时走 Console.Write，交给终端自身编码处理
+        if (Console.IsOutputRedirected)
+        {
+            using var stdout = Console.OpenStandardOutput();
+            using var writer = new StreamWriter(stdout, new UTF8Encoding(false)) { AutoFlush = true };
+            writer.Write(json);
+        }
+        else
+        {
+            Console.Write(json);
+        }
+        return 0;
+    }
+
     /// <summary>打印用法</summary>
     private static void PrintUsage()
     {
@@ -163,6 +199,7 @@ public static class Program
         Console.WriteLine(Localization.Translate("  convert <input> [output]   Convert office documents to Markdown (output defaults to stdout)"));
         Console.WriteLine(Localization.Translate("  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)"));
         Console.WriteLine(Localization.Translate("  info <input>               Show file format information"));
+        Console.WriteLine(Localization.Translate("  read <input.docx>          Dump docx structure snapshot as JSON (for agents)"));
         Console.WriteLine();
         Console.WriteLine(Localization.Translate("Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc."));
     }

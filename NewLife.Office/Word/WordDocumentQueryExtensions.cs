@@ -22,6 +22,10 @@ namespace NewLife.Office.Word;
 public static class WordDocumentQueryExtensions
 {
     #region 定位
+    /// <summary>生成文档结构快照（块级视图，带锚点，供 AI 定位修改）</summary>
+    /// <param name="doc">文档</param>
+    /// <returns>结构快照</returns>
+    public static DocxOutline ToOutline(this Document doc) => DocxOutline.From(doc);
     /// <summary>枚举全部段落（正文、表格单元格含嵌套、页眉页脚、脚注尾注）</summary>
     /// <param name="doc">文档</param>
     /// <returns>按文档顺序排列的段落列表</returns>

@@ -284,6 +284,10 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     #endregion
 
     #region 文档模型读取
+    /// <summary>读取文档结构快照（块级视图，带锚点，供 AI 定位修改）</summary>
+    /// <returns>结构快照</returns>
+    public DocxOutline ReadOutline() => ReadDocument().ToOutline();
+
     /// <summary>读取完整文档模型（含格式、图片、表格、页面设置等）</summary>
     public Document ReadDocument()
     {
