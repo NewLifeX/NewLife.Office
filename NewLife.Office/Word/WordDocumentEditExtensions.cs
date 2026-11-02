@@ -489,6 +489,97 @@ public static class WordDocumentEditExtensions
     }
     #endregion
 
+    #region 修订
+    /// <summary>开启修订建议模式：设置后续修订的作者与时间</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="author">修订作者（写入 w:ins/w:del 的 w:author）</param>
+    /// <param name="date">修订时间；null 表示保存时刻</param>
+    public static void StartRevisions(this Document doc, String author, DateTime? date = null)
+    {
+        if (doc == null) throw new ArgumentNullException(nameof(doc));
+        if (String.IsNullOrEmpty(author)) throw new ArgumentException("Author is empty.", nameof(author));
+
+        doc.RevisionsAuthor = author;
+        doc.RevisionsDate = date;
+    }
+
+    /// <summary>把段落改成"删除原文 + 插入新文"的修订建议（Word 中显示为建议修改，可接受/拒绝）</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="paragraph">目标段落</param>
+    /// <param name="text">新文本</param>
+    /// <param name="author">修订作者；null 表示沿用 <see cref="Document.RevisionsAuthor"/></param>
+    /// <param name="date">修订时间；null 表示沿用 <see cref="Document.RevisionsDate"/></param>
+    /// <returns>同一个段落（便于链式使用）</returns>
+    /// <exception cref="ArgumentNullException">doc 或 paragraph 为空</exception>
+    /// <example>
+    /// <code>
+    /// doc.BeginEdit();
+    /// doc.StartRevisions("AI 审阅");
+    /// var para = doc.FindParagraph(p => p.Runs[0].Text.Contains("可能"));
+    /// if (para != null) doc.SetTextAsRevision(para, "建议改为：必然。");
+    /// </code>
+    /// </example>
+    public static Paragraph SetTextAsRevision(this Document doc, Paragraph paragraph, String text, String? author = null, DateTime? date = null)
+    {
+        if (doc == null) throw new ArgumentNullException(nameof(doc));
+        if (paragraph == null) throw new ArgumentNullException(nameof(paragraph));
+
+        if (author != null) doc.RevisionsAuthor = author;
+        if (date.HasValue) doc.RevisionsDate = date;
+
+        // 原文整段标为删除（保留各自格式），新文标为插入追加在后
+        var style = paragraph.Runs.Count > 0 ? paragraph.Runs[0].Properties : null;
+        foreach (var run in paragraph.Runs)
+        {
+            if (!String.IsNullOrEmpty(run.Text)) run.Revision = TrackChangeType.Delete;
+        }
+
+        paragraph.RawXml = null;
+        paragraph.Runs.Add(new Run { Text = text ?? String.Empty, Properties = style, Revision = TrackChangeType.Insert });
+
+        doc.MarkModified();
+        return paragraph;
+    }
+    #endregion
+
+    #region 页眉页脚
+    /// <summary>在页脚追加页码（PAGE / NUMPAGES 域），并开启打开时更新域</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="prefix">页码前缀文本（如"第 "）</param>
+    /// <param name="middle">页码与总页数之间的分隔文本（如" 页 / 共 "）</param>
+    /// <param name="suffix">总页数后缀文本（如" 页"）</param>
+    /// <param name="type">页脚类型：default（默认）/ first（首页）/ even（偶数页）</param>
+    /// <returns>新增的页脚段落</returns>
+    /// <remarks>
+    /// 页码是域而非静态文本：Word/WPS 打开时按 <see cref="Document.UpdateFields"/> 刷新。
+    /// 已有 <paramref name="type"/> 页脚时追加到其末尾，否则新建该类型页脚。
+    /// </remarks>
+    public static Paragraph AddPageNumber(this Document doc, String prefix = "第 ", String middle = " 页 / 共 ", String suffix = " 页", String type = "default")
+    {
+        if (doc == null) throw new ArgumentNullException(nameof(doc));
+
+        var footer = doc.Footers.Find(f => String.Equals(f.Type, type, StringComparison.OrdinalIgnoreCase));
+        if (footer == null)
+        {
+            footer = new Footer { Type = type };
+            doc.Footers.Add(footer);
+        }
+
+        var para = new Paragraph { Alignment = "center" };
+        if (!String.IsNullOrEmpty(prefix)) para.Runs.Add(new Run { Text = prefix });
+        para.AddField("PAGE", "1");
+        if (!String.IsNullOrEmpty(middle)) para.Runs.Add(new Run { Text = middle });
+        para.AddField("NUMPAGES", "1");
+        if (!String.IsNullOrEmpty(suffix)) para.Runs.Add(new Run { Text = suffix });
+
+        footer.Elements.Add(new Element { Type = ElementType.Paragraph, Paragraph = para });
+
+        doc.UpdateFields = true;
+        doc.MarkModified();
+        return para;
+    }
+    #endregion
+
     #region 域
     /// <summary>在当前段落末尾追加域（复杂域：begin/instrText/separate/结果/end）</summary>
     /// <param name="paragraph">段落</param>

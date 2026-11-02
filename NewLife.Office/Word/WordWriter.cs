@@ -81,6 +81,11 @@ public class WordWriter : IDisposable
     /// <summary>样式表是否被程序化修改（透传模式下用模型样式表覆盖源 styles.xml）</summary>
     private Boolean _stylesModified;
 
+    // 修订（track changes）上下文：作者/时间/自增 id
+    private String _revisionsAuthor = "NewLife.Office";
+    private DateTime? _revisionsDate;
+    private Int32 _revisionId = 1;
+
     // 程序化创建的脚注/尾注（非空时生成 footnotes.xml/endnotes.xml 部件，W22）
     private List<Footnote> _footnotes = [];
     private List<Footnote> _endnotes = [];
@@ -700,6 +705,9 @@ public class WordWriter : IDisposable
         ProtectionReadOnly = document.ProtectionReadOnly;
         _updateFields = document.UpdateFields;
         _stylesModified = document.StylesModified;
+        _revisionsAuthor = document.RevisionsAuthor ?? "NewLife.Office";
+        _revisionsDate = document.RevisionsDate;
+        _revisionId = 1;
         _documentVariables = document.DocumentVariables.Count > 0
             ? new Dictionary<String, String>(document.DocumentVariables) : [];
         if (document.PageSettings.HeaderText == null && document.HeaderText != null)
@@ -2127,7 +2135,7 @@ public class WordWriter : IDisposable
         sb.Append("</w:sdt>");
     }
 
-    private static void BuildRunXml(StringBuilder sb, Run run)
+    private void BuildRunXml(StringBuilder sb, Run run)
     {
         // 域（复杂域）：begin → instrText → separate → 结果 → end，Word 打开时按 updateFields 更新
         if (!String.IsNullOrEmpty(run.FieldCode))
@@ -2136,6 +2144,27 @@ public class WordWriter : IDisposable
             return;
         }
 
+        // 修订：插入 → w:ins，删除 → w:del + w:delText（Word 中显示为建议修改）
+        if (run.Revision.HasValue)
+        {
+            var isInsert = run.Revision.Value == TrackChangeType.Insert;
+            var tag = isInsert ? "ins" : "del";
+            var date = (_revisionsDate ?? DateTime.Now).ToString("yyyy-MM-ddTHH:mm:ssZ");
+            sb.Append($"<w:{tag} w:id=\"{_revisionId++}\" w:author=\"{Esc(_revisionsAuthor)}\" w:date=\"{date}\">");
+            BuildPlainRunXml(sb, run, isInsert ? "t" : "delText");
+            sb.Append($"</w:{tag}>");
+            return;
+        }
+
+        BuildPlainRunXml(sb, run, "t");
+    }
+
+    /// <summary>输出普通 run（含 rPr 与文本元素；删除修订用 <c>w:delText</c>）</summary>
+    /// <param name="sb">目标 StringBuilder</param>
+    /// <param name="run">运行段</param>
+    /// <param name="textTag">文本元素名：t 或 delText</param>
+    private static void BuildPlainRunXml(StringBuilder sb, Run run, String textTag)
+    {
         if (run.HyperlinkRelId != null)
             sb.Append($"<w:hyperlink r:id=\"{run.HyperlinkRelId}\" w:history=\"1\">");
 
@@ -2143,7 +2172,7 @@ public class WordWriter : IDisposable
         BuildRunPrXml(sb, run.Properties, run.HyperlinkRelId != null);
         var spaceAttr = (run.Text.Length > 0 && (run.Text[0] == ' ' || run.Text[^1] == ' '))
             ? " xml:space=\"preserve\"" : "";
-        sb.Append($"<w:t{spaceAttr}>{Esc(run.Text)}</w:t>");
+        sb.Append($"<w:{textTag}{spaceAttr}>{Esc(run.Text)}</w:{textTag}>");
         sb.Append("</w:r>");
 
         if (run.HyperlinkRelId != null)

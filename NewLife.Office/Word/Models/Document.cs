@@ -142,6 +142,12 @@ public class Document
 
     /// <summary>样式表是否被程序化修改过（<see cref="WordStyles"/>）。为 true 时透传模式会用 <see cref="StylesXml"/> 覆盖源 styles.xml</summary>
     public Boolean StylesModified { get; internal set; }
+
+    /// <summary>修订（track changes）作者，写入 <c>w:ins</c>/<c>w:del</c> 的 w:author；默认 NewLife.Office</summary>
+    public String RevisionsAuthor { get; set; } = "NewLife.Office";
+
+    /// <summary>修订时间，写入 <c>w:ins</c>/<c>w:del</c> 的 w:date；为 null 时用保存时刻</summary>
+    public DateTime? RevisionsDate { get; set; }
     #endregion
 
     #region 编辑

@@ -21,5 +21,11 @@ public class Run
 
     /// <summary>域缓存结果（显示文本）。为 null 时由 Word 打开后更新域填充（需 <see cref="Document.UpdateFields"/>）</summary>
     public String? FieldResult { get; set; }
+
+    /// <summary>
+    /// 修订标记：非空时 Writer 把该 Run 包成修订（Insert → <c>w:ins</c>，Delete → <c>w:del</c> + <c>w:delText</c>），
+    /// 作者/时间取 <see cref="Document.RevisionsAuthor"/>/<see cref="Document.RevisionsDate"/>。
+    /// </summary>
+    public TrackChangeType? Revision { get; set; }
     #endregion
 }
