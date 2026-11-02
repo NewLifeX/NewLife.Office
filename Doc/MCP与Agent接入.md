@@ -33,7 +33,7 @@ NewLife.Office.Cli convert report.docx report.md --images ./report-images --head
 
 - `read` 输出到 stdout；**被管道/重定向时按 UTF-8 写字节**，避免控制台代码页把中文转成乱码。
 - `apply` 退出码：`0` 全部成功、`1` 参数/文件错误、`3` 有操作失败（此时**不产生输出文件**）。
-- `convert` 的 `--images <dir>` 把图片写成 `image1.png`… 并在 Markdown 中以文件名引用；`--header-footer` 把页眉页脚以引用块标注输出（默认均关闭，避免污染正文）。
+- `convert` 的 `--images <dir>` 把图片写成 `{文档名}-image1.png`…（带源文档名前缀，多个文档落同一目录不会互相覆盖）并在 Markdown 中以文件名引用；`--header-footer` 把页眉页脚以引用块标注输出（默认均关闭，避免污染正文）。
 
 ---
 
