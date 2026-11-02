@@ -553,10 +553,10 @@ partial class ExcelWriter
                 var mime = ext == "png" ? "image/png" : ext == "jpeg" || ext == "jpg" ? "image/jpeg" : ext == "gif" ? "image/gif" : "image/png";
                 sw.Write($"<Default Extension=\"{ext}\" ContentType=\"{mime}\"/>");
             }
-            // Drawing
+            // Drawing（图片与图表共用 drawingN.xml，仅含图表时同样必须声明，否则部件落回 application/xml 导致文件无法打开）
             for (var i = 0; i < _sheetNames.Count; i++)
             {
-                if (sheetsWithImages.Contains(i))
+                if (sheetsWithImages.Contains(i) || sheetsWithCharts.ContainsKey(i))
                     sw.Write($"<Override PartName=\"/xl/drawings/drawing{i + 1}.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawing+xml\"/>");
             }
             // 批注
@@ -848,26 +848,6 @@ partial class ExcelWriter
                 sw.Write("</mergeCells>");
             }
 
-            // rowBreaks（水平分页符）
-            if (_sheetPageBreaks.TryGetValue(sheet, out var rowBreaks) && rowBreaks.Count > 0)
-            {
-                rowBreaks.Sort();
-                sw.Write($"<rowBreaks count=\"{rowBreaks.Count}\" manualBreakCount=\"{rowBreaks.Count}\">");
-                foreach (var r in rowBreaks)
-                    sw.Write($"<brk id=\"{r - 1}\" max=\"16383\" man=\"1\"/>");
-                sw.Write("</rowBreaks>");
-            }
-
-            // colBreaks（垂直分页符）——OOXML 规范 id 为 0基列号，与 rowBreaks 保持一致（2026-08-07 修复 off-by-one）
-            if (_sheetColPageBreaks.TryGetValue(sheet, out var colBreaks) && colBreaks.Count > 0)
-            {
-                colBreaks.Sort();
-                sw.Write($"<colBreaks count=\"{colBreaks.Count}\" manualBreakCount=\"{colBreaks.Count}\">");
-                foreach (var c in colBreaks)
-                    sw.Write($"<brk id=\"{c - 1}\" max=\"1048575\" man=\"1\"/>");
-                sw.Write("</colBreaks>");
-            }
-
             // conditionalFormatting
             if (_sheetCondFormats.TryGetValue(sheet, out var conds) && conds.Count > 0)
             {
@@ -985,6 +965,26 @@ partial class ExcelWriter
                 }
             }
 
+            // rowBreaks（水平分页符）——必须位于 headerFooter 之后（CT_Worksheet 子元素顺序）
+            if (_sheetPageBreaks.TryGetValue(sheet, out var rowBreaks) && rowBreaks.Count > 0)
+            {
+                rowBreaks.Sort();
+                sw.Write($"<rowBreaks count=\"{rowBreaks.Count}\" manualBreakCount=\"{rowBreaks.Count}\">");
+                foreach (var r in rowBreaks)
+                    sw.Write($"<brk id=\"{r - 1}\" max=\"16383\" man=\"1\"/>");
+                sw.Write("</rowBreaks>");
+            }
+
+            // colBreaks（垂直分页符）——OOXML 规范 id 为 0基列号，与 rowBreaks 保持一致（2026-08-07 修复 off-by-one）
+            if (_sheetColPageBreaks.TryGetValue(sheet, out var colBreaks) && colBreaks.Count > 0)
+            {
+                colBreaks.Sort();
+                sw.Write($"<colBreaks count=\"{colBreaks.Count}\" manualBreakCount=\"{colBreaks.Count}\">");
+                foreach (var c in colBreaks)
+                    sw.Write($"<brk id=\"{c - 1}\" max=\"1048575\" man=\"1\"/>");
+                sw.Write("</colBreaks>");
+            }
+
             // drawing（图片 + 图表引用）
             var hasDrawing = sheetsWithImages.Contains(i) || sheetsWithCharts.ContainsKey(i);
             if (hasDrawing)
@@ -1007,46 +1007,44 @@ partial class ExcelWriter
                 sw.Write("</tableParts>");
             }
 
-            // sparklineGroups（迷你图）
-            if (_sheetSparklineGroups.TryGetValue(sheet, out var sparkGroups) && sparkGroups.Count > 0)
-            {
-                sw.Write("<x14:sparklineGroups xmlns:x14=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\" xmlns:xm=\"http://schemas.microsoft.com/office/excel/2006/main\">");
-                foreach (var sg in sparkGroups)
-                {
-                    sw.Write($"<x14:sparklineGroup displayEmptyCellsAs=\"gap\"");
-                    if (sg.MarkerColor != null) sw.Write($" markers=\"1\"");
-                    sw.Write(">");
-                    sw.Write($"<x14:colorSeries theme=\"4\"/>");
-                    sw.Write($"<x14:colorNegative theme=\"5\"/>");
-                    sw.Write($"<x14:colorAxis theme=\"4\" luminance=\"42\"/>");
-                    sw.Write($"<x14:colorMarkers theme=\"4\" luminance=\"42\"/>");
-                    sw.Write($"<x14:colorFirst theme=\"4\" luminance=\"42\"/>");
-                    sw.Write($"<x14:colorLast theme=\"4\" luminance=\"42\"/>");
-                    sw.Write($"<x14:colorHigh theme=\"4\"/>");
-                    sw.Write($"<x14:colorLow theme=\"4\"/>");
-                    // 数据系列
-                    sw.Write($"<xm:sqref>{XmlEscape(sg.DataRange)}</xm:sqref>");
-                    // 迷你图位置
-                    sw.Write("<x14:sparklines>");
-                    // 单个单元格或多个单元格
-                    var cells = sg.CellRange.Split(',', ' ');
-                    foreach (var cell in cells)
-                    {
-                        if (cell.Trim().Length == 0) continue;
-                        sw.Write($"<x14:sparkline><xm:f>{XmlEscape(cell.Trim())}</xm:f></x14:sparkline>");
-                    }
-                    sw.Write("</x14:sparklines>");
-                    sw.Write($"</x14:sparklineGroup>");
-                }
-                sw.Write("</x14:sparklineGroups>");
-            }
-
-            // 扩展引用（M27 线程化批注 + M28 切片器）：extLst + x14 扩展
+            // 扩展引用：迷你图（x14）+ 线程化批注（M27）+ 切片器（M28）
+            // 说明：x14:sparklineGroups 不是 CT_Worksheet 的合法直接子元素，必须包在 extLst/ext 内
+            var hasSparklines = _sheetSparklineGroups.TryGetValue(sheet, out var sparkGroups) && sparkGroups != null && sparkGroups.Count > 0;
             var hasThreadedExt = sheetsWithThreadedComments.Contains(i);
             var sheetSlicers = _slicers.Where(s => s.Sheet.EqualIgnoreCase(sheet)).ToList();
-            if (hasThreadedExt || sheetSlicers.Count > 0)
+            if (hasSparklines || hasThreadedExt || sheetSlicers.Count > 0)
             {
                 sw.Write("<extLst>");
+                if (hasSparklines)
+                {
+                    sw.Write("<ext uri=\"{05C60535-1F16-4FD2-B633-F4F36F0B64E0}\">");
+                    sw.Write("<x14:sparklineGroups xmlns:x14=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\" xmlns:xm=\"http://schemas.microsoft.com/office/excel/2006/main\">");
+                    foreach (var sg in sparkGroups!)
+                    {
+                        sw.Write($"<x14:sparklineGroup displayEmptyCellsAs=\"gap\"");
+                        if (sg.MarkerColor != null) sw.Write($" markers=\"1\"");
+                        sw.Write(">");
+                        sw.Write($"<x14:colorSeries theme=\"4\"/>");
+                        sw.Write($"<x14:colorNegative theme=\"5\"/>");
+                        sw.Write($"<x14:colorAxis theme=\"4\"/>");
+                        sw.Write($"<x14:colorMarkers theme=\"4\"/>");
+                        sw.Write($"<x14:colorFirst theme=\"4\"/>");
+                        sw.Write($"<x14:colorLast theme=\"4\"/>");
+                        sw.Write($"<x14:colorHigh theme=\"4\"/>");
+                        sw.Write($"<x14:colorLow theme=\"4\"/>");
+                        // 迷你图放置位置（sqref）与数据系列（xm:f，按位置逐一对应）
+                        sw.Write("<x14:sparklines>");
+                        var cells = sg.CellRange.Split(',', ' ');
+                        foreach (var cell in cells)
+                        {
+                            if (cell.Trim().Length == 0) continue;
+                            sw.Write($"<x14:sparkline><xm:f>{XmlEscape(sg.DataRange)}</xm:f><xm:sqref>{XmlEscape(cell.Trim())}</xm:sqref></x14:sparkline>");
+                        }
+                        sw.Write("</x14:sparklines>");
+                        sw.Write($"</x14:sparklineGroup>");
+                    }
+                    sw.Write("</x14:sparklineGroups></ext>");
+                }
                 if (hasThreadedExt)
                 {
                     sw.Write("<ext uri=\"{0298E913-981F-46C6-9B23-F7C1E7E6C8F1}\">");
@@ -1116,13 +1114,10 @@ partial class ExcelWriter
                     }
                     globalTableIndex += tblRels.Count;
                 }
-                // 图表关系
+                // 图表关系：必须挂在 drawing 部件上（SpreadsheetML 不允许 worksheet 直接关联 ChartPart），
+                // 这里只推进图表编号，供后续 drawing rels 使用
                 if (sheetsWithCharts.TryGetValue(i, out var chartRels))
                 {
-                    for (var c = 0; c < chartRels.Count; c++)
-                    {
-                        rsw.Write($"<Relationship Id=\"rCh{c + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart\" Target=\"../charts/chart{globalChartId + c + 1}.xml\"/>");
-                    }
                     globalChartId += chartRels.Count;
                 }
                 rsw.Write("</Relationships>");

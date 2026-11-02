@@ -3042,8 +3042,8 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         var doc = XDocument.Load(es);
         if (doc.Root == null) return result;
 
-        // x14:sparklineGroups 节点
-        var sglEl = doc.Root.Elements()
+        // x14:sparklineGroups 节点（位于 extLst/ext 内，需按后代查找）
+        var sglEl = doc.Root.Descendants()
             .FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sparklineGroups"));
         if (sglEl == null) return result;
 
@@ -3052,27 +3052,32 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         {
             var group = new SparklineGroup();
 
-            // 读取 sqref（数据范围）
-            var sqrefEl = sgEl.Elements()
-                .FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sqref"));
-            group.DataRange = sqrefEl?.Value ?? String.Empty;
-
-            // 读取 sparklines 中的每个 sparkline 位置
+            // 规范结构：sparkline 的 f = 数据区域、sqref = 放置单元格；
+            // 旧版本自产文件写反了（组级 sqref 存数据区域、sparkline.f 存单元格），此处一并兼容。
             var sparklinesEl = sgEl.Elements()
                 .FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sparklines"));
+            var dataFromSparkline = String.Empty;
             if (sparklinesEl != null)
             {
                 foreach (var spEl in sparklinesEl.Elements()
                     .Where(e => e.Name.LocalName.EqualIgnoreCase("sparkline")))
                 {
-                    var fEl = spEl.Elements()
-                        .FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("f"));
-                    if (fEl != null && !fEl.Value.IsNullOrEmpty())
-                        group.Sparklines.Add(fEl.Value);
+                    var fVal = spEl.Elements()
+                        .FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("f"))?.Value;
+                    var sqVal = spEl.Elements()
+                        .FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sqref"))?.Value;
+                    if (dataFromSparkline.Length == 0 && !fVal.IsNullOrEmpty()) dataFromSparkline = fVal!;
+                    var cell = !sqVal.IsNullOrEmpty() ? sqVal! : fVal;
+                    if (!cell.IsNullOrEmpty()) group.Sparklines.Add(cell!);
                 }
             }
 
-            // 构建 CellRange（从 sparklines 的 f 值组合）
+            // 数据区域：优先组级 sqref（旧结构），否则取 sparkline.f（规范结构）
+            var sqrefEl = sgEl.Elements()
+                .FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("sqref"));
+            group.DataRange = sqrefEl?.Value ?? dataFromSparkline;
+
+            // 构建 CellRange（从 sparklines 的位置组合）
             if (group.Sparklines.Count > 0)
             {
                 group.CellRange = String.Join(",", group.Sparklines);
