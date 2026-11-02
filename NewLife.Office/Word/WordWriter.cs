@@ -78,6 +78,9 @@ public class WordWriter : IDisposable
     /// <summary>是否需要 Word 打开时刷新域（页码/目录），写入 settings.xml 的 w:updateFields</summary>
     private Boolean _updateFields;
 
+    /// <summary>样式表是否被程序化修改（透传模式下用模型样式表覆盖源 styles.xml）</summary>
+    private Boolean _stylesModified;
+
     // 程序化创建的脚注/尾注（非空时生成 footnotes.xml/endnotes.xml 部件，W22）
     private List<Footnote> _footnotes = [];
     private List<Footnote> _endnotes = [];
@@ -564,6 +567,13 @@ public class WordWriter : IDisposable
             // 需要 Word 打开时刷新域（页码/目录）：改写透传的 settings.xml
             if (_updateFields && _otherParts.TryGetValue("word/settings.xml", out var stBytes))
                 _otherParts["word/settings.xml"] = Encoding.UTF8.GetBytes(EnsureUpdateFields(Encoding.UTF8.GetString(stBytes)));
+            // 样式被程序化修改：用模型样式表覆盖透传的 styles.xml（原包没有该部件时补齐引用）
+            if (_stylesModified && _stylesXml != null)
+            {
+                var styleExisted = _otherParts.ContainsKey("word/styles.xml");
+                _otherParts["word/styles.xml"] = Encoding.UTF8.GetBytes(_stylesXml);
+                if (!styleExisted) EnsureStylesPartRefs();
+            }
             // 有文档变量变更时，从透传中移除 settings.xml 以便重新生成
             if (_documentVariables.Count > 0 && _settingsXml != null && !DocVarsMatch(_settingsXml, _documentVariables))
                 _otherParts.Remove("word/settings.xml");
@@ -689,6 +699,7 @@ public class WordWriter : IDisposable
         DocumentProperties = document.DocumentProperties;
         ProtectionReadOnly = document.ProtectionReadOnly;
         _updateFields = document.UpdateFields;
+        _stylesModified = document.StylesModified;
         _documentVariables = document.DocumentVariables.Count > 0
             ? new Dictionary<String, String>(document.DocumentVariables) : [];
         if (document.PageSettings.HeaderText == null && document.HeaderText != null)
@@ -1164,13 +1175,14 @@ public class WordWriter : IDisposable
     private void WriteStyles(ZipArchive za)
     {
         // 优先级：公开属性 StylesXml > 文档模型导入的样式表 > 默认生成
-        var stylesXml = StylesXml ?? _stylesXml;
-        if (stylesXml != null)
-        {
-            WriteEntry(za, "word/styles.xml", stylesXml);
-            return;
-        }
+        var stylesXml = StylesXml ?? _stylesXml ?? BuildDefaultStylesXml();
+        WriteEntry(za, "word/styles.xml", stylesXml);
+    }
 
+    /// <summary>生成默认样式表（docDefaults + Normal + Heading1~6 + TableGrid）</summary>
+    /// <returns>styles.xml 内容</returns>
+    internal static String BuildDefaultStylesXml()
+    {
         const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
         var sb = new StringBuilder();
         sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
@@ -1206,7 +1218,7 @@ public class WordWriter : IDisposable
         }
         sb.Append("</w:tblBorders></w:tblPr></w:style>");
         sb.Append("</w:styles>");
-        WriteEntry(za, "word/styles.xml", sb.ToString());
+        return sb.ToString();
     }
 
     private void WriteSettings(ZipArchive za)
@@ -1239,6 +1251,25 @@ public class WordWriter : IDisposable
         }
         sb.Append("</w:settings>");
         WriteEntry(za, "word/settings.xml", sb.ToString());
+    }
+
+    /// <summary>透传包内原本没有 styles.xml 时，补齐 Content_Types Override 与 document.xml.rels 关系</summary>
+    private void EnsureStylesPartRefs()
+    {
+        if (_otherParts.TryGetValue("[Content_Types].xml", out var ct))
+        {
+            var xml = InjectOneOverride(Encoding.UTF8.GetString(ct), "/word/styles.xml",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml");
+            _otherParts["[Content_Types].xml"] = Encoding.UTF8.GetBytes(xml);
+        }
+        if (_otherParts.TryGetValue("word/_rels/document.xml.rels", out var rels))
+        {
+            var xml = Encoding.UTF8.GetString(rels);
+            if (xml.IndexOf("Target=\"styles.xml\"", StringComparison.Ordinal) < 0)
+                xml = InjectXml(xml, "</Relationships>",
+                    "<Relationship Id=\"rStyles\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>");
+            _otherParts["word/_rels/document.xml.rels"] = Encoding.UTF8.GetBytes(xml);
+        }
     }
 
     /// <summary>确保 settings.xml 带 <c>w:updateFields</c>（Word 打开时刷新页码/目录等域）</summary>

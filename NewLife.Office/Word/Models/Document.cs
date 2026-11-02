@@ -139,6 +139,9 @@ public class Document
 
     /// <summary>打开时更新域：写入 settings.xml 的 <c>w:updateFields</c>，Word/WPS 打开后提示并刷新页码/目录等域</summary>
     public Boolean UpdateFields { get; set; }
+
+    /// <summary>样式表是否被程序化修改过（<see cref="WordStyles"/>）。为 true 时透传模式会用 <see cref="StylesXml"/> 覆盖源 styles.xml</summary>
+    public Boolean StylesModified { get; internal set; }
     #endregion
 
     #region 编辑
