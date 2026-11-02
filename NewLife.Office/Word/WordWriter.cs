@@ -75,6 +75,9 @@ public class WordWriter : IDisposable
 
     private Dictionary<String, String> _documentVariables = [];
 
+    /// <summary>是否需要 Word 打开时刷新域（页码/目录），写入 settings.xml 的 w:updateFields</summary>
+    private Boolean _updateFields;
+
     // 程序化创建的脚注/尾注（非空时生成 footnotes.xml/endnotes.xml 部件，W22）
     private List<Footnote> _footnotes = [];
     private List<Footnote> _endnotes = [];
@@ -554,6 +557,9 @@ public class WordWriter : IDisposable
         {
             // 新增图片（AddPicture）：先改写透传的 rels/Content_Types，media 部件在透传部件之后补写
             var newMedia = _imageRels.Count > 0 ? PrepareNewImages() : new List<(String Path, Byte[] Data)>();
+            // 需要 Word 打开时刷新域（页码/目录）：改写透传的 settings.xml
+            if (_updateFields && _otherParts.TryGetValue("word/settings.xml", out var stBytes))
+                _otherParts["word/settings.xml"] = Encoding.UTF8.GetBytes(EnsureUpdateFields(Encoding.UTF8.GetString(stBytes)));
             // 有文档变量变更时，从透传中移除 settings.xml 以便重新生成
             if (_documentVariables.Count > 0 && _settingsXml != null && !DocVarsMatch(_settingsXml, _documentVariables))
                 _otherParts.Remove("word/settings.xml");
@@ -669,6 +675,7 @@ public class WordWriter : IDisposable
         PageSettings = document.PageSettings;
         DocumentProperties = document.DocumentProperties;
         ProtectionReadOnly = document.ProtectionReadOnly;
+        _updateFields = document.UpdateFields;
         _documentVariables = document.DocumentVariables.Count > 0
             ? new Dictionary<String, String>(document.DocumentVariables) : [];
         if (document.PageSettings.HeaderText == null && document.HeaderText != null)
@@ -1160,15 +1167,11 @@ public class WordWriter : IDisposable
         if (_settingsXml != null)
         {
             // 当文档变量与源 settings.xml 一致时，直接透传（保持字节精确）
-            if (_documentVariables.Count > 0 && !DocVarsMatch(_settingsXml, _documentVariables))
-            {
-                var injected = InjectDocVars(_settingsXml, _documentVariables);
-                WriteEntry(za, "word/settings.xml", injected);
-            }
-            else
-            {
-                WriteEntry(za, "word/settings.xml", _settingsXml);
-            }
+            var xml = _documentVariables.Count > 0 && !DocVarsMatch(_settingsXml, _documentVariables)
+                ? InjectDocVars(_settingsXml, _documentVariables)
+                : _settingsXml;
+            if (_updateFields) xml = EnsureUpdateFields(xml);
+            WriteEntry(za, "word/settings.xml", xml);
             return;
         }
 
@@ -1178,6 +1181,8 @@ public class WordWriter : IDisposable
         sb.Append("<w:defaultTabStop w:val=\"720\"/>");
         if (ProtectionReadOnly)
             sb.Append("<w:documentProtection w:edit=\"readOnly\" w:enforcement=\"1\"/>");
+        if (_updateFields)
+            sb.Append("<w:updateFields w:val=\"true\"/>");
         if (_documentVariables.Count > 0)
         {
             sb.Append("<w:docVars>");
@@ -1187,6 +1192,15 @@ public class WordWriter : IDisposable
         }
         sb.Append("</w:settings>");
         WriteEntry(za, "word/settings.xml", sb.ToString());
+    }
+
+    /// <summary>确保 settings.xml 带 <c>w:updateFields</c>（Word 打开时刷新页码/目录等域）</summary>
+    /// <param name="settingsXml">原始 settings.xml</param>
+    /// <returns>已含 updateFields 的 settings.xml</returns>
+    private static String EnsureUpdateFields(String settingsXml)
+    {
+        if (settingsXml.IndexOf("w:updateFields", StringComparison.Ordinal) >= 0) return settingsXml;
+        return InjectXml(settingsXml, "</w:settings>", "<w:updateFields w:val=\"true\"/>");
     }
 
     /// <summary>向 settings.xml 注入文档变量（替换已有 w:docVars 或追加到 w:settings 末尾）</summary>
@@ -2007,67 +2021,18 @@ public class WordWriter : IDisposable
 
     private static void BuildRunXml(StringBuilder sb, Run run)
     {
+        // 域（复杂域）：begin → instrText → separate → 结果 → end，Word 打开时按 updateFields 更新
+        if (!String.IsNullOrEmpty(run.FieldCode))
+        {
+            BuildFieldXml(sb, run.FieldCode!, run.FieldResult, run.Properties);
+            return;
+        }
+
         if (run.HyperlinkRelId != null)
             sb.Append($"<w:hyperlink r:id=\"{run.HyperlinkRelId}\" w:history=\"1\">");
 
         sb.Append("<w:r>");
-        var p = run.Properties;
-        if (p != null)
-        {
-            sb.Append("<w:rPr>");
-            // 三态写回：true=开启，false=显式关闭（w:val="0"），null=不输出（继承样式）
-            AppendSwitchXml(sb, "b", p.Bold);
-            AppendSwitchXml(sb, "i", p.Italic);
-            AppendSwitchXml(sb, "strike", p.Strikethrough);
-            AppendSwitchXml(sb, "smallCaps", p.SmallCaps);
-            AppendSwitchXml(sb, "caps", p.AllCaps);
-            AppendSwitchXml(sb, "vanish", p.Hidden);
-            if (p.Superscript == true) sb.Append("<w:vertAlign w:val=\"superscript\"/>");
-            else if (p.Subscript == true) sb.Append("<w:vertAlign w:val=\"subscript\"/>");
-            else if (p.Superscript == false || p.Subscript == false) sb.Append("<w:vertAlign w:val=\"baseline\"/>");
-            // 下划线（支持样式）
-            if (p.Underline != null || p.UnderlineStyle != null)
-            {
-                var uVal = p.Underline == false && p.UnderlineStyle == null ? "none" : (p.UnderlineStyle ?? "single");
-                sb.Append($"<w:u w:val=\"{uVal}\"/>");
-            }
-            if (p.ForeColor != null) sb.Append($"<w:color w:val=\"{p.ForeColor.TrimStart('#')}\"/>");
-            if (p.FontSize.HasValue) sb.Append($"<w:sz w:val=\"{(Int32)(p.FontSize.Value * 2)}\"/>");
-            if (p.CharacterSpacing.HasValue) sb.Append($"<w:spacing w:val=\"{p.CharacterSpacing.Value}\"/>");
-            if (p.CharacterScaling.HasValue) sb.Append($"<w:w w:val=\"{p.CharacterScaling.Value}\"/>");
-            // 字体：西文/东亚字体独立设置（eastAsia 单独可控）
-            if (p.FontName != null || p.EastAsiaFontName != null)
-            {
-                var rf = new StringBuilder();
-                if (p.FontName != null)
-                    rf.Append($" w:ascii=\"{Esc(p.FontName)}\" w:hAnsi=\"{Esc(p.FontName)}\"");
-                if (p.EastAsiaFontName != null)
-                    rf.Append($" w:eastAsia=\"{Esc(p.EastAsiaFontName)}\"");
-                sb.Append($"<w:rFonts{rf}/>");
-            }
-            if (p.HighlightColor != null)
-                sb.Append($"<w:highlight w:val=\"{Esc(p.HighlightColor.TrimStart('#'))}\"/>");
-            if (p.Language != null)
-                sb.Append($"<w:lang w:val=\"{Esc(p.Language)}\"/>");
-            if (run.HyperlinkRelId != null) sb.Append("<w:rStyle w:val=\"Hyperlink\"/><w:color w:val=\"0563C1\"/><w:u w:val=\"single\"/>");
-            // 文字发光效果 (w14:glow)
-            if (p.GlowColor != null)
-            {
-                var rad = p.GlowSize ?? 254000; // EMU，默认 10pt
-                sb.Append($"<w14:glow w14:rad=\"{rad}\"><w14:srgbClr val=\"{p.GlowColor.TrimStart('#')}\"/></w14:glow>");
-            }
-            // 文字阴影效果 (w14:shadow)
-            if (p.ShadowColor != null)
-            {
-                var blurRad = 63500; // EMU，默认 2.5pt
-                var dist = p.ShadowOffsetX != null || p.ShadowOffsetY != null
-                    ? (Int64)Math.Sqrt((Double)((p.ShadowOffsetX ?? 0) * (p.ShadowOffsetX ?? 0) + (p.ShadowOffsetY ?? 0) * (p.ShadowOffsetY ?? 0)))
-                    : 25400L;
-                var dir = ShadowDirToAngle(p.ShadowOffsetX ?? 25400, p.ShadowOffsetY ?? 25400);
-                sb.Append($"<w14:shadow w14:blurRad=\"{blurRad}\" w14:dist=\"{dist}\" w14:dir=\"{dir}\"><w14:srgbClr val=\"{p.ShadowColor.TrimStart('#')}\"/></w14:shadow>");
-            }
-            sb.Append("</w:rPr>");
-        }
+        BuildRunPrXml(sb, run.Properties, run.HyperlinkRelId != null);
         var spaceAttr = (run.Text.Length > 0 && (run.Text[0] == ' ' || run.Text[^1] == ' '))
             ? " xml:space=\"preserve\"" : "";
         sb.Append($"<w:t{spaceAttr}>{Esc(run.Text)}</w:t>");
@@ -2075,6 +2040,92 @@ public class WordWriter : IDisposable
 
         if (run.HyperlinkRelId != null)
             sb.Append("</w:hyperlink>");
+    }
+
+    /// <summary>生成复杂域 XML（三个 fldChar + instrText + 结果文本）</summary>
+    /// <param name="sb">目标 StringBuilder</param>
+    /// <param name="code">域指令，如 <c>PAGE \* MERGEFORMAT</c>、<c>TOC \o "1-3" \h \z \u</c></param>
+    /// <param name="result">缓存显示结果（可为 null，由 Word 更新域时填充）</param>
+    /// <param name="props">结果的字符格式</param>
+    private static void BuildFieldXml(StringBuilder sb, String code, String? result, RunProperties? props)
+    {
+        sb.Append("<w:r><w:fldChar w:fldCharType=\"begin\"/></w:r>");
+        sb.Append($"<w:r><w:instrText xml:space=\"preserve\"> {Esc(code)} </w:instrText></w:r>");
+        sb.Append("<w:r><w:fldChar w:fldCharType=\"separate\"/></w:r>");
+        sb.Append("<w:r>");
+        BuildRunPrXml(sb, props, false);
+        var spaceAttr = (!String.IsNullOrEmpty(result) && (result![0] == ' ' || result[^1] == ' '))
+            ? " xml:space=\"preserve\"" : "";
+        sb.Append($"<w:t{spaceAttr}>{Esc(result ?? String.Empty)}</w:t>");
+        sb.Append("</w:r>");
+        sb.Append("<w:r><w:fldChar w:fldCharType=\"end\"/></w:r>");
+    }
+
+    /// <summary>生成 <c>w:rPr</c>（三态写回：true=开启，false=显式关闭，null=继承样式）</summary>
+    /// <param name="sb">目标 StringBuilder</param>
+    /// <param name="p">字符格式；null 表示不输出 rPr</param>
+    /// <param name="isHyperlink">是否作为超链接文本输出（附加 Hyperlink 字符样式）</param>
+    private static void BuildRunPrXml(StringBuilder sb, RunProperties? p, Boolean isHyperlink)
+    {
+        if (p == null)
+        {
+            if (isHyperlink) sb.Append("<w:rPr><w:rStyle w:val=\"Hyperlink\"/><w:color w:val=\"0563C1\"/><w:u w:val=\"single\"/></w:rPr>");
+            return;
+        }
+
+        sb.Append("<w:rPr>");
+        // 三态写回：true=开启，false=显式关闭（w:val="0"），null=不输出（继承样式）
+        AppendSwitchXml(sb, "b", p.Bold);
+        AppendSwitchXml(sb, "i", p.Italic);
+        AppendSwitchXml(sb, "strike", p.Strikethrough);
+        AppendSwitchXml(sb, "smallCaps", p.SmallCaps);
+        AppendSwitchXml(sb, "caps", p.AllCaps);
+        AppendSwitchXml(sb, "vanish", p.Hidden);
+        if (p.Superscript == true) sb.Append("<w:vertAlign w:val=\"superscript\"/>");
+        else if (p.Subscript == true) sb.Append("<w:vertAlign w:val=\"subscript\"/>");
+        else if (p.Superscript == false || p.Subscript == false) sb.Append("<w:vertAlign w:val=\"baseline\"/>");
+        // 下划线（支持样式）
+        if (p.Underline != null || p.UnderlineStyle != null)
+        {
+            var uVal = p.Underline == false && p.UnderlineStyle == null ? "none" : (p.UnderlineStyle ?? "single");
+            sb.Append($"<w:u w:val=\"{uVal}\"/>");
+        }
+        if (p.ForeColor != null) sb.Append($"<w:color w:val=\"{p.ForeColor.TrimStart('#')}\"/>");
+        if (p.FontSize.HasValue) sb.Append($"<w:sz w:val=\"{(Int32)(p.FontSize.Value * 2)}\"/>");
+        if (p.CharacterSpacing.HasValue) sb.Append($"<w:spacing w:val=\"{p.CharacterSpacing.Value}\"/>");
+        if (p.CharacterScaling.HasValue) sb.Append($"<w:w w:val=\"{p.CharacterScaling.Value}\"/>");
+        // 字体：西文/东亚字体独立设置（eastAsia 单独可控）
+        if (p.FontName != null || p.EastAsiaFontName != null)
+        {
+            var rf = new StringBuilder();
+            if (p.FontName != null)
+                rf.Append($" w:ascii=\"{Esc(p.FontName)}\" w:hAnsi=\"{Esc(p.FontName)}\"");
+            if (p.EastAsiaFontName != null)
+                rf.Append($" w:eastAsia=\"{Esc(p.EastAsiaFontName)}\"");
+            sb.Append($"<w:rFonts{rf}/>");
+        }
+        if (p.HighlightColor != null)
+            sb.Append($"<w:highlight w:val=\"{Esc(p.HighlightColor.TrimStart('#'))}\"/>");
+        if (p.Language != null)
+            sb.Append($"<w:lang w:val=\"{Esc(p.Language)}\"/>");
+        if (isHyperlink) sb.Append("<w:rStyle w:val=\"Hyperlink\"/><w:color w:val=\"0563C1\"/><w:u w:val=\"single\"/>");
+        // 文字发光效果 (w14:glow)
+        if (p.GlowColor != null)
+        {
+            var rad = p.GlowSize ?? 254000; // EMU，默认 10pt
+            sb.Append($"<w14:glow w14:rad=\"{rad}\"><w14:srgbClr val=\"{p.GlowColor.TrimStart('#')}\"/></w14:glow>");
+        }
+        // 文字阴影效果 (w14:shadow)
+        if (p.ShadowColor != null)
+        {
+            var blurRad = 63500; // EMU，默认 2.5pt
+            var dist = p.ShadowOffsetX != null || p.ShadowOffsetY != null
+                ? (Int64)Math.Sqrt((Double)((p.ShadowOffsetX ?? 0) * (p.ShadowOffsetX ?? 0) + (p.ShadowOffsetY ?? 0) * (p.ShadowOffsetY ?? 0)))
+                : 25400L;
+            var dir = ShadowDirToAngle(p.ShadowOffsetX ?? 25400, p.ShadowOffsetY ?? 25400);
+            sb.Append($"<w14:shadow w14:blurRad=\"{blurRad}\" w14:dist=\"{dist}\" w14:dir=\"{dir}\"><w14:srgbClr val=\"{p.ShadowColor.TrimStart('#')}\"/></w14:shadow>");
+        }
+        sb.Append("</w:rPr>");
     }
 
     /// <summary>生成三态开关元素 XML（w:b 等）：true=开启，false=显式关闭（w:val="0"），null=不输出</summary>

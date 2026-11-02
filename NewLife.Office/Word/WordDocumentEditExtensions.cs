@@ -438,6 +438,73 @@ public static class WordDocumentEditExtensions
     }
     #endregion
 
+    #region 域
+    /// <summary>在当前段落末尾追加域（复杂域：begin/instrText/separate/结果/end）</summary>
+    /// <param name="paragraph">段落</param>
+    /// <param name="code">域指令，如 <c>PAGE \* MERGEFORMAT</c>、<c>NUMPAGES</c>、<c>DATE \@ yyyy-MM-dd</c></param>
+    /// <param name="result">缓存显示文本；null 时留空，Word 打开后按 <see cref="Document.UpdateFields"/> 刷新</param>
+    /// <param name="properties">结果的字符格式</param>
+    /// <returns>新增的域 Run</returns>
+    /// <exception cref="ArgumentNullException">paragraph 为空</exception>
+    /// <exception cref="ArgumentException">code 为空</exception>
+    /// <example>
+    /// <code>
+    /// doc.BeginEdit();
+    /// var para = doc.AddParagraph("第 ");
+    /// para.Paragraph!.AddField("PAGE", "1");
+    /// para.Paragraph!.Runs.Add(new Run { Text = " 页" });
+    /// doc.UpdateFields = true;
+    /// </code>
+    /// </example>
+    public static Run AddField(this Paragraph paragraph, String code, String? result = null, RunProperties? properties = null)
+    {
+        if (paragraph == null) throw new ArgumentNullException(nameof(paragraph));
+        if (String.IsNullOrEmpty(code)) throw new ArgumentException("Field code is empty.", nameof(code));
+
+        paragraph.RawXml = null;
+        var run = new Run { FieldCode = code, FieldResult = result, Properties = properties };
+        paragraph.Runs.Add(run);
+        return run;
+    }
+
+    /// <summary>在正文末尾追加只含一个域的段落</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="code">域指令</param>
+    /// <param name="result">缓存显示文本</param>
+    /// <param name="style">段落样式</param>
+    /// <returns>新增段落的顶层元素</returns>
+    public static Element AddField(this Document doc, String code, String? result = null, ParagraphStyle style = ParagraphStyle.Normal)
+    {
+        if (String.IsNullOrEmpty(code)) throw new ArgumentException("Field code is empty.", nameof(code));
+
+        var para = new Paragraph { Style = style };
+        para.AddField(code, result);
+        return doc.AppendTopLevel(new Element { Type = ElementType.Paragraph, Paragraph = para });
+    }
+
+    /// <summary>在正文末尾追加目录（TOC 域），并开启打开时更新域</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="levels">收录的标题级别（1~9），默认 3 级</param>
+    /// <param name="title">目录标题文本（如"目录"）；null 表示不输出标题段落</param>
+    /// <returns>目录域所在段落的顶层元素</returns>
+    /// <remarks>
+    /// 目录条目由 Word/WPS 打开时按标题样式生成（<see cref="Document.UpdateFields"/> 已置 true）。
+    /// 需要离线即可见的目录，请自行按标题生成静态条目。
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">levels 不在 1~9</exception>
+    public static Element AddTableOfContents(this Document doc, Int32 levels = 3, String? title = null)
+    {
+        if (levels < 1) levels = 1;
+        if (levels > 9) levels = 9;
+
+        if (!String.IsNullOrEmpty(title))
+            doc.AddParagraph(title!, ParagraphStyle.Heading1);
+
+        doc.UpdateFields = true;
+        return doc.AddField($"TOC \\o \"1-{levels}\" \\h \\z \\u");
+    }
+    #endregion
+
     #region 辅助
     /// <summary>按换行拆分为多个段落（OOXML 的 Run 不承载换行，只能分段表达）</summary>
     private static List<Paragraph> CreateParagraphs(String? text, ParagraphStyle style)

@@ -136,6 +136,9 @@ public class Document
     /// 透传模式下只有正文修改会丢失（页眉页脚/脚注等独立部件仍会同步），保存前据此自检。
     /// </summary>
     public Boolean BodyModified { get; internal set; }
+
+    /// <summary>打开时更新域：写入 settings.xml 的 <c>w:updateFields</c>，Word/WPS 打开后提示并刷新页码/目录等域</summary>
+    public Boolean UpdateFields { get; set; }
     #endregion
 
     #region 编辑
