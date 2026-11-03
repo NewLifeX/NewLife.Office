@@ -4,7 +4,7 @@ namespace NewLife.Office.Pdf;
 
 /// <summary>PDF 结构快照：面向 AI/Agent 的页/书签/表单/注释/附件视图</summary>
 /// <remarks>
-/// 锚点以页码（1 起始）与矩形坐标为定位单位，配合 <see cref="PdfReader.SearchText"/> 可形成"搜索 → 定位 → 标注"链路。
+/// 锚点以页码（1 起始）与矩形坐标为定位单位，配合 <see cref="PdfTextSearch.SearchText"/> 可形成"搜索 → 定位 → 标注"链路。
 /// <example>
 /// <code>
 /// using var reader = new PdfReader("report.pdf");

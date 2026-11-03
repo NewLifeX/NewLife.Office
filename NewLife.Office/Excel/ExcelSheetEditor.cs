@@ -4,7 +4,7 @@ namespace NewLife.Office.Excel;
 
 /// <summary>工作表编辑辅助：按 A1 坐标读写单元格、调整行列与样式</summary>
 /// <remarks>
-/// 所有操作直接作用于 <see cref="Worksheet"/> 模型，保存由 <see cref="ExcelDocumentExtensions.Save"/> 负责。
+/// 所有操作直接作用于 <see cref="Worksheet"/> 模型，保存由 <see cref="ExcelDocumentExtensions.Save(ExcelDocument, String)"/> 负责。
 /// 编辑前会把"跳行"布局规整为稠密行（<see cref="Worksheet.ActualRowNumbers"/> 置 null），
 /// 因此后续行列索引与 Excel 行号一一对应。
 /// </remarks>
