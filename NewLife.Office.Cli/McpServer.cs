@@ -177,7 +177,12 @@ internal static class McpServer
         using (var writer = new WordWriter())
             writer.Save(output, doc);
 
-        return ToolText(id, $"已应用 {result.Applied.Count} 条操作 → {output}");
+        var text = $"已应用 {result.Applied.Count} 条操作 → {output}";
+        // 告警不影响成功状态，但要显式告知，避免“内容被静默丢弃”
+        if (result.Warnings.Count > 0)
+            text += "\n告警：\n" + String.Join("\n", result.Warnings);
+
+        return ToolText(id, text);
     }
 
     private static String? GetString(JsonElement args, String name)

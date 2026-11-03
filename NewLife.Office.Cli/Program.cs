@@ -253,6 +253,10 @@ public static class Program
         using (var writer = new NewLife.Office.Word.WordWriter())
             writer.Save(output, doc);
 
+        // 告警不影响成功状态，但必须让用户看到（否则“内容被静默丢弃”）
+        foreach (var item in result.Warnings)
+            Console.Error.WriteLine(Localization.Translate("Warning: {0}", item));
+
         Console.WriteLine(Localization.Translate("Applied {0} operation(s): {1} → {2}", result.Applied.Count, Path.GetFileName(input), output));
         return 0;
     }
