@@ -9,7 +9,7 @@
 ![NuGet prerelease](https://img.shields.io/nuget/vpre/NewLife.Office?label=dev%20nuget&logo=nuget)
 [![test](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml)
 [![locales](https://img.shields.io/badge/locales-31-2ea44f?logo=dotnet)](Doc/多语言本地化.md)
-[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-23%2F23-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
+[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-24%2F24-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20iOS-blue)
 ![arch](https://img.shields.io/badge/arch-x64%20%7C%20x86%20%7C%20arm64%20%7C%20loongarch64%20%7C%20riscv64%20%7C%20s390x-orange)
 [![contributors](https://img.shields.io/github/contributors/NewLifeX/NewLife.Office?logo=github)](https://github.com/NewLifeX/NewLife.Office/graphs/contributors)
@@ -42,7 +42,7 @@ NuGet: NewLife.Office（レンダリング拡張パッケージ: NewLife.Office.
 - **高忠実度ラウンドトリップ**: L2/L3 レベルの忠実度アーキテクチャ（モデル + RawXml/パーツ透過）、読む→変更→書くで書式を失わない
 - **Markdown 変換ハブ**: MD↔docx/PDF/HTML/Excel/PPT/Word 双方向変換、AI ナレッジベース投入の統一エントリ
 - **レンダリング拡張**: `NewLife.Office.Rendering`（独立 NuGet）がドキュメント → 画像レンダリング、画像処理、QR コードを提供
-- **AOT/クロスプラットフォーム**: `net8.0` / `net10.0` で IL 警告ゼロ。CI は win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64（LoongArch は QEMU 経由）をカバーし、31 言語表を含む 23 の AOT スモークシナリオを実行
+- **AOT/クロスプラットフォーム**: `net8.0` / `net10.0` で IL 警告ゼロ。CI は win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64（LoongArch は QEMU 経由）をカバーし、31 言語表を含む 24 の AOT スモークシナリオを実行
 - **31 言語のローカライズ**: 例外メッセージ、ドキュメント出力ラベル、アセンブリ メタデータを現在のカルチャに合わせて翻訳し、英語にフォールバック。`Locales/*.yml` はアセンブリにコンパイルされ、NativeAOT でも動作
 
 ## 対応形式

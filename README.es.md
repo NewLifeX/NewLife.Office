@@ -9,7 +9,7 @@
 ![NuGet prerelease](https://img.shields.io/nuget/vpre/NewLife.Office?label=dev%20nuget&logo=nuget)
 [![test](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml)
 [![locales](https://img.shields.io/badge/locales-31-2ea44f?logo=dotnet)](Doc/多语言本地化.md)
-[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-23%2F23-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
+[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-24%2F24-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20iOS-blue)
 ![arch](https://img.shields.io/badge/arch-x64%20%7C%20x86%20%7C%20arm64%20%7C%20loongarch64%20%7C%20riscv64%20%7C%20s390x-orange)
 [![contributors](https://img.shields.io/github/contributors/NewLifeX/NewLife.Office?logo=github)](https://github.com/NewLifeX/NewLife.Office/graphs/contributors)
@@ -42,7 +42,7 @@ NuGet: NewLife.Office (paquete de renderizado: NewLife.Office.Rendering)
 - **Roundtrip de alta fidelidad**: arquitectura de fidelidad L2/L3 (modelo + paso directo de RawXml/partes), leer → modificar → escribir sin perder formato
 - **Centro de conversión Markdown**: conversión bidireccional MD↔docx/PDF/HTML/Excel/PPT/Word, un punto de entrada unificado para la ingesta de bases de conocimiento de IA
 - **Extensión de renderizado**: `NewLife.Office.Rendering` (NuGet independiente) proporciona renderizado de documentos → imágenes, procesamiento de imágenes y códigos QR
-- **AOT/multiplataforma**: cero advertencias de IL en `net8.0` / `net10.0`; CI cubre win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch mediante QEMU), con 23 escenarios de prueba AOT que incluyen las 31 tablas de idioma
+- **AOT/multiplataforma**: cero advertencias de IL en `net8.0` / `net10.0`; CI cubre win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch mediante QEMU), con 24 escenarios de prueba AOT que incluyen las 31 tablas de idioma
 - **Localización en 31 idiomas**: los mensajes de excepción, las etiquetas de salida de documentos y los metadatos del ensamblado se traducen según la cultura actual y recurren al inglés; `Locales/*.yml` se compilan en el ensamblado y funcionan bajo NativeAOT
 
 ## Formatos compatibles

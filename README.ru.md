@@ -9,7 +9,7 @@
 ![NuGet prerelease](https://img.shields.io/nuget/vpre/NewLife.Office?label=dev%20nuget&logo=nuget)
 [![test](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml)
 [![locales](https://img.shields.io/badge/locales-31-2ea44f?logo=dotnet)](Doc/多语言本地化.md)
-[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-23%2F23-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
+[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-24%2F24-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20iOS-blue)
 ![arch](https://img.shields.io/badge/arch-x64%20%7C%20x86%20%7C%20arm64%20%7C%20loongarch64%20%7C%20riscv64%20%7C%20s390x-orange)
 [![contributors](https://img.shields.io/github/contributors/NewLifeX/NewLife.Office?logo=github)](https://github.com/NewLifeX/NewLife.Office/graphs/contributors)
@@ -42,7 +42,7 @@ NuGet: NewLife.Office (пакет рендеринга: NewLife.Office.Rendering
 - **Высокоточный roundtrip**: архитектура точности L2/L3 (модель + сквозная передача RawXml/частей), чтение → изменение → запись без потери форматирования
 - **Центр конвертации Markdown**: двунаправленная конвертация MD↔docx/PDF/HTML/Excel/PPT/Word, единая точка входа для загрузки баз знаний ИИ
 - **Расширение рендеринга**: `NewLife.Office.Rendering` (отдельный NuGet) предоставляет рендеринг документов → изображения, обработку изображений и QR-коды
-- **AOT/кроссплатформенность**: ноль предупреждений IL на `net8.0` / `net10.0`; CI охватывает win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch через QEMU), с 23 сценариями AOT-тестов, включая все 31 языковую таблицу
+- **AOT/кроссплатформенность**: ноль предупреждений IL на `net8.0` / `net10.0`; CI охватывает win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch через QEMU), с 24 сценариями AOT-тестов, включая все 31 языковую таблицу
 - **Локализация на 31 язык**: сообщения исключений, метки вывода документов и метаданные сборки переводятся для текущей культуры с откатом на английский; файлы `Locales/*.yml` компилируются в сборку и работают под NativeAOT
 
 ## Поддерживаемые форматы

@@ -9,7 +9,7 @@
 ![NuGet prerelease](https://img.shields.io/nuget/vpre/NewLife.Office?label=dev%20nuget&logo=nuget)
 [![test](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml)
 [![locales](https://img.shields.io/badge/locales-31-2ea44f?logo=dotnet)](Doc/多语言本地化.md)
-[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-23%2F23-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
+[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-24%2F24-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20iOS-blue)
 ![arch](https://img.shields.io/badge/arch-x64%20%7C%20x86%20%7C%20arm64%20%7C%20loongarch64%20%7C%20riscv64%20%7C%20s390x-orange)
 [![contributors](https://img.shields.io/github/contributors/NewLifeX/NewLife.Office?logo=github)](https://github.com/NewLifeX/NewLife.Office/graphs/contributors)
@@ -42,7 +42,7 @@ NuGet: NewLife.Office (렌더링 확장 패키지: NewLife.Office.Rendering)
 - **고충실도 라운드트립**: L2/L3 충실도 아키텍처(모델 + RawXml/파츠 투과), 읽기→수정→쓰기 시 서식 손실 없음
 - **Markdown 변환 허브**: MD↔docx/PDF/HTML/Excel/PPT/Word 양방향 변환, AI 지식 베이스 주입을 위한 통일된 진입점
 - **렌더링 확장**: `NewLife.Office.Rendering`(별도 NuGet)이 문서 → 이미지 렌더링, 이미지 처리, QR 코드 제공
-- **AOT/크로스 플랫폼**: `net8.0` / `net10.0`에서 IL 경고 0개; CI는 win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64(LoongArch는 QEMU 경유)를 포함하며, 31개 언어 테이블을 포함한 23개 AOT 스모크 시나리오를 실행
+- **AOT/크로스 플랫폼**: `net8.0` / `net10.0`에서 IL 경고 0개; CI는 win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64(LoongArch는 QEMU 경유)를 포함하며, 31개 언어 테이블을 포함한 24개 AOT 스모크 시나리오를 실행
 - **31개 언어 현지화**: 예외 메시지, 문서 출력 레이블 및 어셈블리 메타데이터를 현재 문화권에 맞게 번역하고 영어로 대체합니다. `Locales/*.yml`은 어셈블리에 컴파일되어 NativeAOT에서도 작동합니다
 
 ## 지원 형식

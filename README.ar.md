@@ -6,7 +6,7 @@
 ![NuGet prerelease](https://img.shields.io/nuget/vpre/NewLife.Office?label=dev%20nuget&logo=nuget)
 [![test](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml)
 [![locales](https://img.shields.io/badge/locales-31-2ea44f?logo=dotnet)](Doc/多语言本地化.md)
-[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-23%2F23-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
+[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-24%2F24-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20iOS-blue)
 ![arch](https://img.shields.io/badge/arch-x64%20%7C%20x86%20%7C%20arm64%20%7C%20loongarch64%20%7C%20riscv64%20%7C%20s390x-orange)
 [![contributors](https://img.shields.io/github/contributors/NewLifeX/NewLife.Office?logo=github)](https://github.com/NewLifeX/NewLife.Office/graphs/contributors)
@@ -38,7 +38,7 @@ NuGet: NewLife.Office (حزمة العرض: NewLife.Office.Rendering)
 - **استدارة عالية الدقة**: بنية وفاء L2/L3 (نموذج + تمرير RawXml/الأجزاء)، قراءة → تعديل → كتابة دون فقدان التنسيق
 - **مركز تحويل Markdown**: تحويل ثنائي الاتجاه بين MD وdocx/PDF/HTML/Excel/PPT/Word، مدخل موحّد لتغذية قواعد معرفة الذكاء الاصطناعي
 - **امتداد العرض**: `NewLife.Office.Rendering` (حزمة NuGet منفصلة) يوفّر تحويل المستندات إلى صور، ومعالجة الصور، ورموز QR
-- **AOT/متعدد المنصات**: صفر تحذيرات IL على `net8.0` / `net10.0`؛ تغطي CI منصات win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch عبر QEMU)، مع 23 سيناريو اختبار AOT تشمل جداول اللغات الـ31
+- **AOT/متعدد المنصات**: صفر تحذيرات IL على `net8.0` / `net10.0`؛ تغطي CI منصات win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch عبر QEMU)، مع 24 سيناريو اختبار AOT تشمل جداول اللغات الـ31
 - **دعم 31 لغة**: تُترجم رسائل الاستثناءات وتسميات مخرجات المستندات وبيانات تعريف التجميع حسب الثقافة الحالية مع الرجوع إلى الإنجليزية؛ تُجمَّع ملفات `Locales/*.yml` داخل التجميع وتعمل تحت NativeAOT
 
 ## الصيغ المدعومة

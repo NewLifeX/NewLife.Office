@@ -9,7 +9,7 @@
 ![NuGet prerelease](https://img.shields.io/nuget/vpre/NewLife.Office?label=dev%20nuget&logo=nuget)
 [![test](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml)
 [![locales](https://img.shields.io/badge/locales-31-2ea44f?logo=dotnet)](Doc/多语言本地化.md)
-[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-23%2F23-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
+[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-24%2F24-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20iOS-blue)
 ![arch](https://img.shields.io/badge/arch-x64%20%7C%20x86%20%7C%20arm64%20%7C%20loongarch64%20%7C%20riscv64%20%7C%20s390x-orange)
 [![contributors](https://img.shields.io/github/contributors/NewLifeX/NewLife.Office?logo=github)](https://github.com/NewLifeX/NewLife.Office/graphs/contributors)
@@ -42,7 +42,7 @@ NuGet : NewLife.Office (package de rendu : NewLife.Office.Rendering)
 - **Aller-retour haute fidélité** : architecture de fidélité L2/L3 (modèle + passage direct RawXml/parties), lire → modifier → écrire sans perdre le formatage
 - **Centre de conversion Markdown** : conversion bidirectionnelle MD↔docx/PDF/HTML/Excel/PPT/Word, un point d'entrée unifié pour l'ingestion de bases de connaissances IA
 - **Extension de rendu** : `NewLife.Office.Rendering` (NuGet indépendant) fournit le rendu documents → images, le traitement d'images et les codes QR
-- **AOT/multiplateforme** : aucune alerte IL sous `net8.0` / `net10.0` ; la CI couvre win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch via QEMU), avec 23 scénarios de test AOT incluant les 31 tables de langues
+- **AOT/multiplateforme** : aucune alerte IL sous `net8.0` / `net10.0` ; la CI couvre win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch via QEMU), avec 24 scénarios de test AOT incluant les 31 tables de langues
 - **Localisation en 31 langues** : les messages d'exception, les libellés de sortie des documents et les métadonnées d'assembly sont traduits selon la culture courante et reviennent à l'anglais ; les fichiers `Locales/*.yml` sont compilés dans l'assembly et fonctionnent sous NativeAOT
 
 ## Formats pris en charge

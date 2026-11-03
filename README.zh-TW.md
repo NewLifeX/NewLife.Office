@@ -9,7 +9,7 @@
 ![NuGet prerelease](https://img.shields.io/nuget/vpre/NewLife.Office?label=dev%20nuget&logo=nuget)
 [![test](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/NewLifeX/NewLife.Office/actions/workflows/test.yml)
 [![locales](https://img.shields.io/badge/locales-31-2ea44f?logo=dotnet)](Doc/多语言本地化.md)
-[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-23%2F23-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
+[![AOT smoke](https://img.shields.io/badge/AOT%20smoke-24%2F24-brightgreen?logo=dotnet)](.github/workflows/aot.yml)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Android%20%7C%20iOS-blue)
 ![arch](https://img.shields.io/badge/arch-x64%20%7C%20x86%20%7C%20arm64%20%7C%20loongarch64%20%7C%20riscv64%20%7C%20s390x-orange)
 [![contributors](https://img.shields.io/github/contributors/NewLifeX/NewLife.Office?logo=github)](https://github.com/NewLifeX/NewLife.Office/graphs/contributors)
@@ -42,7 +42,7 @@ NuGet：NewLife.Office（渲染擴充套件：NewLife.Office.Rendering）
 - **高保真往返**：L2/L3 級保真架構（模型 + RawXml/元件透傳），讀→改→寫不丟格式
 - **Markdown 全格式轉換中樞**：MD↔docx/PDF/HTML/Excel/PPT/Word 雙向轉換，為 AI 知識庫餵入提供統一入口
 - **渲染擴充套件**：`NewLife.Office.Rendering`（獨立 NuGet）提供文件 → 圖片渲染、圖片處理、QR Code
-- **AOT／跨平台**：`net8.0` / `net10.0` 零 IL 警告，CI 覆蓋 win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64（龍芯 LA64 經 QEMU），23 項 AOT 冒煙場景（含 31 種語言表）
+- **AOT／跨平台**：`net8.0` / `net10.0` 零 IL 警告，CI 覆蓋 win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64（龍芯 LA64 經 QEMU），24 項 AOT 冒煙場景（含 31 種語言表）
 - **31 種語言在地化**：例外訊息、文件輸出標籤與組件中繼資料依目前區域自動翻譯，缺少譯文時回退英文；`Locales/*.yml` 編譯期產生，NativeAOT 下同樣可用
 
 ## 支援的格式
