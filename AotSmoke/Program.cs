@@ -1,4 +1,4 @@
-// NewLife.Office NativeAOT 冒烟：23 场景逐项 PASS/FAIL，任一失败以非 0 退出码结束。
+// NewLife.Office NativeAOT 冒烟：24 场景逐项 PASS/FAIL，任一失败以非 0 退出码结束。
 // 同一工程双跑对照：JIT（dotnet run -c Release）与 NativeAOT（dotnet publish -c Release -r <rid> 后运行产物）。
 // 由 .github/workflows/aot.yml 自动执行（win-x64/win-x86/win-arm64/linux-x64/linux-arm64/osx-x64/osx-arm64 原生发布运行，linux-la64 经 QEMU 以 JIT 覆盖）。
 using System.ComponentModel;
@@ -402,6 +402,73 @@ Run("22.多语言 全部内置语言表可用", () =>
     {
         Localization.Culture = saved;
     }
+});
+
+// 23. 四格式 AI 接口：结构快照 / 文本 / 搜索 / 锚点补丁（OfficeDocumentTool 统一入口）
+Run("23.四格式 AI 接口 快照/搜索/补丁", () =>
+{
+    // xlsx：快照 + 文本 + 搜索 + 就地补丁
+    var xlsx = PathOf("ai.xlsx");
+    using (var w = new ExcelWriter(xlsx))
+    {
+        w.WriteHeader("Sheet1", ["名称", "数量"]);
+        w.WriteRow("Sheet1", new Object?[] { "Alpha", 7 });
+    }
+    var xlsxOutline = OfficeDocumentTool.ReadOutline(xlsx);
+    var xlsxText = OfficeDocumentTool.ReadText(xlsx, 4000);
+    var xlsxHits = OfficeDocumentTool.Search(xlsx, "Alpha");
+    var xlsxOut = PathOf("ai-out.xlsx");
+    var xlsxPatched = OfficeDocumentTool.ApplyPatch(xlsx, """{ "ops": [ { "op": "set_cells", "range": "Sheet1!A2", "values": [["Beta"]] } ] }""", xlsxOut);
+    var xlsxPatchedText = OfficeDocumentTool.ReadText(xlsxOut, 4000).Content ?? "";
+    var okXlsx = xlsxOutline.Success && (xlsxOutline.Content ?? "").Contains("Sheet1")
+        && xlsxText.Success && (xlsxText.Content ?? "").Contains("Alpha")
+        && xlsxHits.Success && (xlsxHits.Content ?? "").Contains("A2")
+        && xlsxPatched.Success && xlsxPatchedText.Contains("Beta") && !xlsxPatchedText.Contains("Alpha");
+
+    // docx：按段落锚点改写
+    var docx = PathOf("ai.docx");
+    using (var w = new WordWriter())
+    {
+        w.AppendParagraph("AI paragraph");
+        w.Save(docx);
+    }
+    var docxOutline = OfficeDocumentTool.ReadOutline(docx);
+    var docxOut = PathOf("ai-out.docx");
+    var docxPatched = OfficeDocumentTool.ApplyPatch(docx, """{ "ops": [ { "op": "set_text", "anchor": "p#0", "text": "AI patched" } ] }""", docxOut);
+    var docxText = OfficeDocumentTool.ReadText(docxOut, 1000).Content ?? "";
+    var okDocx = docxOutline.Success && docxPatched.Success && docxText.Contains("AI patched");
+
+    // pptx：按文本框锚点改写
+    var pptx = PathOf("ai.pptx");
+    using (var w = new PptxWriter())
+    {
+        w.AddSlide();
+        w.AddTextBox(0, "AI title", 2, 2, 20, 3, 28, true);
+        w.Save(pptx);
+    }
+    var pptxOutline = OfficeDocumentTool.ReadOutline(pptx);
+    var pptxOut = PathOf("ai-out.pptx");
+    var pptxPatched = OfficeDocumentTool.ApplyPatch(pptx, """{ "ops": [ { "op": "set_shape_text", "anchor": "s#0/tb#0", "text": "AI patched" } ] }""", pptxOut);
+    var pptxText = OfficeDocumentTool.ReadText(pptxOut, 1000).Content ?? "";
+    var okPptx = pptxOutline.Success && (pptxOutline.Content ?? "").Contains("s#0/tb#0") && pptxPatched.Success && pptxText.Contains("AI patched");
+
+    // pdf：搜索定位 + 对象级旋转
+    var pdf = PathOf("ai.pdf");
+    using (var w = new PdfWriter())
+    {
+        w.BeginPage();
+        w.AppendLine("AI PDF text");
+        w.EndPage();
+        w.Save(pdf);
+    }
+    var pdfOutline = OfficeDocumentTool.ReadOutline(pdf);
+    var pdfHits = OfficeDocumentTool.Search(pdf, "AI PDF");
+    var pdfOut = PathOf("ai-out.pdf");
+    var pdfPatched = OfficeDocumentTool.ApplyPatch(pdf, """{ "ops": [ { "op": "rotate_page", "pages": "1", "rotation": 90 } ] }""", pdfOut);
+    var okPdf = pdfOutline.Success && pdfHits.Success && (pdfHits.Content ?? "").Contains("AI PDF")
+        && pdfPatched.Success && OfficeDocumentTool.ReadOutline(pdfOut).Success;
+
+    return okXlsx && okDocx && okPptx && okPdf;
 });
 
 Console.WriteLine();

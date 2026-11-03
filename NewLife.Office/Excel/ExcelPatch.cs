@@ -81,6 +81,7 @@ public class ExcelPatch
             catch (Exception ex)
             {
                 result.Failed.Add($"{i}:{op.Op}: {ex.Message}");
+                result.FailedCodes.Add(ex.GetType().Name);
             }
         }
         return result;
@@ -98,7 +99,7 @@ public class ExcelPatch
 
                 var values = op.GetMatrix("values") ?? throw new ArgumentException(L.T("set_cells requires 'values'."));
                 var written = ExcelSheetEditor.WriteMatrix(sheet, range, values);
-                result.Warnings.Add($"set_cells {range.FullAddress}: 写入 {written.Rows} 行 × {written.Columns} 列");
+                result.Warnings.Add(L.T("set_cells {0}: wrote {1} row(s) x {2} column(s)", range.FullAddress, written.Rows, written.Columns));
                 return;
             }
 
@@ -116,7 +117,7 @@ public class ExcelPatch
                 var sheet = document.GetSheet(range.Sheet);
                 var formula = op.GetString("formula") ?? throw new ArgumentException(L.T("set_formula requires 'formula'."));
                 if (!range.IsSingleCell)
-                    result.Warnings.Add($"set_formula {range.FullAddress}: 多单元格写入同一公式，相对引用不会自动调整");
+                    result.Warnings.Add(L.T("set_formula {0}: the same formula was written to multiple cells; relative references are not adjusted.", range.FullAddress));
                 for (var r = range.StartRow; r <= range.EndRow; r++)
                     for (var c = range.StartCol; c <= range.EndCol; c++)
                         ExcelSheetEditor.SetFormula(sheet, r, c, formula);
@@ -129,7 +130,7 @@ public class ExcelPatch
                 var sheet = document.GetSheet(name);
                 var values = op.GetMatrix("values") ?? throw new ArgumentException(L.T("append_rows requires 'values'."));
                 var start = ExcelSheetEditor.AppendRows(sheet, values);
-                result.Warnings.Add($"append_rows {sheet.Name}: 从第 {start + 1} 行开始追加");
+                result.Warnings.Add(L.T("append_rows {0}: appended starting at row {1}", sheet.Name, start + 1));
                 return;
             }
 
@@ -488,6 +489,8 @@ public class ExcelPatchResult
 
     /// <summary>失败的指令与原因</summary>
     public List<String> Failed { get; } = [];
+
+    internal List<String> FailedCodes { get; } = [];
 
     /// <summary>执行告警（不影响成功判定）</summary>
     public List<String> Warnings { get; } = [];

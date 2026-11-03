@@ -120,6 +120,7 @@ public class DocxPatch
             catch (Exception ex)
             {
                 result.Failed.Add($"#{i} {op.Op}: {ex.Message}");
+                result.FailedCodes.Add(ex.GetType().Name);
             }
         }
 
@@ -294,7 +295,7 @@ public class DocxPatch
         if (el.RawXml == null) return;
         el.RawXml = null;
         if (el.Paragraph is { HasUnmodeledContent: true })
-            doc.EditWarnings.Add($"{opName} {anchor}: 该段落含域/批注锚点等未建模内容，按模型重建后这些内容会丢失");
+            doc.EditWarnings.Add(L.T("{0} {1}: this paragraph contains unmodeled content (fields, comment anchors, ...) that will be lost when rebuilt from the model.", opName, anchor));
     }
 
     /// <summary>解析样式：Heading1~6 映射枚举，其余作为自定义样式 ID</summary>
@@ -376,6 +377,8 @@ public class DocxPatchResult
 
     /// <summary>失败的操作与原因</summary>
     public List<String> Failed { get; } = [];
+
+    internal List<String> FailedCodes { get; } = [];
 
     /// <summary>执行过程中的告警（如修改段落时丢弃了原本未建模的域/批注锚点等内容）</summary>
     /// <remarks>告警不影响 <see cref="Success"/>，但调用方应向用户展示，避免“内容被静默丢弃”。</remarks>

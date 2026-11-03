@@ -146,6 +146,20 @@
     "  range <input> <range> [--max-rows N] [--cursor N]   Read a worksheet range page by page",
     "  search <input> <text> [--regex] [--max N]   Search workbook cells or PDF text",
     "  mcp                        Start MCP stdio server (tools for agents)",
-    "Failed: {0}"
+    "Failed: {0}",
+    "Unsupported structure snapshot format: {0}",
+    "The document is encrypted; decrypt it first.",
+    "The PDF is encrypted; decrypt it first.",
+    "Cannot read text from format: {0}",
+    "Range reading is only supported for workbooks: {0}",
+    "Search is not supported for format: {0}",
+    "Unsupported patch format: {0}",
+    "xls does not support model-level write-back; change the output path to .xlsx.",
+    "set_cells {0}: wrote {1} row(s) x {2} column(s)",
+    "set_formula {0}: the same formula was written to multiple cells; relative references are not adjusted.",
+    "append_rows {0}: appended starting at row {1}",
+    "add_slide: inserted a new slide at position {0}.",
+    "clone_slide: matches PptxWriter.CloneSlide; element instances are shallow copies.",
+    "{0} {1}: this paragraph contains unmodeled content (fields, comment anchors, ...) that will be lost when rebuilt from the model."
   ]
 }

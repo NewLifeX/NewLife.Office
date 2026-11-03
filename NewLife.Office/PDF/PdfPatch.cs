@@ -77,6 +77,7 @@ public class PdfPatch
             catch (Exception ex)
             {
                 result.Failed.Add($"{i}:{op.Op}: {ex.Message}");
+                result.FailedCodes.Add(ex.GetType().Name);
             }
         }
         return result;
@@ -381,6 +382,8 @@ public class PdfPatchResult
 
     /// <summary>失败的指令与原因</summary>
     public List<String> Failed { get; } = [];
+
+    internal List<String> FailedCodes { get; } = [];
 
     /// <summary>执行告警</summary>
     public List<String> Warnings { get; } = [];

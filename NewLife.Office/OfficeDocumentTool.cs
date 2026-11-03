@@ -142,9 +142,9 @@ public static class OfficeDocumentTool
         {
             var format = Detect(path);
             if (format is not ("docx" or "xlsx" or "pptx" or "pdf"))
-                return Fail(format, OfficeToolErrorCode.Unsupported, $"不支持的结构快照格式: {format}");
+                return Fail(format, OfficeToolErrorCode.Unsupported, L.T("Unsupported structure snapshot format: {0}", format));
             if (format != "pdf" && IsEncryptedOoxml(path))
-                return Fail(format, OfficeToolErrorCode.Encrypted, "文档已加密，请先解密");
+                return Fail(format, OfficeToolErrorCode.Encrypted, L.T("The document is encrypted; decrypt it first."));
 
             String json;
             switch (format)
@@ -163,7 +163,7 @@ public static class OfficeDocumentTool
                     using (var reader = new PdfReader(path))
                     {
                         if (reader.XRefTable?.Trailer.ContainsKey("Encrypt") == true)
-                            return Fail(format, OfficeToolErrorCode.Encrypted, "PDF 已加密，请先解密");
+                            return Fail(format, OfficeToolErrorCode.Encrypted, L.T("The PDF is encrypted; decrypt it first."));
                         json = PdfSnapshot.From(reader).ToJson();
                     }
                     break;
@@ -188,12 +188,12 @@ public static class OfficeDocumentTool
         {
             var format = Detect(path);
             if (format != "pdf" && IsEncryptedOoxml(path))
-                return Fail(format, OfficeToolErrorCode.Encrypted, "文档已加密，请先解密");
+                return Fail(format, OfficeToolErrorCode.Encrypted, L.T("The document is encrypted; decrypt it first."));
             if (format == "pdf" && IsEncryptedPdf(path))
-                return Fail(format, OfficeToolErrorCode.Encrypted, "PDF 已加密，请先解密");
+                return Fail(format, OfficeToolErrorCode.Encrypted, L.T("The PDF is encrypted; decrypt it first."));
 
             var text = OfficeFactory.ReadText(path);
-            if (text == null) return Fail(format, OfficeToolErrorCode.Unsupported, $"无法读取文本: {format}");
+            if (text == null) return Fail(format, OfficeToolErrorCode.Unsupported, L.T("Cannot read text from format: {0}", format));
 
             if (cursor < 0) cursor = 0;
             if (cursor > text.Length) cursor = text.Length;
@@ -230,7 +230,7 @@ public static class OfficeDocumentTool
         {
             var format = Detect(path);
             if (format is not ("xlsx" or "xls"))
-                return Fail(format, OfficeToolErrorCode.Unsupported, $"区域读取仅支持工作簿: {format}");
+                return Fail(format, OfficeToolErrorCode.Unsupported, L.T("Range reading is only supported for workbooks: {0}", format));
 
             using var reader = new ExcelReader(path);
             var document = reader.ReadExcel();
@@ -295,14 +295,14 @@ public static class OfficeDocumentTool
                 {
                     using var reader = new PdfReader(path);
                     if (reader.XRefTable?.Trailer.ContainsKey("Encrypt") == true)
-                        return Fail(format, OfficeToolErrorCode.Encrypted, "PDF 已加密，请先解密");
+                        return Fail(format, OfficeToolErrorCode.Encrypted, L.T("The PDF is encrypted; decrypt it first."));
                     var hits = reader.SearchText(text, regex, false, maxResults);
                     var result = new PdfTextSearchResult { Truncated = hits.Count >= maxResults };
                     result.Hits.AddRange(hits);
                     return new OfficeToolResult { Success = true, Format = format, Content = result.ToJson() };
                 }
                 default:
-                    return Fail(format, OfficeToolErrorCode.Unsupported, $"该格式暂不支持搜索: {format}");
+                    return Fail(format, OfficeToolErrorCode.Unsupported, L.T("Search is not supported for format: {0}", format));
             }
         }
         catch (Exception ex)
@@ -327,11 +327,11 @@ public static class OfficeDocumentTool
 
             var format = Detect(path);
             if (format is not ("docx" or "xlsx" or "xls" or "pptx" or "pdf"))
-                return Fail(format, OfficeToolErrorCode.Unsupported, $"不支持的补丁格式: {format}");
+                return Fail(format, OfficeToolErrorCode.Unsupported, L.T("Unsupported patch format: {0}", format));
             if (format == "xls" && outputPath.EndsWith(".xls", StringComparison.OrdinalIgnoreCase))
-                return Fail(format, OfficeToolErrorCode.Unsupported, "xls 不支持模型级写回，请把输出路径改为 .xlsx");
+                return Fail(format, OfficeToolErrorCode.Unsupported, L.T("xls does not support model-level write-back; change the output path to .xlsx."));
             if (format != "pdf" && IsEncryptedOoxml(path))
-                return Fail(format, OfficeToolErrorCode.Encrypted, "文档已加密，请先解密");
+                return Fail(format, OfficeToolErrorCode.Encrypted, L.T("The document is encrypted; decrypt it first."));
 
             String resultJson;
             var warnings = new List<String>();
@@ -345,7 +345,7 @@ public static class OfficeDocumentTool
                     var patch = DocxPatch.ParseJson(patchJson);
                     var result = DocxPatch.Apply(doc, patch);
                     if (!result.Success)
-                        return Fail(format, ClassifyPatchFailure(result.Failed.ToArray()), String.Join("；", result.Failed));
+                        return Fail(format, ClassifyPatchFailure(result.FailedCodes.ToArray()), String.Join("; ", result.Failed));
 
                     warnings.AddRange(result.Warnings);
                     resultJson = new OfficeResultBridge(result.Applied.Count, result.Failed, result.Warnings).ToJson();
@@ -364,7 +364,7 @@ public static class OfficeDocumentTool
                     var patch = ExcelPatch.ParseJson(patchJson);
                     var result = patch.Apply(doc);
                     if (!result.Success)
-                        return Fail(format, ClassifyPatchFailure(result.Failed.ToArray()), String.Join("；", result.Failed));
+                        return Fail(format, ClassifyPatchFailure(result.FailedCodes.ToArray()), String.Join("; ", result.Failed));
 
                     warnings.AddRange(result.Warnings);
                     resultJson = result.ToJson();
@@ -378,7 +378,7 @@ public static class OfficeDocumentTool
                     var patch = PptxPatch.ParseJson(patchJson);
                     var result = patch.Apply(doc);
                     if (!result.Success)
-                        return Fail(format, ClassifyPatchFailure(result.Failed.ToArray()), String.Join("；", result.Failed));
+                        return Fail(format, ClassifyPatchFailure(result.FailedCodes.ToArray()), String.Join("; ", result.Failed));
 
                     warnings.AddRange(result.Warnings);
                     resultJson = result.ToJson();
@@ -388,11 +388,11 @@ public static class OfficeDocumentTool
                 default:
                 {
                     var doc = PdfObjectDocument.Load(path);
-                    if (doc.IsEncrypted) return Fail(format, OfficeToolErrorCode.Encrypted, "PDF 已加密，请先解密");
+                    if (doc.IsEncrypted) return Fail(format, OfficeToolErrorCode.Encrypted, L.T("The PDF is encrypted; decrypt it first."));
                     var patch = PdfPatch.ParseJson(patchJson);
                     var result = patch.Apply(doc);
                     if (!result.Success)
-                        return Fail(format, ClassifyPatchFailure(result.Failed.ToArray()), String.Join("；", result.Failed));
+                        return Fail(format, ClassifyPatchFailure(result.FailedCodes.ToArray()), String.Join("; ", result.Failed));
 
                     warnings.AddRange(result.Warnings);
                     resultJson = result.ToJson();
@@ -431,11 +431,15 @@ public static class OfficeDocumentTool
         _ => OfficeToolErrorCode.Malformed,
     };
 
-    private static String ClassifyPatchFailure(String[] failures)
+    private static String ClassifyPatchFailure(String[] codes)
     {
-        foreach (var failure in failures)
+        foreach (var code in codes)
         {
-            if (failure.Contains("越界") || failure.Contains("锚点") || failure.Contains("不存在") || failure.Contains("缺少"))
+            if (code == nameof(NotSupportedException)) return OfficeToolErrorCode.Unsupported;
+        }
+        foreach (var code in codes)
+        {
+            if (code == nameof(ArgumentException) || code == nameof(ArgumentOutOfRangeException) || code == nameof(KeyNotFoundException))
                 return OfficeToolErrorCode.AnchorMissing;
         }
         return OfficeToolErrorCode.Malformed;

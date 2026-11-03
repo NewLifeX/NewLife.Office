@@ -1,3 +1,5 @@
+using System.Globalization;
+using NewLife;
 using NewLife.Office;
 using NewLife.Office.Excel;
 using NewLife.Office.Pdf;
@@ -234,5 +236,32 @@ public class OfficeToolTests
         Assert.True(result.Success, result.Message);
         using var reader = new PdfReader(output);
         Assert.Equal("工具层", reader.ReadMetadata().Title);
+    }
+
+    [Fact(DisplayName = "工具-补丁失败分类不依赖消息语言")]
+    public void ApplyPatch_AnchorCodeIsCultureInvariant()
+    {
+        var dir = TempDir();
+        var path = BuildDocx(dir, "锚点分类");
+        var output = Path.Combine(dir, "out.docx");
+        const String patch = """{ "ops": [ { "op": "set_text", "anchor": "p#99", "text": "x" } ] }""";
+
+        var saved = Localization.Culture;
+        try
+        {
+            Localization.Culture = new CultureInfo("en-US");
+            var en = OfficeDocumentTool.ApplyPatch(path, patch, output);
+            Assert.Equal(OfficeToolErrorCode.AnchorMissing, en.Code);
+
+            Localization.Culture = new CultureInfo("zh-Hans");
+            var zh = OfficeDocumentTool.ApplyPatch(path, patch, output);
+            Assert.Equal(OfficeToolErrorCode.AnchorMissing, zh.Code);
+        }
+        finally
+        {
+            Localization.Culture = saved;
+        }
+
+        Assert.False(File.Exists(output));
     }
 }

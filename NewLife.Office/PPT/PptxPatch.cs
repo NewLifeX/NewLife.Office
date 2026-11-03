@@ -80,6 +80,7 @@ public class PptxPatch
             catch (Exception ex)
             {
                 result.Failed.Add($"{i}:{op.Op}: {ex.Message}");
+                result.FailedCodes.Add(ex.GetType().Name);
             }
         }
         return result;
@@ -248,7 +249,7 @@ public class PptxPatch
                 if (at < 0) at = 0;
                 if (at > document.Slides.Count) at = document.Slides.Count;
                 document.Slides.Insert(at, slide);
-                result.Warnings.Add($"add_slide: 在第 {at + 1} 页插入新幻灯片");
+                result.Warnings.Add(L.T("add_slide: inserted a new slide at position {0}.", at + 1));
                 return;
             }
 
@@ -281,7 +282,7 @@ public class PptxPatch
                 if (at < 0) at = 0;
                 if (at > document.Slides.Count) at = document.Slides.Count;
                 document.Slides.Insert(at, clone);
-                result.Warnings.Add("clone_slide: 与 PptxWriter.CloneSlide 一致，元素实例为浅拷贝");
+                result.Warnings.Add(L.T("clone_slide: matches PptxWriter.CloneSlide; element instances are shallow copies."));
                 return;
             }
 
@@ -446,6 +447,8 @@ public class PptxPatchResult
 
     /// <summary>失败的指令与原因</summary>
     public List<String> Failed { get; } = [];
+
+    internal List<String> FailedCodes { get; } = [];
 
     /// <summary>执行告警</summary>
     public List<String> Warnings { get; } = [];
