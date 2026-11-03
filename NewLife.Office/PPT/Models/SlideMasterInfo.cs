@@ -14,7 +14,7 @@ public class SlideMasterInfo
     public String? BackgroundColor { get; set; }
 
     /// <summary>关联版式 ID 列表</summary>
-    public List<String> LayoutIds { get; } = [];
+    public List<String> LayoutIds { get; set; } = [];
 
     /// <summary>关联主题名称</summary>
     public String ThemeRef { get; set; } = String.Empty;

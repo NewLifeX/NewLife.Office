@@ -34,4 +34,8 @@ public class Picture
     /// <summary>圆角半径（EMU）。设置后图片以圆角矩形裁剪，0 或不设置则为直角</summary>
     public Int64 CornerRadius { get; set; }
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

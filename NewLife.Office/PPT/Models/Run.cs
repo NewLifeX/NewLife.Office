@@ -60,4 +60,8 @@ public class Run
     /// <summary>下标（S15-06）</summary>
     public Boolean Subscript { get; set; }
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

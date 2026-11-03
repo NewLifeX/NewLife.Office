@@ -41,10 +41,11 @@ public static class ExcelSearch
             for (var r = 0; r < rowCount; r++)
             {
                 var cells = sheet.Rows[r];
+                var realRow = ExcelSheetEditor.GetActualRow(sheet, r);
                 for (var c = 0; c < cells.Length; c++)
                 {
                     var value = cells[c];
-                    var formula = ExcelSheetEditor.GetFormula(sheet, r, c);
+                    var formula = ExcelSheetEditor.GetFormula(sheet, realRow, c);
 
                     var valueText = value == null ? null : Convert.ToString(value, CultureInfo.InvariantCulture);
                     var formulaText = formula == null ? null : "=" + formula;
@@ -66,9 +67,9 @@ public static class ExcelSearch
                     result.Hits.Add(new ExcelSearchHit
                     {
                         Sheet = sheet.Name,
-                        Row = r,
+                        Row = realRow,
                         Column = c,
-                        Cell = $"{ExcelCellRange.ColumnName(c)}{r + 1}",
+                        Cell = $"{ExcelCellRange.ColumnName(c)}{realRow + 1}",
                         Value = valueText,
                         Formula = formulaText,
                     });

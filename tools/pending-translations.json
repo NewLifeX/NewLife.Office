@@ -159,9 +159,10 @@
     "set_formula {0}: the same formula was written to multiple cells; relative references are not adjusted.",
     "append_rows {0}: appended starting at row {1}",
     "add_slide: inserted a new slide at position {0}.",
-    "clone_slide: matches PptxWriter.CloneSlide; element instances are shallow copies.",
     "{0} {1}: this paragraph contains unmodeled content (fields, comment anchors, ...) that will be lost when rebuilt from the model.",
     "Regular expression evaluation timed out.",
-    "JSON nesting is too deep (max {0})."
+    "JSON nesting is too deep (max {0}).",
+    "The embedded media exceeds the {0} MB limit.",
+    "The merged PDF exceeds the {0} MB limit."
   ]
 }

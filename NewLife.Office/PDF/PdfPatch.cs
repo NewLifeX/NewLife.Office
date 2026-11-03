@@ -89,8 +89,8 @@ public class PdfPatch
         {
             case "delete_pages":
             {
-                var remove = OpPages(op);
                 var pages = document.GetPageObjectNumbers();
+                var remove = new HashSet<Int32>(OpPages(op, pages.Count));
                 foreach (var page in remove)
                     if (page > pages.Count) throw new ArgumentOutOfRangeException(nameof(op), L.T("Page number out of range: {0}", page));
 
@@ -105,8 +105,8 @@ public class PdfPatch
             case "extract_pages":
             case "keep_pages":
             {
-                var keep = OpPages(op).Select(e => e - 1).OrderBy(e => e).ToList();
                 var count = document.GetPageObjectNumbers().Count;
+                var keep = OpPages(op, count).Select(e => e - 1).OrderBy(e => e).ToList();
                 foreach (var index in keep)
                     if (index < 0 || index >= count) throw new ArgumentOutOfRangeException(nameof(op), L.T("Page number out of range: {0}", index + 1));
                 document.KeepPages(keep);
@@ -131,7 +131,7 @@ public class PdfPatch
             case "rotate_page":
             {
                 var rotation = op.GetInt32("rotation") ?? throw new ArgumentException(L.T("rotate_page requires 'rotation'."));
-                foreach (var page in OpPages(op))
+                foreach (var page in OpPages(op, document.GetPageObjectNumbers().Count))
                     document.RotatePage(page - 1, rotation);
                 return;
             }
@@ -217,6 +217,7 @@ public class PdfPatch
             {
                 var path = op.GetString("path") ?? throw new ArgumentException(L.T("merge requires 'path'."));
                 if (!File.Exists(path)) throw new FileNotFoundException(L.T("File not found: {0}", path));
+                if (new FileInfo(path).Length > 256L * 1024 * 1024) throw new ArgumentException(L.T("The merged PDF exceeds the {0} MB limit.", 256));
                 var other = PdfObjectDocument.Load(path);
                 document.Merge(other);
                 return;
@@ -240,7 +241,7 @@ public class PdfPatch
     }
 
     /// <summary>解析 pages 参数：支持 "1-3,5" 或 [1,2,3]；缺省为全部页</summary>
-    private static List<Int32> OpPages(PdfPatchOp op)
+    private static List<Int32> OpPages(PdfPatchOp op, Int32 pageCount)
     {
         var pages = new List<Int32>();
         if (op.Args.TryGetValue("pages", out var value))
@@ -261,6 +262,9 @@ public class PdfPatch
                     {
                         var start = Convert.ToInt32(token[..dash], CultureInfo.InvariantCulture);
                         var end = Convert.ToInt32(token[(dash + 1)..], CultureInfo.InvariantCulture);
+                        if (start > pageCount) throw new ArgumentOutOfRangeException(nameof(op), L.T("Page number out of range: {0}", start));
+                        // 上限夹到真实页数，避免 "1-2000000000" 之类补丁把区间展开成超大列表
+                        if (end > pageCount) end = pageCount;
                         for (var i = start; i <= end; i++) pages.Add(i);
                     }
                     else

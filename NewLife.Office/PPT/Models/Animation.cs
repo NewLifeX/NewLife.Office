@@ -89,4 +89,8 @@ public class Animation
     /// <summary>自动反转（播放后自动倒放），默认 false</summary>
     public Boolean AutoReverse { get; set; }
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

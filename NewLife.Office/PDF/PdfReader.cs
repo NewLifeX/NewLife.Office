@@ -263,9 +263,13 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
         }
     }
 
+    private List<Int32>? _pageObjects;
+
     /// <summary>获取所有页面对象号（递归遍历页树，兼容中间 /Pages 节点）</summary>
     private List<Int32> GetPageObjectNumbers()
     {
+        if (_pageObjects != null) return _pageObjects;
+
         var pageObjNums = new List<Int32>();
         if (XRefTable == null) return pageObjNums;
 
@@ -280,7 +284,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
             return pageObjNums;
 
         CollectPageObjects(pagesRef.ObjNum, pageObjNums, 0);
-        return pageObjNums;
+        return _pageObjects = pageObjNums;
     }
 
     /// <summary>递归收集页面对象号；含 Kids 的中间节点继续下钻</summary>

@@ -52,7 +52,7 @@ public class ExcelOutline
                 Index = i,
                 Name = sheet.Name,
                 Anchor = sheet.Name,
-                Rows = ExcelSheetEditor.GetRowCount(sheet),
+                Rows = ExcelSheetEditor.GetActualRowCount(sheet),
                 Columns = ExcelSheetEditor.GetColumnCount(sheet),
                 FreezeRows = sheet.FreezePane?.Rows ?? 0,
                 FreezeCols = sheet.FreezePane?.Cols ?? 0,
@@ -72,7 +72,7 @@ public class ExcelOutline
                     var values = new Object?[row.Length];
                     for (var c = 0; c < row.Length; c++)
                     {
-                        var formula = ExcelSheetEditor.GetFormula(sheet, r, c);
+                        var formula = ExcelSheetEditor.GetFormula(sheet, ExcelSheetEditor.GetActualRow(sheet, r), c);
                         values[c] = formula != null ? "=" + formula : row[c];
                     }
                     item.Preview.Add(values);

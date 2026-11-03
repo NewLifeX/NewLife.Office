@@ -14,6 +14,6 @@ public class ChartInfo
     public String[] Categories { get; set; } = [];
 
     /// <summary>系列数据集合</summary>
-    public List<ChartSeriesData> Series { get; } = [];
+    public List<ChartSeriesData> Series { get; set; } = [];
     #endregion
 }

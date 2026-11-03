@@ -5,19 +5,19 @@ public class Slide
 {
     #region 属性
     /// <summary>文本框集合</summary>
-    public List<TextBox> TextBoxes { get; } = [];
+    public List<TextBox> TextBoxes { get; set; } = [];
 
     /// <summary>图片集合</summary>
-    public List<Picture> Images { get; } = [];
+    public List<Picture> Images { get; set; } = [];
 
     /// <summary>表格集合</summary>
-    public List<Table> Tables { get; } = [];
+    public List<Table> Tables { get; set; } = [];
 
     /// <summary>基本图形集合</summary>
-    public List<Shape> Shapes { get; } = [];
+    public List<Shape> Shapes { get; set; } = [];
 
     /// <summary>图表集合</summary>
-    public List<Chart> Charts { get; } = [];
+    public List<Chart> Charts { get; set; } = [];
 
     /// <summary>背景色（16进制 RGB），null 表示白色或使用背景图</summary>
     public String? BackgroundColor { get; set; }
@@ -44,10 +44,10 @@ public class Slide
     internal Int32 ImageCounter { get; set; } = 1;
 
     /// <summary>视频/音频媒体集合</summary>
-    public List<Video> Videos { get; } = [];
+    public List<Video> Videos { get; set; } = [];
 
     /// <summary>形状组集合（S07-02 组合形状）</summary>
-    public List<GroupShape> Groups { get; } = [];
+    public List<GroupShape> Groups { get; set; } = [];
 
     /// <summary>使用的版式索引（0起始，对应 PptxWriter 加载的版式列表；无模板时只有索引 0）</summary>
     public Int32 LayoutIndex { get; set; }
@@ -57,15 +57,19 @@ public class Slide
     public String? Layout { get; set; }
 
     /// <summary>连接线/连接器集合（流程图简头等）</summary>
-    public List<ConnectionShape> Connectors { get; } = [];
+    public List<ConnectionShape> Connectors { get; set; } = [];
 
     /// <summary>元素动画列表（进入/强调/退出动画）</summary>
-    public List<Animation> Animations { get; } = [];
+    public List<Animation> Animations { get; set; } = [];
 
     /// <summary>幻灯片批注列表（审阅注释）</summary>
-    public List<Comment> Comments { get; } = [];
+    public List<Comment> Comments { get; set; } = [];
 
     /// <summary>是否隐藏幻灯片（S12-04），对应 <c>p:sld show="0"</c></summary>
     public Boolean Hidden { get; set; }
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

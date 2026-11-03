@@ -651,14 +651,25 @@ public abstract class PdfObject { }
 /// <summary>PDF 数值（整数或实数）</summary>
 public class PdfNumber : PdfObject
 {
+    private readonly String _text;
+
     /// <summary>数值</summary>
     public Single Value { get; }
+
     /// <summary>实例化数值对象</summary>
-    public PdfNumber(Single value) => Value = value;
+    /// <param name="value">数值</param>
+    public PdfNumber(Single value) => (_text, Value) = (value.ToString(CultureInfo.InvariantCulture), value);
+
     /// <summary>实例化数值对象</summary>
-    public PdfNumber(Int32 value) => Value = value;
+    /// <param name="value">数值</param>
+    public PdfNumber(Int32 value) => (_text, Value) = (value.ToString(CultureInfo.InvariantCulture), value);
+
+    /// <summary>实例化数值对象</summary>
+    /// <param name="value">数值</param>
+    public PdfNumber(Int64 value) => (_text, Value) = (value.ToString(CultureInfo.InvariantCulture), value);
+
     /// <inheritdoc/>
-    public override String ToString() => Value.ToString(CultureInfo.InvariantCulture);
+    public override String ToString() => _text;
 }
 
 /// <summary>PDF 名称对象（以 / 开头的标识符）</summary>

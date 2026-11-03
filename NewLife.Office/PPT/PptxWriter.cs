@@ -301,11 +301,7 @@ public partial class PptxWriter : IDisposable
     public Slide CloneSlide(Int32 sourceIndex)
     {
         var src = EnsureSlide(sourceIndex);
-        var clone = new Slide { BackgroundColor = src.BackgroundColor, Notes = src.Notes };
-        foreach (var tb in src.TextBoxes) clone.TextBoxes.Add(tb);
-        foreach (var img in src.Images) clone.Images.Add(img);
-        foreach (var tbl in src.Tables) clone.Tables.Add(tbl);
-        foreach (var sp in src.Shapes) clone.Shapes.Add(sp);
+        var clone = PptxCloner.CloneSlide(src);
         Slides.Add(clone);
         return clone;
     }

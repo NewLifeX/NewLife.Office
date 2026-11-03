@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using NewLife;
 using NewLife.Office;
 using NewLife.Office.Excel;
@@ -261,6 +262,125 @@ public class OfficeToolTests
         var deep = new String('[', 400) + new String(']', 400);
         var ex = Assert.Throws<FormatException>(() => DocxPatch.ParseJson("{ \"ops\": " + deep + " }"));
         Assert.Contains("256", ex.Message);
+    }
+
+    [Fact(DisplayName = "工具-xls 走 BIFF 读取器：快照/区域/搜索/转 xlsx")]
+    public void LegacyXls_ReadAndConvert()
+    {
+        var dir = TempDir();
+        var path = Path.Combine(dir, "legacy.xls");
+        using (var w = new BiffWriter())
+        {
+            w.WriteHeader(["名称", "数量"]);
+            w.WriteRow(["苹果", 5]);
+            w.Save(path);
+        }
+
+        var outline = OfficeDocumentTool.ReadOutline(path);
+        Assert.True(outline.Success, outline.Message);
+        Assert.Contains("名称", outline.Content);
+
+        var range = OfficeDocumentTool.ReadRange(path, "A1:B2");
+        Assert.True(range.Success, range.Message);
+        Assert.Contains("苹果", range.Content);
+
+        var hits = OfficeDocumentTool.Search(path, "苹果");
+        Assert.True(hits.Success, hits.Message);
+        Assert.Contains("A2", hits.Content);
+
+        var text = OfficeDocumentTool.ReadText(path);
+        Assert.NotEqual(OfficeToolErrorCode.Encrypted, text.Code);
+
+        var output = Path.Combine(dir, "converted.xlsx");
+        var patched = OfficeDocumentTool.ApplyPatch(path, """{ "ops": [ { "op": "set_cells", "range": "B2", "values": [[9]] } ] }""", output);
+        Assert.True(patched.Success, patched.Message);
+        using var reader = new ExcelReader(output);
+        Assert.Equal(9d, Convert.ToDouble(reader.ReadExcel().Worksheets[0].Rows[1][1], CultureInfo.InvariantCulture));
+    }
+
+    [Fact(DisplayName = "工具-跳行工作表按真实行号读取与搜索")]
+    public void SparseRows_UseRealRowNumbers()
+    {
+        var dir = TempDir();
+        var path = Path.Combine(dir, "sparse.xlsx");
+        var doc = new ExcelDocument();
+        var sheet = new Worksheet { Name = "S", ActualRowNumbers = [0, 4] };
+        sheet.Rows.Add(["R1"]);
+        sheet.Rows.Add(["R5"]);
+        doc.Worksheets.Add(sheet);
+        doc.Save(path);
+
+        var range = OfficeDocumentTool.ReadRange(path, "S!A1:A10");
+        Assert.True(range.Success, range.Message);
+        using (var json = JsonDocument.Parse(range.Content!))
+        {
+            var rows = json.RootElement.GetProperty("rows");
+            Assert.Equal(5, rows.GetArrayLength());
+            Assert.Equal("R1", rows[0][0].GetString());
+            Assert.Equal("R5", rows[4][0].GetString());
+        }
+
+        var hits = OfficeDocumentTool.Search(path, "R5");
+        Assert.True(hits.Success, hits.Message);
+        Assert.Contains("A5", hits.Content);
+
+        var outline = OfficeDocumentTool.ReadOutline(path);
+        using var outlineJson = JsonDocument.Parse(outline.Content!);
+        Assert.Equal(5, outlineJson.RootElement.GetProperty("sheets")[0].GetProperty("rows").GetInt32());
+    }
+
+    [Fact(DisplayName = "工具-超范围页码补丁快速拒绝")]
+    public void PdfPatch_HugePageRangeRejected()
+    {
+        var dir = TempDir();
+        var path = BuildPdf(dir);
+        var output = Path.Combine(dir, "out.pdf");
+
+        var result = OfficeDocumentTool.ApplyPatch(path,
+            """{ "ops": [ { "op": "rotate_page", "pages": "5-2000000000", "rotation": 90 } ] }""", output);
+
+        Assert.False(result.Success);
+        Assert.Equal(OfficeToolErrorCode.AnchorMissing, result.Code);
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact(DisplayName = "工具-就地补丁（输出=输入）docx 与 xlsx 均可写入")]
+    public void ApplyPatch_InPlace()
+    {
+        var dir = TempDir();
+        var docx = BuildDocx(dir, "原地");
+        var r1 = OfficeDocumentTool.ApplyPatch(docx, """{ "ops": [ { "op": "set_text", "anchor": "p#0", "text": "就地修改" } ] }""", docx);
+        Assert.True(r1.Success, r1.Message);
+        Assert.Contains("就地修改", OfficeDocumentTool.ReadText(docx).Content);
+
+        var xlsx = Path.Combine(dir, "inplace.xlsx");
+        using (var w = new ExcelWriter(xlsx))
+        {
+            w.WriteHeader("Sheet1", ["值"]);
+            w.WriteRow("Sheet1", new Object?[] { "A" });
+        }
+        var r2 = OfficeDocumentTool.ApplyPatch(xlsx, """{ "ops": [ { "op": "set_cells", "range": "Sheet1!A2", "values": [["B"]] } ] }""", xlsx);
+        Assert.True(r2.Success, r2.Message);
+        Assert.Contains("B", OfficeDocumentTool.ReadText(xlsx).Content);
+    }
+
+    [Fact(DisplayName = "工具-未知工作表统一报锚点类错误")]
+    public void ReadRange_MissingSheet_AnchorMissing()
+    {
+        var dir = TempDir();
+        var path = BuildXlsx(dir);
+
+        var result = OfficeDocumentTool.ReadRange(path, "NoSuch!A1:B2");
+
+        Assert.False(result.Success);
+        Assert.Equal(OfficeToolErrorCode.AnchorMissing, result.Code);
+    }
+
+    [Fact(DisplayName = "PDF-整型数值精确保留")]
+    public void PdfNumber_LargeIntegerExact()
+    {
+        Assert.Equal("20000000", new PdfNumber(20000000).ToString());
+        Assert.Equal("3.5", new PdfNumber(3.5f).ToString());
     }
 
     [Fact(DisplayName = "工具-补丁失败分类不依赖消息语言")]    public void ApplyPatch_AnchorCodeIsCultureInvariant()

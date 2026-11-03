@@ -13,10 +13,10 @@ public class SlideMaster
     public String? BackgroundColor { get; set; }
 
     /// <summary>母版上的形状集合（如公司 Logo、页脚装饰等）</summary>
-    public List<Shape> Shapes { get; } = [];
+    public List<Shape> Shapes { get; set; } = [];
 
     /// <summary>关联的版式列表</summary>
-    public List<SlideLayout> Layouts { get; } = [];
+    public List<SlideLayout> Layouts { get; set; } = [];
 
     #endregion
 

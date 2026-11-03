@@ -69,10 +69,10 @@ public class TextBox
     public Int32 SpaceBeforePt { get; set; }
 
     /// <summary>富文本片段集合（向后兼容：优先使用 Paragraphs）</summary>
-    public List<Run> Runs { get; } = [];
+    public List<Run> Runs { get; set; } = [];
 
     /// <summary>段落集合（多段文本时使用，每个段落含独立 Run 列表和段落级格式）。非空时 Writer 优先使用此属性逐段写入</summary>
-    public List<Paragraph> Paragraphs { get; } = [];
+    public List<Paragraph> Paragraphs { get; set; } = [];
 
     /// <summary>文本框左内边距（EMU，bodyPr lIns），0 表示使用默认值</summary>
     public Int32 LeftInset { get; set; }
@@ -117,4 +117,8 @@ public class TextBox
     /// <summary>文本是否自动换行（wrap），null=默认（true）</summary>
     public Boolean? WordWrap { get; set; }
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

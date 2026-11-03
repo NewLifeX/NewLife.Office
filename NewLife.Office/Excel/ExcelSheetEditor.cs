@@ -41,6 +41,29 @@ public static class ExcelSheetEditor
     /// <returns>行数</returns>
     public static Int32 GetRowCount(Worksheet sheet) => sheet.Rows.Count;
 
+    /// <summary>获取行的真实 Excel 行号（0 基）；跳行布局按 <see cref="Worksheet.ActualRowNumbers"/> 映射</summary>
+    /// <param name="sheet">工作表</param>
+    /// <param name="row">稠密行下标</param>
+    /// <returns>真实行号</returns>
+    public static Int32 GetActualRow(Worksheet sheet, Int32 row)
+    {
+        var map = sheet.ActualRowNumbers;
+        return map != null && row >= 0 && row < map.Count ? map[row] : row;
+    }
+
+    /// <summary>获取真实行数（跳行布局取最大行号 + 1，不小于稠密行数）</summary>
+    /// <param name="sheet">工作表</param>
+    /// <returns>真实行数</returns>
+    public static Int32 GetActualRowCount(Worksheet sheet)
+    {
+        var map = sheet.ActualRowNumbers;
+        if (map == null || map.Count == 0) return sheet.Rows.Count;
+
+        var max = 0;
+        foreach (var row in map) if (row > max) max = row;
+        return Math.Max(max + 1, sheet.Rows.Count);
+    }
+
     /// <summary>获取已用列数</summary>
     /// <param name="sheet">工作表</param>
     /// <returns>列数</returns>

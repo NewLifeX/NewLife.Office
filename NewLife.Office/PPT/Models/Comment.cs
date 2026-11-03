@@ -41,4 +41,8 @@ public class Comment
     /// <summary>批注图钉的 Y 坐标（幻灯片高度的比例，0=上, 1=下）</summary>
     public Single Y { get; set; }
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

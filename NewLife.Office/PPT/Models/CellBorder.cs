@@ -36,4 +36,8 @@ public class CellBorder
     /// <summary>下边框线宽（EMU）</summary>
     public Int32 BottomWidth { get; set; } = 12700;
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

@@ -14,7 +14,7 @@ public class Chart
     public String[] Categories { get; set; } = [];
 
     /// <summary>系列集合</summary>
-    public List<ChartSeries> Series { get; } = [];
+    public List<ChartSeries> Series { get; set; } = [];
 
     /// <summary>左边距（EMU）</summary>
     public Int64 Left { get; set; }
@@ -46,4 +46,8 @@ public class Chart
     /// <summary>图例位置（b/r/l/t，null 默认底部）</summary>
     public String? LegendPosition { get; set; }
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

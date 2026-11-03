@@ -181,6 +181,27 @@ public class PptxAiTests
         Assert.Equal(original.Length, doc2.Slides[0].Images[0].Data.Length);
     }
 
+    [Fact(DisplayName = "补丁-克隆幻灯片后编辑不串改源页")]
+    public void Patch_CloneSlideIsDeep()
+    {
+        var doc = new Presentation();
+        var slide = new Slide();
+        slide.TextBoxes.Add(new TextBox { Text = "source", Left = 0, Top = 0, Width = 100, Height = 50 });
+        doc.Slides.Add(slide);
+
+        var patch = PptxPatch.ParseJson("""
+        { "ops": [
+          { "op": "clone_slide", "from": 0, "to": 1 },
+          { "op": "set_shape_text", "anchor": "s#1/tb#0", "text": "changed" }
+        ] }
+        """);
+        var result = patch.Apply(doc);
+
+        Assert.True(result.Success, String.Join("; ", result.Failed));
+        Assert.Equal("source", doc.Slides[0].TextBoxes[0].Text);
+        Assert.Equal("changed", doc.Slides[1].TextBoxes[0].Text);
+    }
+
     [Fact(DisplayName = "补丁-图表系列长度校验")]
     public void Patch_ChartSeriesLength()
     {

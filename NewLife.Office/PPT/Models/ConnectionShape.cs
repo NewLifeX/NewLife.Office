@@ -54,4 +54,8 @@ public class ConnectionShape
     /// <summary>关系 ID（Reader/Writer 内部使用）</summary>
     public String? RelId { get; set; }
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

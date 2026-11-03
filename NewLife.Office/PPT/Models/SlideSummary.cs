@@ -11,6 +11,6 @@ public class SlideSummary
     public String Text { get; set; } = String.Empty;
 
     /// <summary>形状集合</summary>
-    public List<Shape> Shapes { get; } = [];
+    public List<Shape> Shapes { get; set; } = [];
     #endregion
 }

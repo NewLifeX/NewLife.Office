@@ -18,12 +18,16 @@ public class GroupShape
     public Int64 Height { get; set; }
 
     /// <summary>组内形状</summary>
-    public List<Shape> Shapes { get; } = [];
+    public List<Shape> Shapes { get; set; } = [];
 
     /// <summary>组内文本框</summary>
-    public List<TextBox> TextBoxes { get; } = [];
+    public List<TextBox> TextBoxes { get; set; } = [];
 
     /// <summary>组内图片（S07-02）</summary>
-    public List<Picture> Images { get; } = [];
+    public List<Picture> Images { get; set; } = [];
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

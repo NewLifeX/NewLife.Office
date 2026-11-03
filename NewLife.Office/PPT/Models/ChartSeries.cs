@@ -16,4 +16,8 @@ public class ChartSeries
     /// <summary>系列填充色（RRGGBB，null 使用默认配色，S19）</summary>
     public String? Color { get; set; }
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

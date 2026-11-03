@@ -16,4 +16,8 @@ public class CellStyle
     /// <summary>字号（磅），0 表示继承</summary>
     public Int32 FontSize { get; set; }
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

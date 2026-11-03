@@ -104,6 +104,9 @@ public static class OfficeDocumentTool
         return OfficeFactory.Detect(path) ?? ext;
     }
 
+    /// <summary>判断 OOXML（docx/xlsx/pptx）是否被 OLE2 加密包装；老式 doc/xls/ppt 本身就是 OLE2，不能走这里</summary>
+    /// <param name="path">文件路径</param>
+    /// <returns>是否为加密的 OOXML</returns>
     private static Boolean IsEncryptedOoxml(String path)
     {
         try
@@ -142,9 +145,9 @@ public static class OfficeDocumentTool
         try
         {
             var format = Detect(path);
-            if (format is not ("docx" or "xlsx" or "pptx" or "pdf"))
+            if (format is not ("docx" or "xlsx" or "xls" or "pptx" or "pdf"))
                 return Fail(format, OfficeToolErrorCode.Unsupported, L.T("Unsupported structure snapshot format: {0}", format));
-            if (format != "pdf" && IsEncryptedOoxml(path))
+            if (format is "docx" or "xlsx" or "pptx" && IsEncryptedOoxml(path))
                 return Fail(format, OfficeToolErrorCode.Encrypted, L.T("The document is encrypted; decrypt it first."));
 
             String json;
@@ -154,8 +157,10 @@ public static class OfficeDocumentTool
                     using (var reader = new WordReader(path)) json = reader.ReadOutline().ToJson();
                     break;
                 case "xlsx":
-                case "xls":
                     using (var reader = new ExcelReader(path)) json = reader.ReadExcel().ToOutline().ToJson();
+                    break;
+                case "xls":
+                    using (var reader = new BiffReader(path)) json = ExcelLegacyConverter.ToDocument(reader).ToOutline().ToJson();
                     break;
                 case "pptx":
                     using (var reader = new PptxReader(path)) json = reader.ReadDocument().ToOutline().ToJson();
@@ -188,7 +193,7 @@ public static class OfficeDocumentTool
         try
         {
             var format = Detect(path);
-            if (format != "pdf" && IsEncryptedOoxml(path))
+            if (format is "docx" or "xlsx" or "pptx" && IsEncryptedOoxml(path))
                 return Fail(format, OfficeToolErrorCode.Encrypted, L.T("The document is encrypted; decrypt it first."));
             if (format == "pdf" && IsEncryptedPdf(path))
                 return Fail(format, OfficeToolErrorCode.Encrypted, L.T("The PDF is encrypted; decrypt it first."));
@@ -233,11 +238,24 @@ public static class OfficeDocumentTool
             if (format is not ("xlsx" or "xls"))
                 return Fail(format, OfficeToolErrorCode.Unsupported, L.T("Range reading is only supported for workbooks: {0}", format));
 
-            using var reader = new ExcelReader(path);
-            var document = reader.ReadExcel();
+            ExcelDocument document;
+            if (format == "xls")
+            {
+                using var legacy = new BiffReader(path);
+                document = ExcelLegacyConverter.ToDocument(legacy);
+            }
+            else
+            {
+                using var reader = new ExcelReader(path);
+                document = reader.ReadExcel();
+            }
+
             var cellRange = ExcelCellRange.Parse(range, document.Worksheets.FirstOrDefault()?.Name)
                 ?? throw new FormatException(L.T("Cannot parse range: {0}", range));
             var sheet = document.GetSheet(cellRange.Sheet);
+
+            // 读路径按 A1 行号取数：先把跳行布局规整为稠密行（文档为本次调用私有，可安全改写）
+            ExcelSheetEditor.Normalize(sheet);
 
             cellRange = cellRange.Clamp(ExcelSheetEditor.GetRowCount(sheet), ExcelSheetEditor.GetColumnCount(sheet));
             if (cursor < 0) cursor = 0;
@@ -288,8 +306,19 @@ public static class OfficeDocumentTool
                 case "xlsx":
                 case "xls":
                 {
-                    using var reader = new ExcelReader(path);
-                    var result = ExcelSearch.Search(reader.ReadExcel(), text, regex, false, maxResults);
+                    ExcelDocument document;
+                    if (format == "xls")
+                    {
+                        using var legacy = new BiffReader(path);
+                        document = ExcelLegacyConverter.ToDocument(legacy);
+                    }
+                    else
+                    {
+                        using var reader = new ExcelReader(path);
+                        document = reader.ReadExcel();
+                    }
+
+                    var result = ExcelSearch.Search(document, text, regex, false, maxResults);
                     return new OfficeToolResult { Success = true, Format = format, Content = result.ToJson() };
                 }
                 case "pdf":
@@ -335,7 +364,7 @@ public static class OfficeDocumentTool
                 return Fail(format, OfficeToolErrorCode.Unsupported, L.T("Unsupported patch format: {0}", format));
             if (format == "xls" && outputPath.EndsWith(".xls", StringComparison.OrdinalIgnoreCase))
                 return Fail(format, OfficeToolErrorCode.Unsupported, L.T("xls does not support model-level write-back; change the output path to .xlsx."));
-            if (format != "pdf" && IsEncryptedOoxml(path))
+            if (format is "docx" or "xlsx" or "pptx" && IsEncryptedOoxml(path))
                 return Fail(format, OfficeToolErrorCode.Encrypted, L.T("The document is encrypted; decrypt it first."));
 
             String resultJson;
@@ -344,8 +373,8 @@ public static class OfficeDocumentTool
             {
                 case "docx":
                 {
-                    using var reader = new WordReader(path);
-                    var doc = reader.ReadDocument();
+                    Document doc;
+                    using (var reader = new WordReader(path)) doc = reader.ReadDocument();
                     doc.BeginEdit();
                     var patch = DocxPatch.ParseJson(patchJson);
                     var result = DocxPatch.Apply(doc, patch);
@@ -364,8 +393,18 @@ public static class OfficeDocumentTool
                 case "xlsx":
                 case "xls":
                 {
-                    using var reader = new ExcelReader(path);
-                    var doc = reader.ReadExcel();
+                    ExcelDocument doc;
+                    if (format == "xls")
+                    {
+                        using var legacy = new BiffReader(path);
+                        doc = ExcelLegacyConverter.ToDocument(legacy);
+                    }
+                    else
+                    {
+                        using var reader = new ExcelReader(path);
+                        doc = reader.ReadExcel();
+                    }
+
                     var patch = ExcelPatch.ParseJson(patchJson);
                     var result = patch.Apply(doc);
                     if (!result.Success)
@@ -378,8 +417,8 @@ public static class OfficeDocumentTool
                 }
                 case "pptx":
                 {
-                    using var reader = new PptxReader(path);
-                    var doc = reader.ReadDocument();
+                    Presentation doc;
+                    using (var reader = new PptxReader(path)) doc = reader.ReadDocument();
                     var patch = PptxPatch.ParseJson(patchJson);
                     var result = patch.Apply(doc);
                     if (!result.Success)
@@ -431,6 +470,8 @@ public static class OfficeDocumentTool
         NotSupportedException => OfficeToolErrorCode.Unsupported,
         TimeoutException => OfficeToolErrorCode.ResourceLimit,
         ArgumentOutOfRangeException => OfficeToolErrorCode.AnchorMissing,
+        ArgumentException => OfficeToolErrorCode.AnchorMissing,
+        KeyNotFoundException => OfficeToolErrorCode.AnchorMissing,
         FileNotFoundException => OfficeToolErrorCode.Malformed,
         InvalidDataException => OfficeToolErrorCode.Malformed,
         FormatException => OfficeToolErrorCode.Malformed,
@@ -459,13 +500,40 @@ public static class OfficeDocumentTool
         try
         {
             write(temp);
-            if (File.Exists(file)) File.Delete(file);
-            File.Move(temp, file);
+            MoveWithRetry(temp, file);
         }
         catch
         {
             if (File.Exists(temp)) File.Delete(temp);
             throw;
+        }
+    }
+
+    /// <summary>覆盖式移动；Windows 上杀毒软件可能短暂占用新文件，做有限重试</summary>
+    /// <param name="source">源路径</param>
+    /// <param name="destination">目标路径</param>
+    private static void MoveWithRetry(String source, String destination)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+#if NET5_0_OR_GREATER
+                File.Move(source, destination, true);
+#else
+                if (File.Exists(destination)) File.Delete(destination);
+                File.Move(source, destination);
+#endif
+                return;
+            }
+            catch (IOException) when (attempt < 5)
+            {
+                System.Threading.Thread.Sleep(100);
+            }
+            catch (UnauthorizedAccessException) when (attempt < 5)
+            {
+                System.Threading.Thread.Sleep(100);
+            }
         }
     }
     #endregion

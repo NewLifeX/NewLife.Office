@@ -5,7 +5,7 @@ public class Paragraph
 {
     #region 属性
     /// <summary>富文本片段集合</summary>
-    public List<Run> Runs { get; } = [];
+    public List<Run> Runs { get; set; } = [];
 
     /// <summary>段落对齐（l/ctr/r），默认 l</summary>
     public String Alignment { get; set; } = "l";
@@ -31,4 +31,8 @@ public class Paragraph
     /// <summary>无项目符号（显式取消项目符号）</summary>
     public Boolean BulletNone { get; set; }
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

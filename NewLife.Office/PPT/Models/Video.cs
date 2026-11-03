@@ -34,4 +34,8 @@ public class Video
     /// <summary>缩略图关系ID（内部用，写入时自动分配）</summary>
     public String ThumbnailRelId { get; set; } = String.Empty;
     #endregion
+    /// <summary>浅拷贝（引用类型字段仍共享，供深拷贝器配合集合重建使用）</summary>
+    /// <returns>浅拷贝实例</returns>
+    internal Object ShallowClone() => MemberwiseClone();
+
 }

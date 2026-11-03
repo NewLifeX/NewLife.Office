@@ -353,6 +353,10 @@ public class PdfObjectDocument
         if (pageObjectNumbers == null) throw new ArgumentNullException(nameof(pageObjectNumbers));
 
         var pages = GetPagesRoot() ?? throw new InvalidDataException(L.T("The PDF is missing a page tree."));
+
+        // 压平页树前，把中间 /Pages 节点上的可继承属性物化到每页，避免重排后页面丢 Resources/MediaBox
+        MaterializeInherited(pageObjectNumbers);
+
         var array = new PdfArray();
         foreach (var objNum in pageObjectNumbers)
             array.Items.Add(new Ref(objNum, GetGeneration(objNum)));
@@ -367,6 +371,41 @@ public class PdfObjectDocument
             {
                 var page = GetDict(new Ref(objNum, 0));
                 if (page != null) page.Value["Parent"] = parentRef;
+            }
+        }
+    }
+
+    /// <summary>把可继承的页属性从祖先节点物化到页字典</summary>
+    /// <param name="pageObjectNumbers">页对象号集合</param>
+    /// <remarks>
+    /// PDF 允许 Resources/MediaBox/CropBox/Rotate 继承自中间 /Pages 节点；压平页树成叶子列表后继承链断裂，
+    /// 依赖继承的页面会变空白或尺寸错乱，故先把继承值写进页对象自身。
+    /// </remarks>
+    private void MaterializeInherited(IEnumerable<Int32> pageObjectNumbers)
+    {
+        String[] inheritable = ["Resources", "MediaBox", "CropBox", "Rotate"];
+        foreach (var objNum in pageObjectNumbers)
+        {
+            var page = GetDict(new Ref(objNum, 0));
+            if (page == null) continue;
+
+            var visited = new HashSet<Int32>();
+            var node = page;
+            for (var depth = 0; depth < 32; depth++)
+            {
+                if (!node.Value.TryGetValue("Parent", out var parentValue) || parentValue is not Ref parentRef) break;
+                if (!visited.Add(parentRef.ObjNum)) break;
+
+                var parent = GetDict(parentRef);
+                if (parent == null) break;
+
+                foreach (var key in inheritable)
+                {
+                    if (!page.Value.ContainsKey(key) && parent.Value.TryGetValue(key, out var inherited))
+                        page.Value[key] = inherited;
+                }
+
+                node = parent;
             }
         }
     }
@@ -488,8 +527,10 @@ public class PdfObjectDocument
         return applied;
     }
 
-    private Boolean SetFieldValue(PdfObject node, String? prefix, String name, String value)
+    private Boolean SetFieldValue(PdfObject node, String? prefix, String name, String value, Int32 depth = 0)
     {
+        if (depth > 64) return false;
+
         var field = GetDict(node);
         if (field == null) return false;
 
@@ -522,7 +563,7 @@ public class PdfObjectDocument
             if (array != null)
             {
                 foreach (var child in array.Items)
-                    if (SetFieldValue(child, fullName, name, value)) applied = true;
+                    if (SetFieldValue(child, fullName, name, value, depth + 1)) applied = true;
             }
         }
 
@@ -725,6 +766,7 @@ public class PdfObjectDocument
         var pages = GetPageObjectNumbers();
         foreach (var page in other.GetPageObjectNumbers())
             pages.Add(map[page]);
+        MaterializeInherited(pages);
 
         SetPageOrder(pages);
     }

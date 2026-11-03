@@ -282,7 +282,6 @@ public class PptxPatch
                 if (at < 0) at = 0;
                 if (at > document.Slides.Count) at = document.Slides.Count;
                 document.Slides.Insert(at, clone);
-                result.Warnings.Add(L.T("clone_slide: matches PptxWriter.CloneSlide; element instances are shallow copies."));
                 return;
             }
 
@@ -322,31 +321,8 @@ public class PptxPatch
         box.Runs.Clear();
     }
 
-    private static Slide CloneSlide(Slide source)
-    {
-        var clone = new Slide
-        {
-            BackgroundColor = source.BackgroundColor,
-            BackgroundImage = source.BackgroundImage,
-            BackgroundGradientType = source.BackgroundGradientType,
-            BackgroundGradientColor1 = source.BackgroundGradientColor1,
-            BackgroundGradientColor2 = source.BackgroundGradientColor2,
-            Notes = source.Notes,
-            LayoutIndex = source.LayoutIndex,
-            Layout = source.Layout,
-            Hidden = source.Hidden,
-            Transition = source.Transition,
-        };
-        foreach (var tb in source.TextBoxes) clone.TextBoxes.Add(tb);
-        foreach (var image in source.Images) clone.Images.Add(image);
-        foreach (var table in source.Tables) clone.Tables.Add(table);
-        foreach (var shape in source.Shapes) clone.Shapes.Add(shape);
-        foreach (var chart in source.Charts) clone.Charts.Add(chart);
-        foreach (var group in source.Groups) clone.Groups.Add(group);
-        foreach (var connector in source.Connectors) clone.Connectors.Add(connector);
-        foreach (var video in source.Videos) clone.Videos.Add(video);
-        return clone;
-    }
+    private static Slide CloneSlide(Slide source) => PptxCloner.CloneSlide(source);
+
     #endregion
 }
 
@@ -426,15 +402,27 @@ public class PptxPatchOp
         return list.Select(e => Convert.ToString(e, CultureInfo.InvariantCulture) ?? String.Empty).ToArray();
     }
 
+    /// <summary>内嵌媒体上限（32MB），防止超大文件吃满内存</summary>
+    internal const Int64 MaxMediaBytes = 32L * 1024 * 1024;
+
     /// <summary>读取图片字节（base64 或 path）</summary>
     /// <returns>字节数据，缺失返回 null</returns>
     public Byte[]? GetBytes()
     {
         var base64 = GetString("base64");
-        if (!base64.IsNullOrEmpty()) return Convert.FromBase64String(base64!);
+        if (!base64.IsNullOrEmpty())
+        {
+            var data = Convert.FromBase64String(base64!);
+            if (data.Length > MaxMediaBytes) throw new ArgumentException(L.T("The embedded media exceeds the {0} MB limit.", MaxMediaBytes / 1024 / 1024));
+            return data;
+        }
 
         var path = GetString("path");
-        if (!path.IsNullOrEmpty() && File.Exists(path)) return File.ReadAllBytes(path!);
+        if (!path.IsNullOrEmpty() && File.Exists(path))
+        {
+            if (new FileInfo(path).Length > MaxMediaBytes) throw new ArgumentException(L.T("The embedded media exceeds the {0} MB limit.", MaxMediaBytes / 1024 / 1024));
+            return File.ReadAllBytes(path!);
+        }
         return null;
     }
 }

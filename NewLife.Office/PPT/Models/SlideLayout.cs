@@ -13,10 +13,10 @@ public class SlideLayout
     public String LayoutType { get; set; } = "blank";
 
     /// <summary>版式上的形状集合（如占位符文本框、装饰图形）</summary>
-    public List<Shape> Shapes { get; } = [];
+    public List<Shape> Shapes { get; set; } = [];
 
     /// <summary>版式上的文本框集合</summary>
-    public List<TextBox> TextBoxes { get; } = [];
+    public List<TextBox> TextBoxes { get; set; } = [];
 
     #endregion
 }
