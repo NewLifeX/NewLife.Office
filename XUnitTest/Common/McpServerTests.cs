@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using System.Reflection;
+using NewLife.Office.Cli;
 using NewLife.Office.Word;
 using Xunit;
 using WDocument = NewLife.Office.Word.Document;
@@ -27,7 +28,7 @@ public class McpServerTests
             : $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"method\":\"{method}\",\"params\":{@params}}}";
 
     /// <summary>MCP 服务类型（internal，通过反射驱动以避免为测试扩大可见性）</summary>
-    private static readonly Type McpType = Type.GetType("NewLife.Office.Cli.McpServer, NewLife.Office.Cli")!;
+    private static readonly Type McpType = typeof(Program).Assembly.GetType("NewLife.Office.Cli.McpServer", throwOnError: true)!;
 
     /// <summary>协议分发方法（private static Handle）</summary>
     private static readonly MethodInfo HandleMethod = McpType.GetMethod("Handle", BindingFlags.NonPublic | BindingFlags.Static)!;

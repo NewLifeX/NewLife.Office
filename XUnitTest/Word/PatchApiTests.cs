@@ -282,7 +282,7 @@ public class PatchApiTests
 
         var result = DocxPatch.Apply(doc, DocxPatch.ParseJson("""{"ops":[{"op":"fly_to_moon"}]}"""));
         Assert.False(result.Success);
-        Assert.Contains("不支持的操作", result.Failed[0]);
+        Assert.Contains("fly_to_moon", result.Failed[0]);
     }
 
     [Fact(DisplayName = "补丁-replace_text 未匹配视为失败")]
@@ -293,7 +293,8 @@ public class PatchApiTests
 
         var result = DocxPatch.Apply(doc, DocxPatch.ParseJson("""{"ops":[{"op":"replace_text","find":"不存在的词","replace":"x"}]}"""));
         Assert.False(result.Success);
-        Assert.Contains("未匹配", result.Failed[0]);
+        Assert.Single(result.Failed);
+        Assert.Contains("replace_text", result.Failed[0]);
     }
 
     [Fact(DisplayName = "补丁-失败时调用方不保存，原文档不受影响")]
