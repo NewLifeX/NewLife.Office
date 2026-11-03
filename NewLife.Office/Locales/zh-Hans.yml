@@ -275,3 +275,4 @@
 "  range <input> <range> [--max-rows N] [--cursor N]   Read a worksheet range page by page": "  range <input> <range> [--max-rows N] [--cursor N]   逐页读取工作表区域"
 "  search <input> <text> [--regex] [--max N]   Search workbook cells or PDF text": "  search <input> <text> [--regex] [--max N]   搜索工作簿单元格或 PDF 文本"
 "  mcp                        Start MCP stdio server (tools for agents)": "  mcp                        启动 MCP stdio 服务端（供 Agent 调用）"
+"Failed: {0}": "失败：{0}"

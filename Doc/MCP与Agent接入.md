@@ -69,6 +69,7 @@ stdio 传输，每行一条 JSON-RPC 2.0 消息；实现了 `initialize` / `tool
 | `docx_apply_patch` | `path`、`output`、`patch` | docx 补丁 |
 | `xlsx_read_outline` | `path` | 工作表/表头/预览/列摘要/表格对象/图表统计 |
 | `xlsx_read_range` | `path`、`range`、`maxRows`、`cursor` | A1 区域分页读取 |
+| `xlsx_search` | `path`、`text`、`regex`、`maxResults` | 全工作簿单元格搜索，返回 `Sheet!A1` |
 | `xlsx_apply_patch` | `path`、`output`、`patch` | 工作簿补丁 |
 | `pptx_read_outline` | `path` | 幻灯片/文本框/形状/图片/表格/图表/备注 |
 | `pptx_apply_patch` | `path`、`output`、`patch` | 演示文稿补丁 |

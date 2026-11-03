@@ -145,6 +145,7 @@
     "  text <input> [--max-chars N] [--cursor N]   Read plain text in chunks",
     "  range <input> <range> [--max-rows N] [--cursor N]   Read a worksheet range page by page",
     "  search <input> <text> [--regex] [--max N]   Search workbook cells or PDF text",
-    "  mcp                        Start MCP stdio server (tools for agents)"
+    "  mcp                        Start MCP stdio server (tools for agents)",
+    "Failed: {0}"
   ]
 }

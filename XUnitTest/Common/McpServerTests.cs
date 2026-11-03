@@ -84,16 +84,18 @@ public class McpServerTests
     {
         using var doc = Call(Request(2, "tools/list"));
         var tools = doc.RootElement.GetProperty("result").GetProperty("tools");
-        Assert.True(tools.GetArrayLength() >= 14);
+        Assert.True(tools.GetArrayLength() >= 15);
 
         var names = tools.EnumerateArray().Select(e => e.GetProperty("name").GetString()).ToList();
         Assert.Contains("docx_read_outline", names);
         Assert.Contains("docx_apply_patch", names);
         Assert.Contains("office_read_outline", names);
         Assert.Contains("office_read_text", names);
+        Assert.Contains("office_search", names);
         Assert.Contains("office_apply_patch", names);
         Assert.Contains("xlsx_read_outline", names);
         Assert.Contains("xlsx_read_range", names);
+        Assert.Contains("xlsx_search", names);
         Assert.Contains("xlsx_apply_patch", names);
         Assert.Contains("pptx_read_outline", names);
         Assert.Contains("pptx_apply_patch", names);

@@ -143,6 +143,15 @@ internal static class McpServer
                 ["cursor"] = IntProp("续读游标（上次的 nextCursor）"),
             }, "path", "range");
 
+        var xlsxSearch = Tool("xlsx_search", "在工作簿中搜索文本或公式，返回命中单元格（Sheet!A1）与上下文",
+            new JsonObject
+            {
+                ["path"] = PathProp("工作簿路径"),
+                ["text"] = StrProp("搜索内容"),
+                ["regex"] = new JsonObject { ["type"] = "boolean", ["description"] = "是否按正则表达式" },
+                ["maxResults"] = IntProp("最大命中数（默认 100）"),
+            }, "path", "text");
+
         var xlsxApply = Tool("xlsx_apply_patch", "按 A1 坐标批量修改工作簿：set_cells/set_formula/append_rows/insert_rows/delete_rows/merge/unmerge/set_style/set_number_format/set_column_width/set_row_height/freeze/autofilter/add_sheet/rename_sheet/delete_sheet/add_table/add_chart。任一条失败则不写文件",
             new JsonObject
             {
@@ -182,7 +191,7 @@ internal static class McpServer
                 ["patch"] = new JsonObject { ["type"] = "object", ["description"] = "补丁对象，形如 {\"ops\":[...]}" },
             }, "path", "output", "patch");
 
-        return [read, apply, officeOutline, officeText, officeSearch, officeApply, xlsxOutline, xlsxRange, xlsxApply, pptxOutline, pptxApply, pdfOutline, pdfSearch, pdfApply];
+        return [read, apply, officeOutline, officeText, officeSearch, officeApply, xlsxOutline, xlsxRange, xlsxSearch, xlsxApply, pptxOutline, pptxApply, pdfOutline, pdfSearch, pdfApply];
     }
 
     private static JsonObject Tool(String name, String description, JsonObject properties, params String[] required)
@@ -228,7 +237,7 @@ internal static class McpServer
         }
         catch (Exception ex)
         {
-            return ToolText(id, $"失败：{ex.Message}", isError: true);
+            return ToolText(id, Localization.Translate("Failed: {0}", ex.Message), isError: true);
         }
     }
     #endregion
