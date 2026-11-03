@@ -734,9 +734,9 @@ public class WordWriter : IDisposable
         {
             _rebuildHeaderFooter = true;
             _mergeContentTypes = document.OtherParts.TryGetValue("[Content_Types].xml", out var ct0)
-                ? Encoding.UTF8.GetString(ct0) : null;
+                ? DecodeText(ct0) : null;
             _mergeDocumentRels = document.OtherParts.TryGetValue("word/_rels/document.xml.rels", out var rl0)
-                ? Encoding.UTF8.GetString(rl0) : null;
+                ? DecodeText(rl0) : null;
 
             var removeKeys = _otherParts.Keys
                 .Where(k => k.StartsWith("word/header", StringComparison.OrdinalIgnoreCase)
@@ -784,10 +784,10 @@ public class WordWriter : IDisposable
         // 重建页眉页脚模式下，这两份部件已从 _otherParts 移除（稍后由 _merge* 重写），
         // 这里必须以 _merge* 为基线，否则新增图片的关系/内容类型会整个丢失
         _otherParts.TryGetValue("word/_rels/document.xml.rels", out var relsBytes);
-        var relsXml = relsBytes != null ? Encoding.UTF8.GetString(relsBytes) : _mergeDocumentRels;
+        var relsXml = relsBytes != null ? DecodeText(relsBytes) : _mergeDocumentRels;
         var relsInOther = relsBytes != null;
         _otherParts.TryGetValue("[Content_Types].xml", out var ctBytes);
-        var ctXml = ctBytes != null ? Encoding.UTF8.GetString(ctBytes) : _mergeContentTypes;
+        var ctXml = ctBytes != null ? DecodeText(ctBytes) : _mergeContentTypes;
         var ctInOther = ctBytes != null;
 
         var newRels = new StringBuilder();
@@ -871,9 +871,17 @@ public class WordWriter : IDisposable
 
     private void WriteEntry(ZipArchive za, String path, String content)
     {
+        // 源部件的文本可能已含 BOM 字符（解码自带 BOM 的 UTF-8），而 StreamWriter 还会再写 BOM，
+        // 形成双 BOM（EF BB BF EF BB BF），Word 与其他严格解析器会直接判文档损坏。
+        content = content.TrimStart('\uFEFF');
         using var sw = new StreamWriter(za.CreateEntry(path).Open(), Encoding);
         sw.Write(content);
     }
+
+    /// <summary>按 UTF-8 解码部件文本，并剔除前导 BOM 字符</summary>
+    /// <param name="bytes">部件字节</param>
+    /// <returns>无 BOM 前缀的文本</returns>
+    private static String DecodeText(Byte[] bytes) => Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF');
 
     private static String Esc(String? s) => s == null ? String.Empty : (SecurityElement.Escape(s) ?? s);
 
@@ -1592,13 +1600,23 @@ public class WordWriter : IDisposable
             {
                 var sec = _sections[si];
                 var secChart = 0;
-                foreach (var el in sec.Elements)
-                    AppendElementXml(sb, el, ref secChart);
-                if (si < _sections.Count - 1)
+                var secPr = si < _sections.Count - 1 ? BuildSectPrOf(sec) : null;
+                for (var ei = 0; ei < sec.Elements.Count; ei++)
                 {
-                    // 节分隔：空段落携带本节 sectPr（定义已结束的节）
+                    var el = sec.Elements[ei];
+                    // 节分隔的 sectPr 按 OOXML 规则必须宿在段落里：优先附加到本节最后一段（保持段落数不变），
+                    // 避免每次保存都凭空多出一个空段落。
+                    if (secPr != null && ei == sec.Elements.Count - 1
+                        && el.RawXml == null && el.Paragraph != null)
+                        BuildParagraphXml(sb, el.Paragraph, secPr);
+                    else
+                        AppendElementXml(sb, el, ref secChart);
+                }
+                if (secPr != null && (sec.Elements.Count == 0 || sec.Elements[^1].RawXml != null || sec.Elements[^1].Paragraph == null))
+                {
+                    // 节尾不是可建模段落（空节/透传元素），只能用空段落承载 sectPr
                     sb.Append("<w:p><w:pPr>");
-                    sb.Append(BuildSectPrOf(sec));
+                    sb.Append(secPr);
                     sb.Append("</w:pPr></w:p>");
                 }
             }
@@ -2050,7 +2068,7 @@ public class WordWriter : IDisposable
         return sb.ToString();
     }
 
-    private void BuildParagraphXml(StringBuilder sb, Paragraph para)
+    private void BuildParagraphXml(StringBuilder sb, Paragraph para, String? sectPrXml = null)
     {
         // 书签 start/end 均作为 <w:p> 的直接子元素配对（start 在 pPr 前，end 在 runs 后），
         // 不能把 bookmarkStart 放在 <w:p> 之外，否则层级非法导致 Word 提示修复
@@ -2062,7 +2080,7 @@ public class WordWriter : IDisposable
             sb.Append($"<w:bookmarkStart w:id=\"{bmId}\" w:name=\"{Esc(para.BookmarkName)}\"/>");
 
         // paragraph properties
-        var hasPPr = para.StyleId != null || para.Style != ParagraphStyle.Normal || para.Alignment != null
+        var hasPPr = sectPrXml != null || para.StyleId != null || para.Style != ParagraphStyle.Normal || para.Alignment != null
             || para.IndentLeft.HasValue || para.IndentRight.HasValue || para.FirstLineIndent.HasValue
             || para.SpaceBefore.HasValue || para.SpaceAfter.HasValue || para.LineSpacingPct.HasValue
             || para.IsBullet || para.IsOrderedList || para.NumId.HasValue || para.BackgroundColor != null
@@ -2148,13 +2166,16 @@ public class WordWriter : IDisposable
             }
             if (para.Alignment != null)
                 sb.Append($"<w:jc w:val=\"{para.Alignment}\"/>");
+            // CT_PPr 顺序要求：sectPr 是最后一个子元素
+            if (sectPrXml != null)
+                sb.Append(sectPrXml);
             sb.Append("</w:pPr>");
         }
         if (para.IsPageBreak)
         {
             sb.Append("<w:r><w:br w:type=\"page\"/></w:r>");
         }
-        else
+
         {
             // 逐 Run 输出，并在锚点处插入批注范围标记（commentRangeStart/End + 引用 run）
             var runIndex = 0;
@@ -2306,9 +2327,11 @@ public class WordWriter : IDisposable
 
         sb.Append("<w:r>");
         BuildRunPrXml(sb, run.Properties, run.HyperlinkRelId != null);
-        var spaceAttr = (run.Text.Length > 0 && (run.Text[0] == ' ' || run.Text[^1] == ' '))
+        // 分页符已在段落层输出为 w:br，文本里的 \f 是它的模型表示，不能再输出字面字符（XML 非法）
+        var text = run.Text.IndexOf('\f') >= 0 ? run.Text.Replace("\f", String.Empty) : run.Text;
+        var spaceAttr = (text.Length > 0 && (text[0] == ' ' || text[^1] == ' '))
             ? " xml:space=\"preserve\"" : "";
-        sb.Append($"<w:{textTag}{spaceAttr}>{Esc(run.Text)}</w:{textTag}>");
+        sb.Append($"<w:{textTag}{spaceAttr}>{Esc(text)}</w:{textTag}>");
         sb.Append("</w:r>");
 
         if (run.HyperlinkRelId != null)

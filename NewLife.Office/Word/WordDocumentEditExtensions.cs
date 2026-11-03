@@ -438,6 +438,9 @@ public static class WordDocumentEditExtensions
 
     #region 改
     /// <summary>设置段落文本，保留首个 Run 的格式并删除其余 Run</summary>
+    /// <remarks>
+    /// 若原段落是“纯分页符段”（<see cref="Paragraph.IsPageBreak"/>），会被清掉分页标记——
+    /// 否则 Writer 会把它整体当分页符输出，新文本被静默丢弃。</remarks>
     /// <param name="paragraph">段落</param>
     /// <param name="text">新文本（不支持换行，需要分段请用 <c>InsertParagraphAfter</c>）</param>
     public static void SetText(this Paragraph paragraph, String text)
@@ -447,6 +450,8 @@ public static class WordDocumentEditExtensions
 
         // 清掉段落级 RawXml，避免元素级兜底把改动盖回去
         paragraph.RawXml = null;
+        // 替换文本后本段落不再是纯分页段（否则 Writer 只输出 w:br，文本丢失）
+        paragraph.IsPageBreak = false;
 
         if (paragraph.Runs.Count == 0)
         {
