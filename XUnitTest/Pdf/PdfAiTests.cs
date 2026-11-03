@@ -229,4 +229,52 @@ public class PdfAiTests
         Assert.Single(failed.Applied);
         Assert.Single(failed.Failed);
     }
+
+    [Fact(DisplayName = "页面重排-物化中间页树的继承属性")]
+    public void SetPageOrder_MaterializesInheritedAttributes()
+    {
+        // 底稿：普通 PDF；随后改造成 root → 中间 Pages → 叶子页，并把 MediaBox/Resources 上移到中间节点
+        var source = BuildPdf();
+        var doc = PdfObjectDocument.Load(source);
+
+        var rootRef = (Ref)doc.Trailer["Root"];
+        var catalog = (DictObj)doc.Objects[rootRef.ObjNum];
+        var pagesRef = (Ref)catalog.Value["Pages"];
+        var pagesDict = ((DictObj)doc.Objects[pagesRef.ObjNum]).Value;
+        var kids = (PdfArray)pagesDict["Kids"];
+
+        var intermediate = new DictObj(new PdfDict
+        {
+            ["Type"] = new PdfName("Pages"),
+            ["Parent"] = new Ref(pagesRef.ObjNum, 0),
+            ["Kids"] = new PdfArray { Items = [.. kids.Items] },
+            ["Count"] = new PdfNumber(kids.Items.Count),
+            ["MediaBox"] = new PdfArray { Items = [new PdfNumber(0), new PdfNumber(0), new PdfNumber(595), new PdfNumber(842)] },
+            ["Resources"] = new DictObj(new PdfDict()),
+        });
+        var intermediateNum = doc.AddObject(intermediate);
+
+        foreach (var item in kids.Items)
+        {
+            var page = doc.GetDict(new Ref(((Ref)item).ObjNum, 0))!;
+            page.Value.Remove("MediaBox");
+            page.Value.Remove("Resources");
+            page.Value["Parent"] = new Ref(intermediateNum, 0);
+        }
+        pagesDict["Kids"] = new PdfArray { Items = [new Ref(intermediateNum, 0)] };
+
+        var nested = TempPath("nested.pdf");
+        doc.Save(nested);
+
+        var reopened = PdfObjectDocument.Load(nested);
+        var output = TempPath("nested-out.pdf");
+        reopened.KeepPages([0]);
+        reopened.Save(output);
+
+        var result = PdfObjectDocument.Load(output);
+        var pageNum = Assert.Single(result.GetPageObjectNumbers());
+        var kept = result.GetDict(new Ref(pageNum, 0))!;
+        Assert.True(kept.Value.ContainsKey("MediaBox"));
+        Assert.True(kept.Value.ContainsKey("Resources"));
+    }
 }
