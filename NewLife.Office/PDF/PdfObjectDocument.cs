@@ -36,7 +36,7 @@ public class PdfObjectDocument
         if (data == null) throw new ArgumentNullException(nameof(data));
 
         var xref = new PdfXRefTable(data);
-        if (xref.Entries.Count == 0) throw new InvalidDataException("无法解析 PDF 交叉引用表");
+        if (xref.Entries.Count == 0) throw new InvalidDataException(L.T("Cannot parse the PDF cross-reference table."));
 
         var doc = new PdfObjectDocument();
         foreach (var kv in xref.Trailer)
@@ -67,11 +67,11 @@ public class PdfObjectDocument
     /// <exception cref="NotSupportedException">文档已加密</exception>
     public Byte[] ToArray()
     {
-        if (IsEncrypted) throw new NotSupportedException("加密 PDF 不支持对象级修改，请先解密");
+        if (IsEncrypted) throw new NotSupportedException(L.T("Object-level edits are not supported for encrypted PDFs; decrypt the file first."));
 
         var root = Trailer.TryGetValue("Root", out var rootValue) && rootValue is Ref rootRef
             ? rootRef
-            : throw new InvalidDataException("PDF 缺少 /Root");
+            : throw new InvalidDataException(L.T("The PDF is missing /Root."));
 
         var size = 0;
         foreach (var objNum in Objects.Keys)
@@ -178,7 +178,7 @@ public class PdfObjectDocument
                 break;
             }
             default:
-                throw new NotSupportedException($"不支持序列化的 PDF 对象: {obj.GetType().Name}");
+                throw new NotSupportedException(L.T("Unsupported PDF object for serialization: {0}", obj.GetType().Name));
         }
     }
 
@@ -352,7 +352,7 @@ public class PdfObjectDocument
     {
         if (pageObjectNumbers == null) throw new ArgumentNullException(nameof(pageObjectNumbers));
 
-        var pages = GetPagesRoot() ?? throw new InvalidDataException("PDF 缺少页面树");
+        var pages = GetPagesRoot() ?? throw new InvalidDataException(L.T("The PDF is missing a page tree."));
         var array = new PdfArray();
         foreach (var objNum in pageObjectNumbers)
             array.Items.Add(new Ref(objNum, GetGeneration(objNum)));
@@ -377,9 +377,9 @@ public class PdfObjectDocument
     public void RotatePage(Int32 pageIndex, Int32 rotation)
     {
         var pages = GetPageObjectNumbers();
-        if (pageIndex < 0 || pageIndex >= pages.Count) throw new ArgumentOutOfRangeException(nameof(pageIndex), $"页码越界: {pageIndex}");
+        if (pageIndex < 0 || pageIndex >= pages.Count) throw new ArgumentOutOfRangeException(nameof(pageIndex), L.T("Page index out of range: {0}", pageIndex));
 
-        var page = GetDict(new Ref(pages[pageIndex], 0)) ?? throw new InvalidDataException("页面对象无效");
+        var page = GetDict(new Ref(pages[pageIndex], 0)) ?? throw new InvalidDataException(L.T("The page object is invalid."));
         page.Value["Rotate"] = new PdfNumber(rotation / 90 * 90);
     }
 
@@ -391,10 +391,10 @@ public class PdfObjectDocument
         var kept = new List<Int32>();
         foreach (var index in pageIndices)
         {
-            if (index < 0 || index >= pages.Count) throw new ArgumentOutOfRangeException(nameof(pageIndices), $"页码越界: {index}");
+            if (index < 0 || index >= pages.Count) throw new ArgumentOutOfRangeException(nameof(pageIndices), L.T("Page index out of range: {0}", index));
             kept.Add(pages[index]);
         }
-        if (kept.Count == 0) throw new ArgumentException("至少保留一页");
+        if (kept.Count == 0) throw new ArgumentException(L.T("At least one page must be kept."));
         SetPageOrder(kept);
     }
     #endregion
@@ -447,10 +447,10 @@ public class PdfObjectDocument
         if (annotation == null) throw new ArgumentNullException(nameof(annotation));
 
         var pages = GetPageObjectNumbers();
-        if (pageIndex < 0 || pageIndex >= pages.Count) throw new ArgumentOutOfRangeException(nameof(pageIndex), $"页码越界: {pageIndex}");
+        if (pageIndex < 0 || pageIndex >= pages.Count) throw new ArgumentOutOfRangeException(nameof(pageIndex), L.T("Page index out of range: {0}", pageIndex));
 
         var pageObjNum = pages[pageIndex];
-        var page = GetDict(new Ref(pageObjNum, 0)) ?? throw new InvalidDataException("页面对象无效");
+        var page = GetDict(new Ref(pageObjNum, 0)) ?? throw new InvalidDataException(L.T("The page object is invalid."));
         if (annotation is DictObj dict) dict.Value["P"] = new Ref(pageObjNum, GetGeneration(pageObjNum));
 
         var annotationRef = new Ref(AddObject(annotation), 0);
@@ -561,13 +561,13 @@ public class PdfObjectDocument
     {
         if (text == null) throw new ArgumentNullException(nameof(text));
         foreach (var ch in text)
-            if (ch > 255) throw new NotSupportedException("叠加文字仅支持 Latin-1 字符；中文请改用表格/模板方式生成");
+            if (ch > 255) throw new NotSupportedException(L.T("Overlay text supports Latin-1 characters only; for CJK text, use table or template generation instead."));
 
         var pages = GetPageObjectNumbers();
-        if (pageIndex < 0 || pageIndex >= pages.Count) throw new ArgumentOutOfRangeException(nameof(pageIndex), $"页码越界: {pageIndex}");
+        if (pageIndex < 0 || pageIndex >= pages.Count) throw new ArgumentOutOfRangeException(nameof(pageIndex), L.T("Page index out of range: {0}", pageIndex));
 
         var pageObjNum = pages[pageIndex];
-        var page = GetDict(new Ref(pageObjNum, 0)) ?? throw new InvalidDataException("页面对象无效");
+        var page = GetDict(new Ref(pageObjNum, 0)) ?? throw new InvalidDataException(L.T("The page object is invalid."));
         EnsureFont(page);
 
         var radians = rotation * Math.PI / 180;

@@ -99,7 +99,7 @@ public static class WordDocumentEditExtensions
         if (rows == null) throw new ArgumentNullException(nameof(rows));
 
         var data = rows.ToList();
-        if (data.Count == 0) throw new ArgumentException("Table rows are empty.", nameof(rows));
+        if (data.Count == 0) throw new ArgumentException(L.T("Table rows are empty."), nameof(rows));
 
         var cols = data.Max(r => r?.Length ?? 0);
         var table = new Table { StyleId = styleId, FirstRowHeader = firstRowHeader };
@@ -142,7 +142,7 @@ public static class WordDocumentEditExtensions
     public static Image AddPicture(this Document doc, Byte[] data, String? extension = null, Length? width = null, Length? height = null, String? altText = null)
     {
         if (data == null) throw new ArgumentNullException(nameof(data));
-        if (data.Length == 0) throw new ArgumentException("Image data is empty.", nameof(data));
+        if (data.Length == 0) throw new ArgumentException(L.T("Image data is empty."), nameof(data));
 
         var ext = extension?.TrimStart('.').ToLowerInvariant();
         if (String.IsNullOrEmpty(ext)) ext = ImageInfo.DetectExtension(data) ?? "png";
@@ -249,7 +249,7 @@ public static class WordDocumentEditExtensions
         if (text.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
         {
             var idx = text.IndexOf("base64,", StringComparison.OrdinalIgnoreCase);
-            if (idx < 0) throw new FormatException("Unsupported data URI (missing 'base64,' marker).");
+            if (idx < 0) throw new FormatException(L.T("Unsupported data URI (missing 'base64,' marker)."));
 
             var mime = text[5..idx].TrimEnd(';');
             if (extension == null && mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
@@ -538,7 +538,7 @@ public static class WordDocumentEditExtensions
     public static void StartRevisions(this Document doc, String author, DateTime? date = null)
     {
         if (doc == null) throw new ArgumentNullException(nameof(doc));
-        if (String.IsNullOrEmpty(author)) throw new ArgumentException("Author is empty.", nameof(author));
+        if (String.IsNullOrEmpty(author)) throw new ArgumentException(L.T("The author is empty."), nameof(author));
 
         doc.RevisionsAuthor = author;
         doc.RevisionsDate = date;
@@ -642,7 +642,7 @@ public static class WordDocumentEditExtensions
     public static Run AddField(this Paragraph paragraph, String code, String? result = null, RunProperties? properties = null)
     {
         if (paragraph == null) throw new ArgumentNullException(nameof(paragraph));
-        if (String.IsNullOrEmpty(code)) throw new ArgumentException("Field code is empty.", nameof(code));
+        if (String.IsNullOrEmpty(code)) throw new ArgumentException(L.T("The field code is empty."), nameof(code));
 
         paragraph.RawXml = null;
         var run = new Run { FieldCode = code, FieldResult = result, Properties = properties };
@@ -658,7 +658,7 @@ public static class WordDocumentEditExtensions
     /// <returns>新增段落的顶层元素</returns>
     public static Element AddField(this Document doc, String code, String? result = null, ParagraphStyle style = ParagraphStyle.Normal)
     {
-        if (String.IsNullOrEmpty(code)) throw new ArgumentException("Field code is empty.", nameof(code));
+        if (String.IsNullOrEmpty(code)) throw new ArgumentException(L.T("The field code is empty."), nameof(code));
 
         var para = new Paragraph { Style = style };
         para.AddField(code, result);

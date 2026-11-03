@@ -200,7 +200,7 @@ public class PptxAiTests
         var result = patch.Apply(doc);
 
         Assert.False(result.Success);
-        Assert.Contains("不一致", result.Failed[0]);
+        Assert.Contains("S1", result.Failed[0]);
         Assert.Equal(3, doc.Slides[0].Charts[0].Series[0].Values.Length);
     }
 

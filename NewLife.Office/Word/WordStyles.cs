@@ -72,7 +72,7 @@ public static class WordStyles
     public static WordStyleInfo AddStyle(this Document doc, String styleId, String? name = null, String type = "paragraph", String? basedOn = "Normal")
     {
         if (doc == null) throw new ArgumentNullException(nameof(doc));
-        if (String.IsNullOrEmpty(styleId)) throw new ArgumentException("Style id is empty.", nameof(styleId));
+        if (String.IsNullOrEmpty(styleId)) throw new ArgumentException(L.T("The style id is empty."), nameof(styleId));
 
         var xml = Load(doc);
         var ns = Ns(xml);

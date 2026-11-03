@@ -58,7 +58,7 @@ public static class ExcelDocumentExtensions
     /// <param name="name">工作表名称</param>
     /// <returns>工作表</returns>
     public static Worksheet GetSheet(this ExcelDocument document, String? name)
-        => document.FindSheet(name) ?? throw new ArgumentException($"工作表不存在: {name}");
+        => document.FindSheet(name) ?? throw new ArgumentException(L.T("Worksheet not found: {0}", name));
 
     /// <summary>构建结构快照</summary>
     /// <param name="document">工作簿模型</param>

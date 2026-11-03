@@ -41,18 +41,18 @@ public class PptxPatch
         if (json == null) throw new ArgumentNullException(nameof(json));
 
         var root = JsonLite.Parse(json) as Dictionary<String, Object?>
-            ?? throw new FormatException("补丁根节点必须是对象");
+            ?? throw new FormatException(L.T("Patch root must be a JSON object."));
         if (!root.TryGetValue("ops", out var opsValue) || opsValue is not List<Object?> list)
-            throw new FormatException("补丁缺少 ops 数组");
+            throw new FormatException(L.T("Patch must contain an 'ops' array."));
 
         var patch = new PptxPatch();
         foreach (var item in list)
         {
             if (item is not Dictionary<String, Object?> obj)
-                throw new FormatException("ops 数组元素必须是对象");
+                throw new FormatException(L.T("Each op must be a JSON object."));
             patch.Ops.Add(new PptxPatchOp
             {
-                Op = JsonLite.GetString(obj, "op") ?? throw new FormatException("指令缺少 op"),
+                Op = JsonLite.GetString(obj, "op") ?? throw new FormatException(L.T("Each op must have an 'op' name.")),
                 Args = obj,
             });
         }
@@ -91,7 +91,7 @@ public class PptxPatch
         {
             case "set_shape_text":
             {
-                var anchor = PptxAnchor.Parse(op.GetString("anchor") ?? throw new ArgumentException("set_shape_text 需要 anchor"));
+                var anchor = PptxAnchor.Parse(op.GetString("anchor") ?? throw new ArgumentException(L.T("set_shape_text requires 'anchor'.")));
                 var slide = GetSlide(document, anchor.SlideIndex);
                 var text = op.GetString("text") ?? String.Empty;
 
@@ -104,38 +104,38 @@ public class PptxPatch
                         GetItem(slide.Shapes, anchor.Index).Text = text;
                         break;
                     case "tbl":
-                        throw new ArgumentException("表格请使用 set_table_cell");
+                        throw new ArgumentException(L.T("Use set_table_cell for tables."));
                     case "chart":
-                        throw new ArgumentException("图表请使用 update_chart");
+                        throw new ArgumentException(L.T("Use update_chart for charts."));
                     case "pic":
-                        throw new ArgumentException("图片请使用 replace_image");
+                        throw new ArgumentException(L.T("Use replace_image for pictures."));
                     case null:
-                        throw new ArgumentException("set_shape_text 需要具体元素锚点（如 s#0/tb#0）");
+                        throw new ArgumentException(L.T("set_shape_text requires a concrete element anchor, such as s#0/tb#0."));
                     default:
-                        throw new ArgumentException($"不支持的元素类型: {anchor.Kind}");
+                        throw new ArgumentException(L.T("Unsupported element type: {0}", anchor.Kind));
                 }
                 return;
             }
 
             case "set_table_cell":
             {
-                var anchor = PptxAnchor.Parse(op.GetString("anchor") ?? throw new ArgumentException("set_table_cell 需要 anchor"));
-                if (anchor.Kind != "tbl") throw new ArgumentException("set_table_cell 需要表格锚点（如 s#0/tbl#0）");
+                var anchor = PptxAnchor.Parse(op.GetString("anchor") ?? throw new ArgumentException(L.T("set_table_cell requires 'anchor'.")));
+                if (anchor.Kind != "tbl") throw new ArgumentException(L.T("set_table_cell requires a table anchor, such as s#0/tbl#0."));
                 var slide = GetSlide(document, anchor.SlideIndex);
                 var table = GetItem(slide.Tables, anchor.Index);
-                var row = op.GetInt32("row") ?? throw new ArgumentException("set_table_cell 需要 row");
-                var column = op.GetInt32("column") ?? throw new ArgumentException("set_table_cell 需要 column");
-                if (row < 0 || row >= table.Rows.Count) throw new ArgumentOutOfRangeException(nameof(row), $"行越界: {row}");
+                var row = op.GetInt32("row") ?? throw new ArgumentException(L.T("set_table_cell requires 'row'."));
+                var column = op.GetInt32("column") ?? throw new ArgumentException(L.T("set_table_cell requires 'column'."));
+                if (row < 0 || row >= table.Rows.Count) throw new ArgumentOutOfRangeException(nameof(row), L.T("Row index out of range: {0}", row));
                 var cells = table.Rows[row];
-                if (column < 0 || column >= cells.Length) throw new ArgumentOutOfRangeException(nameof(column), $"列越界: {column}");
+                if (column < 0 || column >= cells.Length) throw new ArgumentOutOfRangeException(nameof(column), L.T("Column index out of range: {0}", column));
                 cells[column] = op.GetString("text") ?? String.Empty;
                 return;
             }
 
             case "update_chart":
             {
-                var anchor = PptxAnchor.Parse(op.GetString("anchor") ?? throw new ArgumentException("update_chart 需要 anchor"));
-                if (anchor.Kind != "chart") throw new ArgumentException("update_chart 需要图表锚点（如 s#0/chart#0）");
+                var anchor = PptxAnchor.Parse(op.GetString("anchor") ?? throw new ArgumentException(L.T("update_chart requires 'anchor'.")));
+                if (anchor.Kind != "chart") throw new ArgumentException(L.T("update_chart requires a chart anchor, such as s#0/chart#0."));
                 var slide = GetSlide(document, anchor.SlideIndex);
                 var chart = GetItem(slide.Charts, anchor.Index);
 
@@ -167,20 +167,20 @@ public class PptxPatch
                 {
                     foreach (var series in chart.Series)
                         if (series.Values.Length != chart.Categories.Length)
-                            throw new ArgumentException($"系列 {series.Name} 的数据点数量({series.Values.Length})与分类数({chart.Categories.Length})不一致");
+                            throw new ArgumentException(L.T("Series '{0}' has {1} data points but there are {2} categories.", series.Name, series.Values.Length, chart.Categories.Length));
                 }
                 return;
             }
 
             case "replace_image":
             {
-                var anchor = PptxAnchor.Parse(op.GetString("anchor") ?? throw new ArgumentException("replace_image 需要 anchor"));
-                if (anchor.Kind != "pic") throw new ArgumentException("replace_image 需要图片锚点（如 s#0/pic#0）");
+                var anchor = PptxAnchor.Parse(op.GetString("anchor") ?? throw new ArgumentException(L.T("replace_image requires 'anchor'.")));
+                if (anchor.Kind != "pic") throw new ArgumentException(L.T("replace_image requires a picture anchor, such as s#0/pic#0."));
                 var slide = GetSlide(document, anchor.SlideIndex);
                 var picture = GetItem(slide.Images, anchor.Index);
 
                 var data = op.GetBytes();
-                if (data == null || data.Length == 0) throw new ArgumentException("replace_image 需要 base64 或 path");
+                if (data == null || data.Length == 0) throw new ArgumentException(L.T("replace_image requires 'base64' or 'path'."));
                 picture.Data = data;
                 var extension = op.GetString("extension");
                 if (!extension.IsNullOrEmpty()) picture.Extension = extension!;
@@ -190,7 +190,7 @@ public class PptxPatch
 
             case "set_notes":
             {
-                var anchor = PptxAnchor.Parse(op.GetString("anchor") ?? throw new ArgumentException("set_notes 需要 anchor"));
+                var anchor = PptxAnchor.Parse(op.GetString("anchor") ?? throw new ArgumentException(L.T("set_notes requires 'anchor'.")));
                 var slide = GetSlide(document, anchor.SlideIndex);
                 slide.Notes = op.GetString("text");
                 return;
@@ -198,12 +198,12 @@ public class PptxPatch
 
             case "set_title":
             {
-                var anchor = PptxAnchor.Parse(op.GetString("anchor") ?? throw new ArgumentException("set_title 需要 anchor"));
+                var anchor = PptxAnchor.Parse(op.GetString("anchor") ?? throw new ArgumentException(L.T("set_title requires 'anchor'.")));
                 var slide = GetSlide(document, anchor.SlideIndex);
                 var text = op.GetString("text") ?? String.Empty;
                 var title = slide.TextBoxes.FirstOrDefault(e => String.Equals(e.Role, "title", StringComparison.OrdinalIgnoreCase))
                     ?? slide.TextBoxes.FirstOrDefault();
-                if (title == null) throw new ArgumentException($"幻灯片 s#{anchor.SlideIndex} 没有可用于标题的文本框");
+                if (title == null) throw new ArgumentException(L.T("Slide s#{0} has no text box usable as a title.", anchor.SlideIndex));
                 SetTextBoxText(title, text);
                 return;
             }
@@ -255,17 +255,17 @@ public class PptxPatch
             case "delete_slide":
             {
                 var index = ResolveSlideIndex(document, op);
-                if (document.Slides.Count <= 1) throw new ArgumentException("不能删除最后一张幻灯片");
+                if (document.Slides.Count <= 1) throw new ArgumentException(L.T("Cannot delete the last slide."));
                 document.Slides.RemoveAt(index);
                 return;
             }
 
             case "move_slide":
             {
-                var from = op.GetInt32("from") ?? throw new ArgumentException("move_slide 需要 from");
-                var to = op.GetInt32("to") ?? throw new ArgumentException("move_slide 需要 to");
-                if (from < 0 || from >= document.Slides.Count) throw new ArgumentOutOfRangeException(nameof(from), $"页码越界: {from}");
-                if (to < 0 || to >= document.Slides.Count) throw new ArgumentOutOfRangeException(nameof(to), $"页码越界: {to}");
+                var from = op.GetInt32("from") ?? throw new ArgumentException(L.T("move_slide requires 'from'."));
+                var to = op.GetInt32("to") ?? throw new ArgumentException(L.T("move_slide requires 'to'."));
+                if (from < 0 || from >= document.Slides.Count) throw new ArgumentOutOfRangeException(nameof(from), L.T("Slide index out of range: {0}", from));
+                if (to < 0 || to >= document.Slides.Count) throw new ArgumentOutOfRangeException(nameof(to), L.T("Slide index out of range: {0}", to));
                 var slide = document.Slides[from];
                 document.Slides.RemoveAt(from);
                 document.Slides.Insert(to, slide);
@@ -274,7 +274,7 @@ public class PptxPatch
 
             case "clone_slide":
             {
-                var from = op.GetInt32("from") ?? throw new ArgumentException("clone_slide 需要 from");
+                var from = op.GetInt32("from") ?? throw new ArgumentException(L.T("clone_slide requires 'from'."));
                 var slide = GetSlide(document, from);
                 var clone = CloneSlide(slide);
                 var at = op.GetInt32("to") ?? document.Slides.Count;
@@ -286,7 +286,7 @@ public class PptxPatch
             }
 
             default:
-                throw new ArgumentException($"未知指令: {op.Op}");
+                throw new ArgumentException(L.T("Unknown operation: {0}", op.Op));
         }
     }
     #endregion
@@ -294,13 +294,13 @@ public class PptxPatch
     #region 辅助
     private static Slide GetSlide(Presentation document, Int32 index)
     {
-        if (index < 0 || index >= document.Slides.Count) throw new ArgumentOutOfRangeException(nameof(index), $"幻灯片越界: {index}");
+        if (index < 0 || index >= document.Slides.Count) throw new ArgumentOutOfRangeException(nameof(index), L.T("Slide index out of range: {0}", index));
         return document.Slides[index];
     }
 
     private static T GetItem<T>(List<T> list, Int32 index)
     {
-        if (index < 0 || index >= list.Count) throw new ArgumentOutOfRangeException(nameof(index), $"元素越界: {index}");
+        if (index < 0 || index >= list.Count) throw new ArgumentOutOfRangeException(nameof(index), L.T("Element index out of range: {0}", index));
         return list[index];
     }
 
@@ -308,8 +308,8 @@ public class PptxPatch
     {
         var anchor = op.GetString("anchor");
         if (!anchor.IsNullOrEmpty()) return PptxAnchor.Parse(anchor!).SlideIndex;
-        var slide = op.GetInt32("slide") ?? throw new ArgumentException($"{op.Op} 需要 anchor 或 slide");
-        if (slide < 0 || slide >= document.Slides.Count) throw new ArgumentOutOfRangeException(nameof(slide), $"幻灯片越界: {slide}");
+        var slide = op.GetInt32("slide") ?? throw new ArgumentException(L.T("{0} requires 'anchor' or 'slide'.", op.Op));
+        if (slide < 0 || slide >= document.Slides.Count) throw new ArgumentOutOfRangeException(nameof(slide), L.T("Slide index out of range: {0}", slide));
         return slide;
     }
 
@@ -369,23 +369,23 @@ public class PptxAnchor
         if (text == null) throw new ArgumentNullException(nameof(text));
 
         var s = text.Trim();
-        if (!s.StartsWith("s#", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException($"非法锚点: {text}");
+        if (!s.StartsWith("s#", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException(L.T("Invalid anchor: {0}", text));
 
         var anchor = new PptxAnchor();
         var slash = s.IndexOf('/');
         var slidePart = slash >= 0 ? s[..slash] : s;
         if (!Int32.TryParse(slidePart[2..], NumberStyles.Integer, CultureInfo.InvariantCulture, out var slideIndex))
-            throw new ArgumentException($"非法锚点: {text}");
+            throw new ArgumentException(L.T("Invalid anchor: {0}", text));
         anchor.SlideIndex = slideIndex;
 
         if (slash >= 0)
         {
             var rest = s[(slash + 1)..];
             var hash = rest.IndexOf('#');
-            if (hash <= 0) throw new ArgumentException($"非法锚点: {text}");
+            if (hash <= 0) throw new ArgumentException(L.T("Invalid anchor: {0}", text));
             anchor.Kind = rest[..hash].ToLowerInvariant();
             if (!Int32.TryParse(rest[(hash + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out var index))
-                throw new ArgumentException($"非法锚点: {text}");
+                throw new ArgumentException(L.T("Invalid anchor: {0}", text));
             anchor.Index = index;
         }
 

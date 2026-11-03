@@ -42,20 +42,20 @@ public class DocxPatch
         if (json == null) throw new ArgumentNullException(nameof(json));
 
         var root = JsonLite.Parse(json) as Dictionary<String, Object?>
-            ?? throw new FormatException("Patch root must be a JSON object.");
+            ?? throw new FormatException(L.T("Patch root must be a JSON object."));
 
         // 顶层必须是对象：{"ops":[...]}；只给数组会解析失败
         List<Object?>? ops = null;
         if (root.TryGetValue("ops", out var opsValue)) ops = opsValue as List<Object?>;
         else if (root.Count == 0) ops = [];
 
-        if (ops == null) throw new FormatException("Patch must contain an 'ops' array.");
+        if (ops == null) throw new FormatException(L.T("Patch must contain an 'ops' array."));
 
         var patch = new DocxPatch();
         foreach (var item in ops)
         {
             if (item is not Dictionary<String, Object?> obj)
-                throw new FormatException("Each op must be a JSON object.");
+                throw new FormatException(L.T("Each op must be a JSON object."));
 
             patch.Ops.Add(new DocxPatchOp
             {
@@ -136,12 +136,12 @@ public class DocxPatch
         switch (op.Op)
         {
             case "replace_text":
-                if (String.IsNullOrEmpty(op.Find)) throw new ArgumentException("replace_text 需要 find");
-                if (String.IsNullOrEmpty(op.Replace)) throw new ArgumentException("replace_text 需要 replace");
+                if (String.IsNullOrEmpty(op.Find)) throw new ArgumentException(L.T("replace_text requires 'find'."));
+                if (String.IsNullOrEmpty(op.Replace)) throw new ArgumentException(L.T("replace_text requires 'replace'."));
                 var count = op.Regex
                     ? doc.ReplaceRegex(op.Find!, op.Replace!)
                     : doc.ReplaceText(op.Find!, op.Replace!);
-                if (count == 0) throw new InvalidOperationException("未匹配到 find 文本");
+                if (count == 0) throw new InvalidOperationException(L.T("No text matched the 'find' pattern."));
                 return;
 
             case "set_text":
@@ -161,7 +161,7 @@ public class DocxPatch
                     return;
                 }
 
-                var para = FindParagraphByAnchor(doc, op.Anchor!) ?? throw new ArgumentException($"锚点不存在或不是段落: {op.Anchor}");
+                var para = FindParagraphByAnchor(doc, op.Anchor!) ?? throw new ArgumentException(L.T("Anchor not found or not a paragraph: {0}", op.Anchor));
                 if (String.Equals(op.Position, "before", StringComparison.OrdinalIgnoreCase))
                     doc.InsertParagraphBefore(para, op.Text ?? String.Empty, style);
                 else
@@ -172,14 +172,14 @@ public class DocxPatch
             case "delete":
             {
                 var el = ResolveElement(doc, op.Anchor, "delete");
-                if (!doc.RemoveElement(el)) throw new InvalidOperationException($"删除失败: {op.Anchor}");
+                if (!doc.RemoveElement(el)) throw new InvalidOperationException(L.T("Failed to delete: {0}", op.Anchor));
                 return;
             }
 
             case "set_style":
             {
                 var (el, para) = RequireParagraphPair(doc, op.Anchor, "set_style");
-                if (String.IsNullOrEmpty(op.Style)) throw new ArgumentException("set_style 需要 style");
+                if (String.IsNullOrEmpty(op.Style)) throw new ArgumentException(L.T("set_style requires 'style'."));
                 DropRawXmlFallback(doc, el, op.Anchor!, "set_style");
                 ApplyStyle(para, op.Style!);
                 para.RawXml = null;
@@ -189,8 +189,8 @@ public class DocxPatch
             case "set_cell_text":
             {
                 var cellEl = ResolveElement(doc, op.Anchor, "set_cell_text");
-                var table = cellEl.Table ?? throw new ArgumentException($"锚点不是表格: {op.Anchor}");
-                if (!op.Row.HasValue || !op.Column.HasValue) throw new ArgumentException("set_cell_text 需要 row 与 column");
+                var table = cellEl.Table ?? throw new ArgumentException(L.T("Anchor is not a table: {0}", op.Anchor));
+                if (!op.Row.HasValue || !op.Column.HasValue) throw new ArgumentException(L.T("set_cell_text requires 'row' and 'column'."));
                 DropRawXmlFallback(doc, cellEl, op.Anchor!, "set_cell_text");
                 table.RawXml = null;
                 table.SetCellText(op.Row.Value, op.Column.Value, op.Text ?? String.Empty);
@@ -218,7 +218,7 @@ public class DocxPatch
                 }
 
                 var index = ResolveIndex(doc, op.Anchor)
-                    ?? throw new ArgumentException($"锚点不存在: {op.Anchor}（insert_table 不再静默追加到末尾）");
+                    ?? throw new ArgumentException(L.T("Anchor not found: {0} (insert_table no longer appends silently at the end).", op.Anchor));
                 if (String.Equals(op.Position, "before", StringComparison.OrdinalIgnoreCase)) index--;
                 doc.InsertElementAt(index, el);
                 return;
@@ -227,14 +227,14 @@ public class DocxPatch
             case "add_comment":
             {
                 var (el, para) = RequireParagraphPair(doc, op.Anchor, "add_comment");
-                if (String.IsNullOrEmpty(op.Text)) throw new ArgumentException("add_comment 需要 text");
+                if (String.IsNullOrEmpty(op.Text)) throw new ArgumentException(L.T("add_comment requires 'text'."));
                 DropRawXmlFallback(doc, el, op.Anchor!, "add_comment");
                 doc.AddComment(para, op.Text!, op.Author);
                 return;
             }
 
             default:
-                throw new ArgumentException($"不支持的操作: {op.Op}");
+                throw new ArgumentException(L.T("Unsupported operation: {0}", op.Op));
         }
     }
     #endregion
@@ -252,7 +252,7 @@ public class DocxPatch
 
     private static Element ResolveElement(Document doc, String? anchor, String opName)
     {
-        var index = ResolveIndex(doc, anchor) ?? throw new ArgumentException($"{opName} 需要有效锚点");
+        var index = ResolveIndex(doc, anchor) ?? throw new ArgumentException(L.T("{0} requires a valid anchor.", opName));
         return doc.Elements[index];
     }
 
@@ -264,7 +264,7 @@ public class DocxPatch
 
     private static Paragraph RequireParagraph(Document doc, String? anchor, String opName)
         => (String.IsNullOrEmpty(anchor) ? null : FindParagraphByAnchor(doc, anchor!))
-            ?? throw new ArgumentException($"{opName} 需要指向段落的锚点");
+            ?? throw new ArgumentException(L.T("{0} requires a paragraph anchor.", opName));
 
     /// <summary>按锚点取段落及其所属元素（修改前后需要定位元素级 RawXml）</summary>
     /// <param name="doc">文档</param>
@@ -273,9 +273,9 @@ public class DocxPatch
     /// <returns>元素与段落</returns>
     private static (Element Element, Paragraph Paragraph) RequireParagraphPair(Document doc, String? anchor, String opName)
     {
-        var index = ResolveIndex(doc, anchor) ?? throw new ArgumentException($"{opName} 需要指向段落的锚点");
+        var index = ResolveIndex(doc, anchor) ?? throw new ArgumentException(L.T("{0} requires a paragraph anchor.", opName));
         var el = doc.Elements[index];
-        var para = el.Paragraph ?? throw new ArgumentException($"{opName} 需要指向段落的锚点");
+        var para = el.Paragraph ?? throw new ArgumentException(L.T("{0} requires a paragraph anchor.", opName));
         return (el, para);
     }
 

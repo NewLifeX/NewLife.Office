@@ -37,18 +37,18 @@ public class PdfPatch
         if (json == null) throw new ArgumentNullException(nameof(json));
 
         var root = JsonLite.Parse(json) as Dictionary<String, Object?>
-            ?? throw new FormatException("补丁根节点必须是对象");
+            ?? throw new FormatException(L.T("Patch root must be a JSON object."));
         if (!root.TryGetValue("ops", out var opsValue) || opsValue is not List<Object?> list)
-            throw new FormatException("补丁缺少 ops 数组");
+            throw new FormatException(L.T("Patch must contain an 'ops' array."));
 
         var patch = new PdfPatch();
         foreach (var item in list)
         {
             if (item is not Dictionary<String, Object?> obj)
-                throw new FormatException("ops 数组元素必须是对象");
+                throw new FormatException(L.T("Each op must be a JSON object."));
             patch.Ops.Add(new PdfPatchOp
             {
-                Op = JsonLite.GetString(obj, "op") ?? throw new FormatException("指令缺少 op"),
+                Op = JsonLite.GetString(obj, "op") ?? throw new FormatException(L.T("Each op must have an 'op' name.")),
                 Args = obj,
             });
         }
@@ -63,7 +63,7 @@ public class PdfPatch
     public PdfPatchResult Apply(PdfObjectDocument document)
     {
         if (document == null) throw new ArgumentNullException(nameof(document));
-        if (document.IsEncrypted) throw new NotSupportedException("加密 PDF 不支持补丁，请先解密");
+        if (document.IsEncrypted) throw new NotSupportedException(L.T("Patches are not supported for encrypted PDFs; decrypt the file first."));
 
         var result = new PdfPatchResult();
         for (var i = 0; i < Ops.Count; i++)
@@ -91,12 +91,12 @@ public class PdfPatch
                 var remove = OpPages(op);
                 var pages = document.GetPageObjectNumbers();
                 foreach (var page in remove)
-                    if (page > pages.Count) throw new ArgumentOutOfRangeException(nameof(op), $"页码越界: {page}");
+                    if (page > pages.Count) throw new ArgumentOutOfRangeException(nameof(op), L.T("Page number out of range: {0}", page));
 
                 var keep = new List<Int32>();
                 for (var i = 0; i < pages.Count; i++)
                     if (!remove.Contains(i + 1)) keep.Add(i);
-                if (keep.Count == 0) throw new ArgumentException("不能删除全部页面");
+                if (keep.Count == 0) throw new ArgumentException(L.T("Cannot delete all pages."));
                 document.KeepPages(keep);
                 return;
             }
@@ -107,18 +107,18 @@ public class PdfPatch
                 var keep = OpPages(op).Select(e => e - 1).OrderBy(e => e).ToList();
                 var count = document.GetPageObjectNumbers().Count;
                 foreach (var index in keep)
-                    if (index < 0 || index >= count) throw new ArgumentOutOfRangeException(nameof(op), $"页码越界: {index + 1}");
+                    if (index < 0 || index >= count) throw new ArgumentOutOfRangeException(nameof(op), L.T("Page number out of range: {0}", index + 1));
                 document.KeepPages(keep);
                 return;
             }
 
             case "move_page":
             {
-                var from = op.GetInt32("from") ?? throw new ArgumentException("move_page 需要 from");
-                var to = op.GetInt32("to") ?? throw new ArgumentException("move_page 需要 to");
+                var from = op.GetInt32("from") ?? throw new ArgumentException(L.T("move_page requires 'from'."));
+                var to = op.GetInt32("to") ?? throw new ArgumentException(L.T("move_page requires 'to'."));
                 var pages = document.GetPageObjectNumbers();
-                if (from < 1 || from > pages.Count) throw new ArgumentOutOfRangeException(nameof(op), $"页码越界: {from}");
-                if (to < 1 || to > pages.Count) throw new ArgumentOutOfRangeException(nameof(op), $"页码越界: {to}");
+                if (from < 1 || from > pages.Count) throw new ArgumentOutOfRangeException(nameof(op), L.T("Page number out of range: {0}", from));
+                if (to < 1 || to > pages.Count) throw new ArgumentOutOfRangeException(nameof(op), L.T("Page number out of range: {0}", to));
 
                 var page = pages[from - 1];
                 pages.RemoveAt(from - 1);
@@ -129,7 +129,7 @@ public class PdfPatch
 
             case "rotate_page":
             {
-                var rotation = op.GetInt32("rotation") ?? throw new ArgumentException("rotate_page 需要 rotation");
+                var rotation = op.GetInt32("rotation") ?? throw new ArgumentException(L.T("rotate_page requires 'rotation'."));
                 foreach (var page in OpPages(op))
                     document.RotatePage(page - 1, rotation);
                 return;
@@ -144,7 +144,7 @@ public class PdfPatch
                 Add(values, "Keywords", op.GetString("keywords"));
                 Add(values, "Creator", op.GetString("creator"));
                 Add(values, "Producer", op.GetString("producer"));
-                if (values.Count == 0) throw new ArgumentException("set_metadata 至少需要一个字段");
+                if (values.Count == 0) throw new ArgumentException(L.T("set_metadata requires at least one field."));
                 document.SetMetadata(values);
                 return;
             }
@@ -153,7 +153,7 @@ public class PdfPatch
             {
                 var page = RequirePage(op);
                 document.AddText(page - 1,
-                    op.GetString("text") ?? throw new ArgumentException("add_text 需要 text"),
+                    op.GetString("text") ?? throw new ArgumentException(L.T("add_text requires 'text'.")),
                     op.GetSingle("x") ?? 72f,
                     op.GetSingle("y") ?? 72f,
                     op.GetSingle("fontSize") ?? 12f,
@@ -165,7 +165,7 @@ public class PdfPatch
             case "add_watermark":
             {
                 document.AddWatermark(
-                    op.GetString("text") ?? throw new ArgumentException("add_watermark 需要 text"),
+                    op.GetString("text") ?? throw new ArgumentException(L.T("add_watermark requires 'text'.")),
                     op.GetSingle("fontSize") ?? 48f,
                     op.GetString("color"));
                 return;
@@ -174,10 +174,10 @@ public class PdfPatch
             case "add_highlight":
             {
                 var page = RequirePage(op);
-                var x = op.GetSingle("x") ?? throw new ArgumentException("add_highlight 需要 x");
-                var y = op.GetSingle("y") ?? throw new ArgumentException("add_highlight 需要 y");
-                var width = op.GetSingle("width") ?? throw new ArgumentException("add_highlight 需要 width");
-                var height = op.GetSingle("height") ?? throw new ArgumentException("add_highlight 需要 height");
+                var x = op.GetSingle("x") ?? throw new ArgumentException(L.T("add_highlight requires '{0}'.", "x"));
+                var y = op.GetSingle("y") ?? throw new ArgumentException(L.T("add_highlight requires '{0}'.", "y"));
+                var width = op.GetSingle("width") ?? throw new ArgumentException(L.T("add_highlight requires '{0}'.", "width"));
+                var height = op.GetSingle("height") ?? throw new ArgumentException(L.T("add_highlight requires '{0}'.", "height"));
 
                 var annotation = BuildHighlight(x, y, width, height, op.GetString("color") ?? "FFEB3B",
                     op.GetString("text"), op.GetString("author"));
@@ -202,27 +202,27 @@ public class PdfPatch
                     var applied = false;
                     foreach (var kv in fields)
                         if (document.FillForm(kv.Key, Convert.ToString(kv.Value, CultureInfo.InvariantCulture) ?? String.Empty)) applied = true;
-                    if (!applied) throw new ArgumentException("没有匹配的表单字段");
+                    if (!applied) throw new ArgumentException(L.T("No matching form field."));
                     return;
                 }
 
-                var name = op.GetString("name") ?? throw new ArgumentException("fill_form 需要 name 或 fields");
+                var name = op.GetString("name") ?? throw new ArgumentException(L.T("fill_form requires 'name' or 'fields'."));
                 var value = op.GetString("value") ?? String.Empty;
-                if (!document.FillForm(name, value)) throw new ArgumentException($"表单字段不存在: {name}");
+                if (!document.FillForm(name, value)) throw new ArgumentException(L.T("Form field not found: {0}", name));
                 return;
             }
 
             case "merge":
             {
-                var path = op.GetString("path") ?? throw new ArgumentException("merge 需要 path");
-                if (!File.Exists(path)) throw new FileNotFoundException($"文件不存在: {path}");
+                var path = op.GetString("path") ?? throw new ArgumentException(L.T("merge requires 'path'."));
+                if (!File.Exists(path)) throw new FileNotFoundException(L.T("File not found: {0}", path));
                 var other = PdfObjectDocument.Load(path);
                 document.Merge(other);
                 return;
             }
 
             default:
-                throw new ArgumentException($"未知指令: {op.Op}");
+                throw new ArgumentException(L.T("Unknown operation: {0}", op.Op));
         }
     }
 
@@ -233,8 +233,8 @@ public class PdfPatch
 
     private static Int32 RequirePage(PdfPatchOp op)
     {
-        var page = op.GetInt32("page") ?? throw new ArgumentException($"{op.Op} 需要 page（1 起始）");
-        if (page < 1) throw new ArgumentOutOfRangeException(nameof(op), $"页码必须从 1 开始: {page}");
+        var page = op.GetInt32("page") ?? throw new ArgumentException(L.T("{0} requires a 1-based 'page'.", op.Op));
+        if (page < 1) throw new ArgumentOutOfRangeException(nameof(op), L.T("Page numbers start at 1: {0}", page));
         return page;
     }
 
@@ -268,8 +268,8 @@ public class PdfPatch
             }
         }
 
-        if (pages.Count == 0) throw new ArgumentException($"{op.Op} 需要 pages（如 \"1-3,5\" 或 [1,2,3]）");
-        if (pages.Any(e => e < 1)) throw new ArgumentOutOfRangeException(nameof(op), "页码必须从 1 开始");
+        if (pages.Count == 0) throw new ArgumentException(L.T("{0} requires 'pages' (for example \"1-3,5\" or [1,2,3]).", op.Op));
+        if (pages.Any(e => e < 1)) throw new ArgumentOutOfRangeException(nameof(op), L.T("Page numbers start at 1."));
         return pages;
     }
 

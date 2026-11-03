@@ -22,7 +22,7 @@ internal static class JsonLite
         var pos = 0;
         var value = ParseValue(text, ref pos);
         SkipWhite(text, ref pos);
-        if (pos < text.Length) throw new FormatException($"Unexpected trailing characters at {pos}.");
+        if (pos < text.Length) throw new FormatException(L.T("Unexpected trailing characters at position {0}.", pos));
         return value;
     }
 
@@ -55,7 +55,7 @@ internal static class JsonLite
     private static Object? ParseValue(String text, ref Int32 pos)
     {
         SkipWhite(text, ref pos);
-        if (pos >= text.Length) throw new FormatException("Unexpected end of JSON.");
+        if (pos >= text.Length) throw new FormatException(L.T("Unexpected end of JSON."));
 
         return text[pos] switch
         {
@@ -81,15 +81,15 @@ internal static class JsonLite
             SkipWhite(text, ref pos);
             var key = ParseString(text, ref pos);
             SkipWhite(text, ref pos);
-            if (pos >= text.Length || text[pos] != ':') throw new FormatException($"Expected ':' at {pos}.");
+            if (pos >= text.Length || text[pos] != ':') throw new FormatException(L.T("Expected ':' at position {0}.", pos));
             pos++;
             obj[key] = ParseValue(text, ref pos);
             SkipWhite(text, ref pos);
 
-            if (pos >= text.Length) throw new FormatException("Unterminated object.");
+            if (pos >= text.Length) throw new FormatException(L.T("Unterminated object."));
             if (text[pos] == ',') { pos++; continue; }
             if (text[pos] == '}') { pos++; return obj; }
-            throw new FormatException($"Expected ',' or '}}' at {pos}.");
+            throw new FormatException(L.T("Expected a comma or the end of the object at position {0}.", pos));
         }
     }
 
@@ -105,16 +105,16 @@ internal static class JsonLite
             list.Add(ParseValue(text, ref pos));
             SkipWhite(text, ref pos);
 
-            if (pos >= text.Length) throw new FormatException("Unterminated array.");
+            if (pos >= text.Length) throw new FormatException(L.T("Unterminated array."));
             if (text[pos] == ',') { pos++; continue; }
             if (text[pos] == ']') { pos++; return list; }
-            throw new FormatException($"Expected ',' or ']' at {pos}.");
+            throw new FormatException(L.T("Expected a comma or the end of the array at position {0}.", pos));
         }
     }
 
     private static String ParseString(String text, ref Int32 pos)
     {
-        if (pos >= text.Length || text[pos] != '"') throw new FormatException($"Expected string at {pos}.");
+        if (pos >= text.Length || text[pos] != '"') throw new FormatException(L.T("Expected a string at position {0}.", pos));
         pos++;
 
         var sb = new StringBuilder();
@@ -137,20 +137,20 @@ internal static class JsonLite
                 case 'r': sb.Append('\r'); break;
                 case 't': sb.Append('\t'); break;
                 case 'u':
-                    if (pos + 4 > text.Length) throw new FormatException("Invalid unicode escape.");
+                    if (pos + 4 > text.Length) throw new FormatException(L.T("Invalid unicode escape."));
                     sb.Append((Char)Int32.Parse(text.Substring(pos, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture));
                     pos += 4;
                     break;
-                default: throw new FormatException($"Invalid escape '\\{esc}'.");
+                default: throw new FormatException(L.T("Invalid escape character: {0}", esc));
             }
         }
-        throw new FormatException("Unterminated string.");
+        throw new FormatException(L.T("Unterminated string."));
     }
 
     private static Object? ParseLiteral(String text, ref Int32 pos, String literal, Object? value)
     {
         if (pos + literal.Length > text.Length || String.CompareOrdinal(text, pos, literal, 0, literal.Length) != 0)
-            throw new FormatException($"Invalid literal at {pos}.");
+            throw new FormatException(L.T("Invalid literal at position {0}.", pos));
 
         pos += literal.Length;
         return value;
@@ -161,7 +161,7 @@ internal static class JsonLite
         var start = pos;
         if (pos < text.Length && (text[pos] == '-' || text[pos] == '+')) pos++;
         while (pos < text.Length && (Char.IsDigit(text[pos]) || text[pos] == '.' || text[pos] == 'e' || text[pos] == 'E' || text[pos] == '-' || text[pos] == '+')) pos++;
-        if (pos == start) throw new FormatException($"Invalid number at {start}.");
+        if (pos == start) throw new FormatException(L.T("Invalid number at position {0}.", start));
 
         return Double.Parse(text.Substring(start, pos - start), CultureInfo.InvariantCulture);
     }

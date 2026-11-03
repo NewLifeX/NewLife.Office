@@ -102,14 +102,14 @@ public readonly struct Length : IEquatable<Length>
     {
         if (text == null) throw new ArgumentNullException(nameof(text));
         var s = text.Trim();
-        if (s.Length == 0) throw new FormatException("Length text is empty.");
+        if (s.Length == 0) throw new FormatException(L.T("The length text is empty."));
 
         // 找出数字结束位置，后面是单位
         var i = 0;
         if (i < s.Length && (s[i] == '-' || s[i] == '+')) i++;
         while (i < s.Length && (Char.IsDigit(s[i]) || s[i] == '.')) i++;
         if (!Double.TryParse(s[..i], out var value))
-            throw new FormatException($"Invalid length: {text}");
+            throw new FormatException(L.T("Invalid length: {0}", text));
 
         var unit = s[i..].Trim().ToLowerInvariant();
         return unit switch
@@ -120,7 +120,7 @@ public readonly struct Length : IEquatable<Length>
             "mm" => FromMm(value),
             "cm" => FromCm(value),
             "in" or "inch" or "inches" => FromInches(value),
-            _ => throw new FormatException($"Unknown length unit: {unit}"),
+            _ => throw new FormatException(L.T("Unknown length unit: {0}", unit)),
         };
     }
 

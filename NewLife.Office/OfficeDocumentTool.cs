@@ -235,7 +235,7 @@ public static class OfficeDocumentTool
             using var reader = new ExcelReader(path);
             var document = reader.ReadExcel();
             var cellRange = ExcelCellRange.Parse(range, document.Worksheets.FirstOrDefault()?.Name)
-                ?? throw new FormatException($"无法解析区域: {range}");
+                ?? throw new FormatException(L.T("Cannot parse range: {0}", range));
             var sheet = document.GetSheet(cellRange.Sheet);
 
             cellRange = cellRange.Clamp(ExcelSheetEditor.GetRowCount(sheet), ExcelSheetEditor.GetColumnCount(sheet));

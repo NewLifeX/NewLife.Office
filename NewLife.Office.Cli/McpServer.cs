@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using NewLife.Office.Word;
+using NewLife;
 
 namespace NewLife.Office.Cli;
 
@@ -235,15 +236,15 @@ internal static class McpServer
     #region 工具实现
     private static String ReadOutline(JsonElement id, JsonElement args)
     {
-        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException("缺少 path"));
+        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException(Localization.Translate("Missing required argument: '{0}'.", "path")));
         var result = OfficeDocumentTool.ReadOutline(path);
         return result.Success ? ToolText(id, result.Content!) : ToolError(id, result);
     }
 
     private static String ReadRange(JsonElement id, JsonElement args)
     {
-        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException("缺少 path"));
-        var range = GetString(args, "range") ?? throw new ArgumentException("缺少 range");
+        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException(Localization.Translate("Missing required argument: '{0}'.", "path")));
+        var range = GetString(args, "range") ?? throw new ArgumentException(Localization.Translate("Missing required argument: '{0}'.", "range"));
         var maxRows = GetInt32(args, "maxRows") ?? 0;
         var cursor = GetInt32(args, "cursor") ?? 0;
 
@@ -253,7 +254,7 @@ internal static class McpServer
 
     private static String ReadText(JsonElement id, JsonElement args)
     {
-        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException("缺少 path"));
+        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException(Localization.Translate("Missing required argument: '{0}'.", "path")));
         var maxChars = GetInt32(args, "maxChars") ?? 0;
         var cursor = GetInt32(args, "cursor") ?? 0;
 
@@ -267,8 +268,8 @@ internal static class McpServer
 
     private static String Search(JsonElement id, JsonElement args)
     {
-        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException("缺少 path"));
-        var text = GetString(args, "text") ?? throw new ArgumentException("缺少 text");
+        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException(Localization.Translate("Missing required argument: '{0}'.", "path")));
+        var text = GetString(args, "text") ?? throw new ArgumentException(Localization.Translate("Missing required argument: '{0}'.", "text"));
         var regex = GetBoolean(args, "regex") ?? false;
         var maxResults = GetInt32(args, "maxResults") ?? 100;
 
@@ -278,9 +279,9 @@ internal static class McpServer
 
     private static String ApplyPatch(JsonElement id, JsonElement args)
     {
-        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException("缺少 path"));
-        var output = Program.ResolvePath(GetString(args, "output") ?? throw new ArgumentException("缺少 output"));
-        if (!args.TryGetProperty("patch", out var patchEl)) throw new ArgumentException("缺少 patch");
+        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException(Localization.Translate("Missing required argument: '{0}'.", "path")));
+        var output = Program.ResolvePath(GetString(args, "output") ?? throw new ArgumentException(Localization.Translate("Missing required argument: '{0}'.", "output")));
+        if (!args.TryGetProperty("patch", out var patchEl)) throw new ArgumentException(Localization.Translate("Missing required argument: '{0}'.", "patch"));
 
         var result = OfficeDocumentTool.ApplyPatch(path, patchEl.GetRawText(), output);
         if (!result.Success) return ToolError(id, result);

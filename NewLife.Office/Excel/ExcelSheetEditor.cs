@@ -103,7 +103,7 @@ public static class ExcelSheetEditor
     /// <param name="col">列索引（0 基）</param>
     public static void EnsureSize(Worksheet sheet, Int32 row, Int32 col)
     {
-        if (row < 0 || col < 0) throw new ArgumentOutOfRangeException(nameof(row), "行列索引不能为负");
+        if (row < 0 || col < 0) throw new ArgumentOutOfRangeException(nameof(row), L.T("Row and column indices cannot be negative."));
         Normalize(sheet);
 
         while (sheet.Rows.Count <= row) sheet.Rows.Add([]);

@@ -42,19 +42,19 @@ public class ExcelPatch
         if (json == null) throw new ArgumentNullException(nameof(json));
 
         var root = JsonLite.Parse(json) as Dictionary<String, Object?>
-            ?? throw new FormatException("补丁根节点必须是对象");
+            ?? throw new FormatException(L.T("Patch root must be a JSON object."));
 
         var patch = new ExcelPatch();
         if (!root.TryGetValue("ops", out var opsValue) || opsValue is not List<Object?> list)
-            throw new FormatException("补丁缺少 ops 数组");
+            throw new FormatException(L.T("Patch must contain an 'ops' array."));
 
         foreach (var item in list)
         {
             if (item is not Dictionary<String, Object?> obj)
-                throw new FormatException("ops 数组元素必须是对象");
+                throw new FormatException(L.T("Each op must be a JSON object."));
 
             var op = new ExcelPatchOp { Args = obj };
-            op.Op = JsonLite.GetString(obj, "op") ?? throw new FormatException("指令缺少 op");
+            op.Op = JsonLite.GetString(obj, "op") ?? throw new FormatException(L.T("Each op must have an 'op' name."));
             patch.Ops.Add(op);
         }
         return patch;
@@ -96,7 +96,7 @@ public class ExcelPatch
                 var sheet = document.GetSheet(range.Sheet);
                 range.Sheet = sheet.Name;
 
-                var values = op.GetMatrix("values") ?? throw new ArgumentException("set_cells 需要 values");
+                var values = op.GetMatrix("values") ?? throw new ArgumentException(L.T("set_cells requires 'values'."));
                 var written = ExcelSheetEditor.WriteMatrix(sheet, range, values);
                 result.Warnings.Add($"set_cells {range.FullAddress}: 写入 {written.Rows} 行 × {written.Columns} 列");
                 return;
@@ -114,7 +114,7 @@ public class ExcelPatch
             {
                 var range = ParseRange(document, op, true);
                 var sheet = document.GetSheet(range.Sheet);
-                var formula = op.GetString("formula") ?? throw new ArgumentException("set_formula 需要 formula");
+                var formula = op.GetString("formula") ?? throw new ArgumentException(L.T("set_formula requires 'formula'."));
                 if (!range.IsSingleCell)
                     result.Warnings.Add($"set_formula {range.FullAddress}: 多单元格写入同一公式，相对引用不会自动调整");
                 for (var r = range.StartRow; r <= range.EndRow; r++)
@@ -127,7 +127,7 @@ public class ExcelPatch
             {
                 var name = op.GetString("sheet");
                 var sheet = document.GetSheet(name);
-                var values = op.GetMatrix("values") ?? throw new ArgumentException("append_rows 需要 values");
+                var values = op.GetMatrix("values") ?? throw new ArgumentException(L.T("append_rows requires 'values'."));
                 var start = ExcelSheetEditor.AppendRows(sheet, values);
                 result.Warnings.Add($"append_rows {sheet.Name}: 从第 {start + 1} 行开始追加");
                 return;
@@ -179,7 +179,7 @@ public class ExcelPatch
             {
                 var range = ParseRange(document, op, true);
                 var sheet = document.GetSheet(range.Sheet);
-                var format = op.GetString("format") ?? throw new ArgumentException("set_number_format 需要 format");
+                var format = op.GetString("format") ?? throw new ArgumentException(L.T("set_number_format requires 'format'."));
                 ExcelSheetEditor.SetNumberFormat(sheet, range, format);
                 return;
             }
@@ -187,9 +187,9 @@ public class ExcelPatch
             case "set_column_width":
             {
                 var sheet = ResolveSheet(document, op);
-                var colRange = op.GetString("columns") ?? op.GetString("range") ?? throw new ArgumentException("set_column_width 需要 columns");
-                var width = op.GetDouble("width") ?? throw new ArgumentException("set_column_width 需要 width");
-                var range = ExcelCellRange.Parse(colRange, sheet.Name) ?? throw new ArgumentException($"无法解析列范围: {colRange}");
+                var colRange = op.GetString("columns") ?? op.GetString("range") ?? throw new ArgumentException(L.T("set_column_width requires 'columns'."));
+                var width = op.GetDouble("width") ?? throw new ArgumentException(L.T("set_column_width requires 'width'."));
+                var range = ExcelCellRange.Parse(colRange, sheet.Name) ?? throw new ArgumentException(L.T("Cannot parse column range: {0}", colRange));
                 for (var c = range.StartCol; c <= range.EndCol; c++)
                     ExcelSheetEditor.SetColumnWidth(sheet, c, width);
                 return;
@@ -198,9 +198,9 @@ public class ExcelPatch
             case "set_row_height":
             {
                 var sheet = ResolveSheet(document, op);
-                var rowRange = op.GetString("rows") ?? op.GetString("range") ?? throw new ArgumentException("set_row_height 需要 rows");
-                var height = op.GetDouble("height") ?? throw new ArgumentException("set_row_height 需要 height");
-                var range = ExcelCellRange.Parse(rowRange, sheet.Name) ?? throw new ArgumentException($"无法解析行范围: {rowRange}");
+                var rowRange = op.GetString("rows") ?? op.GetString("range") ?? throw new ArgumentException(L.T("set_row_height requires 'rows'."));
+                var height = op.GetDouble("height") ?? throw new ArgumentException(L.T("set_row_height requires 'height'."));
+                var range = ExcelCellRange.Parse(rowRange, sheet.Name) ?? throw new ArgumentException(L.T("Cannot parse row range: {0}", rowRange));
                 for (var r = range.StartRow; r <= range.EndRow; r++)
                     ExcelSheetEditor.SetRowHeight(sheet, r, height);
                 return;
@@ -225,17 +225,17 @@ public class ExcelPatch
 
             case "add_sheet":
             {
-                var name = op.GetString("name") ?? throw new ArgumentException("add_sheet 需要 name");
-                if (document.FindSheet(name) != null) throw new ArgumentException($"工作表已存在: {name}");
+                var name = op.GetString("name") ?? throw new ArgumentException(L.T("add_sheet requires 'name'."));
+                if (document.FindSheet(name) != null) throw new ArgumentException(L.T("Worksheet already exists: {0}", name));
                 document.Worksheets.Add(new Worksheet { Name = name });
                 return;
             }
 
             case "rename_sheet":
             {
-                var from = op.GetString("from") ?? op.GetString("name") ?? throw new ArgumentException("rename_sheet 需要 from");
-                var to = op.GetString("to") ?? op.GetString("newName") ?? throw new ArgumentException("rename_sheet 需要 to");
-                if (document.FindSheet(to) != null) throw new ArgumentException($"工作表已存在: {to}");
+                var from = op.GetString("from") ?? op.GetString("name") ?? throw new ArgumentException(L.T("rename_sheet requires 'from'."));
+                var to = op.GetString("to") ?? op.GetString("newName") ?? throw new ArgumentException(L.T("rename_sheet requires 'to'."));
+                if (document.FindSheet(to) != null) throw new ArgumentException(L.T("Worksheet already exists: {0}", to));
                 var sheet = document.GetSheet(from);
                 sheet.Name = to;
                 return;
@@ -243,8 +243,8 @@ public class ExcelPatch
 
             case "delete_sheet":
             {
-                var name = op.GetString("name") ?? throw new ArgumentException("delete_sheet 需要 name");
-                if (document.Worksheets.Count <= 1) throw new ArgumentException("不能删除最后一张工作表");
+                var name = op.GetString("name") ?? throw new ArgumentException(L.T("delete_sheet requires 'name'."));
+                if (document.Worksheets.Count <= 1) throw new ArgumentException(L.T("Cannot delete the last worksheet."));
                 var sheet = document.GetSheet(name);
                 document.Worksheets.Remove(sheet);
                 return;
@@ -274,7 +274,7 @@ public class ExcelPatch
             }
 
             default:
-                throw new ArgumentException($"未知指令: {op.Op}");
+                throw new ArgumentException(L.T("Unknown operation: {0}", op.Op));
         }
     }
     #endregion
@@ -282,12 +282,12 @@ public class ExcelPatch
     #region 辅助
     private static ExcelCellRange ParseRange(ExcelDocument document, ExcelPatchOp op, Boolean required)
     {
-        var text = op.GetString("range") ?? (required ? throw new ArgumentException($"{op.Op} 需要 range") : null);
-        if (text == null) throw new ArgumentException($"{op.Op} 需要 range");
+        var text = op.GetString("range") ?? (required ? throw new ArgumentException(L.T("{0} requires 'range'.", op.Op)) : null);
+        if (text == null) throw new ArgumentException(L.T("{0} requires 'range'.", op.Op));
 
         var defaultSheet = op.GetString("sheet") ?? document.Worksheets.FirstOrDefault()?.Name;
         var range = ExcelCellRange.Parse(text, defaultSheet);
-        if (range == null) throw new ArgumentException($"无法解析区域: {text}");
+        if (range == null) throw new ArgumentException(L.T("Cannot parse range: {0}", text));
         if (range.Sheet == null || range.Sheet.Length == 0) range.Sheet = defaultSheet;
         return range;
     }
@@ -345,7 +345,7 @@ public class ExcelPatch
         "fill" => HorizontalAlignment.Fill,
         "justify" => HorizontalAlignment.Justify,
         "general" => HorizontalAlignment.General,
-        _ => throw new ArgumentException($"未知水平对齐: {value}"),
+        _ => throw new ArgumentException(L.T("Unknown horizontal alignment: {0}", value)),
     };
 
     private static VerticalAlignment ParseVerticalAlignment(String value) => value.ToLowerInvariant() switch
@@ -353,7 +353,7 @@ public class ExcelPatch
         "top" or "t" => VerticalAlignment.Top,
         "center" or "ctr" or "m" => VerticalAlignment.Center,
         "bottom" or "b" => VerticalAlignment.Bottom,
-        _ => throw new ArgumentException($"未知垂直对齐: {value}"),
+        _ => throw new ArgumentException(L.T("Unknown vertical alignment: {0}", value)),
     };
 
     private static BorderStyle ParseBorder(String value) => value.ToLowerInvariant() switch
@@ -365,14 +365,14 @@ public class ExcelPatch
         "dotted" => BorderStyle.Dotted,
         "double" or "doubleline" => BorderStyle.DoubleLine,
         "none" => BorderStyle.None,
-        _ => throw new ArgumentException($"未知边框样式: {value}"),
+        _ => throw new ArgumentException(L.T("Unknown border style: {0}", value)),
     };
 
     private static ExcelChart BuildChart(Worksheet sheet, ExcelCellRange range, ExcelPatchOp op)
     {
         // 约定：区域首行为系列名、首列为分类；至少 2 行 2 列
         if (range.RowCount < 2 || range.ColumnCount < 2)
-            throw new ArgumentException("add_chart 的数据区域至少需要 2 行 2 列（首行系列名、首列分类）");
+            throw new ArgumentException(L.T("add_chart requires a data range of at least 2 rows and 2 columns (first row: series names, first column: categories)."));
 
         var chart = new ExcelChart
         {
