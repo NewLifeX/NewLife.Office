@@ -10,36 +10,52 @@
 | 方式 | 适用场景 | 入口 |
 |------|----------|------|
 | **C# 库** | AI 生成 C# 代码直接调用 | `NewLife.Office.OfficeDocumentTool` 统一入口，或各格式 API |
-| **CLI** | 脚本、批处理、任何能执行命令的 Agent | `NewLife.Office.Cli` 的 `read` / `apply` / `text` / `range` / `search` |
-| **MCP** | 支持 MCP 的 Agent（VS Code、Claude 等） | `NewLife.Office.Cli mcp`（stdio 传输，零外部依赖） |
+| **CLI** | 脚本、批处理、任何能执行命令的 Agent | `office` 命令的 `read` / `apply` / `text` / `range` / `search` |
+| **MCP** | 支持 MCP 的 Agent（VS Code、Claude 等） | `office mcp`（stdio 传输，零外部依赖） |
 
 ---
 
 ## 2. CLI
 
+命令名固定为 **`office`**（程序集/包名仍是 `NewLife.Office.Cli`，包名用于安装，命令名用于日常调用）。
+
+安装（二选一）：
+
 ```bash
+# 方式一：.NET 全局工具（推荐，需要 .NET 8+ 运行时）
+dotnet tool install -g NewLife.Office.Cli
+
+# 方式二：下载 Release 中的单文件 office(.exe)，放到 PATH 即可
+#   office-win-x64.zip / office-linux-x64.zip / office-osx-arm64.zip ...
+```
+
+```bash
+# 探测版本与帮助（Agent 首选的可用性检查）
+office --version
+office --help
+
 # 结构快照（docx/xlsx/pptx/pdf 自动识别）
-NewLife.Office.Cli read report.xlsx
+office read report.xlsx
 
 # 按补丁修改（任一条失败则不写出文件）
-NewLife.Office.Cli apply report.xlsx patch.json out.xlsx
+office apply report.xlsx patch.json out.xlsx
 
 # 分段读文本（避免一次灌满上下文）
-NewLife.Office.Cli text big.docx --max-chars 4000
-NewLife.Office.Cli text big.docx --max-chars 4000 --cursor 4000
+office text big.docx --max-chars 4000
+office text big.docx --max-chars 4000 --cursor 4000
 
 # 工作簿按行分页读取
-NewLife.Office.Cli range book.xlsx "Sheet1!A1:F2000" --max-rows 200
+office range book.xlsx "Sheet1!A1:F2000" --max-rows 200
 
 # 搜索（工作簿单元格 / PDF 文本）
-NewLife.Office.Cli search book.xlsx "华东"
-NewLife.Office.Cli search report.pdf "合同金额"
+office search book.xlsx "华东"
+office search report.pdf "合同金额"
 
 # 文档转 Markdown
-NewLife.Office.Cli convert report.docx
+office convert report.docx
 
 # 图片落地成文件 + 输出页眉页脚（Agent 可直接读图片文件）
-NewLife.Office.Cli convert report.docx report.md --images ./report-images --header-footer
+office convert report.docx report.md --images ./report-images --header-footer
 ```
 
 - `read` 输出到 stdout；**被管道/重定向时按 UTF-8 写字节**，避免控制台代码页把中文转成乱码。
@@ -52,7 +68,7 @@ NewLife.Office.Cli convert report.docx report.md --images ./report-images --head
 ## 3. MCP 服务端
 
 ```bash
-NewLife.Office.Cli mcp
+office mcp
 ```
 
 stdio 传输，每行一条 JSON-RPC 2.0 消息；实现了 `initialize` / `tools/list` / `tools/call` / `ping`。
@@ -84,8 +100,8 @@ stdio 传输，每行一条 JSON-RPC 2.0 消息；实现了 `initialize` / `tool
   "servers": {
     "newlife-office": {
       "type": "stdio",
-      "command": "dotnet",
-      "args": ["run", "--project", "C:/X/NewLife.Office/NewLife.Office.Cli", "--", "mcp"]
+      "command": "office",
+      "args": ["mcp"]
     }
   }
 }

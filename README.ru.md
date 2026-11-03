@@ -85,11 +85,14 @@ String? md = OfficeFactory.ReadMarkdown("slides.pptx");
 ### Инструмент командной строки (NewLife.Office.Cli)
 
 ```bash
+# Установка как глобального инструмента .NET (команда: office)
+dotnet tool install -g NewLife.Office.Cli
+
 # Любой документ Office → Markdown
-dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
+office convert input.docx output.md
 
 # doc (97-2003) → docx (миграция устаревших документов)
-dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
+office doc2docx legacy.doc legacy.docx
 ```
 
 ### ИИ и агенты
@@ -110,11 +113,11 @@ if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
 
 ```bash
 # CLI: read / apply / text / range / search для всех четырёх форматов
-dotnet run --project NewLife.Office.Cli -- read report.xlsx
-dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+office read report.xlsx
+office apply report.xlsx patch.json out.xlsx
 
 # MCP-сервер (stdio) для агентов вроде VS Code / Claude
-dotnet run --project NewLife.Office.Cli -- mcp
+office mcp
 ```
 
 > Якоря и операции патча по форматам: [Интеграция с MCP и агентами](Doc/MCP与Agent接入.md).

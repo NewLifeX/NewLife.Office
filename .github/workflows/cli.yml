@@ -1,0 +1,76 @@
+name: cli
+
+# 独立分发：为各平台产出单文件 office(.exe)，tag 推送时挂到同名 GitHub Release。
+# 产物形态：框架依赖 + 单文件（.NET 8 运行时），约 3.6MB；不采用 NativeAOT（>10MB，超过 5MB 约定）。
+on:
+  push:
+    tags: [ v* ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-cli:
+    name: build office (${{ matrix.rid }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [win-x64, win-x86, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64]
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup dotNET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.x
+          10.x
+
+    - name: Publish single-file
+      shell: pwsh
+      run: |
+        $ref = $env:GITHUB_REF_NAME
+        if ($env:GITHUB_REF_TYPE -eq 'tag' -and $ref -match '^v[0-9]+\.[0-9]+\.[0-9]{4}\.[0-9]{4}$') {
+          # 与 NuGet 包保持一致：v1.5.2026.1024 → VersionSuffix=2026.1024
+          $suffix = ($ref -split '\.', 3)[2]
+        }
+        else {
+          $suffix = Get-Date -Format 'yyyy.MMdd'
+        }
+        Write-Host "VersionSuffix=$suffix"
+        pwsh -File tools/publish-cli.ps1 -Runtime ${{ matrix.rid }} -OutDir out -VersionSuffix $suffix
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: office-${{ matrix.rid }}
+        path: out/*.zip
+        if-no-files-found: error
+
+  release-cli:
+    name: attach cli assets
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build-cli
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        path: assets
+        merge-multiple: true
+
+    - name: Upload to GitHub Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        tag="$GITHUB_REF_NAME"
+        # publish 工作流与本工作流并行，等待 Release 创建完成（最多 5 分钟）
+        for i in $(seq 1 30); do
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then break; fi
+          echo "等待 Release $tag 创建（$i/30）"
+          sleep 10
+        done
+        gh release upload "$tag" assets/*.zip --repo "$GITHUB_REPOSITORY" --clobber

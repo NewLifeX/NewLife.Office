@@ -88,11 +88,14 @@ OfficeFactory.ConvertDocToDocx("legacy.doc", "legacy.docx");
 ### Command-Line Tool (NewLife.Office.Cli)
 
 ```bash
+# Install as a .NET global tool (command: office)
+dotnet tool install -g NewLife.Office.Cli
+
 # Any office document → Markdown
-dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
+office convert input.docx output.md
 
 # doc (97-2003) → docx (legacy document migration)
-dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
+office doc2docx legacy.doc legacy.docx
 ```
 
 ### AI & Agents
@@ -113,11 +116,11 @@ if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
 
 ```bash
 # CLI: read / apply / text / range / search for all four formats
-dotnet run --project NewLife.Office.Cli -- read report.xlsx
-dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+office read report.xlsx
+office apply report.xlsx patch.json out.xlsx
 
 # MCP server (stdio) for VS Code / Claude
-dotnet run --project NewLife.Office.Cli -- mcp
+office mcp
 ```
 
 > Anchors and patch operations per format: [MCP & Agent Integration](Doc/MCP与Agent接入.md).

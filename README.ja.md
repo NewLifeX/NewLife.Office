@@ -85,11 +85,14 @@ String? md = OfficeFactory.ReadMarkdown("slides.pptx");
 ### コマンドラインツール（NewLife.Office.Cli）
 
 ```bash
+# .NET グローバルツールとしてインストール（コマンド: office）
+dotnet tool install -g NewLife.Office.Cli
+
 # 任意の Office 文書 → Markdown
-dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
+office convert input.docx output.md
 
 # doc（97-2003）→ docx（旧形式文書の移行）
-dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
+office doc2docx legacy.doc legacy.docx
 ```
 
 ### AI とエージェント
@@ -110,11 +113,11 @@ if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
 
 ```bash
 # CLI：4 形式共通の read / apply / text / range / search
-dotnet run --project NewLife.Office.Cli -- read report.xlsx
-dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+office read report.xlsx
+office apply report.xlsx patch.json out.xlsx
 
 # MCP サーバー（stdio）。VS Code / Claude などのエージェントから利用
-dotnet run --project NewLife.Office.Cli -- mcp
+office mcp
 ```
 
 > 形式ごとのアンカーとパッチ操作：[MCP とエージェント連携](Doc/MCP与Agent接入.md)。

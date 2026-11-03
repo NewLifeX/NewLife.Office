@@ -10,6 +10,7 @@
 | `check-readme-languages.ps1` | 校验 11 种 README 的结构、代码块、目标语言书写系统与整段英文残留 |
 | `sync-readme-package.ps1` | 按 `readme-package.json` 从英文 README 生成 NuGet 包版（相对链接改写为 GitHub 绝对地址） |
 | `verify-localization.ps1` | 一键运行词表、英文消息、README、NuGet 包版全部门禁 |
+| `publish-cli.ps1` | 为各 RID 构建 `office` 单文件产物（框架依赖 .NET 8，约 3.6MB）并打 zip，`cli.yml` 使用 |
 | `pending-translations.json` | 迁移期「英文与简体中文已完成、其余语言待补」的键清单 |
 
 ## 常用命令

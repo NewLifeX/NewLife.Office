@@ -294,3 +294,5 @@
 "The embedded media exceeds the {0} MB limit.": "内嵌媒体超过 {0} MB 上限"
 "The merged PDF exceeds the {0} MB limit.": "合并的 PDF 超过 {0} MB 上限"
 "The merged PDF is encrypted; decrypt it first.": "合并的 PDF 已加密，请先解密"
+"  --help, -h                 Show this help": "  --help, -h                 显示帮助"
+"  --version, -v              Show version": "  --version, -v              显示版本"

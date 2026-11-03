@@ -85,11 +85,14 @@ String? md = OfficeFactory.ReadMarkdown("slides.pptx");
 ### 命令列工具（NewLife.Office.Cli）
 
 ```bash
+# 安裝為 .NET 全域工具（命令：office）
+dotnet tool install -g NewLife.Office.Cli
+
 # 任意 Office 文件 → Markdown
-dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
+office convert input.docx output.md
 
 # doc（97-2003）→ docx（舊版文件移轉）
-dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
+office doc2docx legacy.doc legacy.docx
 ```
 
 ### AI 與 Agent 整合
@@ -110,11 +113,11 @@ if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
 
 ```bash
 # CLI：read / apply / text / range / search，四種格式通用
-dotnet run --project NewLife.Office.Cli -- read report.xlsx
-dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+office read report.xlsx
+office apply report.xlsx patch.json out.xlsx
 
 # MCP 伺服器（stdio），供 VS Code / Claude 等 Agent 呼叫
-dotnet run --project NewLife.Office.Cli -- mcp
+office mcp
 ```
 
 > 各格式錨點與補丁指令見 [MCP 與 Agent 接入](Doc/MCP与Agent接入.md)。

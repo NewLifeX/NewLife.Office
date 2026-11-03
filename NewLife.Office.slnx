@@ -7,6 +7,7 @@
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
     <File Path=".github/workflows/aot.yml" />
+    <File Path=".github/workflows/cli.yml" />
     <File Path=".github/workflows/publish-beta.yml" />
     <File Path=".github/workflows/publish.yml" />
     <File Path=".github/workflows/test.yml" />

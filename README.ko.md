@@ -85,11 +85,14 @@ String? md = OfficeFactory.ReadMarkdown("slides.pptx");
 ### 명령줄 도구(NewLife.Office.Cli)
 
 ```bash
+# .NET 전역 도구로 설치(명령: office)
+dotnet tool install -g NewLife.Office.Cli
+
 # 모든 Office 문서 → Markdown
-dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
+office convert input.docx output.md
 
 # doc(97-2003) → docx(레거시 문서 마이그레이션)
-dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
+office doc2docx legacy.doc legacy.docx
 ```
 
 ### AI 및 에이전트
@@ -110,11 +113,11 @@ if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
 
 ```bash
 # CLI: 네 가지 형식 공통 read / apply / text / range / search
-dotnet run --project NewLife.Office.Cli -- read report.xlsx
-dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+office read report.xlsx
+office apply report.xlsx patch.json out.xlsx
 
 # MCP 서버(stdio). VS Code / Claude 같은 에이전트에서 호출
-dotnet run --project NewLife.Office.Cli -- mcp
+office mcp
 ```
 
 > 형식별 앵커와 패치 작업: [MCP 및 에이전트 연동](Doc/MCP与Agent接入.md).

@@ -2,21 +2,41 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <OutputPath>..\Bin\Cli</OutputPath>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <AssemblyName>NewLife.Office.Cli</AssemblyName>
+    <AssemblyName>office</AssemblyName>
     <RootNamespace>NewLife.Office.Cli</RootNamespace>
     <SignAssembly>True</SignAssembly>
     <AssemblyOriginatorKeyFile>..\Doc\newlife.snk</AssemblyOriginatorKeyFile>
+
+    <!-- 分发：NuGet 全局工具（dotnet tool install -g NewLife.Office.Cli → 命令 office） -->
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>office</ToolCommandName>
+    <PackageId>NewLife.Office.Cli</PackageId>
+    <RollForward>Major</RollForward>
+    <VersionPrefix>1.5</VersionPrefix>
+    <Version Condition="'$(VersionSuffix)' != ''">$(VersionPrefix).$(VersionSuffix)</Version>
+    <Version Condition="'$(VersionSuffix)' == ''">$(VersionPrefix).0.0</Version>
+    <Company>新生命开发团队</Company>
+    <Authors>$(Company)</Authors>
+    <Description>NewLife.Office 命令行工具（office）：办公文档转 Markdown、结构快照、锚点补丁与 MCP 服务端，供 AI/Agent 直接调用</Description>
+    <PackageTags>NewLife;Office;CLI;dotnet-tool;MCP;Agent;Markdown;Excel;Word;PowerPoint;PDF</PackageTags>
+    <RepositoryUrl>https://github.com/NewLifeX/NewLife.Office</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+    <!-- 独立分发：单文件发布时不要把 XML 文档一起带出，保证"只有一个 office.exe" -->
+    <PublishDocumentationFiles>false</PublishDocumentationFiles>
+    <DebugType>none</DebugType>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="NewLife.Core" Version="12.0.2026.1024" />
-    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.11" />
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="8.0.0" />
   </ItemGroup>
 
   <ItemGroup>

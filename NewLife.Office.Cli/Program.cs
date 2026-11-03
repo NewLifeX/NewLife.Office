@@ -11,9 +11,9 @@ namespace NewLife.Office.Cli;
 /// info 命令显示格式信息。内容识别 + 格式路由自动选择转换器，零外部依赖，可被 Agent/脚本直接调用。
 /// <example>
 /// <code>
-/// NewLife.Office.Cli convert input.docx output.md
-/// NewLife.Office.Cli convert input.xlsx
-/// NewLife.Office.Cli info input.pdf
+/// office convert input.docx output.md
+/// office convert input.xlsx
+/// office info input.pdf
 /// </code>
 /// </example>
 /// </remarks>
@@ -37,6 +37,8 @@ public static class Program
             }
             return args[0].ToLowerInvariant() switch
             {
+                "--help" or "-h" or "help" => ShowHelp(),
+                "--version" or "-v" => ShowVersion(),
                 "convert" or "conv" => Convert(args.Skip(1).ToArray()),
                 "doc2docx" or "d2x" => Doc2Docx(args.Skip(1).ToArray()),
                 "info" => Info(args.Skip(1).ToArray()),
@@ -425,6 +427,30 @@ public static class Program
         }
     }
 
+    /// <summary>显示帮助</summary>
+    /// <returns>退出码（0）</returns>
+    private static Int32 ShowHelp()
+    {
+        PrintUsage();
+        return 0;
+    }
+
+    /// <summary>显示版本，供 Agent 探测工具能力</summary>
+    /// <returns>退出码（0）</returns>
+    private static Int32 ShowVersion()
+    {
+        var assembly = typeof(Program).Assembly;
+        var version = assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+            .FirstOrDefault()?.InformationalVersion;
+        if (version.IsNullOrEmpty()) version = assembly.GetName().Version?.ToString();
+        var index = version?.IndexOf('+') ?? -1;
+        if (index > 0) version = version!.Substring(0, index);
+
+        Console.WriteLine("office " + version);
+        return 0;
+    }
+
     /// <summary>打印用法</summary>
     private static void PrintUsage()
     {
@@ -442,6 +468,8 @@ public static class Program
         Console.WriteLine(Localization.Translate("  range <input> <range> [--max-rows N] [--cursor N]   Read a worksheet range page by page"));
         Console.WriteLine(Localization.Translate("  search <input> <text> [--regex] [--max N]   Search workbook cells or PDF text"));
         Console.WriteLine(Localization.Translate("  mcp                        Start MCP stdio server (tools for agents)"));
+        Console.WriteLine(Localization.Translate("  --help, -h                 Show this help"));
+        Console.WriteLine(Localization.Translate("  --version, -v              Show version"));
         Console.WriteLine();
         Console.WriteLine(Localization.Translate("Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc."));
     }

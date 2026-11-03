@@ -90,11 +90,14 @@ OfficeFactory.ConvertDocToDocx("legacy.doc", "legacy.docx");
 ### 命令行工具（NewLife.Office.Cli）
 
 ```bash
+# 安装为 .NET 全局工具（命令：office）
+dotnet tool install -g NewLife.Office.Cli
+
 # 任意办公文档 → Markdown
-dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
+office convert input.docx output.md
 
 # doc（97-2003）→ docx（历史文档迁移）
-dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
+office doc2docx legacy.doc legacy.docx
 ```
 
 ### AI 与 Agent 集成
@@ -115,11 +118,11 @@ if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
 
 ```bash
 # CLI：read / apply / text / range / search，四格式通用
-dotnet run --project NewLife.Office.Cli -- read report.xlsx
-dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+office read report.xlsx
+office apply report.xlsx patch.json out.xlsx
 
 # MCP 服务端（stdio），供 VS Code / Claude 等 Agent 调用
-dotnet run --project NewLife.Office.Cli -- mcp
+office mcp
 ```
 
 > 各格式锚点与补丁指令见 [MCP 与 Agent 接入](Doc/MCP与Agent接入.md)。

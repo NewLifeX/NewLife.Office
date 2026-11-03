@@ -85,11 +85,14 @@ String? md = OfficeFactory.ReadMarkdown("slides.pptx");
 ### Outil en ligne de commande (NewLife.Office.Cli)
 
 ```bash
+# Installer comme outil global .NET (commande : office)
+dotnet tool install -g NewLife.Office.Cli
+
 # Tout document Office → Markdown
-dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
+office convert input.docx output.md
 
 # doc (97-2003) → docx (migration de documents anciens)
-dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
+office doc2docx legacy.doc legacy.docx
 ```
 
 ### IA et agents
@@ -110,11 +113,11 @@ if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
 
 ```bash
 # CLI : read / apply / text / range / search pour les quatre formats
-dotnet run --project NewLife.Office.Cli -- read report.xlsx
-dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+office read report.xlsx
+office apply report.xlsx patch.json out.xlsx
 
 # Serveur MCP (stdio) pour les agents tels que VS Code / Claude
-dotnet run --project NewLife.Office.Cli -- mcp
+office mcp
 ```
 
 > Ancres et opérations de correctif par format : [Intégration MCP et agents](Doc/MCP与Agent接入.md).

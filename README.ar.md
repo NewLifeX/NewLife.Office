@@ -84,11 +84,14 @@ OfficeFactory.ConvertDocToDocx("legacy.doc", "legacy.docx");
 ### أداة سطر الأوامر (NewLife.Office.Cli)
 
 ```bash
+# التثبيت كأداة .NET عامة (الأمر: office)
+dotnet tool install -g NewLife.Office.Cli
+
 # أي مستند Office → Markdown
-dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
+office convert input.docx output.md
 
 # doc (97-2003) → docx (ترحيل المستندات القديمة)
-dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
+office doc2docx legacy.doc legacy.docx
 ```
 
 ### الذكاء الاصطناعي والوكلاء
@@ -109,11 +112,11 @@ if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
 
 ```bash
 # سطر الأوامر: read / apply / text / range / search للصيغ الأربع
-dotnet run --project NewLife.Office.Cli -- read report.xlsx
-dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+office read report.xlsx
+office apply report.xlsx patch.json out.xlsx
 
 # خادم MCP (stdio) للوكلاء مثل VS Code / Claude
-dotnet run --project NewLife.Office.Cli -- mcp
+office mcp
 ```
 
 > انظر مراسي وعمليات الرقعة لكل صيغة: [تكامل MCP والوكلاء](Doc/MCP与Agent接入.md).

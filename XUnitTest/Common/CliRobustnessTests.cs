@@ -45,6 +45,33 @@ public class CliRobustnessTests
         return dir;
     }
 
+    [Fact, DisplayName("CLI-健壮：--help 返回 0 并打印用法")]
+    public void Help_ReturnsZero()
+    {
+        var (code, output, _) = Run("--help");
+
+        Assert.Equal(0, code);
+        Assert.Contains("mcp", output);
+    }
+
+    [Fact, DisplayName("CLI-健壮：--version 返回 0 并打印命令名")]
+    public void Version_ReturnsZero()
+    {
+        var (code, output, _) = Run("--version");
+
+        Assert.Equal(0, code);
+        Assert.StartsWith("office ", output);
+    }
+
+    [Fact, DisplayName("CLI-健壮：无参数返回 1 且打印用法")]
+    public void NoArgs_ReturnsOne()
+    {
+        var (code, output, _) = Run();
+
+        Assert.Equal(1, code);
+        Assert.Contains("mcp", output);
+    }
+
     [Fact, DisplayName("CLI-健壮：未知命令返回 1 且打印用法")]
     public void UnknownCommand_ReturnsOne()
     {
