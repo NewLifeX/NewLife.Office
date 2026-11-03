@@ -108,6 +108,7 @@ public class DocxPatch
         if (patch == null) throw new ArgumentNullException(nameof(patch));
 
         var result = new DocxPatchResult();
+        var warnStart = doc.EditWarnings.Count;
         for (var i = 0; i < patch.Ops.Count; i++)
         {
             var op = patch.Ops[i];
@@ -121,6 +122,10 @@ public class DocxPatch
                 result.Failed.Add($"#{i} {op.Op}: {ex.Message}");
             }
         }
+
+        // 把本次执行新增的告警带回调用方（BeginEdit 已有的告警不回放）
+        for (var i = warnStart; i < doc.EditWarnings.Count; i++)
+            result.Warnings.Add(doc.EditWarnings[i]);
 
         if (result.Applied.Count > 0) doc.MarkModified();
         return result;
@@ -141,7 +146,8 @@ public class DocxPatch
 
             case "set_text":
             {
-                var para = RequireParagraph(doc, op.Anchor, "set_text");
+                var (el, para) = RequireParagraphPair(doc, op.Anchor, "set_text");
+                DropRawXmlFallback(doc, el, op.Anchor!, "set_text");
                 para.SetText(op.Text ?? String.Empty);
                 return;
             }
@@ -172,8 +178,9 @@ public class DocxPatch
 
             case "set_style":
             {
-                var para = RequireParagraph(doc, op.Anchor, "set_style");
+                var (el, para) = RequireParagraphPair(doc, op.Anchor, "set_style");
                 if (String.IsNullOrEmpty(op.Style)) throw new ArgumentException("set_style 需要 style");
+                DropRawXmlFallback(doc, el, op.Anchor!, "set_style");
                 ApplyStyle(para, op.Style!);
                 para.RawXml = null;
                 return;
@@ -181,8 +188,11 @@ public class DocxPatch
 
             case "set_cell_text":
             {
-                var table = ResolveElement(doc, op.Anchor, "set_cell_text").Table ?? throw new ArgumentException($"锚点不是表格: {op.Anchor}");
+                var cellEl = ResolveElement(doc, op.Anchor, "set_cell_text");
+                var table = cellEl.Table ?? throw new ArgumentException($"锚点不是表格: {op.Anchor}");
                 if (!op.Row.HasValue || !op.Column.HasValue) throw new ArgumentException("set_cell_text 需要 row 与 column");
+                DropRawXmlFallback(doc, cellEl, op.Anchor!, "set_cell_text");
+                table.RawXml = null;
                 table.SetCellText(op.Row.Value, op.Column.Value, op.Text ?? String.Empty);
                 return;
             }
@@ -216,8 +226,9 @@ public class DocxPatch
 
             case "add_comment":
             {
-                var para = RequireParagraph(doc, op.Anchor, "add_comment");
+                var (el, para) = RequireParagraphPair(doc, op.Anchor, "add_comment");
                 if (String.IsNullOrEmpty(op.Text)) throw new ArgumentException("add_comment 需要 text");
+                DropRawXmlFallback(doc, el, op.Anchor!, "add_comment");
                 doc.AddComment(para, op.Text!, op.Author);
                 return;
             }
@@ -254,6 +265,37 @@ public class DocxPatch
     private static Paragraph RequireParagraph(Document doc, String? anchor, String opName)
         => (String.IsNullOrEmpty(anchor) ? null : FindParagraphByAnchor(doc, anchor!))
             ?? throw new ArgumentException($"{opName} 需要指向段落的锚点");
+
+    /// <summary>按锚点取段落及其所属元素（修改前后需要定位元素级 RawXml）</summary>
+    /// <param name="doc">文档</param>
+    /// <param name="anchor">锚点（如 p#3）</param>
+    /// <param name="opName">操作名（用于异常提示）</param>
+    /// <returns>元素与段落</returns>
+    private static (Element Element, Paragraph Paragraph) RequireParagraphPair(Document doc, String? anchor, String opName)
+    {
+        var index = ResolveIndex(doc, anchor) ?? throw new ArgumentException($"{opName} 需要指向段落的锚点");
+        var el = doc.Elements[index];
+        var para = el.Paragraph ?? throw new ArgumentException($"{opName} 需要指向段落的锚点");
+        return (el, para);
+    }
+
+    /// <summary>清除元素级 RawXml 兜底，保证模型修改真正落盘</summary>
+    /// <remarks>
+    /// 真实 Word 文档中部分段落含域、批注锚点、对象等未建模内容，Reader 会同时保留原始 XML（RawXml）并建模。
+    /// 保存时 Writer 优先输出 RawXml，导致模型修改被静默丢弃。这里在修改前清掉兜底，改为按模型重建，
+    /// 并把"未建模内容会丢失"记入 <see cref="Document.EditWarnings"/>，由 <see cref="DocxPatchResult.Warnings"/> 带回调用方。
+    /// </remarks>
+    /// <param name="doc">文档</param>
+    /// <param name="el">被修改的元素</param>
+    /// <param name="anchor">锚点（用于告警文本）</param>
+    /// <param name="opName">操作名（用于告警文本）</param>
+    private static void DropRawXmlFallback(Document doc, Element el, String anchor, String opName)
+    {
+        if (el.RawXml == null) return;
+        el.RawXml = null;
+        if (el.Paragraph is { HasUnmodeledContent: true })
+            doc.EditWarnings.Add($"{opName} {anchor}: 该段落含域/批注锚点等未建模内容，按模型重建后这些内容会丢失");
+    }
 
     /// <summary>解析样式：Heading1~6 映射枚举，其余作为自定义样式 ID</summary>
     private static ParagraphStyle ParseStyle(String? style)
@@ -334,6 +376,10 @@ public class DocxPatchResult
 
     /// <summary>失败的操作与原因</summary>
     public List<String> Failed { get; } = [];
+
+    /// <summary>执行过程中的告警（如修改段落时丢弃了原本未建模的域/批注锚点等内容）</summary>
+    /// <remarks>告警不影响 <see cref="Success"/>，但调用方应向用户展示，避免“内容被静默丢弃”。</remarks>
+    public List<String> Warnings { get; } = [];
 
     /// <summary>是否全部成功（为 false 时不应保存文档）</summary>
     public Boolean Success => Failed.Count == 0;
