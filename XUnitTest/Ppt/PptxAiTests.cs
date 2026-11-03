@@ -1,3 +1,4 @@
+using NewLife.Office;
 using NewLife.Office.Ppt;
 using Xunit;
 
@@ -179,6 +180,33 @@ public class PptxAiTests
         var doc2 = Read(output);
         Assert.Single(doc2.Slides[0].Images);
         Assert.Equal(original.Length, doc2.Slides[0].Images[0].Data.Length);
+    }
+
+    [Fact(DisplayName = "占位符-角色与省略几何往返，set_title 命中标题")]
+    public void Placeholder_RoleRoundTrip()
+    {
+        var path = TempPath("ph.pptx");
+        var doc = new Presentation();
+        var slide = new Slide();
+        slide.TextBoxes.Add(new TextBox { Text = "标题", Role = "title", OmitGeometry = true });
+        slide.TextBoxes.Add(new TextBox { Text = "正文", Left = 100, Top = 100, Width = 200, Height = 50 });
+        doc.Slides.Add(slide);
+        doc.Save(path);
+
+        var read = Read(path);
+        var title = read.Slides[0].TextBoxes.First(e => e.Role == "title");
+        Assert.True(title.OmitGeometry);
+        Assert.Equal(0, title.Width);
+        Assert.Contains(read.Slides[0].TextBoxes, e => e.Role == null && e.Text == "正文");
+
+        var outline = OfficeDocumentTool.ReadOutline(path);
+        Assert.Contains("\"role\": \"title\"", outline.Content);
+
+        var patch = PptxPatch.ParseJson("""{ "ops": [ { "op": "set_title", "anchor": "s#0", "text": "新标题" } ] }""");
+        var result = patch.Apply(read);
+        Assert.True(result.Success, String.Join("; ", result.Failed));
+        Assert.Equal("新标题", read.Slides[0].TextBoxes.First(e => e.Role == "title").Text);
+        Assert.Equal("正文", read.Slides[0].TextBoxes.First(e => e.Role == null).Text);
     }
 
     [Fact(DisplayName = "补丁-克隆幻灯片后编辑不串改源页")]

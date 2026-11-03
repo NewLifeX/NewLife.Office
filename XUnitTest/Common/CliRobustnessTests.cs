@@ -137,7 +137,7 @@ public class CliRobustnessTests
             var output = Path.Combine(dir, "out.docx");
 
             var (code, _, _) = Run("apply", docx, patch, output);
-            Assert.NotEqual(0, code);
+            Assert.Equal(3, code);
             Assert.False(File.Exists(output), "非法补丁不应产生输出文件");
         }
         finally
@@ -158,11 +158,11 @@ public class CliRobustnessTests
             new WordWriter().Save(docx, doc);
 
             var patch = Path.Combine(dir, "p.json");
-            File.WriteAllText(patch, "{\"operations\":[{\"op\":\"replace_text\",\"anchor\":\"不存在的锚点\",\"text\":\"新\"}]}", Encoding.UTF8);
+            File.WriteAllText(patch, "{\"ops\":[{\"op\":\"set_text\",\"anchor\":\"p#99\",\"text\":\"新\"}]}", Encoding.UTF8);
             var output = Path.Combine(dir, "out.docx");
 
             var (code, _, err) = Run("apply", docx, patch, output);
-            Assert.True(code == 3 || code == 2, "期望部分失败(3)或转换失败(2)，实际 " + code);
+            Assert.Equal(3, code);
             Assert.False(String.IsNullOrWhiteSpace(err));
             Assert.False(File.Exists(output), "失败时不应留下输出文件");
         }

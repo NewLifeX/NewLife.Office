@@ -250,7 +250,8 @@ public static class Program
         if (!result.Success)
         {
             Console.Error.WriteLine($"[{result.Code}] {result.Message}");
-            return result.Code == OfficeToolErrorCode.AnchorMissing ? 3 : 2;
+            // 2 = 格式/加密等"换个文件"的问题；3 = 补丁本身失败（锚点/参数/资源限制）
+            return result.Code is OfficeToolErrorCode.Unsupported or OfficeToolErrorCode.Encrypted ? 2 : 3;
         }
 
         Console.WriteLine(Localization.Translate("Applied: {0} → {1}", Path.GetFileName(input), output));
@@ -345,6 +346,13 @@ public static class Program
         }
 
         WriteStdout(result.Content!);
+
+        if (result.Content != null && result.Content.Contains("\"nextCursor\""))
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(result.Content);
+            if (json.RootElement.TryGetProperty("nextCursor", out var cursorValue))
+                Console.Error.WriteLine($"[Truncated] nextCursor={cursorValue.GetInt32()}");
+        }
         return 0;
     }
 

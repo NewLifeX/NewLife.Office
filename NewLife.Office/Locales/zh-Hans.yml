@@ -293,3 +293,4 @@
 "JSON nesting is too deep (max {0}).": "JSON 嵌套层级过深（最多 {0} 层）"
 "The embedded media exceeds the {0} MB limit.": "内嵌媒体超过 {0} MB 上限"
 "The merged PDF exceeds the {0} MB limit.": "合并的 PDF 超过 {0} MB 上限"
+"The merged PDF is encrypted; decrypt it first.": "合并的 PDF 已加密，请先解密"

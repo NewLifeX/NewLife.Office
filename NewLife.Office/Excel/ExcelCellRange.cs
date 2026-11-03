@@ -5,7 +5,7 @@ namespace NewLife.Office.Excel;
 
 /// <summary>Excel A1 区域引用（如 <c>Sheet1!A1:D20</c>）</summary>
 /// <remarks>
-/// 支持整列（<c>A:C</c>）、整行（<c>1:3</c>）与整表（只给工作表名）形式，行列索引均为 0 基、区间闭区间。
+/// 支持整列（<c>A:C</c>）、整行（<c>1:3</c>）与单元格区域（<c>A1:D20</c>）形式，行列索引均为 0 基、区间闭区间。
 /// 供面向 AI 的区域读写与补丁定位使用。
 /// <example>
 /// <code>

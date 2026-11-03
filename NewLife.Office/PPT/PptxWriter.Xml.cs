@@ -485,10 +485,16 @@ partial class PptxWriter
                 hlinkMap[hlRelId] = tb.HyperlinkUrl;
             }
             var descr = tb.AltText != null ? $" descr=\"{EscXml(tb.AltText)}\"" : "";
-            sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"TextBox\"{descr}/><p:cNvSpPr txBox=\"1\"/><p:nvPr/></p:nvSpPr>");
+            var phType = tb.Role != null ? $" type=\"{EscXml(tb.Role)}\"" : null;
+            var phIdx = tb.PlaceholderIndex.HasValue ? $" idx=\"{tb.PlaceholderIndex}\"": null;
+            var nvPr = tb.Role != null ? $"<p:nvPr><p:ph{phType}{phIdx}/></p:nvPr>" : "<p:nvPr/>";
+            var txBoxAttr = tb.Role != null ? "" : " txBox=\"1\"";
+            sb.Append($"<p:sp><p:nvSpPr><p:cNvPr id=\"{shapeId++}\" name=\"TextBox\"{descr}/><p:cNvSpPr{txBoxAttr}/>{nvPr}</p:nvSpPr>");
             sb.Append("<p:spPr>");
             var tbRot = tb.Rotation != 0 ? $" rot=\"{tb.Rotation}\"" : "";
-            sb.Append($"<a:xfrm{tbRot}><a:off x=\"{tb.Left}\" y=\"{tb.Top}\"/><a:ext cx=\"{tb.Width}\" cy=\"{tb.Height}\"/></a:xfrm>");
+            // 占位符未显式给几何时省略 a:xfrm，由版式占位符继承（写死 0×0 会破坏版面）
+            if (!tb.OmitGeometry && !(tb.Role != null && tb.Width == 0 && tb.Height == 0))
+                sb.Append($"<a:xfrm{tbRot}><a:off x=\"{tb.Left}\" y=\"{tb.Top}\"/><a:ext cx=\"{tb.Width}\" cy=\"{tb.Height}\"/></a:xfrm>");
             sb.Append("<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom>");
             if (tb.BackgroundColor != null)
                 sb.Append($"<a:solidFill><a:srgbClr val=\"{tb.BackgroundColor.TrimStart('#')}\"/></a:solidFill>");

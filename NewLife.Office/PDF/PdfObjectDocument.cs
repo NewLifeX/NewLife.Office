@@ -642,8 +642,8 @@ public class PdfObjectDocument
             var page = GetDict(new Ref(pages[i], 0));
             if (page == null) continue;
 
-            var width = GetNumber(page.Value.TryGetValue("MediaBox", out var box) ? GetArray(box) : null, 2, 595f);
-            var height = GetNumber(page.Value.TryGetValue("MediaBox", out var box2) ? GetArray(box2) : null, 3, 842f);
+            var width = GetNumber(GetArray(ResolveInherited(page, "MediaBox")), 2, 595f);
+            var height = GetNumber(GetArray(ResolveInherited(page, "MediaBox")), 3, 842f);
             var textWidth = PdfTextSearch.Measure(text, fontSize);
             var x = (width - textWidth * 0.7071f) / 2;
             var y = (height - textWidth * 0.7071f) / 2;
@@ -665,25 +665,59 @@ public class PdfObjectDocument
             _textFontRef = AddObject(font);
         }
 
-        DictObj? resources;
+        DictObj resources;
+        var fromInherited = false;
         if (page.Value.TryGetValue("Resources", out var resourcesValue) && GetDict(resourcesValue) is DictObj existing)
             resources = existing;
+        else if (ResolveInherited(page, "Resources") is DictObj inherited)
+        {
+            // 继承的资源字典归父节点所有，先复制再改，否则会把新字体写进其它页共用的字典
+            resources = CloneDict(inherited);
+            page.Value["Resources"] = resources;
+            fromInherited = true;
+        }
         else
         {
             resources = new DictObj(new PdfDict());
             page.Value["Resources"] = resources;
         }
 
-        DictObj? fonts;
+        DictObj fonts;
         if (resources.Value.TryGetValue("Font", out var fontValue) && GetDict(fontValue) is DictObj existingFonts)
-            fonts = existingFonts;
+            fonts = fromInherited ? CloneDict(existingFonts) : existingFonts;
         else
-        {
             fonts = new DictObj(new PdfDict());
-            resources.Value["Font"] = fonts;
-        }
 
+        resources.Value["Font"] = fonts;
         fonts.Value["NLOfficeF1"] = new Ref(_textFontRef, 0);
+    }
+
+    /// <summary>沿 /Parent 链读取可继承属性（Resources/MediaBox 等）</summary>
+    /// <param name="node">起始字典（通常是页对象）</param>
+    /// <param name="key">属性名</param>
+    /// <returns>属性值，找不到返回 null</returns>
+    private PdfObject? ResolveInherited(DictObj node, String key)
+    {
+        var visited = new HashSet<Int32>();
+        var current = node;
+        for (var depth = 0; depth < 32; depth++)
+        {
+            if (current.Value.TryGetValue(key, out var value) && value != null) return value;
+            if (!current.Value.TryGetValue("Parent", out var parentValue) || parentValue is not Ref parentRef) return null;
+            if (!visited.Add(parentRef.ObjNum)) return null;
+
+            var parent = GetDict(parentRef);
+            if (parent == null) return null;
+            current = parent;
+        }
+        return null;
+    }
+
+    private static DictObj CloneDict(DictObj source)
+    {
+        var copy = new PdfDict();
+        foreach (var kv in source.Value) copy[kv.Key] = kv.Value;
+        return new DictObj(copy);
     }
 
     private void AppendContent(DictObj page, Byte[] data)

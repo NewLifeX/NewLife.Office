@@ -97,7 +97,22 @@ public class ExcelPatch
                 var sheet = document.GetSheet(range.Sheet);
                 range.Sheet = sheet.Name;
 
-                var values = op.GetMatrix("values") ?? throw new ArgumentException(L.T("set_cells requires 'values'."));
+                var values = op.GetMatrix("values");
+                if (values == null)
+                {
+                    // 标量按文档约定铺满整个区域
+                    if (!op.Args.TryGetValue("values", out var scalar) || scalar == null)
+                        throw new ArgumentException(L.T("set_cells requires 'values'."));
+
+                    values = [];
+                    var columns = range.EndCol - range.StartCol + 1;
+                    for (var r = range.StartRow; r <= range.EndRow; r++)
+                    {
+                        var row = new Object?[columns];
+                        for (var c = 0; c < columns; c++) row[c] = scalar;
+                        values.Add(row);
+                    }
+                }
                 var written = ExcelSheetEditor.WriteMatrix(sheet, range, values);
                 result.Warnings.Add(L.T("set_cells {0}: wrote {1} row(s) x {2} column(s)", range.FullAddress, written.Rows, written.Columns));
                 return;

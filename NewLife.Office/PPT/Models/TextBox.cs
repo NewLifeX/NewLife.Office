@@ -90,6 +90,12 @@ public class TextBox
     /// <remarks>支持：title/subtitle/body/kpi/caption</remarks>
     public String? Role { get; set; }
 
+    /// <summary>占位符索引（<c>p:ph idx</c>），null 表示未指定</summary>
+    public Int32? PlaceholderIndex { get; set; }
+
+    /// <summary>原始 XML 未写 <c>a:xfrm</c>：几何由版式占位符继承，写回时也应省略</summary>
+    public Boolean OmitGeometry { get; set; }
+
     /// <summary>旋转角度（S15-02），以 60000 分之一度为单位</summary>
     public Int32 Rotation { get; set; }
 

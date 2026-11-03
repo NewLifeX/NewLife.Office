@@ -201,9 +201,14 @@ public class PdfPatch
                 if (op.Args.TryGetValue("fields", out var fieldsValue) && fieldsValue is Dictionary<String, Object?> fields)
                 {
                     var applied = false;
+                    var missing = new List<String>();
                     foreach (var kv in fields)
+                    {
                         if (document.FillForm(kv.Key, Convert.ToString(kv.Value, CultureInfo.InvariantCulture) ?? String.Empty)) applied = true;
+                        else missing.Add(kv.Key);
+                    }
                     if (!applied) throw new ArgumentException(L.T("No matching form field."));
+                    foreach (var field in missing) result.Warnings.Add(L.T("Form field not found: {0}", field));
                     return;
                 }
 
@@ -219,6 +224,7 @@ public class PdfPatch
                 if (!File.Exists(path)) throw new FileNotFoundException(L.T("File not found: {0}", path));
                 if (new FileInfo(path).Length > 256L * 1024 * 1024) throw new ArgumentException(L.T("The merged PDF exceeds the {0} MB limit.", 256));
                 var other = PdfObjectDocument.Load(path);
+                if (other.IsEncrypted) throw new NotSupportedException(L.T("The merged PDF is encrypted; decrypt it first."));
                 document.Merge(other);
                 return;
             }

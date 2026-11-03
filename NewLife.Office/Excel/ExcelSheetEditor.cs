@@ -224,7 +224,21 @@ public static class ExcelSheetEditor
             {
                 if (cell != null) { hasValue = true; break; }
             }
+            // 只有公式没有缓存值的行也算"有内容"，否则会被新数据覆盖
+            if (!hasValue && sheet.Formulas.Count > 0)
+            {
+                foreach (var key in sheet.Formulas.Keys)
+                {
+                    if (key.Row == r) { hasValue = true; break; }
+                }
+            }
             if (hasValue) { start = r + 1; break; }
+        }
+
+        // 公式可能落在稠密行范围之外
+        foreach (var key in sheet.Formulas.Keys)
+        {
+            if (key.Row >= start) start = key.Row + 1;
         }
 
         var range = new ExcelCellRange(sheet.Name, start, 0, start, 0);

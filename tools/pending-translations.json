@@ -163,6 +163,7 @@
     "Regular expression evaluation timed out.",
     "JSON nesting is too deep (max {0}).",
     "The embedded media exceeds the {0} MB limit.",
-    "The merged PDF exceeds the {0} MB limit."
+    "The merged PDF exceeds the {0} MB limit.",
+    "The merged PDF is encrypted; decrypt it first."
   ]
 }

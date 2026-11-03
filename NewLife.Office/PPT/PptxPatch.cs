@@ -184,8 +184,10 @@ public class PptxPatch
                 if (data == null || data.Length == 0) throw new ArgumentException(L.T("replace_image requires 'base64' or 'path'."));
                 picture.Data = data;
                 var extension = op.GetString("extension");
+                var sourcePath = op.GetString("path");
                 if (!extension.IsNullOrEmpty()) picture.Extension = extension!;
-                else if (!op.GetString("path").IsNullOrEmpty()) picture.Extension = Path.GetExtension(op.GetString("path")!).TrimStart('.').ToLowerInvariant();
+                else if (!sourcePath.IsNullOrEmpty()) picture.Extension = Path.GetExtension(sourcePath!).TrimStart('.').ToLowerInvariant();
+                else if (SniffImageExtension(data) is { } sniffed) picture.Extension = sniffed;
                 return;
             }
 
@@ -202,7 +204,8 @@ public class PptxPatch
                 var anchor = PptxAnchor.Parse(op.GetString("anchor") ?? throw new ArgumentException(L.T("set_title requires 'anchor'.")));
                 var slide = GetSlide(document, anchor.SlideIndex);
                 var text = op.GetString("text") ?? String.Empty;
-                var title = slide.TextBoxes.FirstOrDefault(e => String.Equals(e.Role, "title", StringComparison.OrdinalIgnoreCase))
+                var title = slide.TextBoxes.FirstOrDefault(e => String.Equals(e.Role, "title", StringComparison.OrdinalIgnoreCase)
+                        || String.Equals(e.Role, "ctrTitle", StringComparison.OrdinalIgnoreCase))
                     ?? slide.TextBoxes.FirstOrDefault();
                 if (title == null) throw new ArgumentException(L.T("Slide s#{0} has no text box usable as a title.", anchor.SlideIndex));
                 SetTextBoxText(title, text);
@@ -319,6 +322,21 @@ public class PptxPatch
         box.Text = text;
         box.Paragraphs.Clear();
         box.Runs.Clear();
+    }
+
+    /// <summary>按魔数推断图片扩展名（base64 分支没有文件名可用）</summary>
+    /// <param name="data">图片字节</param>
+    /// <returns>扩展名，无法识别返回 null</returns>
+    private static String? SniffImageExtension(Byte[] data)
+    {
+        if (data.Length >= 8 && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47) return "png";
+        if (data.Length >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF) return "jpg";
+        if (data.Length >= 6 && data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46) return "gif";
+        if (data.Length >= 2 && data[0] == 0x42 && data[1] == 0x4D) return "bmp";
+        if (data.Length >= 12 && data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46
+            && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50) return "webp";
+        if (data.Length >= 3 && ((data[0] == 0x49 && data[1] == 0x49 && data[2] == 0x2A) || (data[0] == 0x4D && data[1] == 0x4D && data[2] == 0x00))) return "tiff";
+        return null;
     }
 
     private static Slide CloneSlide(Slide source) => PptxCloner.CloneSlide(source);

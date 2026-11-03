@@ -277,4 +277,97 @@ public class PdfAiTests
         Assert.True(kept.Value.ContainsKey("MediaBox"));
         Assert.True(kept.Value.ContainsKey("Resources"));
     }
+
+    [Fact(DisplayName = "补丁-叠加文字保留继承的页面资源")]
+    public void AddText_PreservesInheritedResources()
+    {
+        var source = BuildPdf();
+        var doc = PdfObjectDocument.Load(source);
+
+        var rootRef = (Ref)doc.Trailer["Root"];
+        var catalog = (DictObj)doc.Objects[rootRef.ObjNum];
+        var pagesRef = (Ref)catalog.Value["Pages"];
+        var pagesDict = ((DictObj)doc.Objects[pagesRef.ObjNum]).Value;
+        var kids = (PdfArray)pagesDict["Kids"];
+
+        var font = new DictObj(new PdfDict
+        {
+            ["Type"] = new PdfName("Font"),
+            ["Subtype"] = new PdfName("Type1"),
+            ["BaseFont"] = new PdfName("Helvetica"),
+        });
+        var fontNum = doc.AddObject(font);
+        var intermediate = new DictObj(new PdfDict
+        {
+            ["Type"] = new PdfName("Pages"),
+            ["Parent"] = new Ref(pagesRef.ObjNum, 0),
+            ["Kids"] = new PdfArray { Items = [.. kids.Items] },
+            ["Count"] = new PdfNumber(kids.Items.Count),
+            ["Resources"] = new DictObj(new PdfDict
+            {
+                ["Font"] = new DictObj(new PdfDict { ["F1"] = new Ref(fontNum, 0) }),
+            }),
+        });
+        var intermediateNum = doc.AddObject(intermediate);
+
+        foreach (var item in kids.Items)
+        {
+            var childPage = doc.GetDict(new Ref(((Ref)item).ObjNum, 0))!;
+            childPage.Value.Remove("Resources");
+            childPage.Value["Parent"] = new Ref(intermediateNum, 0);
+        }
+        pagesDict["Kids"] = new PdfArray { Items = [new Ref(intermediateNum, 0)] };
+
+        doc.AddText(0, "Overlay", 72, 700, 12);
+        var output = TempPath("inherited.pdf");
+        doc.Save(output);
+
+        var reopened = PdfObjectDocument.Load(output);
+        var pageNum = reopened.GetPageObjectNumbers()[0];
+        var page = reopened.GetDict(new Ref(pageNum, 0))!;
+        var fonts = ((DictObj)((DictObj)page.Value["Resources"]).Value["Font"]).Value;
+        Assert.True(fonts.ContainsKey("F1"));
+        Assert.True(fonts.ContainsKey("NLOfficeF1"));
+
+        // 父节点共享的资源字典不能被写脏
+        var parentFonts = ((DictObj)((DictObj)((DictObj)reopened.Objects[intermediateNum]).Value["Resources"]).Value["Font"]).Value;
+        Assert.False(parentFonts.ContainsKey("NLOfficeF1"));
+    }
+
+    [Fact(DisplayName = "补丁-合并加密 PDF 被拒绝")]
+    public void Merge_EncryptedSourceRejected()
+    {
+        var encrypted = TempPath("enc.pdf");
+        using (var writer = new PdfWriter { UserPassword = "secret" })
+        {
+            writer.BeginPage();
+            writer.AppendLine("secret");
+            writer.EndPage();
+            writer.Save(encrypted);
+        }
+
+        var target = BuildPdf();
+        var doc = PdfObjectDocument.Load(target);
+        var patch = PdfPatch.ParseJson($$"""
+        { "ops": [ { "op": "merge", "path": {{System.Text.Json.JsonSerializer.Serialize(encrypted)}} } ] }
+        """);
+
+        var result = patch.Apply(doc);
+
+        Assert.False(result.Success);
+        Assert.Equal(2, doc.GetPageObjectNumbers().Count);
+    }
+
+    [Fact(DisplayName = "补丁-表单部分命中给出告警")]
+    public void FillForm_PartialHitsWarn()
+    {
+        var path = BuildPdf();
+        var doc = PdfObjectDocument.Load(path);
+        var patch = PdfPatch.ParseJson("""{ "ops": [ { "op": "fill_form", "fields": { "name": "新值", "nope": "x" } } ] }""");
+
+        var result = patch.Apply(doc);
+
+        Assert.True(result.Success, String.Join("; ", result.Failed));
+        Assert.Contains(result.Warnings, e => e.Contains("nope"));
+    }
 }

@@ -221,4 +221,34 @@ public class ExcelAiTests
         Assert.Equal("产品", rows[0][0]);
         Assert.Equal(10d, rows[1][1]);
     }
+
+    [Fact(DisplayName = "补丁-append_rows 跳过尾部纯公式行")]
+    public void Patch_AppendRowsSkipsFormulaTail()
+    {
+        var doc = new ExcelDocument();
+        var sheet = new Worksheet { Name = "S" };
+        sheet.Rows.Add(["名称"]);
+        sheet.Rows.Add([1d]);
+        sheet.Formulas[(2, 0)] = "SUM(B2:B2)";
+        doc.Worksheets.Add(sheet);
+
+        var patch = ExcelPatch.ParseJson("""{ "ops": [ { "op": "append_rows", "values": [["新行"]] } ] }""");
+        var result = patch.Apply(doc);
+
+        Assert.True(result.Success, String.Join("; ", result.Failed));
+        Assert.True(doc.Worksheets[0].Formulas.ContainsKey((2, 0)));
+        Assert.Equal("新行", doc.Worksheets[0].Rows[3][0]);
+    }
+
+    [Fact(DisplayName = "补丁-set_cells 标量铺满区域")]
+    public void Patch_SetCellsScalar()
+    {
+        var doc = BuildSample();
+        var patch = ExcelPatch.ParseJson("""{ "ops": [ { "op": "set_cells", "range": "销售!A1:B2", "values": 7 } ] }""");
+        var result = patch.Apply(doc);
+
+        Assert.True(result.Success, String.Join("; ", result.Failed));
+        var rows = ExcelSheetEditor.ReadRange(doc.GetSheet("销售"), ExcelCellRange.Parse("A1:B2")!);
+        Assert.All(rows, row => Assert.All(row, cell => Assert.Equal(7d, cell)));
+    }
 }

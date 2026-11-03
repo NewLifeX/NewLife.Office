@@ -796,6 +796,21 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var flipH = xfrmEl?.GetAttribute("flipH") == "1";
         var flipV = xfrmEl?.GetAttribute("flipV") == "1";
 
+        // 占位符（p:ph）：真实文件常见"无 a:xfrm、几何继承自版式"，必须带角色与继承尺寸
+        var phEl = sp.SelectSingleNode(".//*[local-name()='nvSpPr']/*[local-name()='nvPr']/*[local-name()='ph']") as XmlElement;
+        var placeholderType = phEl?.GetAttribute("type");
+        if (placeholderType != null && placeholderType.Length == 0) placeholderType = "obj";
+        Int32? placeholderIndex = null;
+        if (phEl != null && Int32.TryParse(phEl.GetAttribute("idx"), out var phIdx)) placeholderIndex = phIdx;
+
+        var omitGeometry = false;
+        if (xfrmEl == null && placeholderType != null)
+        {
+            var inherited = ParseLayoutPlaceholderXfrm(slide.LayoutIndex, placeholderType, placeholderIndex);
+            if (inherited != null) (left, top, width, height) = inherited.Value;
+            else omitGeometry = true;
+        }
+
         // 形状级超链接（S20 Reader 侧）
         String? shapeHyperlink = null;
         var shHlink = sp.SelectSingleNode(".//*[local-name()='cNvPr']/*[local-name()='hlinkClick']") as XmlElement
@@ -808,7 +823,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         }
 
         // 文本框判定：cNvSpPr txBox="1" 或 prstGeom="textBox"；带文本的基本形状应读为 Shape 而非文本框
-        var isTextBox = hasTxBody && (shapeType == "textBox" || IsTxBox(sp));
+        var isTextBox = hasTxBody && (shapeType == "textBox" || IsTxBox(sp) || phEl != null);
 
         // 形状文本方向与自适配（写入端由 PptShape.TextDirection/TextAutoFit 输出到 bodyPr）
         String? shapeTextDir = null, shapeAutoFit = null;
@@ -827,7 +842,11 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
 
         if (isTextBox)
         {
-            var tb = new TextBox { Left = left, Top = top, Width = width, Height = height, Rotation = rotation, AltText = altText };
+            var tb = new TextBox
+            {
+                Left = left, Top = top, Width = width, Height = height, Rotation = rotation, AltText = altText,
+                Role = placeholderType, PlaceholderIndex = placeholderIndex, OmitGeometry = omitGeometry,
+            };
             if (fillColor != null) tb.BackgroundColor = fillColor;
 
             // TextBox 整体超链接（S20，跳转 URL 或文件）
@@ -1234,6 +1253,39 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     /// <summary>从版式 XML 读取 lstStyle 字体默认值（占位符继承用）</summary>
     /// <param name="layoutIndex">版式索引（0起始）</param>
     /// <returns>lstStyle 默认值字典，版式不存在或没有 lstStyle 时返回空字典</returns>
+    /// <summary>从版式读取占位符几何（idx 优先，其次按 type 匹配）</summary>
+    /// <param name="layoutIndex">版式索引（0 基）</param>
+    /// <param name="type">占位符类型</param>
+    /// <param name="index">占位符索引</param>
+    /// <returns>几何，找不到返回 null</returns>
+    private (Int64 Left, Int64 Top, Int64 Width, Int64 Height)? ParseLayoutPlaceholderXfrm(Int32 layoutIndex, String type, Int32? index)
+    {
+        var entry = _zip.GetEntry($"ppt/slideLayouts/slideLayout{layoutIndex + 1}.xml");
+        if (entry == null) return null;
+
+        var xml = new XmlDocument { XmlResolver = null };
+        using (var stream = entry.Open()) xml.Load(stream);
+
+        foreach (XmlElement sp in xml.SelectNodes("//*[local-name()='sp']")!)
+        {
+            var ph = sp.SelectSingleNode(".//*[local-name()='nvPr']/*[local-name()='ph']") as XmlElement;
+            if (ph == null) continue;
+
+            var phType = ph.GetAttribute("type");
+            if (phType.Length == 0) phType = "obj";
+            Int32? phIndex = Int32.TryParse(ph.GetAttribute("idx"), out var parsed) ? parsed : null;
+
+            var match = index.HasValue
+                ? phIndex == index
+                : String.Equals(phType, type, StringComparison.OrdinalIgnoreCase);
+            if (!match) continue;
+
+            var xfrm = sp.SelectSingleNode(".//*[local-name()='xfrm']") as XmlElement;
+            if (xfrm != null) return ParseXfrm(xfrm);
+        }
+        return null;
+    }
+
     private Dictionary<String, DefaultRunProps> ParseLayoutLstStyleDefaults(Int32 layoutIndex)
     {
         var r = new Dictionary<String, DefaultRunProps>();
