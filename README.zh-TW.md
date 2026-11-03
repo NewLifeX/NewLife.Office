@@ -92,6 +92,34 @@ dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
 dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
 ```
 
+### AI 與 Agent 整合
+
+四類主流格式共用同一套「先讀結構、再按錨點打補丁」的用法，並提供跨格式入口：
+
+```csharp
+using NewLife.Office;
+
+// 結構快照（docx/xlsx/pptx/pdf 自動辨識）
+var outline = OfficeDocumentTool.ReadOutline("report.xlsx");
+Console.WriteLine(outline.Content);
+
+// 套用 JSON 補丁；任一項失敗則不寫出檔案
+var result = OfficeDocumentTool.ApplyPatch("report.xlsx", patchJson, "out.xlsx");
+if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
+```
+
+```bash
+# CLI：read / apply / text / range / search，四種格式通用
+dotnet run --project NewLife.Office.Cli -- read report.xlsx
+dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+
+# MCP 伺服器（stdio），供 VS Code / Claude 等 Agent 呼叫
+dotnet run --project NewLife.Office.Cli -- mcp
+```
+
+> 各格式錨點與補丁指令見 [MCP 與 Agent 接入](Doc/MCP与Agent接入.md)。
+
+
 ### Excel 寫入與讀取
 
 ```csharp

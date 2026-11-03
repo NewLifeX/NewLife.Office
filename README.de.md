@@ -92,6 +92,34 @@ dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
 dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
 ```
 
+### KI und Agenten
+
+Die vier wichtigsten Formate teilen denselben Ablauf „Struktur lesen → Patch über Anker anwenden" und bieten einen formatübergreifenden Einstieg:
+
+```csharp
+using NewLife.Office;
+
+// Strukturaufnahme (docx/xlsx/pptx/pdf, automatisch erkannt)
+var outline = OfficeDocumentTool.ReadOutline("report.xlsx");
+Console.WriteLine(outline.Content);
+
+// JSON-Patch anwenden; schlägt eine Operation fehl, wird keine Datei geschrieben
+var result = OfficeDocumentTool.ApplyPatch("report.xlsx", patchJson, "out.xlsx");
+if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
+```
+
+```bash
+# CLI: read / apply / text / range / search für alle vier Formate
+dotnet run --project NewLife.Office.Cli -- read report.xlsx
+dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+
+# MCP-Server (stdio) für Agents wie VS Code / Claude
+dotnet run --project NewLife.Office.Cli -- mcp
+```
+
+> Anker und Patch-Befehle je Format: [MCP- und Agent-Integration](Doc/MCP与Agent接入.md).
+
+
 ### Excel schreiben und lesen
 
 ```csharp

@@ -92,6 +92,34 @@ dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
 dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
 ```
 
+### IA et agents
+
+Les quatre formats principaux partagent le même flux « lire la structure → appliquer un correctif par ancre » et offrent une entrée inter-formats :
+
+```csharp
+using NewLife.Office;
+
+// Instantané de structure (docx/xlsx/pptx/pdf, détection automatique)
+var outline = OfficeDocumentTool.ReadOutline("report.xlsx");
+Console.WriteLine(outline.Content);
+
+// Appliquer un correctif JSON ; aucun fichier écrit si une opération échoue
+var result = OfficeDocumentTool.ApplyPatch("report.xlsx", patchJson, "out.xlsx");
+if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
+```
+
+```bash
+# CLI : read / apply / text / range / search pour les quatre formats
+dotnet run --project NewLife.Office.Cli -- read report.xlsx
+dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+
+# Serveur MCP (stdio) pour les agents tels que VS Code / Claude
+dotnet run --project NewLife.Office.Cli -- mcp
+```
+
+> Ancres et opérations de correctif par format : [Intégration MCP et agents](Doc/MCP与Agent接入.md).
+
+
 ### Écriture et lecture Excel
 
 ```csharp

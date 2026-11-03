@@ -97,6 +97,33 @@ dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
 dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
 ```
 
+### AI & Agents
+
+Every mainstream format exposes the same "read structure → apply anchored patch" workflow, plus a cross-format entry:
+
+```csharp
+using NewLife.Office;
+
+// Structure snapshot (docx/xlsx/pptx/pdf, auto-detected)
+var outline = OfficeDocumentTool.ReadOutline("report.xlsx");
+Console.WriteLine(outline.Content);
+
+// Apply a JSON patch; nothing is written if any op fails
+var result = OfficeDocumentTool.ApplyPatch("report.xlsx", patchJson, "out.xlsx");
+if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
+```
+
+```bash
+# CLI: read / apply / text / range / search for all four formats
+dotnet run --project NewLife.Office.Cli -- read report.xlsx
+dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+
+# MCP server (stdio) for VS Code / Claude
+dotnet run --project NewLife.Office.Cli -- mcp
+```
+
+> Anchors and patch operations per format: [MCP & Agent Integration](https://github.com/NewLifeX/NewLife.Office/blob/master/Doc/MCP与Agent接入.md).
+
 ### Excel Write and Read
 
 ```csharp
@@ -125,6 +152,7 @@ var rows = reader.ReadRows("Data").ToList();
 - [Feature List](https://github.com/NewLifeX/NewLife.Office/blob/master/Doc/功能清单.md)
 - [Architecture](https://github.com/NewLifeX/NewLife.Office/blob/master/Doc/架构设计.md)
 - [Competitive Analysis](https://github.com/NewLifeX/NewLife.Office/blob/master/Doc/竞品分析报告.md)
+- [MCP & Agent Integration](https://github.com/NewLifeX/NewLife.Office/blob/master/Doc/MCP与Agent接入.md)
 - [ChangeLog](https://github.com/NewLifeX/NewLife.Office/blob/master/ChangeLog.md)
 
 ## Ecosystem Map

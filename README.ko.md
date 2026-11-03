@@ -92,6 +92,34 @@ dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
 dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
 ```
 
+### AI 및 에이전트
+
+네 가지 주요 형식은 모두 «구조 읽기 → 앵커로 패치 적용» 이라는 같은 흐름을 공유하며, 형식을 넘나드는 진입점도 제공합니다.
+
+```csharp
+using NewLife.Office;
+
+// 구조 스냅샷(docx/xlsx/pptx/pdf 자동 판별)
+var outline = OfficeDocumentTool.ReadOutline("report.xlsx");
+Console.WriteLine(outline.Content);
+
+// JSON 패치 적용. 하나라도 실패하면 파일을 쓰지 않습니다
+var result = OfficeDocumentTool.ApplyPatch("report.xlsx", patchJson, "out.xlsx");
+if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
+```
+
+```bash
+# CLI: 네 가지 형식 공통 read / apply / text / range / search
+dotnet run --project NewLife.Office.Cli -- read report.xlsx
+dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+
+# MCP 서버(stdio). VS Code / Claude 같은 에이전트에서 호출
+dotnet run --project NewLife.Office.Cli -- mcp
+```
+
+> 형식별 앵커와 패치 작업: [MCP 및 에이전트 연동](Doc/MCP与Agent接入.md).
+
+
 ### Excel 쓰기와 읽기
 
 ```csharp

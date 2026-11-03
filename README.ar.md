@@ -91,6 +91,34 @@ dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
 dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
 ```
 
+### الذكاء الاصطناعي والوكلاء
+
+تتشارك الصيغ الأربع الرئيسية المسار نفسه « قراءة البنية ← تطبيق رقعة عبر المرساة »، وتوفّر مدخلًا موحّدًا بين الصيغ:
+
+```csharp
+using NewLife.Office;
+
+// لقطة البنية (docx/xlsx/pptx/pdf مع اكتشاف تلقائي)
+var outline = OfficeDocumentTool.ReadOutline("report.xlsx");
+Console.WriteLine(outline.Content);
+
+// تطبيق رقعة JSON؛ لا يُكتب الملف إذا فشلت أي عملية
+var result = OfficeDocumentTool.ApplyPatch("report.xlsx", patchJson, "out.xlsx");
+if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
+```
+
+```bash
+# سطر الأوامر: read / apply / text / range / search للصيغ الأربع
+dotnet run --project NewLife.Office.Cli -- read report.xlsx
+dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+
+# خادم MCP (stdio) للوكلاء مثل VS Code / Claude
+dotnet run --project NewLife.Office.Cli -- mcp
+```
+
+> انظر مراسي وعمليات الرقعة لكل صيغة: [تكامل MCP والوكلاء](Doc/MCP与Agent接入.md).
+
+
 ### كتابة وقراءة Excel
 
 ```csharp

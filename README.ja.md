@@ -92,6 +92,34 @@ dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
 dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
 ```
 
+### AI とエージェント
+
+4 つの主要形式は「構造を読み取り、アンカーでパッチを適用する」という同じ流れを共有し、形式をまたぐ入口も用意しています。
+
+```csharp
+using NewLife.Office;
+
+// 構造スナップショット（docx/xlsx/pptx/pdf を自動判定）
+var outline = OfficeDocumentTool.ReadOutline("report.xlsx");
+Console.WriteLine(outline.Content);
+
+// JSON パッチを適用。1 つでも失敗したらファイルは書き出しません
+var result = OfficeDocumentTool.ApplyPatch("report.xlsx", patchJson, "out.xlsx");
+if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
+```
+
+```bash
+# CLI：4 形式共通の read / apply / text / range / search
+dotnet run --project NewLife.Office.Cli -- read report.xlsx
+dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+
+# MCP サーバー（stdio）。VS Code / Claude などのエージェントから利用
+dotnet run --project NewLife.Office.Cli -- mcp
+```
+
+> 形式ごとのアンカーとパッチ操作：[MCP とエージェント連携](Doc/MCP与Agent接入.md)。
+
+
 ### Excel 書き込みと読み取り
 
 ```csharp

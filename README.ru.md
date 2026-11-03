@@ -92,6 +92,34 @@ dotnet run --project NewLife.Office.Cli -- convert input.docx output.md
 dotnet run --project NewLife.Office.Cli -- doc2docx legacy.doc legacy.docx
 ```
 
+### ИИ и агенты
+
+Все четыре основных формата используют один и тот же сценарий «прочитать структуру → применить патч по якорю» и имеют единую точку входа:
+
+```csharp
+using NewLife.Office;
+
+// Снимок структуры (docx/xlsx/pptx/pdf, определяется автоматически)
+var outline = OfficeDocumentTool.ReadOutline("report.xlsx");
+Console.WriteLine(outline.Content);
+
+// Применить JSON-патч; если операция не удалась, файл не записывается
+var result = OfficeDocumentTool.ApplyPatch("report.xlsx", patchJson, "out.xlsx");
+if (!result.Success) Console.WriteLine($"{result.Code}: {result.Message}");
+```
+
+```bash
+# CLI: read / apply / text / range / search для всех четырёх форматов
+dotnet run --project NewLife.Office.Cli -- read report.xlsx
+dotnet run --project NewLife.Office.Cli -- apply report.xlsx patch.json out.xlsx
+
+# MCP-сервер (stdio) для агентов вроде VS Code / Claude
+dotnet run --project NewLife.Office.Cli -- mcp
+```
+
+> Якоря и операции патча по форматам: [Интеграция с MCP и агентами](Doc/MCP与Agent接入.md).
+
+
 ### Запись и чтение Excel
 
 ```csharp
