@@ -569,7 +569,13 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
             field.FieldType = ftn.Value switch { "Tx" => FormFieldType.Tx, "Btn" => FormFieldType.Btn, "Ch" => FormFieldType.Ch, "Sig" => FormFieldType.Sig, _ => FormFieldType.Tx };
 
         if (dict.TryGetValue("V", out var vVal))
-            field.Value = vVal switch { PdfString vs => vs.Value, PdfName vn => vn.Value, _ => vVal.ToString() };
+            field.Value = vVal switch
+            {
+                PdfString vs => vs.Value,
+                PdfName vn => vn.Value,
+                HexString hs => DecodeHexFromString(hs.Value),
+                _ => vVal.ToString(),
+            };
 
         if (dict.TryGetValue("DV", out var dvVal) && dvVal is PdfString dvs)
             field.DefaultValue = dvs.Value;

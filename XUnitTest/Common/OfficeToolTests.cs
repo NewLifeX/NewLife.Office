@@ -1,0 +1,214 @@
+using NewLife.Office;
+using NewLife.Office.Excel;
+using NewLife.Office.Pdf;
+using NewLife.Office.Ppt;
+using NewLife.Office.Word;
+using Xunit;
+using WDocument = NewLife.Office.Word.Document;
+
+namespace XUnitTest.Common;
+
+/// <summary>跨格式 AI 工具层测试：格式路由、分页续读、搜索与补丁原子性</summary>
+public class OfficeToolTests
+{
+    #region 工具
+    private static String TempDir()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "officetool_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    private static String BuildDocx(String dir, String text)
+    {
+        var path = Path.Combine(dir, "sample.docx");
+        var doc = new WDocument();
+        doc.AddParagraph(text);
+        doc.AddParagraph("第二段");
+        using var writer = new WordWriter();
+        writer.Save(path, doc);
+        return path;
+    }
+
+    private static String BuildXlsx(String dir)
+    {
+        var path = Path.Combine(dir, "sample.xlsx");
+        var doc = new ExcelDocument();
+        var sheet = new Worksheet { Name = "数据" };
+        sheet.Rows.Add(["姓名", "部门"]);
+        for (var i = 0; i < 9; i++) sheet.Rows.Add([$"成员{i}", "研发"]);
+        doc.Worksheets.Add(sheet);
+        doc.Save(path);
+        return path;
+    }
+
+    private static String BuildPptx(String dir)
+    {
+        var path = Path.Combine(dir, "sample.pptx");
+        using var writer = new PptxWriter();
+        writer.AddSlide(0);
+        writer.AddTextBox(0, "标题", 1, 1, 10, 2, 28, true);
+        writer.Save(path);
+        return path;
+    }
+
+    private static String BuildPdf(String dir)
+    {
+        var path = Path.Combine(dir, "sample.pdf");
+        using var writer = new PdfWriter();
+        writer.BeginPage();
+        writer.AppendLine("Hello PDF");
+        writer.EndPage();
+        writer.Save(path);
+        return path;
+    }
+    #endregion
+
+    [Fact(DisplayName = "工具-四格式结构快照路由")]
+    public void ReadOutline_RoutesAllFormats()
+    {
+        var dir = TempDir();
+        var docx = OfficeDocumentTool.ReadOutline(BuildDocx(dir, "长文本"));
+        var xlsx = OfficeDocumentTool.ReadOutline(BuildXlsx(dir));
+        var pptx = OfficeDocumentTool.ReadOutline(BuildPptx(dir));
+        var pdf = OfficeDocumentTool.ReadOutline(BuildPdf(dir));
+
+        Assert.True(docx.Success);
+        Assert.Equal("docx", docx.Format);
+        Assert.Contains("\"blocks\"", docx.Content);
+
+        Assert.True(xlsx.Success);
+        Assert.Equal("xlsx", xlsx.Format);
+        Assert.Contains("\"sheets\"", xlsx.Content);
+        Assert.Contains("数据", xlsx.Content);
+
+        Assert.True(pptx.Success);
+        Assert.Contains("\"slides\"", pptx.Content);
+        Assert.Contains("s#0/tb#0", pptx.Content);
+
+        Assert.True(pdf.Success);
+        Assert.Contains("\"pages\"", pdf.Content);
+    }
+
+    [Fact(DisplayName = "工具-文本分段续读可拼回全文")]
+    public void ReadText_Paging()
+    {
+        var dir = TempDir();
+        var text = new String('中', 120) + "结尾";
+        var path = BuildDocx(dir, text);
+
+        var full = OfficeDocumentTool.ReadText(path, 0, 0);
+        Assert.True(full.Success);
+        Assert.False(full.Truncated);
+
+        var first = OfficeDocumentTool.ReadText(path, 50, 0);
+        Assert.True(first.Truncated);
+        Assert.Equal(50, first.NextCursor);
+        Assert.Equal(50, first.Content!.Length);
+
+        var second = OfficeDocumentTool.ReadText(path, 1000, first.NextCursor);
+        Assert.False(second.Truncated);
+        Assert.Equal(full.Content, first.Content + second.Content);
+    }
+
+    [Fact(DisplayName = "工具-区域分页读取")]
+    public void ReadRange_Paging()
+    {
+        var dir = TempDir();
+        var path = BuildXlsx(dir);
+
+        var page1 = OfficeDocumentTool.ReadRange(path, "数据!A1:B10", 3, 0);
+        Assert.True(page1.Success);
+        Assert.True(page1.Truncated);
+        Assert.Equal(3, page1.NextCursor);
+        Assert.Contains("成员0", page1.Content);
+
+        var page2 = OfficeDocumentTool.ReadRange(path, "数据!A1:B10", 3, 3);
+        Assert.True(page2.Success);
+        Assert.Contains("成员2", page2.Content);
+        Assert.DoesNotContain("成员0", page2.Content);
+
+        var tail = OfficeDocumentTool.ReadRange(path, "数据!A1:B10", 10, 6);
+        Assert.False(tail.Truncated);
+        Assert.Contains("成员8", tail.Content);
+    }
+
+    [Fact(DisplayName = "工具-工作簿与PDF搜索")]
+    public void Search_WorkbookAndPdf()
+    {
+        var dir = TempDir();
+        var xlsx = OfficeDocumentTool.Search(BuildXlsx(dir), "成员3");
+        Assert.True(xlsx.Success);
+        Assert.Contains("数据!A5", xlsx.Content);
+
+        var pdf = OfficeDocumentTool.Search(BuildPdf(dir), "Hello");
+        Assert.True(pdf.Success);
+        Assert.Contains("\"page\": 1", pdf.Content);
+        Assert.Contains("Hello", pdf.Content);
+    }
+
+    [Fact(DisplayName = "工具-补丁成功写出并可读回")]
+    public void ApplyPatch_Success()
+    {
+        var dir = TempDir();
+        var path = BuildXlsx(dir);
+        var output = Path.Combine(dir, "out.xlsx");
+
+        var result = OfficeDocumentTool.ApplyPatch(path,
+            """{ "ops": [ { "op": "set_cells", "range": "数据!A12", "values": [["新增"]] } ] }""", output);
+
+        Assert.True(result.Success, result.Message);
+        Assert.True(File.Exists(output));
+
+        var check = OfficeDocumentTool.ReadRange(output, "数据!A12:A12");
+        Assert.Contains("新增", check.Content);
+    }
+
+    [Fact(DisplayName = "工具-补丁失败不写文件并返回错误码")]
+    public void ApplyPatch_Failure()
+    {
+        var dir = TempDir();
+        var path = BuildXlsx(dir);
+        var output = Path.Combine(dir, "out.xlsx");
+
+        var result = OfficeDocumentTool.ApplyPatch(path,
+            """{ "ops": [ { "op": "set_cells", "range": "不存在!A1", "values": [["x"]] } ] }""", output);
+
+        Assert.False(result.Success);
+        Assert.True(result.Code == OfficeToolErrorCode.AnchorMissing, $"{result.Code}: {result.Message}");
+        Assert.False(File.Exists(output));
+    }
+
+    [Fact(DisplayName = "工具-不支持格式与加密文档的错误码")]
+    public void ReadOutline_UnsupportedAndEncrypted()
+    {
+        var dir = TempDir();
+        var unsupported = Path.Combine(dir, "file.bin");
+        File.WriteAllBytes(unsupported, [1, 2, 3, 4]);
+        var result = OfficeDocumentTool.ReadOutline(unsupported);
+        Assert.False(result.Success);
+        Assert.Equal(OfficeToolErrorCode.Unsupported, result.Code);
+
+        var docx = BuildDocx(dir, "加密");
+        var encrypted = Path.Combine(dir, "encrypted.docx");
+        File.WriteAllBytes(encrypted, WordEncryptor.Encrypt(File.ReadAllBytes(docx), "123456"));
+        var encryptedResult = OfficeDocumentTool.ReadOutline(encrypted);
+        Assert.False(encryptedResult.Success);
+        Assert.Equal(OfficeToolErrorCode.Encrypted, encryptedResult.Code);
+    }
+
+    [Fact(DisplayName = "工具-PDF 补丁跨格式路由")]
+    public void ApplyPatch_Pdf()
+    {
+        var dir = TempDir();
+        var path = BuildPdf(dir);
+        var output = Path.Combine(dir, "out.pdf");
+
+        var result = OfficeDocumentTool.ApplyPatch(path,
+            """{ "ops": [ { "op": "set_metadata", "title": "工具层" } ] }""", output);
+
+        Assert.True(result.Success, result.Message);
+        using var reader = new PdfReader(output);
+        Assert.Equal("工具层", reader.ReadMetadata().Title);
+    }
+}

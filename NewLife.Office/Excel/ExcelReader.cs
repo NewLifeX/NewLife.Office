@@ -2862,7 +2862,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             if (rId.IsNullOrEmpty() || !rels.TryGetValue(rId!, out var target)) continue;
 
             // target 是相对于 xl/worksheets/ 的路径，如 "../tables/table1.xml"
-            var tblPath = target.TrimStart('.', '/').Replace("../", "xl/");
+            var tblPath = target.Replace("../", "xl/").TrimStart('.', '/');
             var tblEntry = _zip.GetEntry(tblPath);
             if (tblEntry == null) continue;
 

@@ -42,6 +42,9 @@ public static class Program
                 "info" => Info(args.Skip(1).ToArray()),
                 "read" => ReadOutline(args.Skip(1).ToArray()),
                 "apply" => ApplyPatch(args.Skip(1).ToArray()),
+                "text" => ReadText(args.Skip(1).ToArray()),
+                "range" => ReadRange(args.Skip(1).ToArray()),
+                "search" => Search(args.Skip(1).ToArray()),
                 "mcp" => McpServer.Run(),
                 _ => PrintUsageAndReturn(),
             };
@@ -191,14 +194,14 @@ public static class Program
         return 0;
     }
 
-    /// <summary>read 命令：输出 docx 结构快照（JSON），供 Agent 看清结构后按锚点修改</summary>
-    /// <param name="args">参数（&lt;input.docx&gt;）</param>
+    /// <summary>read 命令：输出文档结构快照（JSON），按扩展名/内容自动识别格式</summary>
+    /// <param name="args">参数（&lt;input&gt;）</param>
     /// <returns>退出码</returns>
     private static Int32 ReadOutline(String[] args)
     {
         if (args.Length < 1)
         {
-            Console.Error.WriteLine(Localization.Translate("Usage: read <input.docx>"));
+            Console.Error.WriteLine(Localization.Translate("Usage: read <input>"));
             return 1;
         }
         var input = ResolvePath(args[0]);
@@ -208,19 +211,25 @@ public static class Program
             return 1;
         }
 
-        using var reader = new NewLife.Office.Word.WordReader(input);
-        WriteStdout(reader.ReadOutline().ToJson());
+        var result = OfficeDocumentTool.ReadOutline(input);
+        if (!result.Success)
+        {
+            Console.Error.WriteLine($"[{result.Code}] {result.Message}");
+            return 2;
+        }
+
+        WriteStdout(result.Content!);
         return 0;
     }
 
-    /// <summary>apply 命令：按补丁 JSON 修改 docx；任一条失败则不写出文件（原子）</summary>
-    /// <param name="args">参数（&lt;in.docx&gt; &lt;patch.json&gt; &lt;out.docx&gt;）</param>
-    /// <returns>退出码（0=全部成功，1=参数/文件错误，3=有操作失败）</returns>
+    /// <summary>apply 命令：按补丁 JSON 修改文档；任一条失败则不写出文件（原子）</summary>
+    /// <param name="args">参数（&lt;in&gt; &lt;patch.json&gt; &lt;out&gt;）</param>
+    /// <returns>退出码（0=全部成功，1=参数/文件错误，2=格式/加密错误，3=有操作失败）</returns>
     private static Int32 ApplyPatch(String[] args)
     {
         if (args.Length < 3)
         {
-            Console.Error.WriteLine(Localization.Translate("Usage: apply <in.docx> <patch.json> <out.docx>"));
+            Console.Error.WriteLine(Localization.Translate("Usage: apply <in> <patch.json> <out>"));
             return 1;
         }
         var input = ResolvePath(args[0]);
@@ -237,27 +246,145 @@ public static class Program
             return 1;
         }
 
-        var patch = NewLife.Office.Word.DocxPatch.ParseJson(File.ReadAllText(patchPath));
-        using var reader = new NewLife.Office.Word.WordReader(input);
-        var doc = reader.ReadDocument();
-        doc.BeginEdit();
-
-        var result = NewLife.Office.Word.DocxPatch.Apply(doc, patch);
+        var result = OfficeDocumentTool.ApplyPatch(input, File.ReadAllText(patchPath), output);
         if (!result.Success)
         {
-            foreach (var item in result.Failed)
-                Console.Error.WriteLine(item);
-            return 3;
+            Console.Error.WriteLine($"[{result.Code}] {result.Message}");
+            return result.Code == OfficeToolErrorCode.AnchorMissing ? 3 : 2;
         }
 
-        using (var writer = new NewLife.Office.Word.WordWriter())
-            writer.Save(output, doc);
+        Console.WriteLine(Localization.Translate("Applied: {0} → {1}", Path.GetFileName(input), output));
+        return 0;
+    }
 
-        // 告警不影响成功状态，但必须让用户看到（否则“内容被静默丢弃”）
-        foreach (var item in result.Warnings)
-            Console.Error.WriteLine(Localization.Translate("Warning: {0}", item));
+    /// <summary>text 命令：分段读取纯文本</summary>
+    /// <param name="args">参数（&lt;input&gt; [--max-chars N] [--cursor N]）</param>
+    /// <returns>退出码</returns>
+    private static Int32 ReadText(String[] args)
+    {
+        if (args.Length < 1)
+        {
+            Console.Error.WriteLine(Localization.Translate("Usage: text <input> [--max-chars N] [--cursor N]"));
+            return 1;
+        }
+        var input = ResolvePath(args[0]);
+        if (!File.Exists(input))
+        {
+            Console.Error.WriteLine(Localization.Translate("File not found: {0}", args[0]));
+            return 1;
+        }
 
-        Console.WriteLine(Localization.Translate("Applied {0} operation(s): {1} → {2}", result.Applied.Count, Path.GetFileName(input), output));
+        var maxChars = 0;
+        var cursor = 0;
+        for (var i = 1; i < args.Length; i++)
+        {
+            switch (args[i].ToLowerInvariant())
+            {
+                case "--max-chars" when i + 1 < args.Length:
+                    Int32.TryParse(args[++i], out maxChars);
+                    break;
+                case "--cursor" when i + 1 < args.Length:
+                    Int32.TryParse(args[++i], out cursor);
+                    break;
+            }
+        }
+
+        var result = OfficeDocumentTool.ReadText(input, maxChars, cursor);
+        if (!result.Success)
+        {
+            Console.Error.WriteLine($"[{result.Code}] {result.Message}");
+            return 2;
+        }
+
+        WriteStdout(result.Content ?? String.Empty);
+        if (result.Truncated)
+            Console.Error.WriteLine($"[Truncated] nextCursor={result.NextCursor}");
+        return 0;
+    }
+
+    /// <summary>range 命令：分页读取工作簿区域</summary>
+    /// <param name="args">参数（&lt;input&gt; &lt;range&gt; [--max-rows N] [--cursor N]）</param>
+    /// <returns>退出码</returns>
+    private static Int32 ReadRange(String[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine(Localization.Translate("Usage: range <input> <range> [--max-rows N] [--cursor N]"));
+            return 1;
+        }
+        var input = ResolvePath(args[0]);
+        if (!File.Exists(input))
+        {
+            Console.Error.WriteLine(Localization.Translate("File not found: {0}", args[0]));
+            return 1;
+        }
+
+        var maxRows = 0;
+        var cursor = 0;
+        for (var i = 2; i < args.Length; i++)
+        {
+            switch (args[i].ToLowerInvariant())
+            {
+                case "--max-rows" when i + 1 < args.Length:
+                    Int32.TryParse(args[++i], out maxRows);
+                    break;
+                case "--cursor" when i + 1 < args.Length:
+                    Int32.TryParse(args[++i], out cursor);
+                    break;
+            }
+        }
+
+        var result = OfficeDocumentTool.ReadRange(input, args[1], maxRows, cursor);
+        if (!result.Success)
+        {
+            Console.Error.WriteLine($"[{result.Code}] {result.Message}");
+            return 2;
+        }
+
+        WriteStdout(result.Content!);
+        return 0;
+    }
+
+    /// <summary>search 命令：在工作簿或 PDF 中搜索</summary>
+    /// <param name="args">参数（&lt;input&gt; &lt;text&gt; [--regex] [--max N]）</param>
+    /// <returns>退出码</returns>
+    private static Int32 Search(String[] args)
+    {
+        if (args.Length < 2)
+        {
+            Console.Error.WriteLine(Localization.Translate("Usage: search <input> <text> [--regex] [--max N]"));
+            return 1;
+        }
+        var input = ResolvePath(args[0]);
+        if (!File.Exists(input))
+        {
+            Console.Error.WriteLine(Localization.Translate("File not found: {0}", args[0]));
+            return 1;
+        }
+
+        var regex = false;
+        var max = 100;
+        for (var i = 2; i < args.Length; i++)
+        {
+            switch (args[i].ToLowerInvariant())
+            {
+                case "--regex":
+                    regex = true;
+                    break;
+                case "--max" when i + 1 < args.Length:
+                    Int32.TryParse(args[++i], out max);
+                    break;
+            }
+        }
+
+        var result = OfficeDocumentTool.Search(input, args[1], regex, max);
+        if (!result.Success)
+        {
+            Console.Error.WriteLine($"[{result.Code}] {result.Message}");
+            return 2;
+        }
+
+        WriteStdout(result.Content!);
         return 0;
     }
 
@@ -298,8 +425,11 @@ public static class Program
         Console.WriteLine(Localization.Translate("      --header-footer        Include headers/footers as blockquotes (Word)"));
         Console.WriteLine(Localization.Translate("  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)"));
         Console.WriteLine(Localization.Translate("  info <input>               Show file format information"));
-        Console.WriteLine(Localization.Translate("  read <input.docx>          Dump docx structure snapshot as JSON (for agents)"));
-        Console.WriteLine(Localization.Translate("  apply <in> <patch> <out>   Apply JSON patch to docx (no output file if any op fails)"));
+        Console.WriteLine(Localization.Translate("  read <input>               Dump structure snapshot as JSON (docx/xlsx/pptx/pdf, for agents)"));
+        Console.WriteLine(Localization.Translate("  apply <in> <patch> <out>   Apply JSON patch to docx/xlsx/pptx/pdf (no output file if any op fails)"));
+        Console.WriteLine(Localization.Translate("  text <input> [--max-chars N] [--cursor N]   Read plain text in chunks"));
+        Console.WriteLine(Localization.Translate("  range <input> <range> [--max-rows N] [--cursor N]   Read a worksheet range page by page"));
+        Console.WriteLine(Localization.Translate("  search <input> <text> [--regex] [--max N]   Search workbook cells or PDF text"));
         Console.WriteLine(Localization.Translate("  mcp                        Start MCP stdio server (tools for agents)"));
         Console.WriteLine();
         Console.WriteLine(Localization.Translate("Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc."));

@@ -111,6 +111,48 @@ public class CellFormat
     public String? PatternFgColor { get; set; }
     #endregion
 
+    #region 方法
+    /// <summary>复制样式副本（写入器会按单元格保存样式实例，编辑时应先复制再改，避免影响共享实例）</summary>
+    /// <returns>新样式对象</returns>
+    public CellFormat Clone() => new()
+    {
+        FontName = FontName,
+        FontSize = FontSize,
+        Bold = Bold,
+        Italic = Italic,
+        Underline = Underline,
+        FontColor = FontColor,
+        BackgroundColor = BackgroundColor,
+        HAlign = HAlign,
+        VAlign = VAlign,
+        WrapText = WrapText,
+        Border = Border,
+        BorderColor = BorderColor,
+        LeftBorder = LeftBorder,
+        LeftBorderColor = LeftBorderColor,
+        RightBorder = RightBorder,
+        RightBorderColor = RightBorderColor,
+        TopBorder = TopBorder,
+        TopBorderColor = TopBorderColor,
+        BottomBorder = BottomBorder,
+        BottomBorderColor = BottomBorderColor,
+        DiagonalBorder = DiagonalBorder,
+        DiagonalBorderColor = DiagonalBorderColor,
+        NumberFormat = NumberFormat,
+        Strike = Strike,
+        VerticalAlign = VerticalAlign,
+        TextRotation = TextRotation,
+        Indent = Indent,
+        ShrinkToFit = ShrinkToFit,
+        RichTextRuns = RichTextRuns,
+        GradientType = GradientType,
+        GradientColor1 = GradientColor1,
+        GradientColor2 = GradientColor2,
+        PatternType = PatternType,
+        PatternFgColor = PatternFgColor,
+    };
+    #endregion
+
     #region 静态
     /// <summary>默认表头样式（粗体）</summary>
     public static CellFormat Header => new() { Bold = true };

@@ -5,11 +5,11 @@ using NewLife.Office.Word;
 
 namespace NewLife.Office.Cli;
 
-/// <summary>极简 MCP（Model Context Protocol）stdio 服务端：把 docx 读写能力暴露给 Agent</summary>
+/// <summary>极简 MCP（Model Context Protocol）stdio 服务端：把 docx/xlsx/pptx/pdf 读写能力暴露给 Agent</summary>
 /// <remarks>
 /// 走 MCP 的 stdio 传输：每行一条 JSON-RPC 2.0 消息（请求/响应/通知），stdin 读、stdout 写。
 /// 只实现最小可用集合：<c>initialize</c> / <c>tools/list</c> / <c>tools/call</c> / <c>ping</c>。
-/// <para>工具：<c>docx_read_outline</c>（读结构快照）、<c>docx_apply_patch</c>（按补丁改文档）。</para>
+/// <para>工具：四格式的结构快照/补丁，以及统一的 <c>office_read_outline</c> / <c>office_read_text</c> / <c>office_search</c> / <c>office_apply_patch</c>。</para>
 /// <para>零外部依赖：只用 BCL 的 System.Text.Json 手写协议层，不引入 MCP SDK。</para>
 /// </remarks>
 internal static class McpServer
@@ -70,7 +70,7 @@ internal static class McpServer
                     },
                     ["serverInfo"] = new JsonObject
                     {
-                        ["name"] = "newlife-office-docx",
+                        ["name"] = "newlife-office",
                         ["version"] = "1.0.0",
                     },
                 });
@@ -91,40 +91,117 @@ internal static class McpServer
 
     private static JsonArray BuildTools()
     {
-        var read = new JsonObject
-        {
-            ["name"] = "docx_read_outline",
-            ["description"] = "读取 docx 结构快照（块级视图，带 p#3/tbl#5 锚点、标题层级、表格矩阵），返回 JSON 文本",
-            ["inputSchema"] = new JsonObject
-            {
-                ["type"] = "object",
-                ["properties"] = new JsonObject
-                {
-                    ["path"] = new JsonObject { ["type"] = "string", ["description"] = "docx 文件路径" },
-                },
-                ["required"] = new JsonArray("path"),
-            },
-        };
+        var read = Tool("docx_read_outline", "读取 docx 结构快照（块级视图，带 p#3/tbl#5 锚点、标题层级、表格矩阵），返回 JSON 文本",
+            new JsonObject { ["path"] = PathProp("docx 文件路径") }, "path");
 
-        var apply = new JsonObject
-        {
-            ["name"] = "docx_apply_patch",
-            ["description"] = "按锚点批量修改 docx：replace_text/set_text/insert_paragraph/delete/set_style/set_cell_text/insert_table/add_comment。任一条失败则不写文件。注意：锚点指 read 时刻的元素下标，insert/delete 会让后续锚点偏移，请把结构性操作排在补丁最后",
-            ["inputSchema"] = new JsonObject
+        var apply = Tool("docx_apply_patch", "按锚点批量修改 docx：replace_text/set_text/insert_paragraph/delete/set_style/set_cell_text/insert_table/add_comment。任一条失败则不写文件。注意：锚点指 read 时刻的元素下标，insert/delete 会让后续锚点偏移，请把结构性操作排在补丁最后",
+            new JsonObject
             {
-                ["type"] = "object",
-                ["properties"] = new JsonObject
-                {
-                    ["path"] = new JsonObject { ["type"] = "string", ["description"] = "输入 docx 路径" },
-                    ["output"] = new JsonObject { ["type"] = "string", ["description"] = "输出 docx 路径" },
-                    ["patch"] = new JsonObject { ["type"] = "object", ["description"] = "补丁对象，形如 {\"ops\":[...]}" },
-                },
-                ["required"] = new JsonArray("path", "output", "patch"),
-            },
-        };
+                ["path"] = PathProp("输入 docx 路径"),
+                ["output"] = PathProp("输出 docx 路径"),
+                ["patch"] = new JsonObject { ["type"] = "object", ["description"] = "补丁对象，形如 {\"ops\":[...]}" },
+            }, "path", "output", "patch");
 
-        return [read, apply];
+        var officeOutline = Tool("office_read_outline", "读取任意受支持文档（docx/xlsx/pptx/pdf）的结构快照，按扩展名或内容自动识别格式，返回 JSON 文本",
+            new JsonObject { ["path"] = PathProp("文档路径") }, "path");
+
+        var officeText = Tool("office_read_text", "分段读取任意文档的纯文本：maxChars 控制本次字符数，cursor 传上次返回的 nextCursor 续读",
+            new JsonObject
+            {
+                ["path"] = PathProp("文档路径"),
+                ["maxChars"] = IntProp("本次最多返回字符数（0 不限）"),
+                ["cursor"] = IntProp("续读游标（上次的 nextCursor）"),
+            }, "path");
+
+        var officeSearch = Tool("office_search", "在工作簿（文本/公式/正则）或 PDF 中搜索，返回命中位置（Sheet!A1 或 页码 + 矩形坐标）",
+            new JsonObject
+            {
+                ["path"] = PathProp("文档路径"),
+                ["text"] = StrProp("搜索内容"),
+                ["regex"] = new JsonObject { ["type"] = "boolean", ["description"] = "是否按正则表达式" },
+                ["maxResults"] = IntProp("最大命中数（默认 100）"),
+            }, "path", "text");
+
+        var officeApply = Tool("office_apply_patch", "对任意受支持文档应用 JSON 补丁：docx（段落/表格）、xlsx（A1 区域/样式/行）、pptx（形状/表格/页）、pdf（页/标注/表单/元数据）。任一条失败则不写文件",
+            new JsonObject
+            {
+                ["path"] = PathProp("输入文件路径"),
+                ["output"] = PathProp("输出文件路径"),
+                ["patch"] = new JsonObject { ["type"] = "object", ["description"] = "补丁对象，形如 {\"ops\":[...]}" },
+            }, "path", "output", "patch");
+
+        var xlsxOutline = Tool("xlsx_read_outline", "读取 xlsx/xls 结构快照（工作表、已用区域、表头、前 5 行预览、表格对象、图表/批注统计）",
+            new JsonObject { ["path"] = PathProp("工作簿路径") }, "path");
+
+        var xlsxRange = Tool("xlsx_read_range", "按 A1 区域读取工作簿数据：maxRows 控制本次行数，cursor 传上次的 nextCursor 续读",
+            new JsonObject
+            {
+                ["path"] = PathProp("工作簿路径"),
+                ["range"] = StrProp("A1 区域（如 Sheet1!A1:D100）"),
+                ["maxRows"] = IntProp("本次最多返回行数（0 不限）"),
+                ["cursor"] = IntProp("续读游标（上次的 nextCursor）"),
+            }, "path", "range");
+
+        var xlsxApply = Tool("xlsx_apply_patch", "按 A1 坐标批量修改工作簿：set_cells/set_formula/append_rows/insert_rows/delete_rows/merge/unmerge/set_style/set_number_format/set_column_width/set_row_height/freeze/autofilter/add_sheet/rename_sheet/delete_sheet/add_table/add_chart。任一条失败则不写文件",
+            new JsonObject
+            {
+                ["path"] = PathProp("输入工作簿路径"),
+                ["output"] = PathProp("输出工作簿路径"),
+                ["patch"] = new JsonObject { ["type"] = "object", ["description"] = "补丁对象，形如 {\"ops\":[...]}" },
+            }, "path", "output", "patch");
+
+        var pptxOutline = Tool("pptx_read_outline", "读取 pptx 结构快照（幻灯片、文本框、形状、图片、表格、图表、备注），带 s#2/tb#0 锚点",
+            new JsonObject { ["path"] = PathProp("演示文稿路径") }, "path");
+
+        var pptxApply = Tool("pptx_apply_patch", "按锚点批量修改演示文稿：set_shape_text/set_table_cell/update_chart/replace_image/set_notes/set_title/add_slide/delete_slide/move_slide/clone_slide。任一条失败则不写文件",
+            new JsonObject
+            {
+                ["path"] = PathProp("输入演示文稿路径"),
+                ["output"] = PathProp("输出演示文稿路径"),
+                ["patch"] = new JsonObject { ["type"] = "object", ["description"] = "补丁对象，形如 {\"ops\":[...]}" },
+            }, "path", "output", "patch");
+
+        var pdfOutline = Tool("pdf_read_outline", "读取 PDF 结构快照（页数与尺寸、书签树、表单字段、注释、附件、字体、加密/签名状态、每页首行预览）",
+            new JsonObject { ["path"] = PathProp("PDF 路径") }, "path");
+
+        var pdfSearch = Tool("pdf_search", "在 PDF 中搜索文本，返回页码与矩形坐标（可直接用于 add_highlight/add_note）",
+            new JsonObject
+            {
+                ["path"] = PathProp("PDF 路径"),
+                ["text"] = StrProp("搜索内容"),
+                ["regex"] = new JsonObject { ["type"] = "boolean", ["description"] = "是否按正则表达式" },
+                ["maxResults"] = IntProp("最大命中数（默认 100）"),
+            }, "path", "text");
+
+        var pdfApply = Tool("pdf_apply_patch", "按对象级补丁修改 PDF：delete_pages/extract_pages/move_page/rotate_page/set_metadata/add_text/add_watermark/add_highlight/add_note/fill_form/merge。任一条失败则不写文件",
+            new JsonObject
+            {
+                ["path"] = PathProp("输入 PDF 路径"),
+                ["output"] = PathProp("输出 PDF 路径"),
+                ["patch"] = new JsonObject { ["type"] = "object", ["description"] = "补丁对象，形如 {\"ops\":[...]}" },
+            }, "path", "output", "patch");
+
+        return [read, apply, officeOutline, officeText, officeSearch, officeApply, xlsxOutline, xlsxRange, xlsxApply, pptxOutline, pptxApply, pdfOutline, pdfSearch, pdfApply];
     }
+
+    private static JsonObject Tool(String name, String description, JsonObject properties, params String[] required)
+        => new()
+        {
+            ["name"] = name,
+            ["description"] = description,
+            ["inputSchema"] = new JsonObject
+            {
+                ["type"] = "object",
+                ["properties"] = properties,
+                ["required"] = new JsonArray(required.Select(e => (JsonNode?)JsonValue.Create(e)).ToArray()),
+            },
+        };
+
+    private static JsonObject StrProp(String description) => new() { ["type"] = "string", ["description"] = description };
+
+    private static JsonObject IntProp(String description) => new() { ["type"] = "integer", ["description"] = description };
+
+    private static JsonObject PathProp(String description) => StrProp(description);
 
     private static String CallTool(JsonElement id, JsonElement root)
     {
@@ -138,8 +215,13 @@ internal static class McpServer
         {
             return name switch
             {
-                "docx_read_outline" => ReadOutline(id, args),
-                "docx_apply_patch" => ApplyPatch(id, args),
+                "docx_read_outline" or "xlsx_read_outline" or "pptx_read_outline" or "pdf_read_outline" or "office_read_outline"
+                    => ReadOutline(id, args),
+                "xlsx_read_range" => ReadRange(id, args),
+                "office_read_text" => ReadText(id, args),
+                "office_search" or "pdf_search" or "xlsx_search" => Search(id, args),
+                "docx_apply_patch" or "xlsx_apply_patch" or "pptx_apply_patch" or "pdf_apply_patch" or "office_apply_patch"
+                    => ApplyPatch(id, args),
                 _ => Error(id, -32602, $"Unknown tool: {name}"),
             };
         }
@@ -154,8 +236,44 @@ internal static class McpServer
     private static String ReadOutline(JsonElement id, JsonElement args)
     {
         var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException("缺少 path"));
-        using var reader = new WordReader(path);
-        return ToolText(id, reader.ReadOutline().ToJson());
+        var result = OfficeDocumentTool.ReadOutline(path);
+        return result.Success ? ToolText(id, result.Content!) : ToolError(id, result);
+    }
+
+    private static String ReadRange(JsonElement id, JsonElement args)
+    {
+        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException("缺少 path"));
+        var range = GetString(args, "range") ?? throw new ArgumentException("缺少 range");
+        var maxRows = GetInt32(args, "maxRows") ?? 0;
+        var cursor = GetInt32(args, "cursor") ?? 0;
+
+        var result = OfficeDocumentTool.ReadRange(path, range, maxRows, cursor);
+        return result.Success ? ToolText(id, result.Content!) : ToolError(id, result);
+    }
+
+    private static String ReadText(JsonElement id, JsonElement args)
+    {
+        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException("缺少 path"));
+        var maxChars = GetInt32(args, "maxChars") ?? 0;
+        var cursor = GetInt32(args, "cursor") ?? 0;
+
+        var result = OfficeDocumentTool.ReadText(path, maxChars, cursor);
+        if (!result.Success) return ToolError(id, result);
+
+        var text = result.Content ?? String.Empty;
+        if (result.Truncated) text += $"\n\n--- 已截断，续读请传 cursor={result.NextCursor} ---";
+        return ToolText(id, text);
+    }
+
+    private static String Search(JsonElement id, JsonElement args)
+    {
+        var path = Program.ResolvePath(GetString(args, "path") ?? throw new ArgumentException("缺少 path"));
+        var text = GetString(args, "text") ?? throw new ArgumentException("缺少 text");
+        var regex = GetBoolean(args, "regex") ?? false;
+        var maxResults = GetInt32(args, "maxResults") ?? 100;
+
+        var result = OfficeDocumentTool.Search(path, text, regex, maxResults);
+        return result.Success ? ToolText(id, result.Content!) : ToolError(id, result);
     }
 
     private static String ApplyPatch(JsonElement id, JsonElement args)
@@ -164,25 +282,31 @@ internal static class McpServer
         var output = Program.ResolvePath(GetString(args, "output") ?? throw new ArgumentException("缺少 output"));
         if (!args.TryGetProperty("patch", out var patchEl)) throw new ArgumentException("缺少 patch");
 
-        var patch = DocxPatch.ParseJson(patchEl.GetRawText());
+        var result = OfficeDocumentTool.ApplyPatch(path, patchEl.GetRawText(), output);
+        if (!result.Success) return ToolError(id, result);
 
-        using var reader = new WordReader(path);
-        var doc = reader.ReadDocument();
-        doc.BeginEdit();
-
-        var result = DocxPatch.Apply(doc, patch);
-        if (!result.Success)
-            return ToolText(id, "失败，未写出文件：\n" + String.Join("\n", result.Failed), isError: true);
-
-        using (var writer = new WordWriter())
-            writer.Save(output, doc);
-
-        var text = $"已应用 {result.Applied.Count} 条操作 → {output}";
-        // 告警不影响成功状态，但要显式告知，避免“内容被静默丢弃”
-        if (result.Warnings.Count > 0)
-            text += "\n告警：\n" + String.Join("\n", result.Warnings);
-
+        var text = $"已应用补丁 → {output}";
+        if (!result.Content.IsNullOrEmpty()) text += "\n" + result.Content;
         return ToolText(id, text);
+    }
+
+    private static String ToolError(JsonElement id, OfficeToolResult result)
+        => ToolText(id, $"失败（{result.Code}）：{result.Message}\n未写出文件。", isError: true);
+
+    private static Int32? GetInt32(JsonElement args, String name)
+    {
+        if (args.ValueKind != JsonValueKind.Object || !args.TryGetProperty(name, out var el)) return null;
+        if (el.ValueKind == JsonValueKind.Number) return el.GetInt32();
+        if (el.ValueKind == JsonValueKind.String && Int32.TryParse(el.GetString(), out var parsed)) return parsed;
+        return null;
+    }
+
+    private static Boolean? GetBoolean(JsonElement args, String name)
+    {
+        if (args.ValueKind != JsonValueKind.Object || !args.TryGetProperty(name, out var el)) return null;
+        if (el.ValueKind == JsonValueKind.True) return true;
+        if (el.ValueKind == JsonValueKind.False) return false;
+        return null;
     }
 
     private static String? GetString(JsonElement args, String name)

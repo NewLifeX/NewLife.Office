@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace NewLife.Office.Word;
+namespace NewLife.Office;
 
 /// <summary>极简 JSON 解析器（零依赖、AOT 友好），供补丁文件等结构化输入使用</summary>
 /// <remarks>

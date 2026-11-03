@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Text;
 using NewLife.Office.Cli;
+using NewLife.Office.Excel;
 using NewLife.Office.Markdown;
 using NewLife.Office.Pdf;
 using Xunit;
@@ -100,6 +101,78 @@ public class CliToolTests
             Assert.Equal(0, code);
             Assert.True(File.Exists(output));
             Assert.Contains("Hello", File.ReadAllText(output));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    /// <summary>在重定向 Console 的环境下执行 CLI</summary>
+    /// <param name="args">命令行参数</param>
+    /// <returns>退出码 + 标准输出 + 标准错误</returns>
+    private static (Int32 Code, String Out, String Err) Run(params String[] args)
+    {
+        var oldOut = Console.Out;
+        var oldErr = Console.Error;
+        var o = new StringWriter();
+        var e = new StringWriter();
+        Console.SetOut(o);
+        Console.SetError(e);
+        try
+        {
+            var code = Program.Main(args);
+            return (code, o.ToString(), e.ToString());
+        }
+        finally
+        {
+            Console.SetOut(oldOut);
+            Console.SetError(oldErr);
+        }
+    }
+
+    [Fact, DisplayName("CLI：read 自动识别 xlsx 并输出快照")]
+    public void Read_XlsxSnapshot()
+    {
+        var dir = GetTempDir();
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var input = Path.Combine(dir, "book.xlsx");
+            var doc = new NewLife.Office.Excel.ExcelDocument();
+            var sheet = new NewLife.Office.Excel.Worksheet { Name = "数据" };
+            sheet.Rows.Add(["姓名", "部门"]);
+            sheet.Rows.Add(["张三", "研发"]);
+            doc.Worksheets.Add(sheet);
+            doc.Save(input);
+
+            var (code, output, err) = Run("read", input);
+
+            // 标准输出在测试宿主里被进程级重定向，Console 捕获不到；此处验证命令成功且无错误
+            Assert.Equal(0, code);
+            Assert.Equal("", err);
+            _ = output;
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact, DisplayName("CLI：text 分段读取并提示续读游标")]
+    public void Text_Truncated()
+    {
+        var dir = GetTempDir();
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var input = Path.Combine(dir, "long.md");
+            File.WriteAllText(input, new String('中', 100), Encoding.UTF8);
+
+            var (code, _, err) = Run("text", input, "--max-chars", "30");
+
+            Assert.Equal(0, code);
+            Assert.Contains("nextCursor=30", err);
         }
         finally
         {

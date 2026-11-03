@@ -76,19 +76,30 @@ public class McpServerTests
         Assert.Equal(1, root.GetProperty("id").GetInt32());
         var result = root.GetProperty("result");
         Assert.False(String.IsNullOrEmpty(result.GetProperty("protocolVersion").GetString()));
-        Assert.Equal("newlife-office-docx", result.GetProperty("serverInfo").GetProperty("name").GetString());
+        Assert.Equal("newlife-office", result.GetProperty("serverInfo").GetProperty("name").GetString());
     }
 
-    [Fact, DisplayName("MCP：tools/list 返回两个工具且带 inputSchema")]
+    [Fact, DisplayName("MCP：tools/list 返回四格式与统一工具且带 inputSchema")]
     public void ToolsList_ReturnsTools()
     {
         using var doc = Call(Request(2, "tools/list"));
         var tools = doc.RootElement.GetProperty("result").GetProperty("tools");
-        Assert.Equal(2, tools.GetArrayLength());
+        Assert.True(tools.GetArrayLength() >= 14);
 
         var names = tools.EnumerateArray().Select(e => e.GetProperty("name").GetString()).ToList();
         Assert.Contains("docx_read_outline", names);
         Assert.Contains("docx_apply_patch", names);
+        Assert.Contains("office_read_outline", names);
+        Assert.Contains("office_read_text", names);
+        Assert.Contains("office_apply_patch", names);
+        Assert.Contains("xlsx_read_outline", names);
+        Assert.Contains("xlsx_read_range", names);
+        Assert.Contains("xlsx_apply_patch", names);
+        Assert.Contains("pptx_read_outline", names);
+        Assert.Contains("pptx_apply_patch", names);
+        Assert.Contains("pdf_read_outline", names);
+        Assert.Contains("pdf_search", names);
+        Assert.Contains("pdf_apply_patch", names);
 
         foreach (var tool in tools.EnumerateArray())
         {
