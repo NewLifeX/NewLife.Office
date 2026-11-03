@@ -311,8 +311,10 @@ public static class OfficeDocumentTool
             if (outputPath == null) throw new ArgumentNullException(nameof(outputPath));
 
             var format = Detect(path);
-            if (format is not ("docx" or "xlsx" or "pptx" or "pdf"))
+            if (format is not ("docx" or "xlsx" or "xls" or "pptx" or "pdf"))
                 return Fail(format, OfficeToolErrorCode.Unsupported, $"不支持的补丁格式: {format}");
+            if (format == "xls" && outputPath.EndsWith(".xls", StringComparison.OrdinalIgnoreCase))
+                return Fail(format, OfficeToolErrorCode.Unsupported, "xls 不支持模型级写回，请把输出路径改为 .xlsx");
             if (format != "pdf" && IsEncryptedOoxml(path))
                 return Fail(format, OfficeToolErrorCode.Encrypted, "文档已加密，请先解密");
 

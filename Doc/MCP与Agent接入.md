@@ -226,6 +226,7 @@ stdio 传输，每行一条 JSON-RPC 2.0 消息；实现了 `initialize` / `tool
 | docx 修订/批注 | 读取修订记录、批注内容可用；批注锚点区间读取未建模（程序化新增批注不受影响） |
 | docx 目录 | `AddTableOfContents` 生成 TOC 域，需 Word/WPS 打开时更新域；离线可见用 `AddStaticTableOfContents`（纯文本条目，无跳转） |
 | xlsx 图表/透视表 | 未建模部件原样透传；`add_chart` 仅支持按数据区域生成基础图表 |
+| xls 写回 | 仅支持读取；修改请把输出路径改为 `.xlsx`（模型写回为 xlsx） |
 | pptx 保真 | 按模型重建（L2），SmartArt/复杂动画等未建模元素不透传；另存时以源文件为模板复用母版/主题 |
 | pdf 加密 | 加密 PDF 拒绝对象级修改，需先解密 |
 | pdf 叠加文字 | 仅 Helvetica + Latin-1；中文请先生成图片或改用模板/生成式 PDF |
