@@ -1,6 +1,6 @@
 # Word 竞品分析
 
-> 版本：v2.0 | 日期：2026-08-06
+> 版本：v2.1 | 日期：2026-11-03
 > 返回：[竞品分析报告](竞品分析报告.md)
 
 ## 1. 概述
@@ -19,6 +19,7 @@
 | **GemBox.Document** | 免费受限/商业 | 3.7.x | ~5MB | docx/pdf/html/rtf | N/A | 100万+ |
 | **Aspose.Words** | 商业 | 25.x | ~40MB | doc/docx/rtf/html/pdf 等 | N/A | 1000万+ |
 | **Spire.Doc** | 免费受限/商业 | 12.x | ~15MB | doc/docx/pdf/html/rtf | N/A | 200万+ |
+| **python-docx** | MIT | 1.x | —（Python 包） | docx（不含 doc） | — | PyPI 高下载 |
 | **NewLife.Office** | MIT | 1.3.x | <500KB | docx/doc | — | — |
 
 ### 1.2 竞品分层定位
@@ -512,6 +513,19 @@ var doc = new XWPFDocument(File.OpenRead("source.docx"));
 | 适用场景 | 对保真度有极致要求且预算充足的商业项目 |
 
 **与 NewLife.Office 对比**：Aspose.Words 是终极方案，NewLife.Office 是 MIT 下的最优方案。两者剩余差距主要在：PDF 渲染保真度（内容映射 vs 像素级）、修订追踪模型级操作、doc 写入、docx→图片渲染。NewLife.Office 在 API 简洁性、零成本与轻量性上胜出。
+
+### 6.7 python-docx（AI/脚本场景的默认选择）
+
+**定位**：Python 生态读写 docx 的事实标准，大模型生成文档脚本时最常调用的库。
+
+| 维度 | 评价 |
+|------|------|
+| 优势 | API 直观（Document → Paragraph → Run）；模板替换链路短；LLM 训练语料多，生成代码命中率高 |
+| 劣势 | 仅 docx，不读写 doc；无渲染；批注与修订支持有限；定位内容只能遍历对象树，无结构快照 |
+| 保真度 | L2（对象模型级，未覆盖的部件在改写时容易丢失） |
+| 适用场景 | Python 脚本批量生成/改写 docx，以及由 AI 直接生成调用代码 |
+
+**与 NewLife.Office 对比**：python-docx 代表"脚本易用"路线；NewLife.Office 在提供同级构建 API（W25）之外，另补了结构快照与 JSON 补丁（W29）——模型先拿到 `p#3`/`tbl#5` 锚点再改，不必凭记忆猜结构，保真上以 RawXml 与部件透传做到 L3。差距主要在生态：python-docx 的示例与模型语料更多，跨语言迁移成本更低。
 
 ---
 

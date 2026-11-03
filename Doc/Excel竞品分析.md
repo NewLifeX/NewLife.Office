@@ -1,6 +1,6 @@
 # Excel 竞品分析
 
-> 版本：v2.0 | 日期：2026-08-06
+> 版本：v2.1 | 日期：2026-11-03
 > 返回：[竞品分析报告](竞品分析报告.md)
 
 ---
@@ -16,6 +16,8 @@
 | **MiniExcel** | 开源 | Apache 2.0 | 极致轻量流式读写，功能精简 |
 | **ExcelDataReader** | 开源 | MIT | xls/xlsx 只读流式解析 |
 | **Open XML SDK** | 开源 | MIT | Office Open XML 底层 SDK |
+| **openpyxl** | 开源（Python） | MIT | Python 生态 xlsx 读写事实标准，A1 寻址 + 样式/图表 |
+| **XlsxWriter** | 开源（Python） | BSD-2 | Python 写 xlsx 的高性能方案，仅写入 |
 | **Aspose.Cells** | 商业 | 商业许可 | 企业级全功能解决方案 |
 
 > ⚠️ **许可提示**：EPPlus v5+ 商业使用需购买许可；NPOI v2.8+ 要求营利性组织支付维护费；Aspose.Cells 为闭源商业授权。
@@ -222,6 +224,14 @@
 **优点**：功能最全，企业级品质，支持几乎所有 Excel 特性（含切片器、线程化批注等高端特性），可导出 PDF。  
 **缺点**：闭源商业授权，价格高昂；包体积大（~30MB）；内存占用高。  
 **适用场景**：预算充足、追求极致保真与全格式支持的企业项目。
+
+### 4.8 openpyxl / XlsxWriter（Python，AI 脚本场景）
+
+**优点**：openpyxl 以 `ws["A1"]` 的 A1 寻址直接读写单元格，是 Python 生态 xlsx 读写的事实标准，也是大模型生成表格脚本时最常调用的库；支持样式、图表、图片、条件格式、数据验证、表格对象与定义名。XlsxWriter 写入性能好、图表与格式能力强。  
+**缺点**：openpyxl 仅 xlsx/xlsm，不读 xls；读取大文件全量载入内存；无结构快照与补丁语义，模型需自行遍历工作表；XlsxWriter 只写不读。  
+**适用场景**：Python 脚本生成报表、清洗数据、由 AI 直接生成调用代码。
+
+**与 NewLife.Office 对比**：NewLife.Office 同时覆盖 xlsx 与 xls，且零依赖、可嵌入 .NET 服务；在 AI 场景上规划 M34（结构快照 + A1 区域读写 + 就地编辑 + JSON 补丁 + CLI/MCP），补上"模型先看结构再改"的链路，这是 openpyxl 需要调用方自己拼的部分。
 
 ---
 
