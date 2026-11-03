@@ -468,7 +468,25 @@ Run("23.四格式 AI 接口 快照/搜索/补丁", () =>
     var okPdf = pdfOutline.Success && pdfHits.Success && (pdfHits.Content ?? "").Contains("AI PDF")
         && pdfPatched.Success && OfficeDocumentTool.ReadOutline(pdfOut).Success;
 
-    return okXlsx && okDocx && okPptx && okPdf;
+    // pptx：clone_slide 走 PptxCloner 深拷贝
+    var clonedPptx = PathOf("ai-clone.pptx");
+    var pptxCloned = OfficeDocumentTool.ApplyPatch(pptx, """{ "ops": [ { "op": "clone_slide", "from": 0, "to": 1 } ] }""", clonedPptx);
+    var clonedText = OfficeDocumentTool.ReadText(clonedPptx, 2000).Content ?? "";
+    var okClone = pptxCloned.Success && clonedText.Split("AI title").Length >= 3;
+
+    // xls：BIFF8 → ExcelDocument（ExcelLegacyConverter）后走统一快照
+    var xls = PathOf("ai.xls");
+    using (var w = new BiffWriter())
+    {
+        w.WriteHeader(["名称", "数量"]);
+        w.WriteRow(["Legacy", 3]);
+        w.Save(xls);
+    }
+    var xlsOutline = OfficeDocumentTool.ReadOutline(xls);
+    var xlsText = OfficeDocumentTool.ReadText(xls, 1000);
+    var okXls = xlsOutline.Success && (xlsOutline.Content ?? "").Contains("Legacy") && xlsText.Success;
+
+    return okXlsx && okDocx && okPptx && okPdf && okClone && okXls;
 });
 
 Console.WriteLine();
