@@ -290,3 +290,5 @@
 "add_slide: inserted a new slide at position {0}.": "add_slide：在第 {0} 页插入新幻灯片"
 "clone_slide: matches PptxWriter.CloneSlide; element instances are shallow copies.": "clone_slide：与 PptxWriter.CloneSlide 一致，元素实例为浅拷贝"
 "{0} {1}: this paragraph contains unmodeled content (fields, comment anchors, ...) that will be lost when rebuilt from the model.": "{0} {1}：该段落含域/批注锚点等未建模内容，按模型重建后这些内容会丢失"
+"Regular expression evaluation timed out.": "正则表达式求值超时"
+"JSON nesting is too deep (max {0}).": "JSON 嵌套层级过深（最多 {0} 层）"

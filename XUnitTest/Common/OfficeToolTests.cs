@@ -238,8 +238,32 @@ public class OfficeToolTests
         Assert.Equal("工具层", reader.ReadMetadata().Title);
     }
 
-    [Fact(DisplayName = "工具-补丁失败分类不依赖消息语言")]
-    public void ApplyPatch_AnchorCodeIsCultureInvariant()
+    [Fact(DisplayName = "工具-正则搜索超时返回资源限制")]
+    public void Search_RegexTimeout()
+    {
+        var dir = TempDir();
+        var path = Path.Combine(dir, "regex.xlsx");
+        using (var w = new ExcelWriter(path))
+        {
+            w.WriteHeader("Sheet1", ["值"]);
+            w.WriteRow("Sheet1", new Object?[] { "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!" });
+        }
+
+        var result = OfficeDocumentTool.Search(path, "(a+)+$", regex: true);
+
+        Assert.False(result.Success);
+        Assert.Equal(OfficeToolErrorCode.ResourceLimit, result.Code);
+    }
+
+    [Fact(DisplayName = "工具-补丁 JSON 嵌套过深被拒绝")]
+    public void ParseJson_DepthLimit()
+    {
+        var deep = new String('[', 400) + new String(']', 400);
+        var ex = Assert.Throws<FormatException>(() => DocxPatch.ParseJson("{ \"ops\": " + deep + " }"));
+        Assert.Contains("256", ex.Message);
+    }
+
+    [Fact(DisplayName = "工具-补丁失败分类不依赖消息语言")]    public void ApplyPatch_AnchorCodeIsCultureInvariant()
     {
         var dir = TempDir();
         var path = BuildDocx(dir, "锚点分类");

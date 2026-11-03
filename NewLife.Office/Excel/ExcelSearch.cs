@@ -8,6 +8,9 @@ namespace NewLife.Office.Excel;
 /// <remarks>供 AI 在不知道具体位置时先搜索、再按返回的 <c>Sheet!A1</c> 改写。</remarks>
 public static class ExcelSearch
 {
+    /// <summary>正则匹配超时，防止灾难性回溯拖死调用方</summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
     /// <summary>在整本工作簿中搜索</summary>
     /// <param name="document">工作簿模型</param>
     /// <param name="pattern">搜索内容（文本或正则）</param>
@@ -27,7 +30,7 @@ public static class ExcelSearch
         {
             var options = RegexOptions.None;
             if (!caseSensitive) options |= RegexOptions.IgnoreCase;
-            rx = new Regex(pattern, options);
+            rx = new Regex(pattern, options, RegexTimeout);
         }
 
         var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;

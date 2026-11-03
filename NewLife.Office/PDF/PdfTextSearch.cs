@@ -10,6 +10,9 @@ namespace NewLife.Office.Pdf;
 /// </remarks>
 public static class PdfTextSearch
 {
+    /// <summary>正则匹配超时，防止灾难性回溯拖死调用方</summary>
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
     /// <summary>在整份 PDF 中搜索文本</summary>
     /// <param name="reader">PDF 读取器</param>
     /// <param name="text">搜索内容（或正则）</param>
@@ -29,7 +32,7 @@ public static class PdfTextSearch
         {
             var options = RegexOptions.None;
             if (!caseSensitive) options |= RegexOptions.IgnoreCase;
-            rx = new Regex(text, options);
+            rx = new Regex(text, options, RegexTimeout);
         }
 
         var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;

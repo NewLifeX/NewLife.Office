@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using NewLife.Office.Excel;
 using NewLife.Office.Pdf;
 using NewLife.Office.Ppt;
@@ -305,6 +306,10 @@ public static class OfficeDocumentTool
                     return Fail(format, OfficeToolErrorCode.Unsupported, L.T("Search is not supported for format: {0}", format));
             }
         }
+        catch (RegexMatchTimeoutException)
+        {
+            return Fail(null, OfficeToolErrorCode.ResourceLimit, L.T("Regular expression evaluation timed out."));
+        }
         catch (Exception ex)
         {
             return Fail(null, MapErrorCode(ex), ex.Message);
@@ -424,6 +429,7 @@ public static class OfficeDocumentTool
     private static String MapErrorCode(Exception ex) => ex switch
     {
         NotSupportedException => OfficeToolErrorCode.Unsupported,
+        TimeoutException => OfficeToolErrorCode.ResourceLimit,
         ArgumentOutOfRangeException => OfficeToolErrorCode.AnchorMissing,
         FileNotFoundException => OfficeToolErrorCode.Malformed,
         InvalidDataException => OfficeToolErrorCode.Malformed,

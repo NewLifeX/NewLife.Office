@@ -20,7 +20,7 @@ internal static class JsonLite
         if (text == null) throw new ArgumentNullException(nameof(text));
 
         var pos = 0;
-        var value = ParseValue(text, ref pos);
+        var value = ParseValue(text, ref pos, 0);
         SkipWhite(text, ref pos);
         if (pos < text.Length) throw new FormatException(L.T("Unexpected trailing characters at position {0}.", pos));
         return value;
@@ -52,15 +52,19 @@ internal static class JsonLite
     }
 
     #region 解析实现
-    private static Object? ParseValue(String text, ref Int32 pos)
+    /// <summary>最大嵌套深度，防止恶意输入导致栈溢出</summary>
+    private const Int32 MaxDepth = 256;
+
+    private static Object? ParseValue(String text, ref Int32 pos, Int32 depth)
     {
+        if (depth > MaxDepth) throw new FormatException(L.T("JSON nesting is too deep (max {0}).", MaxDepth));
         SkipWhite(text, ref pos);
         if (pos >= text.Length) throw new FormatException(L.T("Unexpected end of JSON."));
 
         return text[pos] switch
         {
-            '{' => ParseObject(text, ref pos),
-            '[' => ParseArray(text, ref pos),
+            '{' => ParseObject(text, ref pos, depth),
+            '[' => ParseArray(text, ref pos, depth),
             '"' => ParseString(text, ref pos),
             't' => ParseLiteral(text, ref pos, "true", true),
             'f' => ParseLiteral(text, ref pos, "false", false),
@@ -69,7 +73,7 @@ internal static class JsonLite
         };
     }
 
-    private static Dictionary<String, Object?> ParseObject(String text, ref Int32 pos)
+    private static Dictionary<String, Object?> ParseObject(String text, ref Int32 pos, Int32 depth)
     {
         var obj = new Dictionary<String, Object?>(StringComparer.Ordinal);
         pos++; // {
@@ -83,7 +87,7 @@ internal static class JsonLite
             SkipWhite(text, ref pos);
             if (pos >= text.Length || text[pos] != ':') throw new FormatException(L.T("Expected ':' at position {0}.", pos));
             pos++;
-            obj[key] = ParseValue(text, ref pos);
+            obj[key] = ParseValue(text, ref pos, depth + 1);
             SkipWhite(text, ref pos);
 
             if (pos >= text.Length) throw new FormatException(L.T("Unterminated object."));
@@ -93,7 +97,7 @@ internal static class JsonLite
         }
     }
 
-    private static List<Object?> ParseArray(String text, ref Int32 pos)
+    private static List<Object?> ParseArray(String text, ref Int32 pos, Int32 depth)
     {
         var list = new List<Object?>();
         pos++; // [
@@ -102,7 +106,7 @@ internal static class JsonLite
 
         while (true)
         {
-            list.Add(ParseValue(text, ref pos));
+            list.Add(ParseValue(text, ref pos, depth + 1));
             SkipWhite(text, ref pos);
 
             if (pos >= text.Length) throw new FormatException(L.T("Unterminated array."));
