@@ -162,6 +162,13 @@ public class PptxPatch
 
                 var title = op.GetString("title");
                 if (title != null) chart.Title = title;
+
+                if (chart.Categories.Length > 0)
+                {
+                    foreach (var series in chart.Series)
+                        if (series.Values.Length != chart.Categories.Length)
+                            throw new ArgumentException($"系列 {series.Name} 的数据点数量({series.Values.Length})与分类数({chart.Categories.Length})不一致");
+                }
                 return;
             }
 

@@ -121,6 +121,24 @@ public class PdfAiTests
         Assert.Equal(1, reader.ReadAnnotations(1).Count);
     }
 
+    [Fact(DisplayName = "补丁-拉丁字符叠加文字")]
+    public void Patch_Latin1Text()
+    {
+        var path = BuildPdf();
+        var doc = PdfObjectDocument.Load(path);
+
+        var patch = PdfPatch.ParseJson("""
+        { "ops": [ { "op": "add_text", "page": 1, "text": "Café", "x": 100, "y": 500, "fontSize": 14 } ] }
+        """);
+        var result = patch.Apply(doc);
+        Assert.True(result.Success, String.Join("; ", result.Failed));
+
+        var output = TempPath("latin1.pdf");
+        doc.Save(output);
+        using var reader = new PdfReader(output);
+        Assert.Contains("Café", reader.ExtractText());
+    }
+
     [Fact(DisplayName = "补丁-删页与移动页")]
     public void Patch_PageOrder()
     {

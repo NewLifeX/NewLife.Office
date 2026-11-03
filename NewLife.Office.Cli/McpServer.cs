@@ -287,6 +287,7 @@ internal static class McpServer
 
         var text = $"已应用补丁 → {output}";
         if (!result.Content.IsNullOrEmpty()) text += "\n" + result.Content;
+        if (result.Warnings.Count > 0) text += "\n告警：\n" + String.Join("\n", result.Warnings);
         return ToolText(id, text);
     }
 

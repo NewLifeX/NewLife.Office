@@ -223,7 +223,7 @@ public class PdfObjectDocument
             }
             else if (ch < 32 || ch > 126)
             {
-                WriteAscii(stream, "\\" + ((Int32)ch).ToString("000", CultureInfo.InvariantCulture));
+                WriteAscii(stream, "\\" + Convert.ToString((Int32)ch, 8).PadLeft(3, '0'));
             }
             else
                 stream.WriteByte((Byte)ch);
@@ -586,7 +586,7 @@ public class PdfObjectDocument
         ops.Append("ET\n");
         ops.Append("Q\n");
 
-        AppendContent(page, Encoding.ASCII.GetBytes(ops.ToString()));
+        AppendContent(page, Encoding.GetEncoding(28591).GetBytes(ops.ToString()));
     }
 
     /// <summary>给所有页叠加水印（45° 灰色居中）</summary>
@@ -688,7 +688,7 @@ public class PdfObjectDocument
         foreach (var ch in text)
         {
             if (ch == '(' || ch == ')' || ch == '\\') sb.Append('\\').Append(ch);
-            else if (ch < 32 || ch > 126) sb.Append('\\').Append(((Int32)ch).ToString("000", CultureInfo.InvariantCulture));
+            else if (ch < 32 || ch > 126) sb.Append('\\').Append(Convert.ToString((Int32)ch, 8).PadLeft(3, '0'));
             else sb.Append(ch);
         }
         return sb.ToString();

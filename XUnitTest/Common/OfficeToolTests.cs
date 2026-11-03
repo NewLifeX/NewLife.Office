@@ -159,6 +159,7 @@ public class OfficeToolTests
 
         Assert.True(result.Success, result.Message);
         Assert.True(File.Exists(output));
+        Assert.NotEmpty(result.Warnings);
 
         var check = OfficeDocumentTool.ReadRange(output, "数据!A12:A12");
         Assert.Contains("新增", check.Content);
@@ -195,6 +196,29 @@ public class OfficeToolTests
         var encryptedResult = OfficeDocumentTool.ReadOutline(encrypted);
         Assert.False(encryptedResult.Success);
         Assert.Equal(OfficeToolErrorCode.Encrypted, encryptedResult.Code);
+    }
+
+    [Fact(DisplayName = "工具-加密 PDF 返回 Encrypted 错误码")]
+    public void ReadOutline_EncryptedPdf()
+    {
+        var dir = TempDir();
+        var path = Path.Combine(dir, "secret.pdf");
+        using (var writer = new PdfWriter())
+        {
+            writer.BeginPage();
+            writer.AppendLine("Secret");
+            writer.EndPage();
+            writer.UserPassword = "123456";
+            writer.Save(path);
+        }
+
+        var outline = OfficeDocumentTool.ReadOutline(path);
+        Assert.False(outline.Success);
+        Assert.Equal(OfficeToolErrorCode.Encrypted, outline.Code);
+
+        var text = OfficeDocumentTool.ReadText(path);
+        Assert.False(text.Success);
+        Assert.Equal(OfficeToolErrorCode.Encrypted, text.Code);
     }
 
     [Fact(DisplayName = "工具-PDF 补丁跨格式路由")]

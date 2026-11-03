@@ -117,6 +117,19 @@ public static class OfficeDocumentTool
             return false;
         }
     }
+
+    private static Boolean IsEncryptedPdf(String path)
+    {
+        try
+        {
+            using var reader = new PdfReader(path);
+            return reader.XRefTable?.Trailer.ContainsKey("Encrypt") == true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
     #endregion
 
     #region 读取
@@ -149,9 +162,9 @@ public static class OfficeDocumentTool
                 default:
                     using (var reader = new PdfReader(path))
                     {
-                        var snapshot = PdfSnapshot.From(reader);
-                        if (snapshot.Encrypted) return Fail(format, OfficeToolErrorCode.Encrypted, "PDF 已加密，请先解密");
-                        json = snapshot.ToJson();
+                        if (reader.XRefTable?.Trailer.ContainsKey("Encrypt") == true)
+                            return Fail(format, OfficeToolErrorCode.Encrypted, "PDF 已加密，请先解密");
+                        json = PdfSnapshot.From(reader).ToJson();
                     }
                     break;
             }
@@ -176,6 +189,8 @@ public static class OfficeDocumentTool
             var format = Detect(path);
             if (format != "pdf" && IsEncryptedOoxml(path))
                 return Fail(format, OfficeToolErrorCode.Encrypted, "文档已加密，请先解密");
+            if (format == "pdf" && IsEncryptedPdf(path))
+                return Fail(format, OfficeToolErrorCode.Encrypted, "PDF 已加密，请先解密");
 
             var text = OfficeFactory.ReadText(path);
             if (text == null) return Fail(format, OfficeToolErrorCode.Unsupported, $"无法读取文本: {format}");
@@ -319,6 +334,7 @@ public static class OfficeDocumentTool
                 return Fail(format, OfficeToolErrorCode.Encrypted, "文档已加密，请先解密");
 
             String resultJson;
+            var warnings = new List<String>();
             switch (format)
             {
                 case "docx":
@@ -331,6 +347,7 @@ public static class OfficeDocumentTool
                     if (!result.Success)
                         return Fail(format, ClassifyPatchFailure(result.Failed.ToArray()), String.Join("；", result.Failed));
 
+                    warnings.AddRange(result.Warnings);
                     resultJson = new OfficeResultBridge(result.Applied.Count, result.Failed, result.Warnings).ToJson();
                     WriteAtomic(outputPath, temp =>
                     {
@@ -349,6 +366,7 @@ public static class OfficeDocumentTool
                     if (!result.Success)
                         return Fail(format, ClassifyPatchFailure(result.Failed.ToArray()), String.Join("；", result.Failed));
 
+                    warnings.AddRange(result.Warnings);
                     resultJson = result.ToJson();
                     WriteAtomic(outputPath, temp => doc.Save(temp));
                     break;
@@ -362,6 +380,7 @@ public static class OfficeDocumentTool
                     if (!result.Success)
                         return Fail(format, ClassifyPatchFailure(result.Failed.ToArray()), String.Join("；", result.Failed));
 
+                    warnings.AddRange(result.Warnings);
                     resultJson = result.ToJson();
                     WriteAtomic(outputPath, temp => doc.Save(temp, path));
                     break;
@@ -375,13 +394,16 @@ public static class OfficeDocumentTool
                     if (!result.Success)
                         return Fail(format, ClassifyPatchFailure(result.Failed.ToArray()), String.Join("；", result.Failed));
 
+                    warnings.AddRange(result.Warnings);
                     resultJson = result.ToJson();
                     WriteAtomic(outputPath, temp => doc.Save(temp));
                     break;
                 }
             }
 
-            return new OfficeToolResult { Success = true, Format = format, Content = resultJson };
+            var toolResult = new OfficeToolResult { Success = true, Format = format, Content = resultJson };
+            toolResult.Warnings.AddRange(warnings);
+            return toolResult;
         }
         catch (Exception ex)
         {

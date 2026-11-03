@@ -1,4 +1,4 @@
-﻿using System.Security.Cryptography;
+using System.Security.Cryptography;
 using System.Text;
 using NewLife.Buffers;
 
@@ -108,7 +108,7 @@ internal sealed class PdfEncryptor
             if (ch >= 32 && ch < 256) sb.Append(ch);
             else if (ch >= 256) sb.Append('?');
         }
-        var bytes = Encoding.GetEncoding(1252).GetBytes(sb.ToString());
+        var bytes = Encoding.GetEncoding(28591).GetBytes(sb.ToString());
         var encrypted = EncryptBytes(bytes, objNum, genNum);
         return "<" + BitConverter.ToString(encrypted).Replace("-", "") + ">";
     }
@@ -312,7 +312,7 @@ internal sealed class PdfEncryptor
 
     private static Byte[] PadPwd(String pwd)
     {
-        var raw = Encoding.GetEncoding(1252).GetBytes(pwd);
+        var raw = Encoding.GetEncoding(28591).GetBytes(pwd);
         var r = new Byte[32];
         var copyLen = Math.Min(raw.Length, 32);
         Array.Copy(raw, r, copyLen);

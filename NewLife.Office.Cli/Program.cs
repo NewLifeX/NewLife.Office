@@ -254,6 +254,9 @@ public static class Program
         }
 
         Console.WriteLine(Localization.Translate("Applied: {0} → {1}", Path.GetFileName(input), output));
+        // 告警不影响成功状态，但必须让用户看到（否则"内容被静默丢弃"）
+        foreach (var warning in result.Warnings)
+            Console.Error.WriteLine(Localization.Translate("Warning: {0}", warning));
         return 0;
     }
 

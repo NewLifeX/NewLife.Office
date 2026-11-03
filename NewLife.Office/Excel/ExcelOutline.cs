@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace NewLife.Office.Excel;
@@ -81,7 +82,7 @@ public class ExcelOutline
             if (item.Preview.Count > 0)
             {
                 foreach (var value in item.Preview[0])
-                    item.Header.Add(value == null ? String.Empty : Convert.ToString(value) ?? String.Empty);
+                    item.Header.Add(value == null ? String.Empty : Convert.ToString(value, CultureInfo.InvariantCulture) ?? String.Empty);
             }
 
             item.Summary.AddRange(BuildSummary(sheet, Math.Min(item.Rows, 1000), Math.Min(item.Columns, 30)));
@@ -122,7 +123,7 @@ public class ExcelOutline
         {
             var summary = new ExcelColumnSummary { Column = ExcelCellRange.ColumnName(c) };
             if (sheet.Rows.Count > 0 && c < sheet.Rows[0].Length)
-                summary.Header = Convert.ToString(sheet.Rows[0][c]) ?? String.Empty;
+                summary.Header = Convert.ToString(sheet.Rows[0][c], CultureInfo.InvariantCulture) ?? String.Empty;
 
             var nonNull = 0;
             var number = 0;
@@ -146,7 +147,7 @@ public class ExcelOutline
                     or Single or Double or Decimal) number++;
                 else text++;
 
-                var key = Convert.ToString(value) ?? String.Empty;
+                var key = Convert.ToString(value, CultureInfo.InvariantCulture) ?? String.Empty;
                 counts[key] = counts.TryGetValue(key, out var count) ? count + 1 : 1;
             }
 

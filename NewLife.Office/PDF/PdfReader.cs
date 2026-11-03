@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text;
 using NewLife.Office.Markdown;
 
@@ -905,7 +905,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
     private static void ExtractFromStreams(Byte[] pdfData, StringBuilder sb)
     {
         // 扫描所有 stream...endstream 块
-        var pdf = Encoding.GetEncoding(1252).GetString(pdfData);
+        var pdf = Encoding.GetEncoding(28591).GetString(pdfData);
         var pos = 0;
         while (pos < pdf.Length)
         {
@@ -1104,8 +1104,41 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
             var c = s[pos];
             if (c == '\\' && pos + 1 < s.Length)
             {
-                sb.Append(s[pos + 1]);
+                var next = s[pos + 1];
                 pos += 2;
+                switch (next)
+                {
+                    case 'n': sb.Append('\n'); break;
+                    case 'r': sb.Append('\r'); break;
+                    case 't': sb.Append('\t'); break;
+                    case 'b': sb.Append('\b'); break;
+                    case 'f': sb.Append('\f'); break;
+                    case '(': sb.Append('('); break;
+                    case ')': sb.Append(')'); break;
+                    case '\\': sb.Append('\\'); break;
+                    default:
+                        if (next >= '0' && next <= '7')
+                        {
+                            // PDF 八进制转义 \ddd（1~3 位）
+                            var octal = next - '0';
+                            var digits = 1;
+                            while (digits < 3 && pos < s.Length && s[pos] >= '0' && s[pos] <= '7')
+                            {
+                                octal = octal * 8 + (s[pos] - '0');
+                                pos++;
+                                digits++;
+                            }
+                            sb.Append((Char)octal);
+                        }
+                        else if (next == '\r' || next == '\n')
+                        {
+                            // 续行：反斜杠 + 换行不产生字符
+                            if (next == '\r' && pos < s.Length && s[pos] == '\n') pos++;
+                        }
+                        else
+                            sb.Append(next);
+                        break;
+                }
                 continue;
             }
             if (c == '(') depth++;
@@ -1723,7 +1756,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
             catch { }
         }
 
-        try { return Encoding.GetEncoding(1252).GetString(bytes); }
+        try { return Encoding.GetEncoding(28591).GetString(bytes); }
         catch { return String.Empty; }
     }
     #endregion

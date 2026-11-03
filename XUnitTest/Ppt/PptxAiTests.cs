@@ -181,6 +181,29 @@ public class PptxAiTests
         Assert.Equal(original.Length, doc2.Slides[0].Images[0].Data.Length);
     }
 
+    [Fact(DisplayName = "补丁-图表系列长度校验")]
+    public void Patch_ChartSeriesLength()
+    {
+        var doc = new Presentation();
+        var slide = new Slide();
+        slide.Charts.Add(new Chart
+        {
+            ChartType = "bar",
+            Categories = ["A", "B"],
+            Series = { new ChartSeries { Name = "S1", Values = [1, 2, 3] } },
+        });
+        doc.Slides.Add(slide);
+
+        var patch = PptxPatch.ParseJson("""
+        { "ops": [ { "op": "update_chart", "anchor": "s#0/chart#0", "categories": ["A", "B"], "series": [ { "name": "S1", "values": [1, 2, 3] } ] } ] }
+        """);
+        var result = patch.Apply(doc);
+
+        Assert.False(result.Success);
+        Assert.Contains("不一致", result.Failed[0]);
+        Assert.Equal(3, doc.Slides[0].Charts[0].Series[0].Values.Length);
+    }
+
     [Fact(DisplayName = "补丁-克隆幻灯片")]
     public void Patch_CloneSlide()
     {
