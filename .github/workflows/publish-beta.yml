@@ -13,6 +13,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 jobs:
   build-publish:
@@ -49,7 +50,13 @@ jobs:
       continue-on-error: true
       run: |
         dotnet nuget push ./out/*.nupkg --skip-duplicate --source https://nuget.pkg.github.com/NewLifeX/index.json --api-key ${{ github.token }}
+    - name: NuGet login (OIDC)
+      id: nuget-login
+      continue-on-error: true
+      uses: NuGet/login@v1
+      with:
+        user: BigStone
     - name: Publish to NuGet.org
       id: nuget
       run: |
-        dotnet nuget push ./out/*.nupkg --skip-duplicate --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.nugetKey }}
+        dotnet nuget push ./out/*.nupkg --skip-duplicate --source https://api.nuget.org/v3/index.json --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY || secrets.nugetKey }}
