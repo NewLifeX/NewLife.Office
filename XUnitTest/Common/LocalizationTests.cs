@@ -155,6 +155,8 @@ public class LocalizationTests
     [Fact(DisplayName = "31 种语言已翻译全部词条")]
     public void AllKeysTranslated()
     {
+        if (CultureTestHelper.SkipIfInvariant()) return;
+
         var saved = Localization.Culture;
         try
         {
@@ -178,6 +180,8 @@ public class LocalizationTests
     [Fact(DisplayName = "程序集标题与描述按当前语言翻译")]
     public void AssemblyMetadataIsLocalized()
     {
+        if (CultureTestHelper.SkipIfInvariant()) return;
+
         const String title = "Office Automation Library";
         const String description = "Office automation library supporting read/write, template filling and format conversion for Excel (xlsx/xls), Word (docx/doc), PowerPoint (pptx/ppt), PDF, Markdown, RTF, ODS, Email (eml/msg), iCalendar, vCard, EPUB and XPS, with zero external dependencies and an MIT license.";
         const String renderingTitle = "Office Document Rendering Extension";
@@ -203,6 +207,8 @@ public class LocalizationTests
     [Fact(DisplayName = "译文格式化与占位符保持一致")]
     public void TranslateWithArguments()
     {
+        if (CultureTestHelper.SkipIfInvariant()) return;
+
         var saved = Localization.Culture;
         try
         {
@@ -221,6 +227,8 @@ public class LocalizationTests
     [Fact(DisplayName = "运行时异常消息按当前区域翻译")]
     public void ExceptionMessagesAreLocalized()
     {
+        if (CultureTestHelper.SkipIfInvariant()) return;
+
         var saved = Localization.Culture;
         try
         {
@@ -241,6 +249,8 @@ public class LocalizationTests
     [Fact(DisplayName = "英文与未登记词条回退原文")]
     public void FallbackToEnglish()
     {
+        if (CultureTestHelper.SkipIfInvariant()) return;
+
         var saved = Localization.Culture;
         try
         {

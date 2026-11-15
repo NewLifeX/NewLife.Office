@@ -98,7 +98,7 @@ jobs:
         if-no-files-found: ignore
 
   # linux-la64（龙芯，必选覆盖）：QEMU 用户态仿真 + 龙芯 SDK + loong64 Debian 容器。
-  # 宿主 x64 预构建测试程序集；容器内独立系统无原生 ICU，以 invariant 模式运行。
+  # 宿主 x64 预构建测试程序集；容器内优先安装 ICU（正常文化行为），无 ICU 时降级为 invariant 模式。
   # 非阻塞：仿真链路不稳定时允许失败跳过，不阻塞主干（LA64 为兼容性覆盖，非发布门禁）
   test-linux-la64:
     name: test (linux-la64 / QEMU)
@@ -136,13 +136,20 @@ jobs:
           -v "$PWD:/src" -v "$HOME/la64:/opt/dotnet:ro" -v "$HOME/.nuget:/home/runner/.nuget" -v "$HOME/xrc:/opt/xunit:ro" \
           -e HOME=/home/runner -e DOTNET_CLI_HOME=/home/runner -e NUGET_PACKAGES=/home/runner/.nuget/packages \
           -e DOTNET_ROOT=/opt/dotnet -e PATH=/opt/dotnet:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-          -e DOTNET_CLI_TELEMETRY_OPTOUT=1 -e DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
+          -e DOTNET_CLI_TELEMETRY_OPTOUT=1 \
           -e DOTNET_ROLL_FORWARD=LatestMajor -e DOTNET_EnableWriteXorExecute=0 \
           ghcr.io/loong64/debian:trixie bash -c '
             set -e
             apt-get update -qq || true
             apt-get install -y -qq ca-certificates libstdc++6 zlib1g libunwind8 || true
             apt-get install -y -qq libssl3t64 || apt-get install -y -qq libssl3 || true
+            # 文化相关用例需要 ICU；无对应包时降级为 invariant 模式
+            apt-get install -y -qq libicu76 || apt-get install -y -qq libicu-dev || true
+            if ldconfig -p 2>/dev/null | grep -q 'libicuuc'; then
+              export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=0
+            else
+              export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+            fi
             # SkiaSharp Linux 原生库依赖 fontconfig/freetype
             apt-get install -y -qq libfontconfig1 fonts-dejavu-core || true
             LIBDIR=$(ls -d /usr/lib/*-linux-gnu* 2>/dev/null | head -1)

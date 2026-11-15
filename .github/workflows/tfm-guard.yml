@@ -7,13 +7,11 @@ on:
     branches: [ '*' ]
     paths:
       - 'NewLife.Office/NewLife.Office.csproj'
-      - 'Directory.Build.props'
       - '.github/workflows/tfm-guard.yml'
   pull_request:
     branches: [ '*' ]
     paths:
       - 'NewLife.Office/NewLife.Office.csproj'
-      - 'Directory.Build.props'
       - '.github/workflows/tfm-guard.yml'
   workflow_dispatch:
 

@@ -65,11 +65,11 @@ jobs:
     - name: Setup dotNET
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 10.0.402
+        dotnet-version: 10.0.x
     - name: Select Xcode
       run: sudo xcode-select -s /Applications/Xcode_26.6.app
     - name: Install iOS workload
-      run: dotnet workload install ios --version 10.400.1 || sudo dotnet workload install ios --version 10.400.1
+      run: dotnet workload install ios
     - name: Run iOS smoke
       run: bash ./Samples/MobileSmoke/run-ios.sh
     - name: Upload iOS artifacts

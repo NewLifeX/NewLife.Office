@@ -385,6 +385,8 @@ public class OfficeToolTests
 
     [Fact(DisplayName = "工具-补丁失败分类不依赖消息语言")]    public void ApplyPatch_AnchorCodeIsCultureInvariant()
     {
+        if (CultureTestHelper.SkipIfInvariant()) return;
+
         var dir = TempDir();
         var path = BuildDocx(dir, "锚点分类");
         var output = Path.Combine(dir, "out.docx");

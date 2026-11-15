@@ -9,7 +9,8 @@ $root = Resolve-Path "$PSScriptRoot/../.."
 $project = Join-Path $PSScriptRoot "MobileSmoke.csproj"
 $package = "com.newlife.smoke.office"
 
-dotnet build $project -c $Configuration -f net10.0-android --nologo
+# 覆盖 TargetFrameworks，避免 restore 同时评估 iOS 目标框架（Linux 上没有 iOS workload）
+dotnet build $project -c $Configuration -p:TargetFrameworks=net10.0-android --nologo
 if ($LASTEXITCODE -ne 0) { throw "Android build failed" }
 
 $apk = Get-ChildItem (Join-Path $root "Bin/MobileSmoke") -Recurse -Filter *.apk |
