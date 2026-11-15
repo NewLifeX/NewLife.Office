@@ -27,6 +27,9 @@ public static class PdfSigner
         if (pdfBytes == null) throw new ArgumentNullException(nameof(pdfBytes));
         if (certificate == null) throw new ArgumentNullException(nameof(certificate));
 
+        // 不修改调用方缓冲区
+        pdfBytes = (Byte[])pdfBytes.Clone();
+
         // 1. 定位签名字段中的 /Contents 占位符
         var pdfText = Encoding.GetEncoding("ISO-8859-1").GetString(pdfBytes);
         var fieldPattern = $"/T ({EscapePdfString(signatureFieldName)})";
@@ -38,45 +41,61 @@ public static class PdfSigner
         if (contentsIdx < 0)
             throw new InvalidOperationException(L.T("The signature field is missing the /Contents placeholder."));
 
-        var valStart = contentsIdx + "/Contents <".Length;
+        var hexStart = contentsIdx + "/Contents ".Length;   // '<' 的位置
+        var valStart = hexStart + 1;                        // 十六进制数据起点
         var valEnd = pdfText.IndexOf('>', valStart);
         if (valEnd < 0)
             throw new InvalidOperationException(L.T("The /Contents placeholder is malformed."));
 
-        // 2. 计算签名：ByteRange = [0, valStart, valEnd+2, fileLen-(valEnd+2)]
-        var placeholderLen = valEnd - valStart;
+        // 2. ByteRange：签名覆盖除 <...> 之外的全部字节
+        var range1Len = hexStart;
+        var range2Start = valEnd + 1;
+        var range2Len = pdfBytes.Length - range2Start;
 
-        var beforeSig = new Byte[valStart];
-        Array.Copy(pdfBytes, 0, beforeSig, 0, valStart);
-
-        var afterStart = valEnd + 2;
-        var afterLen = pdfBytes.Length - afterStart;
-        var afterSig = new Byte[afterLen];
-        Array.Copy(pdfBytes, afterStart, afterSig, 0, afterLen);
+        // 3. 先回填 ByteRange（定宽占位，替换后长度不变），再计算摘要，保证摘要覆盖的是最终字节
+        ReplaceByteRange(pdfBytes, fieldIdx, range1Len, range2Start, range2Len, pdfText);
 
         Byte[] docHash;
         using (var sha = SHA256.Create())
         {
-            sha.TransformBlock(beforeSig, 0, beforeSig.Length, null, 0);
-            sha.TransformFinalBlock(afterSig, 0, afterSig.Length);
+            sha.TransformBlock(pdfBytes, 0, range1Len, null, 0);
+            sha.TransformFinalBlock(pdfBytes, range2Start, range2Len);
             docHash = sha.Hash!;
         }
 
-        // 3. 构建 PKCS#7 签名
+        // 4. 构建 PKCS#7 签名（含 messageDigest 等签名属性）
+        var placeholderLen = valEnd - valStart;
         var pkcs7 = BuildPkcs7(docHash, certificate);
         var sigHex = BitConverter.ToString(pkcs7).Replace("-", "");
         if (sigHex.Length > placeholderLen)
             throw new InvalidOperationException(L.T("Signature length {0} exceeds the reserved {1} characters.", sigHex.Length, placeholderLen));
 
+        // 5. 写入 /Contents
         var paddedSig = Encoding.ASCII.GetBytes(sigHex.PadRight(placeholderLen, '0'));
+        Array.Copy(paddedSig, 0, pdfBytes, valStart, paddedSig.Length);
 
-        // 4. 重建 PDF
-        var result = new Byte[valStart + paddedSig.Length + afterLen];
-        Array.Copy(pdfBytes, 0, result, 0, valStart);
-        Array.Copy(paddedSig, 0, result, valStart, paddedSig.Length);
-        Array.Copy(afterSig, 0, result, valStart + paddedSig.Length, afterLen);
+        return pdfBytes;
+    }
 
-        return result;
+    /// <summary>把 /ByteRange 的定宽占位替换为真实偏移</summary>
+    private static void ReplaceByteRange(Byte[] pdfBytes, Int32 fieldIdx, Int32 range1Len, Int32 range2Start, Int32 range2Len, String pdfText)
+    {
+        // /ByteRange 与 /Contents 在同一个签名字典内，从字段起点向后找即可
+        var brIdx = pdfText.IndexOf("/ByteRange", fieldIdx, StringComparison.Ordinal);
+        if (brIdx < 0) return;
+
+        var open = pdfText.IndexOf('[', brIdx);
+        var close = open < 0 ? -1 : pdfText.IndexOf(']', open);
+        if (open < 0 || close < 0) return;
+
+        var actual = $"[0 {range1Len:D10} {range2Start:D10} {range2Len:D10}]";
+        var slot = pdfText.Substring(open, close - open + 1);
+
+        // 定宽占位符才能原地替换；长度不同说明占位符不是本库写出的格式
+        if (slot.Length != actual.Length) return;
+
+        var bytes = Encoding.ASCII.GetBytes(actual);
+        Array.Copy(bytes, 0, pdfBytes, open, bytes.Length);
     }
 
     /// <summary>对 PDF 文件签名并保存</summary>
@@ -92,7 +111,22 @@ public static class PdfSigner
     #region PKCS#7 构建（手动 ASN.1 DER）
     private static Byte[] BuildPkcs7(Byte[] docHash, X509Certificate2 cert)
     {
-        var signature = SignHash(docHash, cert);
+        // 签名属性：contentType + messageDigest + signingTime；RSA 签名作用于整个 SignedAttrs 的 DER
+        // DER 要求 SET OF 的元素按编码字节升序排列，否则严格的解析器会报 InvalidSetOrdering
+        var attrs = new List<Byte[]>
+        {
+            BuildSequence(BuildOid("1.2.840.113549.1.9.3"), BuildSet(BuildOid("1.2.840.113549.1.7.1"))),
+            BuildSequence(BuildOid("1.2.840.113549.1.9.4"), BuildSet(BuildOctetString(docHash))),
+            BuildSequence(BuildOid("1.2.840.113549.1.9.5"), BuildSet(BuildUtcTime(DateTime.UtcNow))),
+        };
+        attrs.Sort(CompareDer);
+        var signedAttrs = BuildSet([.. attrs]);
+
+        Byte[] attrHash;
+        using (var sha = SHA256.Create())
+            attrHash = sha.ComputeHash(signedAttrs);
+
+        var signature = SignHash(attrHash, cert);
         var certBytes = cert.RawData;
         var issuerBytes = cert.IssuerName.RawData;
         var serialBytes = NormalizeSerial(cert.GetSerialNumber());
@@ -122,10 +156,17 @@ public static class PdfSigner
 
         var encryptedDigest = BuildOctetString(signature);
 
+        // SignedAttrs 以 [0] IMPLICIT 形式内嵌（替换 SET 的标签，内容保持 DER 原样）
+        var headerLen = 1 + LengthBytesCount(signedAttrs);
+        var attrContent = new Byte[signedAttrs.Length - headerLen];
+        Array.Copy(signedAttrs, headerLen, attrContent, 0, attrContent.Length);
+        var signedAttrsField = BuildTlv(0xA0, attrContent);
+
         var signerInfo = BuildSequence(
             BuildInteger(1),
             issuerSerial,
             signerDigestAlgo,
+            signedAttrsField,
             signerEncryptAlgo,
             encryptedDigest);
 
@@ -198,6 +239,27 @@ public static class PdfSigner
     private static Byte[] BuildInteger(Int32 value) => BuildTlv(0x02, EncodeIntBytes(value));
     private static Byte[] BuildIntegerBytes(Byte[] value) => BuildTlv(0x02, value);
     private static Byte[] BuildOctetString(Byte[] value) => BuildTlv(0x04, value);
+    private static Byte[] BuildUtcTime(DateTime utc) => BuildTlv(0x17, Encoding.ASCII.GetBytes(utc.ToString("yyMMddHHmmss'Z'", System.Globalization.CultureInfo.InvariantCulture)));
+
+    /// <summary>返回 DER 长度字段占用的字节数（不含标签字节）</summary>
+    private static Int32 LengthBytesCount(Byte[] tlv)
+    {
+        if (tlv.Length < 2) return 1;
+        var first = tlv[1];
+        if (first < 0x80) return 1;
+        return 1 + (first & 0x7F);
+    }
+
+    /// <summary>按无符号字节序比较两段 DER 编码，用于 SET OF 排序</summary>
+    private static Int32 CompareDer(Byte[] x, Byte[] y)
+    {
+        var len = Math.Min(x.Length, y.Length);
+        for (var i = 0; i < len; i++)
+        {
+            if (x[i] != y[i]) return x[i] < y[i] ? -1 : 1;
+        }
+        return x.Length.CompareTo(y.Length);
+    }
     private static Byte[] BuildImplicitTag(Int32 tagNum, Byte[] value) => BuildTlv((Byte)(0xA0 | (tagNum & 0x1F)), value);
     private static Byte[] BuildExplicitTag(Int32 tagNum, Byte[] value) => BuildTlv((Byte)(0xA0 | (tagNum & 0x1F)), value);
 

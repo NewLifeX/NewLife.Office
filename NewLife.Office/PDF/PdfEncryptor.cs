@@ -199,79 +199,138 @@ internal sealed class PdfEncryptor
     #region AES-256 计算（/R 6）
     private static (Byte[] Key, Byte[] O, Byte[] U, Byte[]? OE, Byte[]? UE, Byte[]? Perms) ComputeAes256(String? userPwd, String? ownerPwd, Int32 permissions, Byte[] fid)
     {
-        var uPass = PadPwd(userPwd ?? String.Empty);
-        var oPass = PadPwd(ownerPwd ?? (userPwd ?? String.Empty));
+        // ISO 32000-2：文件加密密钥随机生成，与密码无关；密码只用于包装（OE/UE）
+        var fileKey = new Byte[32];
+        using (var rng = RandomNumberGenerator.Create())
+            rng.GetBytes(fileKey);
 
-        // 生成 256 位加密密钥（SHA-256）
-        var key = ComputeSha256(uPass.Concat(fid).Concat(oPass).ToArray());
+        var uPwd = userPwd ?? String.Empty;
+        var oPwd = ownerPwd ?? uPwd;
 
-        // 计算 U 条目：SHA-256(userPassword + validationSalt) 前 32 字节
-        var validationSalt = key.AsSpan(32, 8).ToArray();
-        var uHash = ComputeSha256(uPass.Concat(validationSalt).ToArray());
+        // U = hash2B(userPwd, uValidationSalt, "") + uValidationSalt + uKeySalt
+        var uValidationSalt = RandomBytes(8);
+        var uKeySalt = RandomBytes(8);
         var u = new Byte[48];
-        Array.Copy(uHash, 0, u, 0, 32);
-        Array.Copy(validationSalt, 0, u, 32, 8);
-        Array.Copy(key, 40, u, 40, 8); // keySalt
+        Array.Copy(Hash2B(uPwd, uValidationSalt, []), 0, u, 0, 32);
+        Array.Copy(uValidationSalt, 0, u, 32, 8);
+        Array.Copy(uKeySalt, 0, u, 40, 8);
 
-        // 计算 O 条目：SHA-256(ownerPassword + validationSalt + u) 前 32 字节
-        var ownerHash = ComputeSha256(oPass.Concat(validationSalt).Concat(u).ToArray());
+        // UE = AES-256(no IV, no padding) 加密 fileKey，密钥为 hash2B(userPwd, uKeySalt, "")
+        var ue = AesNoPadding(Hash2B(uPwd, uKeySalt, []), fileKey, encrypt: true, useIv: false);
+
+        // O = hash2B(ownerPwd, oValidationSalt, U) + oValidationSalt + oKeySalt
+        var oValidationSalt = RandomBytes(8);
+        var oKeySalt = RandomBytes(8);
         var o = new Byte[48];
-        Array.Copy(ownerHash, 0, o, 0, 32);
-        Array.Copy(validationSalt, 0, o, 32, 8);
-        Array.Copy(key, 40, o, 40, 8);
+        Array.Copy(Hash2B(oPwd, oValidationSalt, u), 0, o, 0, 32);
+        Array.Copy(oValidationSalt, 0, o, 32, 8);
+        Array.Copy(oKeySalt, 0, o, 40, 8);
 
-        // 计算 OE 条目：AES-256-CBC 加密 ownerPassword 的 SHA-256
-        Byte[]? oe = null;
-        if (!String.IsNullOrEmpty(ownerPwd))
-        {
-            var oeData = ComputeSha256(oPass);
-            oe = EncryptAes256(key, oeData);
-        }
+        // OE = AES-256(no IV, no padding) 加密 fileKey，密钥为 hash2B(ownerPwd, oKeySalt, U)
+        var oe = AesNoPadding(Hash2B(oPwd, oKeySalt, u), fileKey, encrypt: true, useIv: false);
 
-        // 计算 UE 条目：AES-256-CBC 加密 userPassword 的 SHA-256
-        Byte[]? ue = null;
-        if (!String.IsNullOrEmpty(userPwd))
-        {
-            var ueData = ComputeSha256(uPass);
-            ue = EncryptAes256(key, ueData);
-        }
-
-        // 计算 Perms 条目：AES-256-CBC 加密的权限字节
+        // Perms：4 字节扩展权限 + 4 字节权限 + 'T' 'a' 'd' 'b' + 4 字节随机
         var permsData = new Byte[16];
         var pw = new SpanWriter(permsData, 0, 16);
-        pw.Write(permissions);
-        pw.Write((Byte)0xFF); pw.Write((Byte)0xFF); pw.Write((Byte)0xFF); pw.Write((Byte)0xFF);
-        pw.Write(fid[0] == 0 ? (Byte)0x54 : fid[0]); // 'T'
-        pw.Write(fid[1] == 0 ? (Byte)0x61 : fid[1]); // 'a'
-        pw.Write(fid[2] == 0 ? (Byte)0x64 : fid[2]); // 'd'
-        pw.Write(fid[3] == 0 ? (Byte)0x62 : fid[3]); // 'b'
-        var perms = EncryptAes256(key, permsData);
+        pw.Write(0xFFFFFFFFu);
+        pw.Write((UInt32)permissions);
+        pw.Write((Byte)'T');
+        pw.Write((Byte)'a');
+        pw.Write((Byte)'d');
+        pw.Write((Byte)'b');
+        var tail = RandomBytes(4);
+        pw.Write(tail);
+        var perms = AesNoPadding(fileKey, permsData, encrypt: true, useIv: false);
 
-        return (key, o, u, oe, ue, perms);
+        return (fileKey, o, u, oe, ue, perms);
     }
 
-    private static Byte[] EncryptAes256(Byte[] key, Byte[] data)
+    /// <summary>ISO 32000-2 Algorithm 2.B 密码哈希</summary>
+    private static Byte[] Hash2B(String password, Byte[] salt, Byte[] uData)
+    {
+        // 密码按 UTF-8 处理（PDF 2.0 规定），SASLprep 归一在本库不做
+        var pwd = Encoding.UTF8.GetBytes(password);
+        var k = ComputeSha256(Concat(pwd, salt, uData));
+        var e = new Byte[64];
+        var round = 0;
+        do
+        {
+            // K1 = (password + K + uData) 重复 64 次
+            var block = Concat(pwd, k, uData);
+            var k1 = new Byte[block.Length * 64];
+            for (var i = 0; i < 64; i++)
+                Array.Copy(block, 0, k1, i * block.Length, block.Length);
+
+            // E = AES-128-CBC(无填充) 加密 K1，密钥 K[0..16]，IV K[16..32]
+            using var aes = Aes.Create();
+            aes.Key = k.AsSpan(0, 16).ToArray();
+            aes.IV = k.AsSpan(16, 16).ToArray();
+            aes.Mode = CipherMode.CBC;
+            aes.Padding = PaddingMode.None;
+            using (var enc = aes.CreateEncryptor())
+                e = enc.TransformFinalBlock(k1, 0, k1.Length);
+
+            var mod = 0;
+            for (var i = 0; i < 16; i++) mod += e[i];
+            mod %= 3;
+
+            k = mod switch
+            {
+                0 => ComputeSha256(e),
+                1 => ComputeSha384(e),
+                _ => ComputeSha512(e),
+            };
+            round++;
+        }
+        while (round < 64 || e[e.Length - 1] > round - 32);
+
+        return k.AsSpan(0, 32).ToArray();
+    }
+
+    /// <summary>AES-256 加解密；useIv=false 时使用全零 IV（密钥包装场景）</summary>
+    private static Byte[] AesNoPadding(Byte[] key, Byte[] data, Boolean encrypt, Boolean useIv)
     {
         using var aes = Aes.Create();
-        aes.Key = key;
+        aes.Key = key.AsSpan(0, 32).ToArray();
         aes.Mode = CipherMode.CBC;
-        aes.Padding = PaddingMode.PKCS7;
-        aes.GenerateIV();
+        aes.Padding = PaddingMode.None;
+        aes.IV = useIv ? RandomBytes(16) : new Byte[16];
 
-        var iv = aes.IV;
-        using var encryptor = aes.CreateEncryptor();
-        using var ms = new MemoryStream();
-        ms.Write(iv, 0, iv.Length);
-        using (var cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Write))
+        using var tf = encrypt ? aes.CreateEncryptor() : aes.CreateDecryptor();
+        var result = tf.TransformFinalBlock(data, 0, data.Length);
+        if (!encrypt || !useIv) return result;
+
+        var output = new Byte[16 + result.Length];
+        Array.Copy(aes.IV, 0, output, 0, 16);
+        Array.Copy(result, 0, output, 16, result.Length);
+        return output;
+    }
+
+    private static Byte[] RandomBytes(Int32 count)
+    {
+        var buf = new Byte[count];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(buf);
+        return buf;
+    }
+
+    private static Byte[] Concat(params Byte[][] arrays)
+    {
+        var total = 0;
+        foreach (var a in arrays) total += a.Length;
+        var result = new Byte[total];
+        var offset = 0;
+        foreach (var a in arrays)
         {
-            cs.Write(data, 0, data.Length);
+            Array.Copy(a, 0, result, offset, a.Length);
+            offset += a.Length;
         }
-        return ms.ToArray();
+        return result;
     }
 
     private Byte[] EncryptAes256(Byte[] data, Int32 objNum, Int32 genNum)
     {
-        // AES-256 内容加密：直接使用 _key 加密
+        // ISO 32000-2：AESV3 直接用文件密钥，随机 IV，PKCS#7 填充
         using var aes = Aes.Create();
         aes.Key = _key;
         aes.Mode = CipherMode.CBC;
@@ -293,7 +352,13 @@ internal sealed class PdfEncryptor
     #region 辅助
     private Byte[] ObjKey(Int32 objNum, Int32 genNum)
     {
-        var buf = new Byte[_key.Length + 5];
+        // AESV3（/R 6）不使用对象密钥，直接使用 32 字节文件密钥
+        if (Revision >= CipherRevision.Aes_256) return _key;
+
+        // AESV2（/R 4）需要在密钥派生末尾追加 "sAlT"，否则解出的内容是乱码
+        var salt = Revision == CipherRevision.Aes_128 ? new Byte[] { 0x73, 0x41, 0x6C, 0x54 } : [];
+
+        var buf = new Byte[_key.Length + 5 + salt.Length];
         var writer = new SpanWriter(buf, 0, buf.Length);
         writer.Write(_key);
         writer.Write((Byte)objNum);
@@ -301,10 +366,10 @@ internal sealed class PdfEncryptor
         writer.Write((Byte)(objNum >> 16));
         writer.Write((Byte)genNum);
         writer.Write((Byte)(genNum >> 8));
+        if (salt.Length > 0) writer.Write(salt);
+
         var hash = ComputeMd5(buf);
         var keyLen = Math.Min(hash.Length, _key.Length + 5);
-        // AES-256 时密钥长度固定为 32
-        if (Revision >= CipherRevision.Aes_256) keyLen = 32;
         var result = new Byte[keyLen];
         Array.Copy(hash, result, keyLen);
         return result;
@@ -329,6 +394,18 @@ internal sealed class PdfEncryptor
     private static Byte[] ComputeSha256(Byte[] data)
     {
         using var sha = SHA256.Create();
+        return sha.ComputeHash(data);
+    }
+
+    private static Byte[] ComputeSha384(Byte[] data)
+    {
+        using var sha = SHA384.Create();
+        return sha.ComputeHash(data);
+    }
+
+    private static Byte[] ComputeSha512(Byte[] data)
+    {
+        using var sha = SHA512.Create();
         return sha.ComputeHash(data);
     }
 

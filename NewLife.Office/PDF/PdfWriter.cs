@@ -1387,10 +1387,11 @@ public class PdfWriter : IDisposable
                 {
                     // 预留 8KB 签名空间（十六进制编码）
                     var sigPlaceholder = new String('0', 8192 * 2);
+                    // ByteRange 用固定宽度占位，签名时按同宽度回填，不会移动后续字节
+                    sb.Append("/ByteRange [0 0000000000 0000000000 0000000000]\n");
                     sb.Append($"/Contents <{sigPlaceholder}>\n");
                     sb.Append("/Filter /Adobe.PPKLite\n");
                     sb.Append("/SubFilter /adbe.pkcs7.detached\n");
-                    sb.Append($"/ByteRange [0 0 0 0]\n");
                 }
 
                 sb.Append(">>");
@@ -1458,8 +1459,11 @@ public class PdfWriter : IDisposable
 
             if (r >= 6)
             {
-                // AES-256 (/R 6): 256-bit 密钥
+                // AES-256 (/R 6)：AESV3 密码过滤器，密钥长度以字节计
                 encSb.Append("/Length 256\n");
+                encSb.Append("/CF << /StdCF << /Type /CryptFilter /CFM /AESV3 /AuthEvent /DocOpen /Length 32 >> >>\n");
+                encSb.Append("/StmF /StdCF\n");
+                encSb.Append("/StrF /StdCF\n");
                 encSb.Append($"/O <{oHex}>\n");
                 encSb.Append($"/U <{uHex}>\n");
                 if (enc.OEEntry != null)
@@ -1468,14 +1472,14 @@ public class PdfWriter : IDisposable
                     encSb.Append($"/UE <{BitConverter.ToString(enc.UEEntry).Replace("-", "")}>\n");
                 if (enc.PermsEntry != null)
                     encSb.Append($"/Perms <{BitConverter.ToString(enc.PermsEntry).Replace("-", "")}>\n");
-                encSb.Append("/EncryptMetadata false\n");
             }
             else if (r >= 4)
             {
-                // AES-128 (/R 4): 128-bit 密钥 + EncryptMetadata
+                // AES-128 (/R 4)：必须声明 StdCF 过滤器，否则第三方找不到 /StdCF
                 encSb.Append("/Length 128\n");
-                encSb.Append("/StrF /StdCF\n");
+                encSb.Append("/CF << /StdCF << /Type /CryptFilter /CFM /AESV2 /AuthEvent /DocOpen /Length 16 >> >>\n");
                 encSb.Append("/StmF /StdCF\n");
+                encSb.Append("/StrF /StdCF\n");
                 encSb.Append($"/O <{oHex}>\n");
                 encSb.Append($"/U <{uHex}>\n");
                 encSb.Append("/EncryptMetadata true\n");
