@@ -3414,15 +3414,16 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     }
 
     /// <summary>从 docProps/core.xml 读取文档属性</summary>
+    /// <remarks>命名空间声明可能落在根元素，也可能落在使用它的子元素上（openpyxl、Apache POI 等生成器）。
+    /// 若只按根元素前缀查找会得到 null，随后 XNamespace 拼接抛 ArgumentNullException，因此以 Dublin Core 标准 URI 为准</remarks>
     private static ExcelWriter.ExcelDocumentProperties? ReadCoreProperties(Stream stream)
     {
         var reader = System.Xml.Linq.XDocument.Load(stream);
         var root = reader.Root;
         if (root == null) return null;
 
-        var cpNs = root.GetDefaultNamespace();
-        var dcNs = root.GetNamespaceOfPrefix("dc");
-        var dctermsNs = root.GetNamespaceOfPrefix("dcterms");
+        // 优先采用根元素声明的前缀（兼容非标准 URI 的文件），缺失时按标准 URI 兜底
+        var dcNs = root.GetNamespaceOfPrefix("dc") ?? XNamespace.Get("http://purl.org/dc/elements/1.1/");
 
         var props = new ExcelWriter.ExcelDocumentProperties();
         props.Title = root.Element(dcNs + "title")?.Value;
