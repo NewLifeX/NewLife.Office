@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Security;
 using NewLife.Collections;
 
@@ -57,7 +57,7 @@ partial class ExcelWriter
             // 公式快捷路径
             if (val is CellFormula fval)
             {
-                var fxml = SecurityElement.Escape(fval.Formula) ?? fval.Formula;
+                var fxml = OfficeXml.Escape(fval.Formula) ?? fval.Formula;
                 sb.Append("<c r=\"").Append(cellRef).Append('"');
                 String? fType = null;
                 String fInner;
@@ -69,7 +69,7 @@ partial class ExcelWriter
                         break;
                     case String str:
                         fType = "str";
-                        fInner = SecurityElement.Escape(str) ?? str;
+                        fInner = OfficeXml.Escape(str) ?? str;
                         break;
                     case null:
                         fInner = String.Empty;
@@ -300,10 +300,10 @@ partial class ExcelWriter
                         if (run.Strike) sb.Append("<strike/>");
                         if (run.FontSize > 0) sb.Append("<sz val=\"").Append(run.FontSize).Append("\"/>");
                         if (!run.Color.IsNullOrEmpty()) sb.Append("<color rgb=\"FF").Append(run.Color).Append("\"/>");
-                        if (!run.FontName.IsNullOrEmpty()) sb.Append("<rFont val=\"").Append(SecurityElement.Escape(run.FontName)).Append("\"/>");
+                        if (!run.FontName.IsNullOrEmpty()) sb.Append("<rFont val=\"").Append(OfficeXml.Escape(run.FontName)).Append("\"/>");
                         sb.Append("</rPr>");
                     }
-                    sb.Append("<t xml:space=\"preserve\">").Append(SecurityElement.Escape(run.Text) ?? run.Text).Append("</t></r>");
+                    sb.Append("<t xml:space=\"preserve\">").Append(OfficeXml.Escape(run.Text) ?? run.Text).Append("</t></r>");
                 }
                 sb.Append("</is></c>");
                 if (AutoFitColumnWidth)

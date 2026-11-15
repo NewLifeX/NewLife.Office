@@ -16,6 +16,9 @@ internal sealed class MarkdownParser
     private Int32 _listDepth;
     private MarkdownDocument? _doc;
 
+    /// <summary>引用块嵌套深度，防止 &gt; 层层嵌套导致栈溢出</summary>
+    internal Int32 Depth;
+
     /// <summary>引用链接定义（[id]: url "title"），键为引用标识</summary>
     private Dictionary<String, (String url, String title)> _refs = new(StringComparer.OrdinalIgnoreCase);
 
@@ -559,7 +562,10 @@ internal sealed class MarkdownParser
             return MarkdownBlock.CreateBlockQuote([MarkdownBlock.CreateParagraph(inlines)]);
         }
         // Re-parse quoted content
-        var inner = new MarkdownParser { _refs = _refs, Pipeline = Pipeline };
+        if (Depth + 1 > OfficeLimits.MaxMarkdownQuoteDepth)
+            return MarkdownBlock.CreateBlockQuote([MarkdownBlock.CreateParagraph(ParseInlineWithRefs(String.Join("\n", quotedLines)))]);
+
+        var inner = new MarkdownParser { _refs = _refs, Pipeline = Pipeline, Depth = Depth + 1 };
         var innerDoc = inner.ParseLines(quotedLines);
         return MarkdownBlock.CreateBlockQuote(innerDoc.Blocks);
     }
@@ -845,6 +851,7 @@ internal sealed class MarkdownParser
             _listDepth = _listDepth + 1,
             _refs = _refs,
             Pipeline = Pipeline,
+            Depth = Depth,
         };
         var innerDoc = inner.ParseLines(contentLines, true);
 

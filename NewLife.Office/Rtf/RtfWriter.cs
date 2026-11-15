@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -132,6 +132,8 @@ public sealed class RtfWriter
     /// <param name="stream">目标流</param>
     public void Save(Stream stream)
     {
+        // RTF 控制字的数值必须使用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         var rtf = ToString();
         var bytes = new UTF8Encoding(false).GetBytes(rtf);
         stream.Write(bytes, 0, bytes.Length);

@@ -42,7 +42,7 @@ public sealed class OdsReader
     /// <returns>工作表列表</returns>
     public static List<OdsSheet> Read(Stream stream)
     {
-        using var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+        using var zip = OfficeStreams.OpenReadArchive(stream, leaveOpen: true);
         var entry = zip.GetEntry("content.xml");
         if (entry == null) return [];
 
@@ -120,7 +120,7 @@ public sealed class OdsReader
     {
         var result = new List<OdsSheet>();
         var settings = new XmlReaderSettings { IgnoreWhitespace = false, IgnoreComments = true };
-        using var reader = XmlReader.Create(xmlStream, settings);
+        using var reader = OfficeXml.CreateReader(xmlStream, settings);
 
         OdsSheet? currentSheet = null;
         List<String>? currentRow = null;
@@ -342,7 +342,12 @@ public sealed class OdsReader
     private static Int32 GetRepeatAttr(XmlReader reader, String ns, String localName)
     {
         var val = reader.GetAttribute(localName, ns);
-        return val != null && Int32.TryParse(val, out var n) ? n : 1;
+        if (val == null || !Int32.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n)) return 1;
+        if (n < 1) return 1;
+        if (n > OfficeLimits.MaxOdsRepeatCount)
+            throw new InvalidDataException(L.T("The ODS repeat count '{0}' exceeds the resource limit ({1}).", val, OfficeLimits.MaxOdsRepeatCount));
+
+        return n;
     }
 
     private static String[]? TrimTrailingEmpty(List<String> row)

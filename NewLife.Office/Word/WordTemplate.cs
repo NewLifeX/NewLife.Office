@@ -42,7 +42,7 @@ public class WordTemplate
         var templateBytes = File.ReadAllBytes(TemplatePath);
 
         using var srcMs = new MemoryStream(templateBytes);
-        using var srcZip = new ZipArchive(srcMs, ZipArchiveMode.Read);
+        using var srcZip = OfficeStreams.OpenReadArchive(srcMs);
         using var dstZip = new ZipArchive(outputStream, ZipArchiveMode.Create, leaveOpen: true);
 
         foreach (var entry in srcZip.Entries)
@@ -102,7 +102,7 @@ public class WordTemplate
     {
         var templateBytes = File.ReadAllBytes(TemplatePath);
         using var srcMs = new MemoryStream(templateBytes);
-        using var srcZip = new ZipArchive(srcMs, ZipArchiveMode.Read);
+        using var srcZip = OfficeStreams.OpenReadArchive(srcMs);
         using var dstZip = new ZipArchive(outputStream, ZipArchiveMode.Create, leaveOpen: true);
 
         foreach (var entry in srcZip.Entries)
@@ -156,7 +156,7 @@ public class WordTemplate
     {
         var templateBytes = File.ReadAllBytes(TemplatePath);
         using var srcMs = new MemoryStream(templateBytes);
-        using var srcZip = new ZipArchive(srcMs, ZipArchiveMode.Read);
+        using var srcZip = OfficeStreams.OpenReadArchive(srcMs);
         using var dstZip = new ZipArchive(outputStream, ZipArchiveMode.Create, leaveOpen: true);
 
         var imgReplace = BuildDocxImageMap(srcZip, images);
@@ -211,7 +211,7 @@ public class WordTemplate
         var templateBytes = File.ReadAllBytes(TemplatePath);
 
         using var srcMs = new MemoryStream(templateBytes);
-        using var srcZip = new ZipArchive(srcMs, ZipArchiveMode.Read);
+        using var srcZip = OfficeStreams.OpenReadArchive(srcMs);
         using var dstZip = new ZipArchive(outputStream, ZipArchiveMode.Create, leaveOpen: true);
 
         foreach (var entry in srcZip.Entries)
@@ -264,7 +264,7 @@ public class WordTemplate
         var templateBytes = File.ReadAllBytes(TemplatePath);
 
         using var srcMs = new MemoryStream(templateBytes);
-        using var srcZip = new ZipArchive(srcMs, ZipArchiveMode.Read);
+        using var srcZip = OfficeStreams.OpenReadArchive(srcMs);
         using var dstZip = new ZipArchive(outputStream, ZipArchiveMode.Create, leaveOpen: true);
 
         var docEntry = srcZip.GetEntry("word/document.xml");

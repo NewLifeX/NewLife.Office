@@ -724,7 +724,7 @@ public partial class PptxWriter : IDisposable
     public Int32 CopySlideFrom(Byte[] sourceData, Int32 slideIndex)
     {
         using var ms = new MemoryStream(sourceData);
-        using var srcZip = new ZipArchive(ms, ZipArchiveMode.Read);
+        using var srcZip = OfficeStreams.OpenReadArchive(ms);
         var srcSlideNum = slideIndex + 1;
         var slideEntry = srcZip.GetEntry($"ppt/slides/slide{srcSlideNum}.xml")
             ?? throw new ArgumentOutOfRangeException(nameof(slideIndex), L.T("Slide {0} does not exist in the source file.", slideIndex));
@@ -773,7 +773,7 @@ public partial class PptxWriter : IDisposable
     private String RemapRawSlideRels(ZipArchive srcZip, String relsXml, Int32 outSlideNum)
     {
         var doc = new XmlDocument();
-        doc.LoadXml(relsXml);
+        OfficeXml.LoadXmlInto(doc, relsXml);
         const String PKG = "http://schemas.openxmlformats.org/package/2006/relationships";
         var ns = new XmlNamespaceManager(doc.NameTable);
         ns.AddNamespace("r", PKG);
@@ -856,7 +856,7 @@ public partial class PptxWriter : IDisposable
             String relsXml;
             using (var sr = new StreamReader(relsEntry.Open())) relsXml = sr.ReadToEnd();
             var doc = new XmlDocument();
-            doc.LoadXml(relsXml);
+            OfficeXml.LoadXmlInto(doc, relsXml);
             const String PKG = "http://schemas.openxmlformats.org/package/2006/relationships";
             var ns = new XmlNamespaceManager(doc.NameTable);
             ns.AddNamespace("r", PKG);
@@ -946,7 +946,7 @@ public partial class PptxWriter : IDisposable
         var chartPath = $"ppt/charts/chart{chartNumber}.xml";
         using var srcMs = new MemoryStream(pptxData);
         using var dstMs = new MemoryStream();
-        using (var srcZip = new ZipArchive(srcMs, ZipArchiveMode.Read))
+        using (var srcZip = OfficeStreams.OpenReadArchive(srcMs))
         using (var dstZip = new ZipArchive(dstMs, ZipArchiveMode.Create, leaveOpen: true))
         {
             foreach (var entry in srcZip.Entries)
@@ -977,7 +977,7 @@ public partial class PptxWriter : IDisposable
     private static String PatchChartXml(String xml, List<ChartSeries> series)
     {
         var doc = new System.Xml.XmlDocument();
-        doc.LoadXml(xml);
+        OfficeXml.LoadXmlInto(doc, xml);
         const String C = "http://schemas.openxmlformats.org/drawingml/2006/chart";
         var ns = new System.Xml.XmlNamespaceManager(doc.NameTable);
         ns.AddNamespace("c", C);
@@ -1054,7 +1054,7 @@ public partial class PptxWriter : IDisposable
         for (var fi = 0; fi < sources.Count; fi++)
         {
             using var srcMs = new MemoryStream(sources[fi]);
-            using var srcZip = new ZipArchive(srcMs, ZipArchiveMode.Read);
+            using var srcZip = OfficeStreams.OpenReadArchive(srcMs);
             var mediaRename = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase); // oldFilename -> newFilename
 
             if (fi == 0)
@@ -1213,7 +1213,7 @@ public partial class PptxWriter : IDisposable
         var entry = zip.GetEntry("ppt/presentation.xml");
         if (entry == null) return;
         var doc = new XmlDocument();
-        using (var s = entry.Open()) doc.Load(s);
+        using (var s = entry.Open()) OfficeXml.LoadInto(doc, s);
         var sldSz = doc.SelectSingleNode("//*[local-name()='sldSz']") as XmlElement;
         if (sldSz == null) return;
         if (Int64.TryParse(sldSz.GetAttribute("cx"), out var cx)) width = cx;
@@ -1241,7 +1241,7 @@ public partial class PptxWriter : IDisposable
         HashSet<Int32> commentSlides, ref Boolean commentAuthorsDone)
     {
         var doc = new XmlDocument();
-        doc.LoadXml(relsXml);
+        OfficeXml.LoadXmlInto(doc, relsXml);
         const String PKG = "http://schemas.openxmlformats.org/package/2006/relationships";
         var ns = new XmlNamespaceManager(doc.NameTable);
         ns.AddNamespace("r", PKG);
@@ -1362,7 +1362,7 @@ public partial class PptxWriter : IDisposable
             String relsXml;
             using (var sr = new StreamReader(relsEntry.Open())) relsXml = sr.ReadToEnd();
             var doc = new XmlDocument();
-            doc.LoadXml(relsXml);
+            OfficeXml.LoadXmlInto(doc, relsXml);
             const String PKG = "http://schemas.openxmlformats.org/package/2006/relationships";
             var ns = new XmlNamespaceManager(doc.NameTable);
             ns.AddNamespace("r", PKG);
@@ -1552,7 +1552,7 @@ public partial class PptxWriter : IDisposable
         _templateThemeBytes = null;
 
         using var ms = new MemoryStream(templateBytes);
-        using var zip = new ZipArchive(ms, ZipArchiveMode.Read);
+        using var zip = OfficeStreams.OpenReadArchive(ms);
 
         // 加载母版（按文件名数值排序，避免 slideMaster10 排在 slideMaster2 前面）
         var masterEntries = zip.Entries

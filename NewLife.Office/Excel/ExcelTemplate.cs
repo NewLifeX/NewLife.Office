@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Security;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -47,6 +47,7 @@ public class ExcelTemplate
         // 打开输出文件进行修改
         using var fs = new FileStream(outputPath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
         using var za = new ZipArchive(fs, ZipArchiveMode.Update, false, Encoding);
+        OfficeStreams.ValidateArchive(za);
 
         // 替换共享字符串中的占位符
         ReplaceInSharedStrings(za, data);
@@ -77,6 +78,7 @@ public class ExcelTemplate
         output.Position = 0;
 
         using var za = new ZipArchive(output, ZipArchiveMode.Update, true, Encoding);
+        OfficeStreams.ValidateArchive(za);
 
         ReplaceInSharedStrings(za, data);
 
@@ -137,7 +139,7 @@ public class ExcelTemplate
             var key = m.Groups[1].Value;
             if (data.TryGetValue(key, out var val))
             {
-                return SecurityElement.Escape(val?.ToString() ?? "") ?? "";
+                return OfficeXml.Escape(val?.ToString() ?? "") ?? "";
             }
             return m.Value; // 未匹配的占位符保持原样
         });

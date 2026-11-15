@@ -126,6 +126,8 @@ public sealed class OdsWriter
     /// <param name="stream">输出流</param>
     public void Save(Stream stream)
     {
+        // ODS 数值样式必须使用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         using var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
         WriteMimetype(zip);
         WriteManifest(zip);
@@ -284,21 +286,15 @@ public sealed class OdsWriter
             return;
         }
 
-        if (Double.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out var num))
+        // 仅当文本是数值的规范写法时才按数值写出，"00123"/"1.50" 等保留为字符串，避免第三方读回时丢格式
+        if (Double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var num) &&
+            num.ToString(CultureInfo.InvariantCulture) == value)
         {
             w.WriteLine($@"          <table:table-cell{sAttr} office:value-type=""float"" office:value=""{num.ToString(CultureInfo.InvariantCulture)}""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
             return;
         }
 
-        if (value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
-            value.Equals("false", StringComparison.OrdinalIgnoreCase))
-        {
-            var boolVal = value.ToLowerInvariant();
-            w.WriteLine($@"          <table:table-cell{sAttr} office:value-type=""boolean"" office:boolean-value=""{boolVal}""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
-            return;
-        }
-
-        // 默认字符串
+        // 默认字符串（布尔字面量也按字符串写出，避免 "true" 之类的文本被第三方读成布尔值）
         w.WriteLine($@"          <table:table-cell{sAttr} office:value-type=""string""><text:p>{XmlEncode(value)}</text:p></table:table-cell>");
     }
     #endregion
@@ -307,14 +303,6 @@ public sealed class OdsWriter
     private static String GetStyleKey(OdsCellStyle s) =>
         $"{(s.FontBold ? 1 : 0)}|{(s.FontItalic ? 1 : 0)}|{s.FontSize:F1}|{s.FontColor ?? ""}|{s.BackgroundColor ?? ""}|{s.HAlign ?? ""}";
 
-    private static String XmlEncode(String text)
-    {
-        if (String.IsNullOrEmpty(text)) return text;
-        return text.Replace("&", "&amp;")
-                   .Replace("<", "&lt;")
-                   .Replace(">", "&gt;")
-                   .Replace("\"", "&quot;")
-                   .Replace("'", "&apos;");
-    }
+    private static String XmlEncode(String text) => OfficeXml.Escape(text);
     #endregion
 }

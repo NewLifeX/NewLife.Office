@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using System.Text;
 
 namespace NewLife.Office.Epub;
@@ -225,8 +225,7 @@ public class EpubWriter
     private static String ItemId(String fileName) =>
         "item-" + Path.GetFileNameWithoutExtension(fileName).Replace(" ", "-");
 
-    private static String XmlEscape(String s) =>
-        s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;").Replace("\"", "&quot;");
+    private static String XmlEscape(String s) => OfficeXml.Escape(s);
 
     #endregion
 }

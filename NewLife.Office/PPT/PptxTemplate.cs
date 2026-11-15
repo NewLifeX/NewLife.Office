@@ -41,7 +41,7 @@ public class PptxTemplate
     {
         var templateBytes = File.ReadAllBytes(TemplatePath);
         using var srcMs = new MemoryStream(templateBytes);
-        using var srcZip = new ZipArchive(srcMs, ZipArchiveMode.Read);
+        using var srcZip = OfficeStreams.OpenReadArchive(srcMs);
         using var dstZip = new ZipArchive(outputStream, ZipArchiveMode.Create, leaveOpen: true);
 
         foreach (var entry in srcZip.Entries)
@@ -102,7 +102,7 @@ public class PptxTemplate
     {
         var templateBytes = File.ReadAllBytes(TemplatePath);
         using var srcMs = new MemoryStream(templateBytes);
-        using var srcZip = new ZipArchive(srcMs, ZipArchiveMode.Read);
+        using var srcZip = OfficeStreams.OpenReadArchive(srcMs);
         using var dstZip = new ZipArchive(outputStream, ZipArchiveMode.Create, leaveOpen: true);
 
         foreach (var entry in srcZip.Entries)
@@ -162,7 +162,7 @@ public class PptxTemplate
     {
         var templateBytes = File.ReadAllBytes(TemplatePath);
         using var srcMs = new MemoryStream(templateBytes);
-        using var srcZip = new ZipArchive(srcMs, ZipArchiveMode.Read);
+        using var srcZip = OfficeStreams.OpenReadArchive(srcMs);
         using var dstZip = new ZipArchive(outputStream, ZipArchiveMode.Create, leaveOpen: true);
 
         // Build map: "ppt/media/imageN.xxx" -> new bytes

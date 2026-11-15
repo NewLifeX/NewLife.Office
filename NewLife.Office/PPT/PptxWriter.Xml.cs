@@ -1,4 +1,4 @@
-﻿using System.IO.Compression;
+using System.IO.Compression;
 using NewLife.Office.Word;
 using System.Text;
 
@@ -55,6 +55,8 @@ partial class PptxWriter
     /// <param name="stream">目标流</param>
     public void Save(Stream stream)
     {
+        // OOXML 数值必须使用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         using var za = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
         WriteContentTypes(za);
         WriteRels(za);
@@ -1758,7 +1760,7 @@ partial class PptxWriter
         try
         {
             var doc = new System.Xml.XmlDocument();
-            doc.LoadXml(layoutXml);
+            OfficeXml.LoadXmlInto(doc, layoutXml);
             var cSld = doc.DocumentElement?.SelectSingleNode("//*[local-name()='cSld']") as System.Xml.XmlElement;
             if (cSld != null)
             {
@@ -1974,10 +1976,7 @@ partial class PptxWriter
         return $"<a:accent{index + 1}><a:srgbClr val=\"{color}\"/></a:accent{index + 1}>";
     }
 
-    private static String EscXml(String s) =>
-        s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
-         .Replace("\"", "&quot;").Replace("'", "&apos;")
-         .Replace("\r", "&#xD;");
+    private static String EscXml(String s) => OfficeXml.Escape(s).Replace("\r", "&#xD;");
 
     /// <summary>把对齐值归一化为 ST_TextAlignType 合法取值</summary>
     /// <remarks>

@@ -80,6 +80,8 @@ public class PdfXRefTable
     private void ParseXRefChain(Byte[] data, Encoding latin1, String text, Int64 xrefOffset, HashSet<Int64> visited)
     {
         if (!visited.Add(xrefOffset) || xrefOffset >= data.Length) return;
+        if (visited.Count > OfficeLimits.MaxNestingDepth)
+            throw new InvalidDataException(L.T("The PDF cross-reference chain exceeds the limit ({0}).", OfficeLimits.MaxNestingDepth));
 
         // 检查是否为 xref 流对象（PDF 1.5+ 格式）
         // xref 流对象以 "NNN 0 obj" 开头，字典中含 /Type /XRef
@@ -122,7 +124,7 @@ public class PdfXRefTable
                 break;
 
             // 避免无效的巨型 section
-            if (count > 5000000) break;
+            if (count > OfficeLimits.MaxPdfObjects) break;
 
             // 读取 count 条 xref 条目（每行 20 字节："NNNNNNNNNN GGGGG eol\n"）
             for (var i = 0; i < count && sectionStart + 19 < data.Length; i++)
@@ -146,6 +148,9 @@ public class PdfXRefTable
                     var inUse = entryStatus == 'n';
                     if (!Entries.ContainsKey(objNum))
                     {
+                        if (Entries.Count >= OfficeLimits.MaxPdfObjects)
+                            throw new InvalidDataException(L.T("The PDF contains too many objects ({0}).", OfficeLimits.MaxPdfObjects));
+
                         Entries[objNum] = new XRefEntry
                         {
                             Offset = off,
@@ -162,7 +167,7 @@ public class PdfXRefTable
             var peekText = text.Substring(sectionStart, Math.Min(20, text.Length - sectionStart)).Trim();
             // 跳过空格看是否数字开头
             var peekParts = peekText.Split(' ');
-            if (peekParts.Length < 2 || !Int32.TryParse(peekParts[0], out _) || !Int32.TryParse(peekParts[1], out var nextCount) || nextCount <= 0 || nextCount > 5000000)
+            if (peekParts.Length < 2 || !Int32.TryParse(peekParts[0], out _) || !Int32.TryParse(peekParts[1], out var nextCount) || nextCount <= 0 || nextCount > OfficeLimits.MaxPdfObjects)
                 break;
         }
 

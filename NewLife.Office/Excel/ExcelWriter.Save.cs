@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using System.IO.Compression;
 using System.Security;
 using System.Xml.Linq;
@@ -397,7 +397,7 @@ partial class ExcelWriter
     {
         sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
         sw.Write("<table xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"");
-        var eName = SecurityElement.Escape(tbl.Name) ?? tbl.Name;
+        var eName = OfficeXml.Escape(tbl.Name) ?? tbl.Name;
         sw.Write($" id=\"{tableId}\" name=\"{eName}\" displayName=\"{eName}\" ref=\"{tbl.Range}\">");
 
         // autoFilter（仅当有筛选按钮时）
@@ -410,14 +410,14 @@ partial class ExcelWriter
         for (var c = 0; c < colCount; c++)
         {
             var colName = tbl.ColumnNames != null && c < tbl.ColumnNames.Length
-                ? SecurityElement.Escape(tbl.ColumnNames[c]) ?? tbl.ColumnNames[c]
+                ? OfficeXml.Escape(tbl.ColumnNames[c]) ?? tbl.ColumnNames[c]
                 : $"Column{c + 1}";
             sw.Write($"<tableColumn id=\"{c + 1}\" name=\"{colName}\"/>");
         }
         sw.Write("</tableColumns>");
 
         // 样式
-        var styleName = tbl.StyleName.IsNullOrEmpty() ? "TableStyleMedium9" : SecurityElement.Escape(tbl.StyleName) ?? tbl.StyleName;
+        var styleName = tbl.StyleName.IsNullOrEmpty() ? "TableStyleMedium9" : OfficeXml.Escape(tbl.StyleName) ?? tbl.StyleName;
         var first  = tbl.ShowFirstColumn ? "1" : "0";
         var last   = tbl.ShowLastColumn  ? "1" : "0";
         var rowStr = tbl.ShowRowStripes  ? "1" : "0";
@@ -471,7 +471,7 @@ partial class ExcelWriter
         sw.Write("<c:chart>");
         if (!chart.Title.IsNullOrEmpty())
         {
-            var et = SecurityElement.Escape(chart.Title!) ?? chart.Title;
+            var et = OfficeXml.Escape(chart.Title!) ?? chart.Title;
             sw.Write($"<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang=\"zh-CN\"/><a:t>{et}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val=\"0\"/></c:title>");
         }
         sw.Write("<c:autoTitleDeleted val=\"0\"/>");
@@ -500,7 +500,7 @@ partial class ExcelWriter
             var color = serColors[si % serColors.Length];
             sw.Write("<c:ser>");
             sw.Write($"<c:idx val=\"{si}\"/><c:order val=\"{si}\"/>");
-            var eName = SecurityElement.Escape(ser.Name) ?? ser.Name ?? "";
+            var eName = OfficeXml.Escape(ser.Name) ?? ser.Name ?? "";
             sw.Write($"<c:tx><c:strRef><c:f/><c:strCache><c:ptCount val=\"1\"/><c:pt idx=\"0\"><c:v>{eName}</c:v></c:pt></c:strCache></c:strRef></c:tx>");
             sw.Write($"<c:spPr><a:solidFill><a:srgbClr val=\"{color}\"/></a:solidFill></c:spPr>");
             if (categories.Length > 0)
@@ -508,7 +508,7 @@ partial class ExcelWriter
                 sw.Write("<c:cat><c:strRef><c:f/><c:strCache>");
                 sw.Write($"<c:ptCount val=\"{categories.Length}\"/>");
                 for (var ci = 0; ci < categories.Length; ci++)
-                    sw.Write($"<c:pt idx=\"{ci}\"><c:v>{SecurityElement.Escape(categories[ci]) ?? categories[ci]}</c:v></c:pt>");
+                    sw.Write($"<c:pt idx=\"{ci}\"><c:v>{OfficeXml.Escape(categories[ci]) ?? categories[ci]}</c:v></c:pt>");
                 sw.Write("</c:strCache></c:strRef></c:cat>");
             }
             sw.Write("<c:val><c:numRef><c:f/><c:numCache>");
@@ -583,6 +583,9 @@ partial class ExcelWriter
     /// <summary>保存到文件或目标流</summary>
     public void Save()
     {
+        // OOXML 数值必须使用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
+
         // 若未写任何 sheet，创建一个空的默认工作表，避免生成非法 workbook
         if (_sheetNames.Count == 0) EnsureSheet(SheetName);
 
@@ -787,7 +790,7 @@ partial class ExcelWriter
             sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\"><sheets>");
             for (var i = 0; i < _sheetNames.Count; i++)
             {
-                var name = SecurityElement.Escape(_sheetNames[i]) ?? _sheetNames[i];
+                var name = OfficeXml.Escape(_sheetNames[i]) ?? _sheetNames[i];
                 var stateAttr = _sheetStates.TryGetValue(_sheetNames[i], out var st) ? $" state=\"{st}\"" : "";
                 sw.Write($"<sheet name=\"{name}\" sheetId=\"{i + 1}\" r:id=\"rId{i + 1}\"{stateAttr}/>");
             }
@@ -800,13 +803,13 @@ partial class ExcelWriter
                 foreach (var si in sheetsWithPrintTitles)
                 {
                     var ps = _sheetPageSetups[_sheetNames[si]];
-                    var sn = SecurityElement.Escape(_sheetNames[si]) ?? _sheetNames[si];
+                    var sn = OfficeXml.Escape(_sheetNames[si]) ?? _sheetNames[si];
                     sw.Write($"<definedName name=\"_xlnm.Print_Titles\" localSheetId=\"{si}\">'{sn}'!${ps.PrintTitleStartRow}:${ps.PrintTitleEndRow}</definedName>");
                 }
                 foreach (var (dnName, dnFormula) in _definedNames)
                 {
-                    var en = SecurityElement.Escape(dnName) ?? dnName;
-                    var ef = SecurityElement.Escape(dnFormula) ?? dnFormula;
+                    var en = OfficeXml.Escape(dnName) ?? dnName;
+                    var ef = OfficeXml.Escape(dnFormula) ?? dnFormula;
                     sw.Write($"<definedName name=\"{en}\">{ef}</definedName>");
                 }
                 sw.Write("</definedNames>");
@@ -852,7 +855,7 @@ partial class ExcelWriter
             sw.Write($"<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><sst xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" count=\"{_sharedCount}\" uniqueCount=\"{_shared.Count}\">");
             foreach (var kv in _shared.OrderBy(e => e.Value))
             {
-                var txt = SecurityElement.Escape(kv.Key) ?? String.Empty;
+                var txt = OfficeXml.Escape(kv.Key) ?? String.Empty;
                 sw.Write("<si><t>");
                 sw.Write(txt);
                 sw.Write("</t></si>");
@@ -1023,22 +1026,22 @@ partial class ExcelWriter
                     switch (cf.Type)
                     {
                         case ConditionalFormatValues.GreaterThan:
-                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"greaterThan\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"greaterThan\"><formula>{OfficeXml.Escape(cf.Value)}</formula></cfRule>");
                             break;
                         case ConditionalFormatValues.LessThan:
-                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"lessThan\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"lessThan\"><formula>{OfficeXml.Escape(cf.Value)}</formula></cfRule>");
                             break;
                         case ConditionalFormatValues.Equal:
-                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"equal\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"equal\"><formula>{OfficeXml.Escape(cf.Value)}</formula></cfRule>");
                             break;
                         case ConditionalFormatValues.Between:
-                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"between\"><formula>{SecurityElement.Escape(cf.Value)}</formula><formula>{SecurityElement.Escape(cf.Value2)}</formula></cfRule>");
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"between\"><formula>{OfficeXml.Escape(cf.Value)}</formula><formula>{OfficeXml.Escape(cf.Value2)}</formula></cfRule>");
                             break;
                         case ConditionalFormatValues.NotEqual:
-                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"notEqual\"><formula>{SecurityElement.Escape(cf.Value)}</formula></cfRule>");
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"notEqual\"><formula>{OfficeXml.Escape(cf.Value)}</formula></cfRule>");
                             break;
                         case ConditionalFormatValues.NotBetween:
-                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"notBetween\"><formula>{SecurityElement.Escape(cf.Value)}</formula><formula>{SecurityElement.Escape(cf.Value2)}</formula></cfRule>");
+                            sw.Write($"<cfRule type=\"cellIs\" dxfId=\"{ruleDxfId}\" priority=\"{priority++}\" operator=\"notBetween\"><formula>{OfficeXml.Escape(cf.Value)}</formula><formula>{OfficeXml.Escape(cf.Value2)}</formula></cfRule>");
                             break;
                         case ConditionalFormatValues.DataBar:
                             sw.Write($"<cfRule type=\"dataBar\" priority=\"{priority++}\"><dataBar><cfvo type=\"min\"/><cfvo type=\"max\"/><color rgb=\"FF{cf.Color ?? "4472C4"}\"/></dataBar></cfRule>");
@@ -1051,7 +1054,7 @@ partial class ExcelWriter
                                 var its = cf.IconSetType ?? "3Arrows";
                                 var count = its[0] - '0'; // 取前缀数字
                                 if (count < 3 || count > 5) count = 3;
-                                sw.Write($"<cfRule type=\"iconSet\" priority=\"{priority++}\"><iconSet iconSet=\"{SecurityElement.Escape(its)}\">");
+                                sw.Write($"<cfRule type=\"iconSet\" priority=\"{priority++}\"><iconSet iconSet=\"{OfficeXml.Escape(its)}\">");
                                 for (var p = 0; p < count; p++)
                                 {
                                     var pct = p == 0 ? 0 : (Int32)Math.Round(100.0 * p / count);
@@ -1062,7 +1065,7 @@ partial class ExcelWriter
                             }
                         case ConditionalFormatValues.Expression:
                             {
-                                var esc = SecurityElement.Escape(cf.Formula) ?? cf.Formula ?? String.Empty;
+                                var esc = OfficeXml.Escape(cf.Formula) ?? cf.Formula ?? String.Empty;
                                 var dxfAttr = HasDxfStyle(cf) ? $" dxfId=\"{ruleDxfId}\"" : String.Empty;
                                 sw.Write($"<cfRule type=\"expression\"{dxfAttr} priority=\"{priority++}\"><formula>{esc}</formula></cfRule>");
                                 break;
@@ -1080,15 +1083,15 @@ partial class ExcelWriter
                 {
                     if (v.Items != null)
                     {
-                        var formula = "\"" + String.Join(",", v.Items.Select(e => SecurityElement.Escape(e))) + "\"";
+                        var formula = "\"" + String.Join(",", v.Items.Select(e => OfficeXml.Escape(e))) + "\"";
                         sw.Write($"<dataValidation type=\"list\" allowBlank=\"1\" showInputMessage=\"1\" showErrorMessage=\"1\" sqref=\"{v.CellRange}\"><formula1>{formula}</formula1></dataValidation>");
                     }
                     else if (!v.ValidationType.IsNullOrEmpty())
                     {
                         var op = v.Operator ?? "between";
                         sw.Write($"<dataValidation type=\"{v.ValidationType}\" operator=\"{op}\" allowBlank=\"1\" showInputMessage=\"1\" showErrorMessage=\"1\" sqref=\"{v.CellRange}\">");
-                        sw.Write($"<formula1>{SecurityElement.Escape(v.Formula1 ?? "0")}</formula1>");
-                        if (!v.Formula2.IsNullOrEmpty()) sw.Write($"<formula2>{SecurityElement.Escape(v.Formula2!)}</formula2>");
+                        sw.Write($"<formula1>{OfficeXml.Escape(v.Formula1 ?? "0")}</formula1>");
+                        if (!v.Formula2.IsNullOrEmpty()) sw.Write($"<formula2>{OfficeXml.Escape(v.Formula2!)}</formula2>");
                         sw.Write("</dataValidation>");
                     }
                 }
@@ -1104,7 +1107,7 @@ partial class ExcelWriter
                     var hl = hyperlinks[h];
                     var cellRef = MakeCellRef(hl.Row - 1, hl.Col);
                     sw.Write($"<hyperlink ref=\"{cellRef}\" r:id=\"rHl{h + 1}\"");
-                    if (!hl.Display.IsNullOrEmpty()) sw.Write($" display=\"{SecurityElement.Escape(hl.Display)}\"");
+                    if (!hl.Display.IsNullOrEmpty()) sw.Write($" display=\"{OfficeXml.Escape(hl.Display)}\"");
                     sw.Write("/>");
                 }
                 sw.Write("</hyperlinks>");
@@ -1121,8 +1124,8 @@ partial class ExcelWriter
                 if (!pageSetup.HeaderText.IsNullOrEmpty() || !pageSetup.FooterText.IsNullOrEmpty())
                 {
                     sw.Write("<headerFooter>");
-                    if (!pageSetup.HeaderText.IsNullOrEmpty()) sw.Write($"<oddHeader>{SecurityElement.Escape(pageSetup.HeaderText)}</oddHeader>");
-                    if (!pageSetup.FooterText.IsNullOrEmpty()) sw.Write($"<oddFooter>{SecurityElement.Escape(pageSetup.FooterText)}</oddFooter>");
+                    if (!pageSetup.HeaderText.IsNullOrEmpty()) sw.Write($"<oddHeader>{OfficeXml.Escape(pageSetup.HeaderText)}</oddHeader>");
+                    if (!pageSetup.FooterText.IsNullOrEmpty()) sw.Write($"<oddFooter>{OfficeXml.Escape(pageSetup.FooterText)}</oddFooter>");
                     sw.Write("</headerFooter>");
                 }
             }
@@ -1244,7 +1247,7 @@ partial class ExcelWriter
                 {
                     for (var h = 0; h < rels.Count; h++)
                     {
-                        rsw.Write($"<Relationship Id=\"rHl{h + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"{SecurityElement.Escape(rels[h].Url)}\" TargetMode=\"External\"/>");
+                        rsw.Write($"<Relationship Id=\"rHl{h + 1}\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" Target=\"{OfficeXml.Escape(rels[h].Url)}\" TargetMode=\"External\"/>");
                     }
                 }
                 if (sheetsWithImages.Contains(i) || sheetsWithCharts.ContainsKey(i))
@@ -1398,7 +1401,7 @@ partial class ExcelWriter
                 csw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
                 csw.Write("<comments xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
                 csw.Write("<authors>");
-                foreach (var a in authors) csw.Write($"<author>{SecurityElement.Escape(a)}</author>");
+                foreach (var a in authors) csw.Write($"<author>{OfficeXml.Escape(a)}</author>");
                 csw.Write("</authors><commentList>");
                 foreach (var c in comments)
                 {
@@ -1420,17 +1423,17 @@ partial class ExcelWriter
                                 if (seg.Italic) csw.Write("<i/>");
                                 if (seg.FontSize > 0) csw.Write($"<sz val=\"{seg.FontSize:0.##}\"/>");
                                 if (!String.IsNullOrEmpty(seg.Color)) csw.Write($"<color rgb=\"{seg.Color}\"/>");
-                                if (!String.IsNullOrEmpty(seg.FontName)) csw.Write($"<rFont val=\"{SecurityElement.Escape(seg.FontName)}\"/>");
+                                if (!String.IsNullOrEmpty(seg.FontName)) csw.Write($"<rFont val=\"{OfficeXml.Escape(seg.FontName)}\"/>");
                                 csw.Write("</rPr>");
                             }
-                            csw.Write($"<t xml:space=\"preserve\">{SecurityElement.Escape(seg.Text)}</t>");
+                            csw.Write($"<t xml:space=\"preserve\">{OfficeXml.Escape(seg.Text)}</t>");
                             csw.Write("</r>");
                         }
                         csw.Write("</text>");
                     }
                     else
                     {
-                        csw.Write($"<text><r><t xml:space=\"preserve\">{SecurityElement.Escape(c.Text)}</t></r></text>");
+                        csw.Write($"<text><r><t xml:space=\"preserve\">{OfficeXml.Escape(c.Text)}</t></r></text>");
                     }
                     csw.Write("</comment>");
                 }
@@ -1473,9 +1476,9 @@ partial class ExcelWriter
                 foreach (var kv in personMap)
                 {
                     var tc = _threadedComments.FirstOrDefault(c => c.Author + "\u0001" + (c.UserId ?? "") == kv.Key);
-                    var disp = SecurityElement.Escape(tc?.Author ?? kv.Key.Split('\u0001')[0]) ?? "";
+                    var disp = OfficeXml.Escape(tc?.Author ?? kv.Key.Split('\u0001')[0]) ?? "";
                     var uid = tc?.UserId ?? "";
-                    psw.Write($"<person displayName=\"{disp}\" id=\"{kv.Value}\" userId=\"{SecurityElement.Escape(uid)}\" providerId=\"None\"/>");
+                    psw.Write($"<person displayName=\"{disp}\" id=\"{kv.Value}\" userId=\"{OfficeXml.Escape(uid)}\" providerId=\"None\"/>");
                 }
                 psw.Write("</personList>");
             }
@@ -1496,7 +1499,7 @@ partial class ExcelWriter
                     tcsw.Write($"<threadedComment ref=\"{cellRef}\" personId=\"{tc.PersonId}\" dT=\"{tc.Time.ToUniversalTime():yyyy-MM-ddTHH:mm:ssZ}\" id=\"{tc.Id}\"");
                     if (!tc.ParentId.IsNullOrEmpty()) tcsw.Write($" parentId=\"{tc.ParentId}\"");
                     tcsw.Write(">");
-                    tcsw.Write($"<text>{SecurityElement.Escape(tc.Text)}</text>");
+                    tcsw.Write($"<text>{OfficeXml.Escape(tc.Text)}</text>");
                     tcsw.Write("<mentions/>");
                     tcsw.Write("</threadedComment>");
                 }
@@ -1534,7 +1537,7 @@ partial class ExcelWriter
                 using (var scsw = new StreamWriter(za.CreateEntry($"xl/slicerCaches/slicerCache{si + 1}.xml").Open(), Encoding))
                 {
                     scsw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
-                    scsw.Write($"<slicerCacheDefinition xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\" name=\"{SecurityElement.Escape(cacheName)}\" sourceName=\"{SecurityElement.Escape(slicer.TableName)}\">");
+                    scsw.Write($"<slicerCacheDefinition xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\" name=\"{OfficeXml.Escape(cacheName)}\" sourceName=\"{OfficeXml.Escape(slicer.TableName)}\">");
                     scsw.Write($"<data><tabular pivotCacheId=\"0\" sortOrder=\"ascending\"><items count=\"{items.Count}\">");
                     for (var x = 0; x < items.Count; x++)
                         scsw.Write($"<i x=\"{x}\" s=\"0\"/>");
@@ -1547,7 +1550,7 @@ partial class ExcelWriter
                 {
                     ssw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
                     ssw.Write("<slicers xmlns=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\">");
-                    ssw.Write($"<slicer name=\"{SecurityElement.Escape(slicer.Name)}\" cache=\"{SecurityElement.Escape(cacheName)}\" caption=\"{SecurityElement.Escape(slicer.Caption)}\" style=\"{SecurityElement.Escape(slicer.Style)}\" rowHeight=\"138\" columnCount=\"1\" showCaption=\"1\"/>");
+                    ssw.Write($"<slicer name=\"{OfficeXml.Escape(slicer.Name)}\" cache=\"{OfficeXml.Escape(cacheName)}\" caption=\"{OfficeXml.Escape(slicer.Caption)}\" style=\"{OfficeXml.Escape(slicer.Style)}\" rowHeight=\"138\" columnCount=\"1\" showCaption=\"1\"/>");
                     ssw.Write("</slicers>");
                 }
             }
@@ -1654,7 +1657,7 @@ partial class ExcelWriter
             sw.Write($"<numFmts count=\"{_numFmtMap.Count}\">");
             foreach (var kv in _numFmtMap)
             {
-                sw.Write($"<numFmt numFmtId=\"{kv.Value}\" formatCode=\"{SecurityElement.Escape(kv.Key)}\"/>");
+                sw.Write($"<numFmt numFmtId=\"{kv.Value}\" formatCode=\"{OfficeXml.Escape(kv.Key)}\"/>");
             }
             sw.Write("</numFmts>");
         }
@@ -1679,7 +1682,7 @@ partial class ExcelWriter
             if (!f.VerticalAlign.IsNullOrEmpty()) sw.Write($"<vertAlign val=\"{f.VerticalAlign}\"/>");
             if (f.Size > 0) sw.Write($"<sz val=\"{f.Size}\"/>");
             WriteColorXml(sw, f.Color);
-            if (!f.Name.IsNullOrEmpty()) sw.Write($"<name val=\"{SecurityElement.Escape(f.Name)}\"/>");
+            if (!f.Name.IsNullOrEmpty()) sw.Write($"<name val=\"{OfficeXml.Escape(f.Name)}\"/>");
             sw.Write("</font>");
         }
         sw.Write("</fonts>");

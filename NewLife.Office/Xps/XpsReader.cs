@@ -67,7 +67,7 @@ public class XpsReader
     /// <returns>页面列表</returns>
     public List<XpsPage> Read(Stream stream)
     {
-        using var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+        using var zip = OfficeStreams.OpenReadArchive(stream, leaveOpen: true);
         var pageUris = DiscoverPageUris(zip);
         var pages = new List<XpsPage>();
         foreach (var uri in pageUris)
@@ -92,7 +92,7 @@ public class XpsReader
     /// <returns>文档属性</returns>
     public XpsProperties ReadProperties(Stream stream)
     {
-        using var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+        using var zip = OfficeStreams.OpenReadArchive(stream, leaveOpen: true);
         return ReadDocProps(zip);
     }
 
@@ -110,7 +110,7 @@ public class XpsReader
     /// <returns>（相对路径, 字节数组）序列</returns>
     public IEnumerable<(String Path, Byte[] Data)> ExtractImages(Stream stream)
     {
-        using var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+        using var zip = OfficeStreams.OpenReadArchive(stream, leaveOpen: true);
         var results = new List<(String, Byte[])>();
         foreach (var entry in zip.Entries)
         {
@@ -266,7 +266,7 @@ public class XpsReader
     {
         var doc = new XmlDocument { XmlResolver = null };
         using var s = entry.Open();
-        doc.Load(s);
+        OfficeXml.LoadInto(doc, s);
         return doc;
     }
 

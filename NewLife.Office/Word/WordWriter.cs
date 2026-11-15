@@ -565,6 +565,8 @@ public class WordWriter : IDisposable
     /// <param name="stream">目标流</param>
     public void Save(Stream stream)
     {
+        // OOXML 数值必须使用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         using var za = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true, entryNameEncoding: Encoding);
 
         // 汇总页眉/页脚部件槽位（文档级 + 各节独立），后续 sectPr/部件/rels/Content_Types 均按槽位输出
@@ -883,7 +885,7 @@ public class WordWriter : IDisposable
     /// <returns>无 BOM 前缀的文本</returns>
     private static String DecodeText(Byte[] bytes) => Encoding.UTF8.GetString(bytes).TrimStart('\uFEFF');
 
-    private static String Esc(String? s) => s == null ? String.Empty : (SecurityElement.Escape(s) ?? s);
+    private static String Esc(String? s) => s == null ? String.Empty : (OfficeXml.Escape(s) ?? s);
 
     /// <summary>将阴影偏移量转换为 OOXML w14:dir 角度（1/60000 度单位，顺时针从顶部量起）</summary>
     private static Int32 ShadowDirToAngle(Int64 dx, Int64 dy)
@@ -1381,7 +1383,7 @@ public class WordWriter : IDisposable
         try
         {
             var doc = new XmlDocument();
-            doc.LoadXml(settingsXml);
+            OfficeXml.LoadXmlInto(doc, settingsXml);
             var ns = new XmlNamespaceManager(doc.NameTable);
             ns.AddNamespace("w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
             var docVars = doc.SelectSingleNode("//w:docVars", ns) as XmlElement;

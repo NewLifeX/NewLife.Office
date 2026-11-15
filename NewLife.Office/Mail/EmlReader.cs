@@ -154,7 +154,7 @@ public class EmlReader
     }
 
     private static void ParseBody(Message msg, String contentType, String body,
-        Dictionary<String, String> headers)
+        Dictionary<String, String> headers, Int32 depth = 0)
     {
         var ctLower = contentType.ToLowerInvariant();
 
@@ -162,7 +162,7 @@ public class EmlReader
         {
             var boundary = GetBoundaryFromContentType(contentType);
             if (boundary != null)
-                ParseMultipart(msg, body, boundary, ctLower.IndexOf("alternative", StringComparison.Ordinal) >= 0);
+                ParseMultipart(msg, body, boundary, ctLower.IndexOf("alternative", StringComparison.Ordinal) >= 0, depth + 1);
         }
         else
         {
@@ -182,8 +182,12 @@ public class EmlReader
         }
     }
 
-    private static void ParseMultipart(Message msg, String body, String boundary, Boolean alternative)
+    private static void ParseMultipart(Message msg, String body, String boundary, Boolean alternative, Int32 depth = 0)
     {
+        // 嵌套层数限制，避免构造深层 multipart 触发栈溢出
+        if (depth > OfficeLimits.MaxMimeDepth)
+            throw new InvalidDataException(L.T("The MIME nesting exceeds the limit ({0}).", OfficeLimits.MaxMimeDepth));
+
         var delimiter = "--" + boundary;
         var endDelimiter = "--" + boundary + "--";
 
@@ -197,13 +201,13 @@ public class EmlReader
             if (line.StartsWith(endDelimiter, StringComparison.Ordinal))
             {
                 if (inPart && partLines.Count > 0)
-                    ProcessPart(msg, String.Join("\r\n", partLines), alternative);
+                    ProcessPart(msg, String.Join("\r\n", partLines), alternative, depth);
                 break;
             }
             if (line.StartsWith(delimiter, StringComparison.Ordinal))
             {
                 if (inPart && partLines.Count > 0)
-                    ProcessPart(msg, String.Join("\r\n", partLines), alternative);
+                    ProcessPart(msg, String.Join("\r\n", partLines), alternative, depth);
                 partLines.Clear();
                 inPart = true;
             }
@@ -214,7 +218,7 @@ public class EmlReader
         }
     }
 
-    private static void ProcessPart(Message msg, String partText, Boolean alternative)
+    private static void ProcessPart(Message msg, String partText, Boolean alternative, Int32 depth = 0)
     {
         var lines = SplitLines(partText);
         var pos = 0;
@@ -248,7 +252,7 @@ public class EmlReader
         {
             var boundary = GetBoundaryFromContentType(contentType);
             if (boundary != null)
-                ParseMultipart(msg, partBody, boundary, ctLower.IndexOf("alternative", StringComparison.Ordinal) >= 0);
+                ParseMultipart(msg, partBody, boundary, ctLower.IndexOf("alternative", StringComparison.Ordinal) >= 0, depth + 1);
             return;
         }
 

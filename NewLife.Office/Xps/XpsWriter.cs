@@ -80,6 +80,8 @@ public class XpsWriter
     /// <param name="stream">可写输出流</param>
     public void Save(Stream stream)
     {
+        // XPS 数值必须使用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         using var zip = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true);
         WriteContentTypes(zip);
         WriteRootRels(zip);
@@ -227,8 +229,7 @@ public class XpsWriter
         WriteEntry(zip, "_rels/docProps/.rels", "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"/>");
     }
 
-    private static String Escape(String input) =>
-        input.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+    private static String Escape(String input) => OfficeXml.Escape(input);
 
     #endregion
 }

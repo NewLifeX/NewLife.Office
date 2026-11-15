@@ -67,7 +67,20 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
         using var output = new MemoryStream();
         using var input = new MemoryStream(data, headerOffset, data.Length - headerOffset - (headerOffset > 0 ? 4 : 0));
         using var deflate = new System.IO.Compression.DeflateStream(input, System.IO.Compression.CompressionMode.Decompress);
-        deflate.CopyTo(output);
+
+        // 逐块解压以执行输出上限，避免压缩炸弹把内存打满
+        var buffer = new Byte[81920];
+        var total = 0L;
+        while (true)
+        {
+            var n = deflate.Read(buffer, 0, buffer.Length);
+            if (n <= 0) break;
+            total += n;
+            if (total > OfficeLimits.MaxPdfStreamBytes)
+                throw new InvalidDataException(L.T("The PDF stream exceeds the resource limit ({0} bytes).", OfficeLimits.MaxPdfStreamBytes));
+
+            output.Write(buffer, 0, n);
+        }
         return output.ToArray();
     }
 
@@ -132,7 +145,11 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
         var countIdx = FindToken(pdf, "/Count");
         if (countIdx < 0) return 0;
         var numStr = ExtractNextToken(pdf, countIdx + 6);
-        return Int32.TryParse(numStr.Trim(), out var pageCount) ? pageCount : 0;
+        if (!Int32.TryParse(numStr.Trim(), out var pageCount)) return 0;
+        if (pageCount > OfficeLimits.MaxPdfPages)
+            throw new InvalidDataException(L.T("The PDF declares too many pages ({0}).", pageCount));
+
+        return pageCount;
     }
 
     /// <summary>读取 PDF 中所有嵌入/引用的字体信息</summary>
@@ -293,7 +310,9 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
     /// <param name="depth">递归深度，超过 32 层视为畸形数据</param>
     private void CollectPageObjects(Int32 objNum, List<Int32> pageObjNums, Int32 depth)
     {
-        if (depth > 32) return;
+        if (depth > OfficeLimits.MaxPdfDepth) return;
+        if (pageObjNums.Count > OfficeLimits.MaxPdfPages)
+            throw new InvalidDataException(L.T("The PDF contains too many pages ({0}).", OfficeLimits.MaxPdfPages));
 
         var obj = PdfObjectParser.ReadObject(_data, XRefTable!, objNum);
         if (obj is not DictObj dictObj) return;
@@ -558,8 +577,12 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
         return form;
     }
 
-    private FormField? ReadFormField(Ref fref)
+    private FormField? ReadFormField(Ref fref) => ReadFormField(fref, new HashSet<Int32>(), 0);
+
+    private FormField? ReadFormField(Ref fref, HashSet<Int32> visited, Int32 depth)
     {
+        if (depth > OfficeLimits.MaxPdfDepth || !visited.Add(fref.ObjNum)) return null;
+
         var fobj = PdfObjectParser.ReadObject(_data, XRefTable!, fref.ObjNum);
         if (fobj is not DictObj fdictObj) return null;
         var dict = fdictObj.Value;
@@ -602,7 +625,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
 
             foreach (var kref in kidRefs)
             {
-                var kid = ReadFormField(kref);
+                var kid = ReadFormField(kref, visited, depth + 1);
                 if (kid != null) field.Kids.Add(kid);
             }
         }
@@ -867,8 +890,12 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
     }
 
     /// <summary>递归读取书签树</summary>
-    private void ReadBookmarkTree(Int32 objNum, List<PdfOutline> bookmarks)
+    private void ReadBookmarkTree(Int32 objNum, List<PdfOutline> bookmarks) => ReadBookmarkTree(objNum, bookmarks, new HashSet<Int32>(), 0);
+
+    private void ReadBookmarkTree(Int32 objNum, List<PdfOutline> bookmarks, HashSet<Int32> visited, Int32 depth)
     {
+        if (depth > OfficeLimits.MaxPdfDepth || !visited.Add(objNum)) return;
+
         var obj = PdfObjectParser.ReadObject(_data, XRefTable!, objNum);
         if (obj is not DictObj dictObj) return;
 
@@ -896,11 +923,11 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
 
         // 递归读取子书签（/First）
         if (dict.TryGetValue("First", out var childVal) && childVal is Ref childRef)
-            ReadBookmarkTree(childRef.ObjNum, bm.Children);
+            ReadBookmarkTree(childRef.ObjNum, bm.Children, visited, depth + 1);
 
         // 读取下一个兄弟书签（/Next）
         if (dict.TryGetValue("Next", out var nextVal) && nextVal is Ref nextRef)
-            ReadBookmarkTree(nextRef.ObjNum, bookmarks);
+            ReadBookmarkTree(nextRef.ObjNum, bookmarks, visited, depth + 1);
     }
     #endregion
 

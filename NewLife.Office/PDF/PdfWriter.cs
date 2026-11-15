@@ -1151,6 +1151,9 @@ public class PdfWriter : IDisposable
     /// <param name="stream">目标流</param>
     public void Save(Stream stream)
     {
+        // PDF 内容流的数值必须使用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
+
         // 结束最后一页
         if (CurrentPage != null) EndPage();
 

@@ -20,7 +20,8 @@ public class EmlWriter
     public void Write(Message message, String path)
     {
         var content = Build(message);
-        File.WriteAllText(path, content, Encoding.UTF8);
+        // EML 是纯文本协议文件，不能带 UTF-8 BOM，否则第三方解析器会把首行头部读坏
+        File.WriteAllText(path, content, new UTF8Encoding(false));
     }
 
     /// <summary>将 EML 消息写入流</summary>
@@ -29,7 +30,7 @@ public class EmlWriter
     public void Write(Message message, Stream stream)
     {
         var content = Build(message);
-        var bytes = Encoding.UTF8.GetBytes(content);
+        var bytes = new UTF8Encoding(false).GetBytes(content);
         stream.Write(bytes, 0, bytes.Length);
     }
 
@@ -110,7 +111,9 @@ public class EmlWriter
             sb.AppendLine(EncodeQuotedPrintable(message.TextBody ?? ""));
         }
 
-        return sb.ToString();
+        // 协议要求行结束符为 CRLF，不随运行平台变化
+        var result = sb.ToString().Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", "\r\n");
+        return result;
     }
 
     #endregion
@@ -161,12 +164,12 @@ public class EmlWriter
     private static void AppendAttachment(StringBuilder sb, String boundary, Attachment att, Boolean inline = false)
     {
         sb.AppendLine($"--{boundary}");
-        sb.AppendLine($"Content-Type: {att.ContentType}");
+        sb.AppendLine($"Content-Type: {StripBreaks(att.ContentType)}");
         if (att.ContentId != null)
-            sb.AppendLine($"Content-ID: {att.ContentId}");
+            sb.AppendLine($"Content-ID: {StripBreaks(att.ContentId)}");
         var disp = inline ? "inline" : "attachment";
         if (att.FileName != null)
-            sb.AppendLine($"Content-Disposition: {disp}; filename=\"{att.FileName}\"");
+            sb.AppendLine($"Content-Disposition: {disp}; filename=\"{EscapeQuoted(att.FileName)}\"");
         else
             sb.AppendLine($"Content-Disposition: {disp}");
         sb.AppendLine("Content-Transfer-Encoding: base64");
@@ -179,11 +182,21 @@ public class EmlWriter
         sb.AppendLine($"{name}: {value}");
     }
 
+    /// <summary>转义引号参数中的特殊字符，防止头部注入</summary>
+    private static String EscapeQuoted(String value) => StripBreaks(value)
+        .Replace("\\", "\\\\")
+        .Replace("\"", "\\\"");
+
+    /// <summary>移除 CR/LF，防止头部注入</summary>
+    private static String StripBreaks(String value) => value.Replace("\r", String.Empty).Replace("\n", String.Empty);
+
     /// <summary>对需要编码的头部值使用 RFC 2047 Base64 编码</summary>
     private static String EncodeHeaderValue(String value)
     {
-        // 如果全为 ASCII，无需编码
-        if (value.All(c => c < 128 && c >= 32)) return value;
+        // 含换行的值一律编码，防止头部注入（CRLF 注入伪造头部）
+        var hasBreak = value.IndexOf('\r') >= 0 || value.IndexOf('\n') >= 0;
+        // 如果全为 ASCII 且不含控制字符，无需编码
+        if (!hasBreak && value.All(c => c < 128 && c >= 32)) return value;
         return "=?utf-8?B?" + Convert.ToBase64String(Encoding.UTF8.GetBytes(value)) + "?=";
     }
 
@@ -192,24 +205,45 @@ public class EmlWriter
     {
         var bytes = Encoding.UTF8.GetBytes(text);
         var sb = new StringBuilder();
-        var lineLen = 0;
-        foreach (var b in bytes)
+        var line = new StringBuilder();
+        var i = 0;
+        while (i < bytes.Length)
         {
-            String token;
-            if (b == '\r') { token = "\r"; }
-            else if (b == '\n') { sb.Append("\r\n"); lineLen = 0; continue; }
-            else if (b >= 33 && b <= 126 && b != 61) { token = ((Char)b).ToString(); }
-            else { token = $"={b:X2}"; }
-
-            if (lineLen + token.Length > 75)
+            var b = bytes[i];
+            if (b == '\r' || b == '\n')
             {
-                sb.Append("=\r\n");
-                lineLen = 0;
+                // CR/LF/CRLF 一律归一为硬换行，避免产生 "\r\r\n"
+                if (b == '\r' && i + 1 < bytes.Length && bytes[i + 1] == '\n') i++;
+                AppendQpLine(sb, line, false);
+                i++;
+                continue;
             }
-            sb.Append(token);
-            lineLen += token.Length;
+
+            var token = b >= 33 && b <= 126 && b != 61 ? ((Char)b).ToString() : $"={b:X2}";
+            if (line.Length + token.Length > 75) AppendQpLine(sb, line, true);
+
+            line.Append(token);
+            i++;
         }
+        AppendQpLine(sb, line, false);
+
         return sb.ToString();
+    }
+
+    /// <summary>输出一行 QP 文本；软换行追加 "="，行尾空白编码为 =XX</summary>
+    private static void AppendQpLine(StringBuilder sb, StringBuilder line, Boolean softWrap)
+    {
+        // 行尾空格/制表符在传输过程中可能被裁剪，必须编码
+        while (line.Length > 0 && (line[line.Length - 1] == ' ' || line[line.Length - 1] == '\t'))
+        {
+            var ch = line[line.Length - 1];
+            line.Length--;
+            line.Append('=').Append(((Int32)ch).ToString("X2"));
+        }
+
+        sb.Append(line);
+        sb.Append(softWrap ? "=\r\n" : "\r\n");
+        line.Clear();
     }
 
     private static String GenerateBoundary(String tag)

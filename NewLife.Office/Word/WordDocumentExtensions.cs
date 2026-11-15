@@ -565,7 +565,7 @@ public static class WordDocumentExtensions
     /// <summary>从 Run 模型构建文本框内段落 XML（替换后重建用，保留常见字符格式）</summary>
     private static String BuildTextboxParagraphXml(Paragraph p)
     {
-        static String Esc(String? s) => s == null ? String.Empty : (System.Security.SecurityElement.Escape(s) ?? s);
+        static String Esc(String? s) => s == null ? String.Empty : (OfficeXml.Escape(s) ?? s);
 
         var sb = new StringBuilder();
         sb.Append("<w:p>");

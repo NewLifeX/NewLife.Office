@@ -36,14 +36,21 @@ internal sealed class CfbReader
         var headerReader = new SpanReader(_fs, bufferSize: 512);
         _header = CfbHeader.ReadFrom(ref headerReader);
 
+        // 文件长度决定合理的扇区总数，避免头部伪造超大计数直接分配
+        var maxSectors = _fs.Length / _header.SectorSize + 2;
+        if (maxSectors > Int32.MaxValue) maxSectors = Int32.MaxValue;
+        var sectorLimit = (Int32)maxSectors;
+
         // 2. 构建完整的 FAT 扇区 ID 列表（含 DIFAT 扩展）
-        var fatSectorIds = BuildFatSectorList();
+        var fatSectorIds = BuildFatSectorList(sectorLimit);
 
         // 3. 读入全部 FAT 数据
-        _fat = ReadFatArray(fatSectorIds);
+        _fat = ReadFatArray(fatSectorIds, sectorLimit);
 
         // 4. 读取所有目录条目
         _dirs = ReadAllDirectoryEntries();
+        if (_dirs.Length == 0)
+            throw new InvalidDataException(L.T("The CFB directory is empty."));
 
         // 5. 读取迷你 FAT
         if (_header.FirstMiniFatSectorId != CfbSectorMarker.EndOfChain &&
@@ -57,26 +64,33 @@ internal sealed class CfbReader
         if (rootEntry.StartingSectorId != CfbSectorMarker.EndOfChain &&
             rootEntry.StreamSize > 0)
         {
+            if (rootEntry.StreamSize > Int32.MaxValue)
+                throw new InvalidDataException(L.T("The CFB mini stream is too large."));
             _miniStream = ReadSectorChain(rootEntry.StartingSectorId, (Int32)rootEntry.StreamSize);
         }
 
         // 7. 构建树结构
         var root = new CfbStorage { Name = "Root Entry" };
         if (rootEntry.ChildSid != CfbSectorMarker.NoEntry)
-            BuildTree(root, rootEntry.ChildSid);
+            BuildTree(root, rootEntry.ChildSid, new HashSet<Int32>(), 0);
 
         return root;
     }
 
     /// <summary>构建完整的 FAT 扇区 ID 列表（含 DIFAT 扩展链）</summary>
-    private List<Int32> BuildFatSectorList()
+    /// <param name="sectorLimit">文件长度允许的最大扇区数</param>
+    private List<Int32> BuildFatSectorList(Int32 sectorLimit)
     {
-        var list = new List<Int32>(_header.FatSectorCount);
+        var capacity = Math.Min(_header.FatSectorCount, Math.Max(0, sectorLimit));
+        var list = new List<Int32>(capacity);
+        var visited = new HashSet<Int32>();
 
         // 从文件头 DIFAT 数组读取前 109 个 FAT 扇区 ID
         foreach (var id in _header.DifatArray)
         {
             if (id == CfbSectorMarker.FreeSect || id == CfbSectorMarker.EndOfChain) break;
+            if (id < 0 || id >= sectorLimit)
+                throw new InvalidDataException(L.T("Invalid CFB FAT sector id."));
             list.Add(id);
         }
 
@@ -85,6 +99,11 @@ internal sealed class CfbReader
         var sectorBuf = new Byte[_header.SectorSize];
         while (difatSid != CfbSectorMarker.EndOfChain && difatSid != CfbSectorMarker.FreeSect)
         {
+            if (difatSid < 0 || difatSid >= sectorLimit || !visited.Add(difatSid))
+                throw new InvalidDataException(L.T("Invalid or cyclic CFB DIFAT chain."));
+            if (list.Count > sectorLimit)
+                throw new InvalidDataException(L.T("The CFB FAT sector list exceeds the resource limit."));
+
             ReadAt((Int64)(difatSid + 1) * _header.SectorSize, sectorBuf, 0, _header.SectorSize);
             var sr = new SpanReader(sectorBuf, 0, _header.SectorSize);
             var entriesPerSector = (_header.SectorSize / 4) - 1; // 最后 4 字节是下 DIFAT 扇区 ID
@@ -92,7 +111,11 @@ internal sealed class CfbReader
             {
                 var id = sr.ReadInt32();
                 if (id != CfbSectorMarker.FreeSect && id != CfbSectorMarker.EndOfChain)
+                {
+                    if (id < 0 || id >= sectorLimit)
+                        throw new InvalidDataException(L.T("Invalid CFB FAT sector id."));
                     list.Add(id);
+                }
             }
             difatSid = sr.ReadInt32(); // 最后4字节：下一个 DIFAT 扇区
         }
@@ -101,14 +124,23 @@ internal sealed class CfbReader
     }
 
     /// <summary>从 FAT 扇区 ID 列表读入全部 FAT 数据</summary>
-    private Int32[] ReadFatArray(List<Int32> fatSectorIds)
+    /// <param name="fatSectorIds">FAT 扇区 ID 列表</param>
+    /// <param name="sectorLimit">文件长度允许的最大扇区数</param>
+    private Int32[] ReadFatArray(List<Int32> fatSectorIds, Int32 sectorLimit)
     {
         var entriesPerSector = _header.SectorSize / 4;
-        var fat = new Int32[fatSectorIds.Count * entriesPerSector];
+        var total = (Int64)fatSectorIds.Count * entriesPerSector;
+        if (total > OfficeLimits.MaxCfbFatEntries || total > (Int64)sectorLimit + entriesPerSector)
+            throw new InvalidDataException(L.T("The CFB FAT table exceeds the resource limit."));
+
+        var fat = new Int32[(Int32)total];
         var idx = 0;
         var sectorBuf = new Byte[_header.SectorSize];
         foreach (var sid in fatSectorIds)
         {
+            if (sid < 0 || sid >= sectorLimit)
+                throw new InvalidDataException(L.T("Invalid CFB FAT sector id."));
+
             ReadAt((Int64)(sid + 1) * _header.SectorSize, sectorBuf, 0, _header.SectorSize);
             var sr = new SpanReader(sectorBuf, 0, _header.SectorSize);
             for (var i = 0; i < entriesPerSector; i++)
@@ -120,7 +152,11 @@ internal sealed class CfbReader
     /// <summary>读取类 FAT 链（Mini FAT 使用相同格式）</summary>
     private Int32[] ReadFatLikeChain(Int32 startSid)
     {
-        var data = ReadSectorChain(startSid, _header.MiniFatSectorCount * _header.SectorSize);
+        var expected = (Int64)_header.MiniFatSectorCount * _header.SectorSize;
+        if (expected > Int32.MaxValue || expected > OfficeLimits.MaxCfbStreamBytes)
+            throw new InvalidDataException(L.T("The CFB mini FAT exceeds the resource limit."));
+
+        var data = ReadSectorChain(startSid, (Int32)expected);
         var count = data.Length / 4;
         var arr = new Int32[count];
         var sr = new SpanReader(data, 0, data.Length);
@@ -135,23 +171,30 @@ internal sealed class CfbReader
         var dirData = ReadSectorChain(_header.FirstDirSectorId, -1);
         var entrySize = 128;
         var count = dirData.Length / entrySize;
+        if (count > OfficeLimits.MaxCfbDirectoryEntries)
+            throw new InvalidDataException(L.T("The CFB directory exceeds the resource limit."));
+
         var entries = new CfbDirectoryEntry[count];
         for (var i = 0; i < count; i++)
             entries[i] = CfbDirectoryEntry.ReadFrom(dirData.AsSpan(i * entrySize, entrySize), i);
         return entries;
     }
 
-    /// <summary>递归构建存储树</summary>
-    private void BuildTree(CfbStorage parent, Int32 sid)
+    /// <summary>递归构建存储树（带 visited 与深度上限，防止恶意环/深链）</summary>
+    private void BuildTree(CfbStorage parent, Int32 sid, HashSet<Int32> visited, Int32 depth)
     {
         if (sid == CfbSectorMarker.NoEntry || sid < 0 || sid >= _dirs.Length) return;
+        if (depth > OfficeLimits.MaxCfbTreeDepth)
+            throw new InvalidDataException(L.T("The CFB directory tree is nested too deeply."));
+        if (!visited.Add(sid))
+            throw new InvalidDataException(L.T("The CFB directory tree contains a cycle."));
 
         var entry = _dirs[sid];
         if (entry.ObjectType == ObjectType.Empty) return;
 
         // 先处理左兄弟（红黑树中序遍历）
         if (entry.LeftSibSid != CfbSectorMarker.NoEntry)
-            BuildTree(parent, entry.LeftSibSid);
+            BuildTree(parent, entry.LeftSibSid, visited, depth + 1);
 
         // 处理当前节点
         if (entry.ObjectType == ObjectType.Stream)
@@ -165,17 +208,20 @@ internal sealed class CfbReader
             var storage = new CfbStorage { Name = entry.Name, Parent = parent };
             parent.Children.Add(storage);
             if (entry.ChildSid != CfbSectorMarker.NoEntry)
-                BuildTree(storage, entry.ChildSid);
+                BuildTree(storage, entry.ChildSid, visited, depth + 1);
         }
 
         // 处理右兄弟
         if (entry.RightSibSid != CfbSectorMarker.NoEntry)
-            BuildTree(parent, entry.RightSibSid);
+            BuildTree(parent, entry.RightSibSid, visited, depth + 1);
     }
 
     /// <summary>读取一个流条目的数据（自动识别普通流或迷你流）</summary>
     private Byte[] ReadStreamData(CfbDirectoryEntry entry)
     {
+        if (entry.StreamSize < 0 || entry.StreamSize > Int32.MaxValue || entry.StreamSize > OfficeLimits.MaxCfbStreamBytes)
+            throw new InvalidDataException(L.T("The CFB stream exceeds the resource limit."));
+
         var size = (Int32)entry.StreamSize;
         if (size == 0) return [];
 
@@ -197,21 +243,27 @@ internal sealed class CfbReader
         while (sid != CfbSectorMarker.EndOfChain && sid != CfbSectorMarker.FreeSect && sid >= 0)
         {
             sectorCount++;
+            if (sectorCount > _fat.Length + 1)
+                throw new InvalidDataException(L.T("The CFB FAT chain contains a cycle."));
             if (sid >= _fat.Length) break;
             sid = _fat[sid];
         }
         if (sectorCount == 0) return [];
 
         // 分配结果缓冲区并通过 ReadAt 按扇区读取
-        var total = sectorCount * sectorSize;
+        var total = (Int64)sectorCount * sectorSize;
         var resultSize = expectedSize > 0 && expectedSize < total ? expectedSize : total;
-        var result = new Byte[resultSize];
+        if (resultSize > Int32.MaxValue || resultSize > OfficeLimits.MaxCfbStreamBytes)
+            throw new InvalidDataException(L.T("The CFB stream exceeds the resource limit."));
+
+        var limit = (Int32)resultSize;
+        var result = new Byte[limit];
 
         var pos = 0;
         sid = startSid;
-        while (sid != CfbSectorMarker.EndOfChain && sid != CfbSectorMarker.FreeSect && sid >= 0 && pos < resultSize)
+        while (sid != CfbSectorMarker.EndOfChain && sid != CfbSectorMarker.FreeSect && sid >= 0 && pos < limit)
         {
-            var copyLen = Math.Min(sectorSize, resultSize - pos);
+            var copyLen = Math.Min(sectorSize, limit - pos);
             ReadAt((Int64)(sid + 1) * sectorSize, result, pos, copyLen);
             pos += copyLen;
             if (sid >= _fat.Length) break;
@@ -243,12 +295,15 @@ internal sealed class CfbReader
     {
         var miniSectorSize = _header.MiniSectorSize;
 
-        // 先遍历 Mini FAT 链计算有效扇区数量
+        // 先遍历 Mini FAT 链：检测环，并统计落在迷你流范围内的有效扇区
         var sectorCount = 0;
+        var steps = 0;
         var msid = startMiniSid;
         while (msid != CfbSectorMarker.EndOfChain && msid != CfbSectorMarker.FreeSect && msid >= 0)
         {
-            if (msid * miniSectorSize + miniSectorSize <= _miniStream.Length)
+            if (++steps > _miniFat.Length + 1)
+                throw new InvalidDataException(L.T("The CFB mini FAT chain contains a cycle."));
+            if ((Int64)msid * miniSectorSize + miniSectorSize <= _miniStream.Length)
                 sectorCount++;
             if (msid >= _miniFat.Length) break;
             msid = _miniFat[msid];
@@ -256,18 +311,22 @@ internal sealed class CfbReader
         if (sectorCount == 0) return [];
 
         // 分配结果缓冲区并直接从迷你流复制
-        var total = sectorCount * miniSectorSize;
+        var total = (Int64)sectorCount * miniSectorSize;
         var resultSize = expectedSize > 0 && expectedSize < total ? expectedSize : total;
-        var result = new Byte[resultSize];
+        if (resultSize > Int32.MaxValue || resultSize > OfficeLimits.MaxCfbStreamBytes)
+            throw new InvalidDataException(L.T("The CFB mini stream exceeds the resource limit."));
+
+        var limit = (Int32)resultSize;
+        var result = new Byte[limit];
 
         var pos = 0;
         msid = startMiniSid;
-        while (msid != CfbSectorMarker.EndOfChain && msid != CfbSectorMarker.FreeSect && msid >= 0 && pos < resultSize)
+        while (msid != CfbSectorMarker.EndOfChain && msid != CfbSectorMarker.FreeSect && msid >= 0 && pos < limit)
         {
             var offset = msid * miniSectorSize;
             if (offset + miniSectorSize <= _miniStream.Length)
             {
-                var copyLen = Math.Min(miniSectorSize, resultSize - pos);
+                var copyLen = Math.Min(miniSectorSize, limit - pos);
                 Array.Copy(_miniStream, offset, result, pos, copyLen);
                 pos += copyLen;
             }

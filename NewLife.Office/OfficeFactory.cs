@@ -241,7 +241,7 @@ public static class OfficeFactory
         try
         {
             stream.Position = 0;
-            using var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+            using var zip = OfficeStreams.OpenReadArchive(stream, leaveOpen: true);
             var hasWord = false;
             var hasXl = false;
             var hasPpt = false;

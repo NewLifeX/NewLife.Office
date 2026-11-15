@@ -124,7 +124,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         //_zip = ZipFile.OpenRead(fileName.GetFullPath());
         // 共享访问，避免文件被其它进程打开时再次访问抛出异常
         var fs = new FileStream(fileName.GetFullPath(), FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        _zip = new ZipArchive(fs, ZipArchiveMode.Read, false);
+        _zip = OfficeStreams.OpenReadArchive(fs);
 
         Parse();
     }
@@ -138,7 +138,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
 
         if (stream is FileStream fs) FileName = fs.Name;
 
-        _zip = new ZipArchive(stream, ZipArchiveMode.Read, true, encoding);
+        _zip = OfficeStreams.OpenReadArchive(stream, true, encoding);
 
         Parse();
     }
@@ -260,7 +260,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
 
         using var esheet = entry.Open(); // 及时释放单个 sheet 流
         var settings = new XmlReaderSettings { IgnoreWhitespace = true, IgnoreComments = true };
-        using var reader = XmlReader.Create(esheet, settings);
+        using var reader = OfficeXml.CreateReader(esheet, settings);
 
         // 定位到 sheetData
         while (reader.Read())
@@ -287,6 +287,8 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             if (rAttr.IsNullOrEmpty()) continue;
             var rowIdx = rAttr!.ToInt(-1) - 1;
             if (rowIdx < 0) continue;
+            if (rowIdx >= OfficeLimits.MaxExcelRows)
+                throw new InvalidDataException(L.T("The worksheet exceeds the maximum row count ({0}).", OfficeLimits.MaxExcelRows));
 
             var vs = new List<Object?>();
             var curIndex = 0; // 当前列（0基）
@@ -518,7 +520,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     private String[]? ReadStrings(Stream ms, out List<RichTextRun>?[]? runs)
     {
         runs = null;
-        var doc = XDocument.Load(ms);
+        var doc = OfficeXml.LoadX(ms);
         if (doc?.Root == null) return null;
 
         var list = new List<String>();
@@ -607,7 +609,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     /// <param name="ms">theme1.xml 流</param>
     private static Dictionary<Int32, String>? ReadThemeColors(Stream ms)
     {
-        var doc = XDocument.Load(ms);
+        var doc = OfficeXml.LoadX(ms);
         if (doc?.Root == null) return null;
 
         var scheme = doc.Root.Descendants().FirstOrDefault(e => e.Name.LocalName == "clrScheme");
@@ -682,7 +684,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
 
     private ExcelNumberFormat?[]? ReadStyles(Stream ms)
     {
-        var doc = XDocument.Load(ms);
+        var doc = OfficeXml.LoadX(ms);
         if (doc?.Root == null) return null;
 
         // 内置默认样式
@@ -753,7 +755,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     /// <summary>解析完整样式（字体/填充/边框/XF）</summary>
     private void ParseFullStyles(Stream ms)
     {
-        var doc = XDocument.Load(ms);
+        var doc = OfficeXml.LoadX(ms);
         if (doc?.Root == null) return;
 
         var ns = doc.Root.Name.Namespace;
@@ -1017,7 +1019,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         if (entry != null)
         {
             using var es = entry.Open(); // 释放 workbook.xml 流
-            var doc = XDocument.Load(es);
+            var doc = OfficeXml.LoadX(es);
             if (doc?.Root != null)
             {
                 // 1904 日期系统检测（Mac Excel 旧文件以 1904-01-01 为基准，与 1900 系统相差 1462 天）
@@ -1089,6 +1091,10 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             var ch = cellRef[i];
             if (ch is >= 'a' and <= 'z') ch = (Char)(ch - 'a' + 'A');
             index = index * 26 + (ch - 'A' + 1);
+
+            // 提前拦截超宽引用，避免 ZZZZZ1 之类的引用被放大成千万级列
+            if (index > OfficeLimits.MaxExcelColumns)
+                throw new InvalidDataException(L.T("The cell reference '{0}' exceeds the maximum column count ({1}).", cellRef, OfficeLimits.MaxExcelColumns));
         }
         return index - 1; // 转为0基
     }
@@ -1237,7 +1243,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         if (!_entries.TryGetValue(sheet, out var entry)) return null;
 
         using var esheet = entry.Open();
-        var doc = XDocument.Load(esheet);
+        var doc = OfficeXml.LoadX(esheet);
         if (doc.Root == null) return null;
 
         var mergeNode = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("mergeCells"));
@@ -1280,7 +1286,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         if (relsEntry != null)
         {
             using var rs = relsEntry.Open();
-            var relsDoc = XDocument.Load(rs);
+            var relsDoc = OfficeXml.LoadX(rs);
             if (relsDoc.Root != null)
             {
                 foreach (var rel in relsDoc.Root.Elements())
@@ -1296,7 +1302,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
 
         // 读取 sheet.xml 中的 <hyperlinks> 节点
         using var esheet = entry.Open();
-        var doc = XDocument.Load(esheet);
+        var doc = OfficeXml.LoadX(esheet);
         if (doc.Root == null) return result;
 
         var hyperlinks = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "hyperlinks");
@@ -1356,7 +1362,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         if (_entries == null || !_entries.TryGetValue(sheet, out var entry))
             throw new ArgumentOutOfRangeException(nameof(sheet), L.T("Unable to find worksheet"));
         using var es = entry.Open();
-        return XDocument.Load(es);
+        return OfficeXml.LoadX(es);
     }
     #endregion
 
@@ -1788,7 +1794,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         String? drawingRId = null;
         using (var rs = relsEntry.Open())
         {
-            var relsDoc = XDocument.Load(rs);
+            var relsDoc = OfficeXml.LoadX(rs);
             if (relsDoc.Root != null)
             {
                 foreach (var rel in relsDoc.Root.Elements())
@@ -1812,7 +1818,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         var images = new List<(Int32 Row, Int32 Col, Int64 FromColOff, Int64 FromRowOff, Int32 ToRow, Int32 ToCol, Int64 ToColOff, Int64 ToRowOff, String EditAs, String ImgRId, Int64 EmuW, Int64 EmuH)>();
         using (var ds = drawingEntry.Open())
         {
-            var drawDoc = XDocument.Load(ds);
+            var drawDoc = OfficeXml.LoadX(ds);
             if (drawDoc.Root == null) yield break;
 
             var xdrNs = drawDoc.Root.Name.Namespace;
@@ -1878,7 +1884,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         if (drawRelsEntry != null)
         {
             using var drs = drawRelsEntry.Open();
-            var drDoc = XDocument.Load(drs);
+            var drDoc = OfficeXml.LoadX(drs);
             if (drDoc.Root != null)
             {
                 foreach (var rel in drDoc.Root.Elements())
@@ -1989,7 +1995,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             if (wbEntry != null)
             {
                 using var ws = wbEntry.Open();
-                var wbDoc = XDocument.Load(ws);
+                var wbDoc = OfficeXml.LoadX(ws);
                 if (wbDoc.Root != null)
                 {
                     var definedNames = wbDoc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("definedNames"));
@@ -2163,7 +2169,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         if (entry == null) return null;
 
         using var es = entry.Open();
-        var doc = XDocument.Load(es);
+        var doc = OfficeXml.LoadX(es);
         if (doc.Root == null) return null;
 
         var wp = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("workbookProtection"));
@@ -2183,7 +2189,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         if (entry == null) return null;
 
         using var es = entry.Open();
-        var doc = XDocument.Load(es);
+        var doc = OfficeXml.LoadX(es);
         if (doc.Root == null) return null;
 
         var cp = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("calcPr"));
@@ -2303,7 +2309,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         var authors = new List<String>();
         using (var cs = commentsEntry.Open())
         {
-            var doc = XDocument.Load(cs);
+            var doc = OfficeXml.LoadX(cs);
             if (doc.Root == null) return result;
 
             var authorsEl = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "authors");
@@ -2347,7 +2353,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         if (vmlEntry != null)
         {
             using var vs = vmlEntry.Open();
-            var vdoc = XDocument.Load(vs);
+            var vdoc = OfficeXml.LoadX(vs);
             if (vdoc?.Root != null)
             {
                 foreach (var shape in vdoc.Root.Descendants().Where(e => e.Name.LocalName == "shape"))
@@ -2416,7 +2422,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         var authors = new List<String>();
         using (var cs = commentsEntry.Open())
         {
-            var doc = XDocument.Load(cs);
+            var doc = OfficeXml.LoadX(cs);
             if (doc.Root == null) return result;
 
             var authorsEl = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "authors");
@@ -2488,7 +2494,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         if (personEntry != null)
         {
             using var ps = personEntry.Open();
-            var pdoc = XDocument.Load(ps);
+            var pdoc = OfficeXml.LoadX(ps);
             if (pdoc.Root != null)
             {
                 foreach (var p in pdoc.Root.Elements().Where(e => e.Name.LocalName == "person"))
@@ -2507,7 +2513,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
 
         using (var cs = tcEntry.Open())
         {
-            var doc = XDocument.Load(cs);
+            var doc = OfficeXml.LoadX(cs);
             if (doc.Root == null) return result;
 
             foreach (var tc in doc.Root.Elements().Where(e => e.Name.LocalName == "threadedComment"))
@@ -2563,7 +2569,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         if (relEntry != null)
         {
             using var rs = relEntry.Open();
-            var rdoc = XDocument.Load(rs);
+            var rdoc = OfficeXml.LoadX(rs);
             if (rdoc.Root != null)
             {
                 foreach (var rel in rdoc.Root.Elements().Where(e => e.Name.LocalName == "Relationship"))
@@ -2586,7 +2592,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         foreach (var cacheEntry in _zip.Entries.Where(e => e.FullName.StartsWith("xl/slicerCaches/") && e.FullName.EndsWith(".xml")))
         {
             using var css = cacheEntry.Open();
-            var cdoc = XDocument.Load(css);
+            var cdoc = OfficeXml.LoadX(css);
             if (cdoc.Root == null) continue;
             var cname = cdoc.Root.Attribute("name")?.Value ?? String.Empty;
             // 列名在规范结构里不在 slicerCache 中（旧版自产文件才有 column@name），能取到则用，否则后续用 caption 兵底
@@ -2609,7 +2615,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             if (slicerEntry == null) continue;
 
             using var ss = slicerEntry.Open();
-            var sdoc = XDocument.Load(ss);
+            var sdoc = OfficeXml.LoadX(ss);
             if (sdoc.Root == null) continue;
 
             // 部件根是 x14:slicers 容器，真正的 slicer 是它的子元素（旧版自产文件根即 slicer）
@@ -2690,7 +2696,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         if (relEntry == null) return result;
         using (var rs = relEntry.Open())
         {
-            var rdoc = XDocument.Load(rs);
+            var rdoc = OfficeXml.LoadX(rs);
             if (rdoc.Root != null)
             {
                 foreach (var rel in rdoc.Root.Elements().Where(e => e.Name.LocalName == "Relationship"))
@@ -2708,7 +2714,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             var entry = _zip.GetEntry(path);
             if (entry == null) continue;
             XDocument pdoc;
-            using (var ps = entry.Open()) pdoc = XDocument.Load(ps);
+            using (var ps = entry.Open()) pdoc = OfficeXml.LoadX(ps);
             if (pdoc.Root == null) continue;
 
             var info = new PivotTableInfo
@@ -2779,7 +2785,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         var entry = _zip.GetEntry($"xl/pivotCache/pivotCacheDefinition{cacheId}.xml");
         if (entry == null) return names;
         using var cs = entry.Open();
-        var doc = XDocument.Load(cs);
+        var doc = OfficeXml.LoadX(cs);
         if (doc.Root == null) return names;
         var cacheFields = doc.Root.Elements().FirstOrDefault(e => e.Name.LocalName == "cacheFields");
         if (cacheFields == null) return names;
@@ -2798,7 +2804,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             var wbEntry = _zip.GetEntry("xl/workbook.xml");
             if (wbEntry == null) return result;
             using var ws = wbEntry.Open();
-            var wbDoc = XDocument.Load(ws);
+            var wbDoc = OfficeXml.LoadX(ws);
             if (wbDoc.Root == null) return result;
             var definedNamesEl = wbDoc.Root.Elements().FirstOrDefault(e => e.Name.LocalName.EqualIgnoreCase("definedNames"));
             if (definedNamesEl == null) return result;
@@ -2841,7 +2847,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         var rels = new Dictionary<String, String>(StringComparer.OrdinalIgnoreCase); // rId → target
         using (var rs = relsEntry.Open())
         {
-            var relsDoc = XDocument.Load(rs);
+            var relsDoc = OfficeXml.LoadX(rs);
             if (relsDoc.Root != null)
             {
                 foreach (var rel in relsDoc.Root.Elements())
@@ -2867,7 +2873,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             if (tblEntry == null) continue;
 
             using var ts = tblEntry.Open();
-            var tblDoc = XDocument.Load(ts);
+            var tblDoc = OfficeXml.LoadX(ts);
             if (tblDoc.Root == null) continue;
 
             var tblInfo = new Table
@@ -2926,7 +2932,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
         if (drawingEntry == null) return result;
 
         using var ds = drawingEntry.Open();
-        var drawDoc = XDocument.Load(ds);
+        var drawDoc = OfficeXml.LoadX(ds);
         if (drawDoc.Root == null) return result;
 
         var ns = drawDoc.Root.Name.Namespace;
@@ -2948,7 +2954,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             var chartTarget = (String?)null;
             using (var rs2 = relsEntry.Open())
             {
-                var relDoc = XDocument.Load(rs2);
+                var relDoc = OfficeXml.LoadX(rs2);
                 if (relDoc.Root != null)
                 {
                     foreach (var rel in relDoc.Root.Elements())
@@ -2973,7 +2979,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
 
             var chart = new ExcelChart();
             using var cs = chartEntry.Open();
-            var cDoc = XDocument.Load(cs);
+            var cDoc = OfficeXml.LoadX(cs);
             if (cDoc.Root == null) continue;
 
             var cNs = cDoc.Root.Name.Namespace;
@@ -3049,7 +3055,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
             return result;
 
         using var es = sheetEntry.Open();
-        var doc = XDocument.Load(es);
+        var doc = OfficeXml.LoadX(es);
         if (doc.Root == null) return result;
 
         // x14:sparklineGroups 节点（位于 extLst/ext 内，需按后代查找）
@@ -3418,7 +3424,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
     /// 若只按根元素前缀查找会得到 null，随后 XNamespace 拼接抛 ArgumentNullException，因此以 Dublin Core 标准 URI 为准</remarks>
     private static ExcelWriter.ExcelDocumentProperties? ReadCoreProperties(Stream stream)
     {
-        var reader = System.Xml.Linq.XDocument.Load(stream);
+        var reader = OfficeXml.LoadX(stream);
         var root = reader.Root;
         if (root == null) return null;
 

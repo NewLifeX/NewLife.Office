@@ -82,8 +82,8 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
         // 创建单一 SpanReader，整个解析过程共用，不在循环内重复分配
         var reader = new SpanReader(_workbook, 0, _workbook.Length);
 
-        // 第一遍：收集所有记录；合并 CONTINUE 扩展数据
-        var records = ReadAllRecords(ref reader);
+        // 第一遍：收集所有记录；合并 CONTINUE 扩展数据（同时记录续记录在合并数据中的起点）
+        var records = ReadAllRecords(ref reader, out var continueStarts);
 
         // 找到 Globals BOF
         var globalsStart = FindGlobalsBof(records);
@@ -95,10 +95,11 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
         while (pos < records.Count)
         {
             var (type, data) = records[pos];
+            var recordIndex = pos;
             pos++;
             if (type == RecEof) break;
             if (type == RecSst)
-                _sst = ParseSst(data);
+                _sst = ParseSst(data, continueStarts.TryGetValue(recordIndex, out var starts) ? starts : null);
             else if (type == RecBoundSheet)
                 ParseBoundSheet(data);
         }
@@ -107,9 +108,16 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     /// <summary>读取所有 BIFF 记录（自动合并 CONTINUE 内容）</summary>
     /// <param name="reader">已定位到工作簿头部的读取器</param>
     /// <returns>记录列表（type, data）</returns>
-    private static List<(UInt16 type, Byte[] data)> ReadAllRecords(ref SpanReader reader)
+    private static List<(UInt16 type, Byte[] data)> ReadAllRecords(ref SpanReader reader) => ReadAllRecords(ref reader, out _);
+
+    /// <summary>读取所有 BIFF 记录（自动合并 CONTINUE 内容）</summary>
+    /// <param name="reader">已定位到工作簿头部的读取器</param>
+    /// <param name="continueStarts">记录索引 → 各 CONTINUE 段在合并数据中的起始偏移</param>
+    /// <returns>记录列表（type, data）</returns>
+    private static List<(UInt16 type, Byte[] data)> ReadAllRecords(ref SpanReader reader, out Dictionary<Int32, List<Int32>> continueStarts)
     {
         var result = new List<(UInt16, Byte[])>();
+        continueStarts = [];
         while (reader.Available >= 4)
         {
             var type = reader.ReadUInt16();
@@ -117,6 +125,7 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
             if (reader.Available < len) break;
 
             var data = reader.ReadBytes(len).ToArray();
+            List<Int32>? starts = null;
 
             // 将紧随的 CONTINUE 记录合并（SST 等超长记录会跨多个 CONTINUE）
             while (reader.Available >= 4)
@@ -127,12 +136,17 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
                 var nextLen = (Int32)reader.ReadUInt16();
                 if (reader.Available < nextLen) { reader.Position = savedPos; break; }
                 var continuation = reader.ReadBytes(nextLen).ToArray();
+
+                starts ??= [];
+                starts.Add(data.Length);
+
                 var merged = new Byte[data.Length + continuation.Length];
                 Array.Copy(data, 0, merged, 0, data.Length);
                 Array.Copy(continuation, 0, merged, data.Length, continuation.Length);
                 data = merged;
             }
 
+            if (starts != null) continueStarts[result.Count] = starts;
             result.Add((type, data));
         }
         return result;
@@ -158,21 +172,26 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
 
     /// <summary>解析共享字符串表（SST）</summary>
     /// <param name="data">SST 记录数据（含 CONTINUE 已合并）</param>
+    /// <param name="continueStarts">各 CONTINUE 段在合并数据中的起始偏移</param>
     /// <returns>字符串数组</returns>
-    private static String[] ParseSst(Byte[] data)
+    private static String[] ParseSst(Byte[] data, List<Int32>? continueStarts = null)
     {
         if (data.Length < 8) return [];
 
         // 4字节总引用数，4字节唯一字符串数
         var reader = new SpanReader(data, 4, 4);
         var uniqueCount = reader.ReadInt32();
+        if (uniqueCount < 0) return [];
+        if (uniqueCount > OfficeLimits.MaxBiffSstStrings)
+            throw new InvalidDataException(L.T("The shared string table declares too many strings ({0}).", uniqueCount));
+
         var strings = new String[uniqueCount];
         var pos = 8;
 
         for (var i = 0; i < uniqueCount; i++)
         {
             if (pos + 2 > data.Length) break;
-            strings[i] = ReadXluString(data, ref pos);
+            strings[i] = ReadXluString(data, ref pos, continueStarts);
         }
 
         return strings;
@@ -181,8 +200,9 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
     /// <summary>解析 XLUnicodeRichExtendedString</summary>
     /// <param name="data">字节数组</param>
     /// <param name="pos">当前偏移（解析后自动前进）</param>
+    /// <param name="continueStarts">各 CONTINUE 段在合并数据中的起始偏移</param>
     /// <returns>字符串内容</returns>
-    private static String ReadXluString(Byte[] data, ref Int32 pos)
+    private static String ReadXluString(Byte[] data, ref Int32 pos, List<Int32>? continueStarts = null)
     {
         if (pos + 3 > data.Length) return String.Empty;
 
@@ -210,29 +230,44 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
             pos += 4;
         }
 
-        // 读取字符数据
-        String result;
-        if (fHighByte)
+        // 逐段读取字符数据：CONTINUE 段首字节是新的压缩标志，不是字符
+        var sb = new StringBuilder(cch);
+        var remain = cch;
+        while (remain > 0 && pos < data.Length)
         {
-            // UTF-16LE，每字符 2 字节
-            var byteCount = cch * 2;
-            if (pos + byteCount > data.Length) byteCount = data.Length - pos;
-            result = Encoding.Unicode.GetString(data, pos, byteCount);
-            pos += cch * 2;
-        }
-        else
-        {
-            // Latin-1/扩展 ASCII，每字符 1 字节
-            if (pos + cch > data.Length) cch = data.Length - pos;
-            result = DecodeLatin1(data, pos, cch);
-            pos += cch;
+            if (continueStarts != null && continueStarts.Contains(pos))
+            {
+                fHighByte = (data[pos] & 0x01) != 0;
+                pos++;
+                if (pos >= data.Length) break;
+            }
+
+            var limit = data.Length;
+            if (continueStarts != null)
+            {
+                foreach (var cs in continueStarts)
+                    if (cs > pos && cs < limit) limit = cs;
+            }
+
+            var avail = limit - pos;
+            var n = fHighByte ? Math.Min(remain, avail / 2) : Math.Min(remain, avail);
+            if (n <= 0) break;
+
+            if (fHighByte)
+                sb.Append(Encoding.Unicode.GetString(data, pos, n * 2));
+            else
+                sb.Append(DecodeLatin1(data, pos, n));
+
+            pos += fHighByte ? n * 2 : n;
+            remain -= n;
         }
 
+        var result = sb.ToString();
+
         // 跳过富文本索引（每条 4 字节）
-        pos += cRun * 4;
+        if (cRun > 0) pos = Math.Min(pos + cRun * 4, data.Length);
         // 跳过扩展数据
-        if (cbExtRst > 0)
-            pos += cbExtRst;
+        if (cbExtRst > 0) pos = Math.Min(pos + cbExtRst, data.Length);
 
         return result;
     }

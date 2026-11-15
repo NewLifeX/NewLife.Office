@@ -42,7 +42,7 @@ public sealed class WordHtmlConverter
     /// <returns>HTML 字符串</returns>
     public String Convert(Stream stream)
     {
-        using var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+        using var zip = OfficeStreams.OpenReadArchive(stream, leaveOpen: true);
         var rels = LoadRelationships(zip);
         var images = EmbedImages ? LoadImages(zip) : [];
         var numFmts = LoadNumIdFormats(zip);
@@ -118,7 +118,7 @@ public sealed class WordHtmlConverter
         try
         {
             var doc = new XmlDocument();
-            using (var s = entry.Open()) doc.Load(s);
+            using (var s = entry.Open()) OfficeXml.LoadInto(doc, s);
             const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
             var ns = new XmlNamespaceManager(doc.NameTable);
             ns.AddNamespace("w", W);
@@ -529,7 +529,7 @@ public sealed class WordHtmlConverter
             ?? throw new InvalidOperationException(L.T("Invalid docx file: word/document.xml is missing."));
         var doc = new XmlDocument();
         using var s = entry.Open();
-        doc.Load(s);
+        OfficeXml.LoadInto(doc, s);
         return doc;
     }
 
@@ -544,7 +544,7 @@ public sealed class WordHtmlConverter
 
         var doc = new XmlDocument();
         using (var s = entry.Open())
-            doc.Load(s);
+            OfficeXml.LoadInto(doc, s);
 
         var ns = new XmlNamespaceManager(doc.NameTable);
         ns.AddNamespace("rel", "http://schemas.openxmlformats.org/package/2006/relationships");
@@ -595,7 +595,7 @@ public sealed class WordHtmlConverter
         if (relsEntry == null) return result;
         var relsDoc = new XmlDocument();
         using (var s = relsEntry.Open())
-            relsDoc.Load(s);
+            OfficeXml.LoadInto(relsDoc, s);
         var ns = new XmlNamespaceManager(relsDoc.NameTable);
         ns.AddNamespace("rel", "http://schemas.openxmlformats.org/package/2006/relationships");
         foreach (XmlElement rel in relsDoc.SelectNodes("//rel:Relationship", ns)!)

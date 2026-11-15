@@ -92,7 +92,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             data = WordEncryptor.Decrypt(data, password);
         }
         var ms = new MemoryStream(data);
-        return new ZipArchive(ms, ZipArchiveMode.Read, leaveOpen: false);
+        return OfficeStreams.OpenReadArchive(ms);
     }
 
     /// <summary>释放资源</summary>
@@ -612,7 +612,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     {
         var doc = new XmlDocument();
         using var s = entry.Open();
-        doc.Load(s);
+        OfficeXml.LoadInto(doc, s);
         return doc;
     }
 
@@ -1264,7 +1264,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         if (entry == null) return null;
 
         var xml = new XmlDocument { XmlResolver = null };
-        using (var stream = entry.Open()) xml.Load(stream);
+        using (var stream = entry.Open()) OfficeXml.LoadInto(xml, stream);
 
         foreach (XmlElement sp in xml.SelectNodes("//*[local-name()='sp']")!)
         {
@@ -1783,8 +1783,13 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     }
 
     private void ParseGroupInGroup(XmlElement inner, GroupShape pg, Dictionary<String, (String Target, String Type)> rels,
-        Dictionary<String, DefaultRunProps>? layoutDefaults = null)
+        Dictionary<String, DefaultRunProps>? layoutDefaults = null) => ParseGroupInGroup(inner, pg, rels, layoutDefaults, 0);
+
+    private void ParseGroupInGroup(XmlElement inner, GroupShape pg, Dictionary<String, (String Target, String Type)> rels,
+        Dictionary<String, DefaultRunProps>? layoutDefaults, Int32 depth)
     {
+        if (depth > OfficeLimits.MaxNestingDepth) return;
+
         foreach (XmlNode child in inner.ChildNodes)
         {
             if (child is not XmlElement el) continue;
@@ -1792,7 +1797,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             {
                 case "sp": ParseShapeOrTextBoxInGroup(el, pg, rels, layoutDefaults); break;
                 case "pic": ParsePictureInGroup(el, pg, rels); break;
-                case "grpSp": ParseGroupInGroup(el, pg, rels, layoutDefaults); break;
+                case "grpSp": ParseGroupInGroup(el, pg, rels, layoutDefaults, depth + 1); break;
             }
         }
     }
@@ -1805,7 +1810,7 @@ public class PptxReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         {
             using var ns = notesEntry.Open();
             var nd = new XmlDocument();
-            nd.Load(ns);
+            OfficeXml.LoadInto(nd, ns);
             var text = CollectText(nd.DocumentElement);
             if (text.Length > 0) slide.Notes = text;
             return;

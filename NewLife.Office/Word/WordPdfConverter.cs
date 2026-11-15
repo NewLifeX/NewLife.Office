@@ -106,7 +106,7 @@ public sealed class WordPdfConverter
     /// <param name="pdf">目标 FluentDocument</param>
     private void Render(Stream stream, PdfDocumentBuilder pdf)
     {
-        using var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+        using var zip = OfficeStreams.OpenReadArchive(stream, leaveOpen: true);
 
         // 加载 word/document.xml
         var entry = zip.GetEntry("word/document.xml");
@@ -114,7 +114,7 @@ public sealed class WordPdfConverter
 
         var doc = new XmlDocument();
         using (var s = entry.Open())
-            doc.Load(s);
+            OfficeXml.LoadInto(doc, s);
 
         const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
         const String R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -148,7 +148,7 @@ public sealed class WordPdfConverter
         var entry = zip.GetEntry("word/_rels/document.xml.rels");
         if (entry == null) return map;
         var doc = new XmlDocument();
-        using (var s = entry.Open()) doc.Load(s);
+        using (var s = entry.Open()) OfficeXml.LoadInto(doc, s);
         const String Rel = "http://schemas.openxmlformats.org/package/2006/relationships";
         var ns = new XmlNamespaceManager(doc.NameTable);
         ns.AddNamespace("rel", Rel);
@@ -170,7 +170,7 @@ public sealed class WordPdfConverter
         try
         {
             var doc = new XmlDocument();
-            using (var s = entry.Open()) doc.Load(s);
+            using (var s = entry.Open()) OfficeXml.LoadInto(doc, s);
             const String W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
             var ns = new XmlNamespaceManager(doc.NameTable);
             ns.AddNamespace("w", W);

@@ -49,7 +49,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     /// <param name="stream">包含 docx 内容的流</param>
     public WordReader(Stream stream)
     {
-        _zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+        _zip = OfficeStreams.OpenReadArchive(stream, leaveOpen: true);
     }
 
     /// <summary>释放资源</summary>
@@ -192,7 +192,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
 
         var doc = new XmlDocument();
         using (var s = entry.Open())
-            doc.Load(s);
+            OfficeXml.LoadInto(doc, s);
 
         var ns = new XmlNamespaceManager(doc.NameTable);
         ns.AddNamespace("dc", "http://purl.org/dc/elements/1.1/");
@@ -220,7 +220,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         {
             var doc = new XmlDocument();
             using var s = entry.Open();
-            doc.Load(s);
+            OfficeXml.LoadInto(doc, s);
 
             var ns = new XmlNamespaceManager(doc.NameTable);
             ns.AddNamespace("vt", "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes");
@@ -429,7 +429,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         try
         {
             var doc = new XmlDocument();
-            doc.LoadXml(xml);
+            OfficeXml.LoadXmlInto(doc, xml);
             var ns = new XmlNamespaceManager(doc.NameTable);
             ns.AddNamespace("w", Wns);
             foreach (XmlElement fn in doc.SelectNodes("//w:footnote | //w:endnote", ns)!)
@@ -475,7 +475,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         try
         {
             var doc = new XmlDocument();
-            doc.LoadXml(xml);
+            OfficeXml.LoadXmlInto(doc, xml);
             var ns = new XmlNamespaceManager(doc.NameTable);
             ns.AddNamespace("w", Wns);
             foreach (XmlElement ce in doc.SelectNodes("//w:comment", ns)!)
@@ -545,8 +545,8 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             // 仅排除 word/document.xml —— 它是唯一需要重新生成的部件
             if (name.Equals("word/document.xml", StringComparison.OrdinalIgnoreCase)) continue;
 
+            using var es = OfficeStreams.OpenEntry(entry);
             using var ms = new MemoryStream();
-            using var es = entry.Open();
             es.CopyTo(ms);
             var data = ms.ToArray();
             doc.OtherParts[name] = data;
@@ -700,7 +700,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
             ?? throw new InvalidOperationException(L.T("Invalid docx file: word/document.xml is missing."));
         var doc = new XmlDocument();
         using var s = entry.Open();
-        doc.Load(s);
+        OfficeXml.LoadInto(doc, s);
         return doc;
     }
 
@@ -710,7 +710,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var entry = _zip.GetEntry("word/_rels/document.xml.rels");
         if (entry == null) return map;
         var doc = new XmlDocument();
-        using (var s = entry.Open()) doc.Load(s);
+        using (var s = entry.Open()) OfficeXml.LoadInto(doc, s);
         var ns = new XmlNamespaceManager(doc.NameTable);
         ns.AddNamespace("rel", "http://schemas.openxmlformats.org/package/2006/relationships");
         foreach (XmlElement rel in doc.SelectNodes("//rel:Relationship", ns)!)
@@ -749,7 +749,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         var entry = _zip.GetEntry("word/styles.xml");
         if (entry == null) return map;
         var doc = new XmlDocument();
-        using (var s = entry.Open()) doc.Load(s);
+        using (var s = entry.Open()) OfficeXml.LoadInto(doc, s);
         var ns = WmlNs(doc);
 
         // 文档默认格式（docDefaults/rPrDefault），所有样式的基础
@@ -900,7 +900,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         try
         {
             var doc = new XmlDocument();
-            doc.LoadXml(numberingXml);
+            OfficeXml.LoadXmlInto(doc, numberingXml);
             var ns = new XmlNamespaceManager(doc.NameTable);
             ns.AddNamespace("w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
 
@@ -1394,8 +1394,11 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     #endregion
 
     #region 表格/图片/节属性
-    private Element ParseTable(XmlElement tblEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, WordStyle> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
+    private Element ParseTable(XmlElement tblEl, XmlNamespaceManager ns, Dictionary<String, String> rels, Dictionary<String, WordStyle> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc, Int32 depth = 0)
     {
+        // 嵌套表格可能被构造成无限层，超限后按空表格处理
+        if (depth > OfficeLimits.MaxNestingDepth) return new Element();
+
         var rows = new List<List<Cell>>();
         var firstRowHeader = false;
         var style = new TableStyle();
@@ -1472,7 +1475,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
                 if (trShd != null) rowBg = trShd.GetAttribute("w:fill") ?? trShd.GetAttribute("fill");
             }
             foreach (XmlElement tc in tr.SelectNodes("w:tc", ns)!)
-                cells.Add(ParseCell(tc, ns, rels, styleMap, numIdFormats, doc));
+                cells.Add(ParseCell(tc, ns, rels, styleMap, numIdFormats, doc, depth));
             if (cells.Count > 0)
             {
                 rows.Add(cells);
@@ -1503,7 +1506,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
     }
 
     private Cell ParseCell(XmlElement tcEl, XmlNamespaceManager ns, Dictionary<String, String> rels,
-        Dictionary<String, WordStyle> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc)
+        Dictionary<String, WordStyle> styleMap, Dictionary<Int32, Dictionary<Int32, String>> numIdFormats, Document doc, Int32 depth = 0)
     {
         var cell = new Cell();
         var tcPr = tcEl.SelectSingleNode("w:tcPr", ns) as XmlElement;
@@ -1561,7 +1564,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         // 嵌套表格（W46）：<w:tc><w:tbl>...</w:tbl>
         foreach (XmlElement tblEl in tcEl.SelectNodes("w:tbl", ns)!)
         {
-            var te = ParseTable(tblEl, ns, rels, styleMap, numIdFormats, doc);
+            var te = ParseTable(tblEl, ns, rels, styleMap, numIdFormats, doc, depth + 1);
             if (te.Table != null) cell.NestedTables.Add(te.Table);
         }
 
@@ -1785,7 +1788,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         try
         {
             var doc = new XmlDocument();
-            doc.LoadXml(settingsXml);
+            OfficeXml.LoadXmlInto(doc, settingsXml);
             var ns = new XmlNamespaceManager(doc.NameTable);
             ns.AddNamespace("w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
             var docVars = doc.SelectSingleNode("//w:docVars", ns) as XmlElement;
@@ -1807,7 +1810,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         try
         {
             var doc = new XmlDocument();
-            doc.LoadXml(numberingXml);
+            OfficeXml.LoadXmlInto(doc, numberingXml);
             var ns = new XmlNamespaceManager(doc.NameTable);
             ns.AddNamespace("w", "http://schemas.openxmlformats.org/wordprocessingml/2006/main");
 
@@ -2039,7 +2042,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         if (entry == null) return elements;
 
         var xml = new XmlDocument();
-        using (var s = entry.Open()) xml.Load(s);
+        using (var s = entry.Open()) OfficeXml.LoadInto(xml, s);
         var ns = WmlNs(xml);
         var root = xml.SelectSingleNode("//*[local-name()='hdr' or local-name()='ftr']", ns) as XmlElement;
         if (root == null) return elements;
@@ -2079,7 +2082,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         if (entry == null) return null;
 
         var xml = new XmlDocument();
-        using (var s = entry.Open()) xml.Load(s);
+        using (var s = entry.Open()) OfficeXml.LoadInto(xml, s);
         var ns = WmlNs(xml);
 
         var sb = new StringBuilder();
@@ -2091,7 +2094,7 @@ public class WordReader : IDisposable, ITextExtractable, IMarkdownExtractable, I
         if (relsEntry != null)
         {
             var relsDoc = new XmlDocument();
-            using (var rs = relsEntry.Open()) relsDoc.Load(rs);
+            using (var rs = relsEntry.Open()) OfficeXml.LoadInto(relsDoc, rs);
             var relsNs = new XmlNamespaceManager(relsDoc.NameTable);
             relsNs.AddNamespace("rel", "http://schemas.openxmlformats.org/package/2006/relationships");
             foreach (XmlElement rel in relsDoc.SelectNodes("//rel:Relationship", relsNs)!)

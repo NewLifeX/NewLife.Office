@@ -48,6 +48,9 @@ public static class PdfObjectParser
     /// <returns>解析后的对象</returns>
     public static PdfObject? ReadObjectFromStream(Byte[] data, PdfXRefTable xref, Int32 objNum, Int32 streamObjNum)
     {
+        // 对象流自身不能也是压缩对象，否则会无限递归
+        if (xref.GetStreamObjNum(streamObjNum) > 0) return null;
+
         // 读取对象流本身
         var streamObj = ReadObject(data, xref, streamObjNum);
         if (streamObj is not PdfStream pdfStream) return null;
@@ -64,6 +67,7 @@ public static class PdfObjectParser
         var first = (Int32)firstNum.Value;
         // 对象流内容通常经 FlateDecode 压缩，须先解压；latin1 解码保留高字节
         var streamData = PdfReader.DecompressStreamData(pdfStream.Data, dict);
+        if (n < 0 || first < 0 || first > streamData.Length) return null;
         var latin1 = Encoding.GetEncoding(28591);
 
         // 读取对象索引（每个条目 = 对象号 + 流内偏移，各占可数字段）
@@ -83,7 +87,7 @@ public static class PdfObjectParser
             }
         }
 
-        if (targetOffset < 0 || first + targetOffset >= streamData.Length) return null;
+        if (targetOffset < 0 || (Int64)first + targetOffset >= streamData.Length) return null;
 
         // 使用简化的解析（对象流内的值不含间接对象头部）
         var valueText = latin1.GetString(streamData, first + targetOffset, streamData.Length - first - targetOffset);
@@ -232,10 +236,15 @@ public static class PdfObjectParser
     }
 
     /// <summary>解析字典值（支持数字、名称、字符串、数组、字典、布尔、null、间接引用）</summary>
-    internal static PdfObject? ParseDictValue(String text, ref Int32 pos)
+    internal static PdfObject? ParseDictValue(String text, ref Int32 pos) => ParseDictValue(text, ref pos, 0);
+
+    private static PdfObject? ParseDictValue(String text, ref Int32 pos, Int32 depth)
     {
         SkipWhitespace(text, ref pos);
         if (pos >= text.Length) return null;
+
+        if (depth > OfficeLimits.MaxPdfDepth)
+            throw new InvalidDataException(L.T("The PDF object nesting exceeds the limit ({0}).", OfficeLimits.MaxPdfDepth));
 
         var c = text[pos];
 
@@ -287,7 +296,7 @@ public static class PdfObjectParser
                 pos++;
                 var key = ReadName(text, ref pos);
                 SkipWhitespace(text, ref pos);
-                var val = ParseDictValue(text, ref pos);
+                var val = ParseDictValue(text, ref pos, depth + 1);
                 if (val != null) dict[key] = val;
             }
             return new DictObj(dict);
@@ -309,7 +318,7 @@ public static class PdfObjectParser
             {
                 SkipWhitespace(text, ref pos);
                 if (pos < text.Length && text[pos] == ']') { pos++; break; }
-                var item = ParseDictValue(text, ref pos);
+                var item = ParseDictValue(text, ref pos, depth + 1);
                 if (item != null) arr.Add(item);
                 else if (pos >= text.Length) break;
             }
@@ -359,26 +368,29 @@ public static class PdfObjectParser
                 if (pos < text.Length && text[pos] == '\n') pos++;
 
                 // /Length 支持直接数字或间接引用
-                var length = -1;
+                var length = -1L;
                 if (streamDictObj.Value.TryGetValue("Length", out var lenVal))
                 {
-                    if (lenVal is PdfNumber ln) length = (Int32)ln.Value;
+                    if (lenVal is PdfNumber ln) length = (Int64)ln.Value;
                     else if (lenVal is Ref lenRef)
                     {
                         var resolvedLen = ReadObject(data, xref!, lenRef.ObjNum);
-                        if (resolvedLen is PdfNumber rn) length = (Int32)rn.Value;
+                        if (resolvedLen is PdfNumber rn) length = (Int64)rn.Value;
                     }
                 }
-                if (length < 0 || pos + length > data.Length)
+                if (length < 0 || pos + length > data.Length || length > OfficeLimits.MaxPdfStreamBytes)
                 {
                     // 回退：扫描 endstream 关键字定位
                     var endIdx = text.IndexOf("endstream", pos, StringComparison.Ordinal);
                     length = endIdx > pos ? endIdx - pos : 0;
                 }
 
+                if (length > OfficeLimits.MaxPdfStreamBytes)
+                    throw new InvalidDataException(L.T("The PDF stream exceeds the resource limit ({0} bytes).", OfficeLimits.MaxPdfStreamBytes));
+
                 var streamData = new Byte[length];
-                if (length > 0) Array.Copy(data, pos, streamData, 0, length);
-                pos += length;
+                if (length > 0) Array.Copy(data, pos, streamData, 0, (Int32)length);
+                pos += (Int32)length;
 
                 return new PdfStream { Dict = streamDictObj.Value, Data = streamData };
             }

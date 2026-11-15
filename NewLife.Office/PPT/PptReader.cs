@@ -114,8 +114,13 @@ public sealed class PptReader : IDisposable, ITextExtractable, IMarkdownExtracta
     /// <param name="slides">累积的幻灯片文本列表</param>
     /// <param name="currentSlide">当前幻灯片文本收集器（null 代表还未进入任何幻灯片）</param>
     private static void ScanRecords(Byte[] buf, Int32 start, Int32 end,
-        List<List<String>> slides, List<String>? currentSlide)
+        List<List<String>> slides, List<String>? currentSlide) => ScanRecords(buf, start, end, slides, currentSlide, 0);
+
+    private static void ScanRecords(Byte[] buf, Int32 start, Int32 end,
+        List<List<String>> slides, List<String>? currentSlide, Int32 depth)
     {
+        if (depth > OfficeLimits.MaxNestingDepth) return;
+
         var reader = new SpanReader(buf, start, end - start);
         while (reader.Position + 8 <= reader.Capacity)
         {
@@ -162,12 +167,12 @@ public sealed class PptReader : IDisposable, ITextExtractable, IMarkdownExtracta
                     // 进入一个新幻灯片
                     var slideTexts = new List<String>();
                     slides.Add(slideTexts);
-                    ScanRecords(buf, bodyStart, bodyStart + recLen, slides, slideTexts);
+                    ScanRecords(buf, bodyStart, bodyStart + recLen, slides, slideTexts, depth + 1);
                 }
                 else
                 {
                     // 其他容器—继续在当前幻灯片上下文中递归
-                    ScanRecords(buf, bodyStart, bodyStart + recLen, slides, currentSlide);
+                    ScanRecords(buf, bodyStart, bodyStart + recLen, slides, currentSlide, depth + 1);
                 }
             }
 

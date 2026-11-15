@@ -69,9 +69,14 @@ internal sealed class CfbHeader
         reader.Advance(2);  // Byte order mark (0xFFFE)
 
         var sectorSizePow = reader.ReadUInt16();
+        // MS-CFB：v3 固定 512 字节扇区，v4 固定 4096 字节；其他值一律视为畸形
+        if (header.MajorVersion == 3 && sectorSizePow != 9 || header.MajorVersion == 4 && sectorSizePow != 12 || header.MajorVersion is not 3 and not 4)
+            throw new InvalidDataException(L.T("Invalid CFB sector size or major version."));
         header.SectorSize = 1 << sectorSizePow;
 
         var miniSectorSizePow = reader.ReadUInt16();
+        if (miniSectorSizePow != 6)
+            throw new InvalidDataException(L.T("Invalid CFB mini sector size."));
         header.MiniSectorSize = 1 << miniSectorSizePow;
 
         reader.Advance(6);  // Reserved
@@ -86,6 +91,9 @@ internal sealed class CfbHeader
         header.MiniFatSectorCount = reader.ReadInt32();
         header.FirstDifatSectorId = reader.ReadInt32();
         header.DifatSectorCount = reader.ReadInt32();
+
+        if (header.MiniStreamCutoff <= 0 || header.FatSectorCount < 0 || header.MiniFatSectorCount < 0 || header.DifatSectorCount < 0)
+            throw new InvalidDataException(L.T("Invalid CFB header counts."));
 
         // 读取头部内嵌的 109 个 DIFAT 条目
         var difat = new Int32[109];

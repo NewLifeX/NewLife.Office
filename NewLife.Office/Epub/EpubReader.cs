@@ -24,7 +24,7 @@ public class EpubReader
     public EpubDocument Read(Stream stream)
     {
         var doc = new EpubDocument();
-        using var zip = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: true);
+        using var zip = OfficeStreams.OpenReadArchive(stream, leaveOpen: true);
 
         // 1. 读取 META-INF/container.xml 获取 OPF 路径
         var opfPath = GetOpfPath(zip);
@@ -50,7 +50,7 @@ public class EpubReader
 
         using var stream = container.Open();
         var xml = new XmlDocument();
-        xml.Load(stream);
+        OfficeXml.LoadInto(xml, stream);
 
         var ns = new XmlNamespaceManager(xml.NameTable);
         ns.AddNamespace("c", "urn:oasis:names:tc:opendocument:xmlns:container");
@@ -64,7 +64,7 @@ public class EpubReader
     {
         using var stream = opfEntry.Open();
         var xml = new XmlDocument();
-        xml.Load(stream);
+        OfficeXml.LoadInto(xml, stream);
 
         var ns = new XmlNamespaceManager(xml.NameTable);
         ns.AddNamespace("opf", "http://www.idpf.org/2007/opf");

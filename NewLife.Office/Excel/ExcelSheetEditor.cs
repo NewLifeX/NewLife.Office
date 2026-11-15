@@ -22,6 +22,9 @@ public static class ExcelSheetEditor
         foreach (var row in sheet.ActualRowNumbers)
             if (row > maxRow) maxRow = row;
 
+        if (maxRow >= OfficeLimits.MaxExcelRows)
+            throw new InvalidDataException(L.T("The worksheet exceeds the maximum row count ({0}).", OfficeLimits.MaxExcelRows));
+
         var rows = new List<Object?[]>(maxRow + 1);
         for (var i = 0; i <= maxRow; i++) rows.Add([]);
 

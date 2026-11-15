@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
@@ -524,7 +524,7 @@ public sealed class BiffWriter : IDisposable
         }
 
         // 7. SST
-        WriteRecord(ms, RecSst, BuildSstRecord());
+        WriteSstRecords(ms);
 
         // 8. Globals EOF
         WriteRecord(ms, RecEof, []);
@@ -820,33 +820,77 @@ public sealed class BiffWriter : IDisposable
         return buf;
     }
 
-    private Byte[] BuildSstRecord()
+    /// <summary>按记录边界写出 SST 与 CONTINUE，字符串不跨记录截断</summary>
+    /// <remarks>
+    /// Excel/NPOI 要求 CONTINUE 只在字符边界切分，且续记录首字节是压缩标志；
+    /// 随意按字节切分会让第三方把续记录首字节当成字符，读出"第 8207 个字符变成 0"这类损坏数据。
+    /// </remarks>
+    private void WriteSstRecords(Stream stream)
     {
-        // 预计算总大小
-        var totalSize = 8; // totalRefs(4) + uniqueCount(4)
-        foreach (var s in _sst)
-            totalSize += 3 + s.Length * 2; // cch(2) + flags(1) + UTF-16LE chars
-
-        using var ms = new MemoryStream(totalSize);
         var header = new Byte[8];
-        var writer = new SpanWriter(header);
-        writer.Write(_sst.Count); // total refs
-        writer.Write(_sst.Count); // unique count
-        ms.Write(header, 0, 8);
+        var hw = new SpanWriter(header);
+        hw.Write(_sst.Count);
+        hw.Write(_sst.Count);
+
+        var buffer = new MemoryStream(MaxRecordDataSize);
+        buffer.Write(header, 0, header.Length);
+        var isFirst = true;
+
+        void Flush()
+        {
+            WriteRecord(stream, isFirst ? RecSst : RecContinue, buffer.ToArray());
+            buffer.SetLength(0);
+            isFirst = false;
+        }
 
         foreach (var s in _sst)
         {
-            // XLUnicodeString：cch(2) + flags(1) + UTF-16LE 数据
-            var strHeader = new Byte[3];
-            var sw = new SpanWriter(strHeader);
-            sw.Write((UInt16)s.Length);
-            sw.Write((Byte)0x01);
-            ms.Write(strHeader, 0, 3);
-            var charBytes = Encoding.Unicode.GetBytes(s);
-            ms.Write(charBytes, 0, charBytes.Length);
+            var chars = Encoding.Unicode.GetBytes(s);
+            var total = s.Length;
+            var offset = 0;
+            var firstChunk = true;
+
+            do
+            {
+                var avail = MaxRecordDataSize - (Int32)buffer.Length;
+                var headLen = firstChunk ? 3 : 1;
+                if (avail < headLen + 2)
+                {
+                    Flush();
+                    avail = MaxRecordDataSize;
+                }
+
+                if (firstChunk)
+                {
+                    // 首块：cch(2) + flags(1)
+                    buffer.WriteByte((Byte)(total & 0xFF));
+                    buffer.WriteByte((Byte)(total >> 8));
+                    buffer.WriteByte(0x01); // fHighByte：UTF-16LE
+                    avail -= 3;
+                }
+                else
+                {
+                    // 续块首字节是压缩标志，与首块的 flags 语义一致
+                    buffer.WriteByte(0x01);
+                    avail -= 1;
+                }
+
+                var count = Math.Min(total - offset, avail / 2);
+                if (count > 0)
+                {
+                    buffer.Write(chars, offset * 2, count * 2);
+                    offset += count;
+                }
+                firstChunk = false;
+
+                if (offset >= total) break;
+
+                Flush();
+            }
+            while (true);
         }
 
-        return ms.ToArray();
+        Flush();
     }
 
     private static Byte[] BuildDimensionsData(Int32 rowCount, Int32 colCount)
@@ -1259,49 +1303,53 @@ public sealed class BiffWriter : IDisposable
 
     private static Byte[] BuildBuiltinXfRecord(Int32 index)
     {
-        var buf = new Byte[22];
+        // BIFF8 XF 固定 20 字节：ifnt(2) ifmt(2) flags(2) alc(1) rot(1) txt(1) usedattr(2) borders(4) fill(4) reserved(1)
+        var buf = new Byte[20];
         var writer = new SpanWriter(buf, 0, buf.Length);
         writer.Write((UInt16)0);
         writer.Write(index == 1 ? (UInt16)164 : (UInt16)0);
         writer.Write(index < 16 ? (UInt16)0xFFF5 : (UInt16)0x0001);
-        writer.Write((UInt16)0x20C0);
-        writer.Write((UInt16)0);
-        writer.Write((UInt16)0);
-        writer.Write((UInt16)0);
-        writer.Write(0u);
-        writer.Write(0u);
+        writer.Write((Byte)0x20);          // alc：水平常规 + 垂直居中
+        writer.Write((Byte)0);             // rot
+        writer.Write((Byte)0);             // txt
+        writer.Write((UInt16)0x00F4);      // usedattr
+        writer.Write(0u);                  // 无边框
+        writer.Write(0xC0000000u);         // 无填充（与 xlwt 默认 XF 一致）
+        writer.Write((Byte)0x20);          // 保留字节
         return buf;
     }
 
     private static Byte[] BuildStyledXfRecord(UInt16 fontIndex, UInt32 bgColor, Boolean hasBorder)
     {
-        var buf = new Byte[22];
+        var buf = new Byte[20];
         var writer = new SpanWriter(buf, 0, buf.Length);
         writer.Write(fontIndex);
-        writer.Write((UInt16)0); // format index
-        writer.Write((UInt16)0xFFF5); // cell style
-        writer.Write((UInt16)0x20C0); // default alignment (center-vert, no-wrap)
-        writer.Write((UInt16)0);
-        writer.Write((UInt16)0);
-        writer.Write((UInt16)0);
-        writer.Write(hasBorder ? 0x0000000Fu : 0u); // thin borders (4 nibbles)
-        writer.Write(bgColor); // fill pattern + bg color
+        writer.Write((UInt16)0);           // format index
+        writer.Write((UInt16)0xFFF5);      // flags：单元格样式
+        writer.Write((Byte)0x20);          // alc
+        writer.Write((Byte)0);             // rot
+        writer.Write((Byte)0);             // txt
+        writer.Write((UInt16)0x00F4);      // usedattr
+        writer.Write(hasBorder ? 0x0000000Fu : 0u); // 细边框（4 个 nibble）
+        writer.Write(bgColor);             // 填充
+        writer.Write((Byte)0x20);          // 保留字节
         return buf;
     }
 
     private static Byte[] BuildFormatXfRecord(UInt16 fontIndex, UInt16 formatIndex)
     {
-        var buf = new Byte[22];
+        var buf = new Byte[20];
         var writer = new SpanWriter(buf, 0, buf.Length);
         writer.Write(fontIndex);
-        writer.Write(formatIndex);     // 指向 FORMAT 记录的索引
-        writer.Write((UInt16)0xFFF5);  // cell style
-        writer.Write((UInt16)0x20C0);  // default alignment
-        writer.Write((UInt16)0);
-        writer.Write((UInt16)0);
-        writer.Write((UInt16)0);
-        writer.Write(0u);              // no borders
-        writer.Write(0x40u);           // no fill
+        writer.Write(formatIndex);         // 指向 FORMAT 记录的索引
+        writer.Write((UInt16)0xFFF5);      // flags
+        writer.Write((Byte)0x20);          // alc
+        writer.Write((Byte)0);             // rot
+        writer.Write((Byte)0);             // txt
+        writer.Write((UInt16)0x00F4);      // usedattr
+        writer.Write(0u);                  // 无边框
+        writer.Write(0xC0000000u);         // 无填充
+        writer.Write((Byte)0x20);          // 保留字节
         return buf;
     }
 

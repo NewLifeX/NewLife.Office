@@ -340,7 +340,7 @@ public class PivotBuilder
                 if (val is String s)
                     sb.Append($"<c r=\"{col}\" t=\"inlineStr\"><is><t>{Escape(s)}</t></is></c>");
                 else
-                    sb.Append($"<c r=\"{col}\"><v>{SecurityElement.Escape(Convert.ToString(val, CultureInfo.InvariantCulture))}</v></c>");
+                    sb.Append($"<c r=\"{col}\"><v>{OfficeXml.Escape(Convert.ToString(val, CultureInfo.InvariantCulture))}</v></c>");
             }
             sb.Append("</row>");
         }
@@ -415,7 +415,7 @@ public class PivotBuilder
                 if (v == null || v is String)
                     sb.Append($"<s v=\"{Escape(v?.ToString() ?? String.Empty)}\"/>");
                 else
-                    sb.Append($"<n v=\"{SecurityElement.Escape(Convert.ToString(v, CultureInfo.InvariantCulture))}\"/>");
+                    sb.Append($"<n v=\"{OfficeXml.Escape(Convert.ToString(v, CultureInfo.InvariantCulture))}\"/>");
             }
             sb.Append("</r>");
         }
@@ -533,7 +533,7 @@ public class PivotBuilder
     }
 
     private static String Escape(String? s) =>
-        s == null ? String.Empty : (SecurityElement.Escape(s) ?? s);
+        s == null ? String.Empty : (OfficeXml.Escape(s) ?? s);
 
     private static String GetColName(Int32 index)
     {

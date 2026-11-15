@@ -221,7 +221,7 @@ public static class WordStyles
     private static XmlDocument Load(Document doc)
     {
         var xml = new XmlDocument();
-        xml.LoadXml(doc.StylesXml ?? WordWriter.BuildDefaultStylesXml());
+        OfficeXml.LoadXmlInto(xml, doc.StylesXml ?? WordWriter.BuildDefaultStylesXml());
         return xml;
     }
 
