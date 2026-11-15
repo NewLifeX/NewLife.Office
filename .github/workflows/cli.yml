@@ -21,9 +21,9 @@ jobs:
         rid: [win-x64, win-x86, win-arm64, linux-x64, linux-arm64, osx-x64, osx-arm64]
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
     - name: Setup dotNET
-      uses: actions/setup-dotnet@v4
+      uses: actions/setup-dotnet@v6
       with:
         dotnet-version: |
           8.x
@@ -44,7 +44,7 @@ jobs:
         pwsh -File tools/publish-cli.ps1 -Runtime ${{ matrix.rid }} -OutDir out -VersionSuffix $suffix
 
     - name: Upload artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: office-${{ matrix.rid }}
         path: out/*.zip
@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v7
       with:
         path: assets
         merge-multiple: true
