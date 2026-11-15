@@ -270,7 +270,8 @@ public sealed class WordHtmlConverter
 
         // 构建内联样式
         var spanStyle = new StringBuilder();
-        if (!String.IsNullOrEmpty(color) && color != "auto" && color != "000000")
+        // 颜色值来自文档，必须校验为十六进制，否则可注入任意 CSS
+        if (!String.IsNullOrEmpty(color) && color != "auto" && color != "000000" && IsHexColor(color))
             spanStyle.Append($"color:#{color};");
         if (!String.IsNullOrEmpty(szVal) && Int32.TryParse(szVal, out var sz))
         {
@@ -339,6 +340,32 @@ public sealed class WordHtmlConverter
         }
     }
 
+    /// <summary>判断是否为 6 位十六进制颜色</summary>
+    private static Boolean IsHexColor(String value)
+    {
+        if (value.Length != 6) return false;
+        foreach (var ch in value)
+        {
+            if (!(ch >= '0' && ch <= '9') && !(ch >= 'a' && ch <= 'f') && !(ch >= 'A' && ch <= 'F')) return false;
+        }
+        return true;
+    }
+
+    /// <summary>判断链接是否为安全协议</summary>
+    private static Boolean IsSafeUrl(String url)
+    {
+        var sb = new StringBuilder(url.Length);
+        foreach (var ch in url)
+        {
+            if (ch <= ' ') continue;
+            sb.Append(ch);
+        }
+
+        var normalized = sb.ToString().ToLowerInvariant();
+        return !normalized.StartsWith("javascript:") && !normalized.StartsWith("vbscript:") &&
+               !normalized.StartsWith("data:") && !normalized.StartsWith("file:");
+    }
+
     private static void RenderHyperlink(StringBuilder sb, XmlElement hyperlink,
         Dictionary<String, String> rels, Dictionary<String, String> images, XmlNamespaceManager ns)
     {
@@ -347,7 +374,7 @@ public sealed class WordHtmlConverter
         if (!String.IsNullOrEmpty(relId))
             rels.TryGetValue(relId, out url!);
 
-        if (!String.IsNullOrEmpty(url))
+        if (!String.IsNullOrEmpty(url) && IsSafeUrl(url))
             sb.Append($"<a href=\"{HtmlAttrEncode(url)}\">");
 
         foreach (XmlNode child in hyperlink.ChildNodes)

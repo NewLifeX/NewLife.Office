@@ -1330,8 +1330,8 @@ public sealed class BiffWriter : IDisposable
         writer.Write((Byte)0);             // rot
         writer.Write((Byte)0);             // txt
         writer.Write((UInt16)0x00F4);      // usedattr
-        writer.Write(hasBorder ? 0x0000000Fu : 0u); // 细边框（4 个 nibble）
-        writer.Write(bgColor);             // 填充
+        writer.Write(hasBorder ? 0x00001111u : 0u); // 四边细边框：byte0 左/右，byte1 上/下
+        writer.Write(0xC0000000u);         // 无填充（Excel/xlwt 默认值）
         writer.Write((Byte)0x20);          // 保留字节
         return buf;
     }

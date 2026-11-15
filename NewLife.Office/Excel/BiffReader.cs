@@ -787,40 +787,47 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
         return cf;
     }
 
-    /// <summary>解析 XF 记录（兼容标准 20 字节与本库 22 字节布局）</summary>
+    /// <summary>解析 XF 记录（兼容标准 20 字节与本库早期 22 字节布局）</summary>
     private static XfEntry ParseXf(Byte[] data)
     {
         var xf = new XfEntry();
         xf.FontId = ReadUInt16(data, 0);
         xf.FormatId = ReadUInt16(data, 2);
 
-        // fAlign（标准 20 字节布局与 22 字节布局均在偏移 6）
-        var fAlign = ReadUInt16(data, 6);
-        xf.Wrap = (fAlign & 0x01) != 0;
-        xf.HAlign = (HorizontalAlignment)((fAlign >> 3) & 0x07);
-        xf.VAlign = (VerticalAlignment)((fAlign >> 9) & 0x03);
+        // 早期本库写出的 22 字节布局：对齐字段在 6，边框在 14，填充在 18
+        if (data.Length >= 22)
+        {
+            var fAlign = ReadUInt16(data, 6);
+            xf.Wrap = (fAlign & 0x01) != 0;
+            xf.HAlign = (HorizontalAlignment)((fAlign >> 3) & 0x07);
+            xf.VAlign = (VerticalAlignment)((fAlign >> 9) & 0x03);
 
-        // 边框样式 nibble：标准布局在偏移 10，本库 22 字节布局在偏移 14
-        var borderPos = data.Length == 22 ? 14 : 10;
-        if (borderPos + 4 <= data.Length)
-        {
-            xf.LeftBorder = (BorderStyle)(data[borderPos] & 0x0F);
-            xf.RightBorder = (BorderStyle)((data[borderPos] >> 4) & 0x0F);
-            xf.TopBorder = (BorderStyle)(data[borderPos + 1] & 0x0F);
-            xf.BottomBorder = (BorderStyle)((data[borderPos + 1] >> 4) & 0x0F);
+            var legacyBorder = 14;
+            xf.LeftBorder = (BorderStyle)(data[legacyBorder] & 0x0F);
+            xf.RightBorder = (BorderStyle)((data[legacyBorder] >> 4) & 0x0F);
+            xf.TopBorder = (BorderStyle)(data[legacyBorder + 1] & 0x0F);
+            xf.BottomBorder = (BorderStyle)((data[legacyBorder + 1] >> 4) & 0x0F);
+
+            xf.FillPattern = data[21];
+            return xf;
         }
 
-        // 填充图案：标准布局在偏移 18；本库 22 字节布局末字节为 0x40/0
-        if (data.Length == 22)
-        {
-            xf.FillPattern = (UInt32)data[21];
-        }
-        else if (data.Length >= 20)
-        {
-            xf.FillPattern = data[18];
-            // 标准布局填充色：16-17 前景，18 图案（颜色索引在 palette，best-effort）
-            xf.FgColor = ReadUInt16(data, 16);
-        }
+        // 标准 BIFF8 布局：ifnt(2) ifmt(2) flags(2) alc(1) rot(1) txt(1) usedattr(2) borders(4) fill(4) reserved(1)
+        var alc = data[6];
+        xf.Wrap = (alc & 0x08) != 0;
+        xf.HAlign = (HorizontalAlignment)(alc & 0x07);
+        xf.VAlign = (VerticalAlignment)((alc >> 4) & 0x07);
+
+        // 边框：byte0 左/右样式，byte1 上/下样式，byte2-3 颜色
+        xf.LeftBorder = (BorderStyle)(data[11] & 0x0F);
+        xf.RightBorder = (BorderStyle)((data[11] >> 4) & 0x0F);
+        xf.TopBorder = (BorderStyle)(data[12] & 0x0F);
+        xf.BottomBorder = (BorderStyle)((data[12] >> 4) & 0x0F);
+
+        // 填充：Excel/xlwt 默认值为 0xC0000000，表示无填充
+        var fill = ReadUInt32(data, 15);
+        xf.FgColor = ReadUInt16(data, 15);
+        xf.FillPattern = fill is 0 or 0x40 or 0xC0000000 ? 0u : fill;
         return xf;
     }
 
@@ -876,7 +883,8 @@ public sealed class BiffReader : IDisposable, ITextExtractable, IMarkdownExtract
 
         if (xf.Wrap) { cf.WrapText = true; changed = true; }
         if (xf.HAlign != HorizontalAlignment.General) { cf.HAlign = xf.HAlign; changed = true; }
-        if (xf.VAlign != VerticalAlignment.Top) { cf.VAlign = xf.VAlign; changed = true; }
+        // Excel 默认垂直对齐是底部，按默认值处理，避免所有单元格都被判定为有样式
+        if (xf.VAlign is not (VerticalAlignment.Top or VerticalAlignment.Bottom)) { cf.VAlign = xf.VAlign; changed = true; }
         if (xf.LeftBorder != BorderStyle.None) { cf.LeftBorder = xf.LeftBorder; changed = true; }
         if (xf.RightBorder != BorderStyle.None) { cf.RightBorder = xf.RightBorder; changed = true; }
         if (xf.TopBorder != BorderStyle.None) { cf.TopBorder = xf.TopBorder; changed = true; }

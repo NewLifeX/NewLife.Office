@@ -153,16 +153,16 @@ public class ICalReader
             case "dtstart":
                 evt.AllDay = param.IndexOf("VALUE=DATE", StringComparison.OrdinalIgnoreCase) >= 0
                              && !param.Contains("DATE-TIME");
-                evt.Start = ParseDateTime(value, evt.AllDay);
+                evt.Start = ParseDateTime(value, evt.AllDay, GetTzid(param));
                 break;
             case "dtend":
                 var allDayEnd = param.IndexOf("VALUE=DATE", StringComparison.OrdinalIgnoreCase) >= 0
                                 && !param.Contains("DATE-TIME");
-                evt.End = ParseDateTime(value, allDayEnd);
+                evt.End = ParseDateTime(value, allDayEnd, GetTzid(param));
                 break;
             case "duration": evt.Duration = value; break;
-            case "created": evt.Created = ParseDateTime(value, false); break;
-            case "last-modified": evt.LastModified = ParseDateTime(value, false); break;
+            case "created": evt.Created = ParseDateTime(value, false, GetTzid(param)); break;
+            case "last-modified": evt.LastModified = ParseDateTime(value, false, GetTzid(param)); break;
             default:
                 evt.ExtraProps[name] = value;
                 break;
@@ -177,9 +177,9 @@ public class ICalReader
             case "summary": todo.Summary = UnescapeText(value); break;
             case "description": todo.Description = UnescapeText(value); break;
             case "status": todo.Status = value; break;
-            case "dtstart": todo.Start = ParseDateTime(value, false); break;
-            case "due": todo.Due = ParseDateTime(value, false); break;
-            case "completed": todo.Completed = ParseDateTime(value, false); break;
+            case "dtstart": todo.Start = ParseDateTime(value, false, GetTzid(param)); break;
+            case "due": todo.Due = ParseDateTime(value, false, GetTzid(param)); break;
+            case "completed": todo.Completed = ParseDateTime(value, false, GetTzid(param)); break;
             case "percent-complete":
                 if (Int32.TryParse(value, out var pct)) todo.PercentComplete = pct;
                 break;
@@ -189,8 +189,51 @@ public class ICalReader
         }
     }
 
-    /// <summary>解析 iCal 日期/时间格式：20240101T120000Z 或 20240101</summary>
-    private static DateTimeOffset? ParseDateTime(String value, Boolean allDay)
+    /// <summary>从属性参数串中提取 TZID</summary>
+    private static String? GetTzid(String? param)
+    {
+        if (String.IsNullOrEmpty(param)) return null;
+
+        var idx = param.IndexOf("TZID=", StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return null;
+
+        var value = param[(idx + 5)..];
+        var semi = value.IndexOf(';');
+        if (semi >= 0) value = value[..semi];
+
+        return value.Trim().Trim('"');
+    }
+
+    /// <summary>按 IANA/Windows 时区名解析时区，无法识别返回 null</summary>
+    private static TimeZoneInfo? ResolveTimeZone(String? tzid)
+    {
+        if (String.IsNullOrEmpty(tzid)) return null;
+
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(tzid);
+        }
+        catch
+        {
+            // 老框架在 Windows 上不认 IANA 名，尝试一次转换后重试
+        }
+
+#if NET6_0_OR_GREATER
+        try
+        {
+            if (TimeZoneInfo.TryConvertIanaIdToWindowsId(tzid, out var windowsId))
+                return TimeZoneInfo.FindSystemTimeZoneById(windowsId);
+        }
+        catch
+        {
+            // 忽略并回退
+        }
+#endif
+        return null;
+    }
+
+    /// <summary>解析 iCal 日期/时间格式：20240101T120000Z、20240101T120000[;TZID=...] 或 20240101</summary>
+    private static DateTimeOffset? ParseDateTime(String value, Boolean allDay, String? tzid = null)
     {
         if (String.IsNullOrEmpty(value)) return null;
         if (allDay || value.Length == 8)
@@ -203,12 +246,24 @@ public class ICalReader
         }
         else
         {
-            // YYYYMMDDTHHMISS or YYYYMMDDTHHMISSZ
-            var fmt = value.EndsWith("Z", StringComparison.OrdinalIgnoreCase) ? "yyyyMMddTHHmmssZ" : "yyyyMMddTHHmmss";
+            // YYYYMMDDTHHMISS 或 YYYYMMDDTHHMISSZ
+            var isUtc = value.EndsWith("Z", StringComparison.OrdinalIgnoreCase);
             if (DateTime.TryParseExact(value.TrimEnd('Z', 'z'), "yyyyMMddTHHmmss",
                 CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal, out var dt))
-                return new DateTimeOffset(dt.ToUniversalTime(), TimeSpan.Zero);
+                DateTimeStyles.None, out var dt))
+            {
+                if (isUtc) return new DateTimeOffset(dt, TimeSpan.Zero);
+
+                // 带 TZID 的本地时间必须换算成 UTC，否则会整体偏移若干小时
+                var zone = ResolveTimeZone(tzid);
+                if (zone != null)
+                {
+                    var offset = zone.GetUtcOffset(DateTime.SpecifyKind(dt, DateTimeKind.Unspecified));
+                    return new DateTimeOffset(dt, offset);
+                }
+
+                return new DateTimeOffset(dt, TimeSpan.Zero);
+            }
         }
         return null;
     }

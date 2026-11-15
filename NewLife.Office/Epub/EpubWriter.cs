@@ -56,8 +56,12 @@ public class EpubWriter
 
         // 章节
         var chapters = PadChapters(doc.Chapters);
-        foreach (var ch in chapters)
+        var usedNames = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < chapters.Count; i++)
         {
+            var ch = chapters[i];
+            // 章节名来自调用方或其它文档，必须归一化，禁止 ../ 逃出 OEBPS 目录
+            ch.FileName = SafeChapterName(ch.FileName, i, usedNames);
             WriteText(zip, "OEBPS/" + ch.FileName, BuildChapterXhtml(ch));
         }
 
@@ -79,6 +83,41 @@ public class EpubWriter
             result.Add(ch);
         }
         return result;
+    }
+
+    /// <summary>把章节文件名归一化为 OEBPS 目录下的安全文件名</summary>
+    private static String SafeChapterName(String? fileName, Int32 index, HashSet<String> used)
+    {
+        var name = fileName ?? String.Empty;
+
+        // 仅保留文件名部分，去掉任何目录与盘符
+        var slash = name.LastIndexOfAny(['/', '\\']);
+        if (slash >= 0) name = name[(slash + 1)..];
+        name = name.Replace(":", String.Empty).Trim();
+
+        var invalid = Path.GetInvalidFileNameChars();
+        var sb = new StringBuilder(name.Length);
+        foreach (var ch in name)
+        {
+            sb.Append(Array.IndexOf(invalid, ch) >= 0 ? '_' : ch);
+        }
+        name = sb.ToString().Trim('.');
+
+        if (name.Length == 0) name = "chapter" + (index + 1).ToString("D2") + ".xhtml";
+        if (!name.EndsWith(".xhtml", StringComparison.OrdinalIgnoreCase) && !name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+            name += ".xhtml";
+
+        // 去重，避免同名章节互相覆盖
+        var unique = name;
+        var seq = 1;
+        while (!used.Add(unique))
+        {
+            var dot = name.LastIndexOf('.');
+            unique = dot > 0 ? $"{name[..dot]}-{seq}{name[dot..]}" : $"{name}-{seq}";
+            seq++;
+        }
+
+        return unique;
     }
 
     private static String BuildContainer()

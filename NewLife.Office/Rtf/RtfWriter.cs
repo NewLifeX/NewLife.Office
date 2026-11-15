@@ -387,15 +387,22 @@ public sealed class RtfWriter
     {
         if (String.IsNullOrEmpty(text)) return text;
         var sb = new StringBuilder(text.Length + 8);
-        foreach (var ch in text)
+        for (var i = 0; i < text.Length; i++)
         {
+            var ch = text[i];
             if (ch == '\\') sb.Append("\\\\");
             else if (ch == '{') sb.Append("\\{");
             else if (ch == '}') sb.Append("\\}");
+            else if (ch == '\r') { /* 与下面的 \n 合并，避免重复换行 */ }
+            else if (ch == '\n') sb.Append("\\line ");
+            else if (ch == '\t') sb.Append("\\tab ");
             else if (ch > 127)
             {
-                // Unicode escape: \uN?
-                sb.Append($"\\u{(Int32)ch}?");
+                // RTF 的 \uN 只接受有符号 16 位值，超出 0x7FFF 要写成负数；
+                // 代理对必须拆成两个 UTF-16 码元分别输出
+                var code = (Int32)ch;
+                if (code > 0x7FFF) code -= 0x10000;
+                sb.Append("\\u").Append(code).Append('?');
             }
             else sb.Append(ch);
         }

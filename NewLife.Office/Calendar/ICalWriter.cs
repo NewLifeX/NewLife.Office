@@ -1,4 +1,5 @@
-﻿using System.Text;
+using System.Globalization;
+using System.Text;
 
 namespace NewLife.Office.Calendar;
 
@@ -94,7 +95,7 @@ public class ICalWriter
         if (evt.LastModified.HasValue) AppendLine(sb, "LAST-MODIFIED:" + FormatDateTime(evt.LastModified.Value));
         foreach (var kv in evt.ExtraProps)
         {
-            AppendLine(sb, kv.Key + ":" + kv.Value);
+            AppendLine(sb, kv.Key + ":" + EscapeText(kv.Value));
         }
         AppendLine(sb, "END:VEVENT");
     }
@@ -117,6 +118,9 @@ public class ICalWriter
     /// <summary>添加折行支持的属性行（RFC 5545 要求内容行最长 75 字节）</summary>
     private static void AppendLine(StringBuilder sb, String line)
     {
+        // 行内容里出现裸 CR/LF 会破坏 iCalendar 结构（CRLF 注入），统一剔除
+        line = line.Replace("\r", String.Empty).Replace("\n", String.Empty);
+
         var bytes = Encoding.UTF8.GetBytes(line);
         if (bytes.Length <= 75)
         {
@@ -157,7 +161,7 @@ public class ICalWriter
 
     private static String FormatDateTime(DateTimeOffset dt)
     {
-        return dt.ToUniversalTime().ToString("yyyyMMddTHHmmssZ");
+        return dt.ToUniversalTime().ToString("yyyyMMddTHHmmssZ", CultureInfo.InvariantCulture);
     }
 
     private static String EscapeText(String value)

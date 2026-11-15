@@ -97,7 +97,7 @@ internal sealed class MarkdownHtmlConverter
                 break;
             case MarkdownBlockType.HtmlBlock:
                 var hb = (HtmlBlock)block;
-                sb.AppendLine(hb.RawText);
+                sb.AppendLine(_options.AllowRawHtml ? hb.RawText : HtmlEncode(hb.RawText));
                 break;
             case MarkdownBlockType.MathBlock:
                 var mb = (MathBlock)block;
@@ -320,7 +320,9 @@ internal sealed class MarkdownHtmlConverter
                 sb.Append(" ");
                 break;
             case MarkdownInlineType.RawHtml:
-                sb.Append(inline.Text ?? "");
+                // 原文原始 HTML：不受信任的输入应关闭 AllowRawHtml
+                if (_options.AllowRawHtml) sb.Append(inline.Text ?? "");
+                else sb.Append(HtmlEncode(inline.Text ?? ""));
                 break;
             case MarkdownInlineType.AutoLink:
                 var href2 = inline.Href ?? inline.Text ?? "";
@@ -403,14 +405,38 @@ internal sealed class MarkdownHtmlConverter
             .Replace("\"", "&quot;");
     }
 
-    /// <summary>判断是否为危险URL（javascript:/data:）</summary>
+    /// <summary>判断是否为危险URL（javascript:/vbscript:/data: 等）</summary>
     /// <param name="url">URL字符串</param>
     /// <returns>是否危险</returns>
     private static Boolean IsDangerousUrl(String url)
     {
         if (String.IsNullOrEmpty(url)) return false;
-        var lower = url.TrimStart().ToLower();
-        return lower.StartsWith("javascript:") || lower.StartsWith("vbscript:") || lower.StartsWith("data:");
+
+        // 浏览器解析 URL 时会忽略控制字符与空白，"java\tscript:" 依然是 javascript:，判断前必须剔除
+        var sb = new StringBuilder(url.Length);
+        foreach (var ch in url)
+        {
+            if (ch <= ' ' || ch == '\u007F') continue;
+            sb.Append(ch);
+        }
+
+        var normalized = sb.ToString().ToLowerInvariant();
+        return normalized.StartsWith("javascript:") || normalized.StartsWith("vbscript:") ||
+               normalized.StartsWith("data:") || normalized.StartsWith("file:") || normalized.StartsWith("about:");
+    }
+
+    /// <summary>判断是否为合法 HTML 属性名</summary>
+    /// <param name="name">属性名</param>
+    /// <returns>是否合法</returns>
+    private static Boolean IsValidAttributeName(String name)
+    {
+        if (name.Length == 0 || !Char.IsLetter(name[0])) return false;
+
+        foreach (var ch in name)
+        {
+            if (!Char.IsLetterOrDigit(ch) && ch != '-' && ch != '_' && ch != ':' && ch != '.') return false;
+        }
+        return true;
     }
 
     /// <summary>判断是否为外部链接</summary>
@@ -448,7 +474,10 @@ internal sealed class MarkdownHtmlConverter
                 var eqIdx = part.IndexOf('=');
                 var key = part[..eqIdx];
                 var value = part[(eqIdx + 1)..].Trim('"', '\'');
-                sb.Append(' ').Append(key).Append("=\"").Append(HtmlEncode(value)).Append('"');
+
+                // 属性名白名单式校验：只允许字母开头、由字母数字与 -_:. 组成的名字，避免注入事件处理器以外的怪属性
+                if (key.Length > 0 && IsValidAttributeName(key))
+                    sb.Append(' ').Append(key).Append("=\"").Append(HtmlEncode(value)).Append('"');
             }
         }
 

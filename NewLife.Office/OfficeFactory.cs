@@ -181,11 +181,18 @@ public static class OfficeFactory
         if (stream == null) throw new ArgumentNullException(nameof(stream));
         if (!stream.CanRead) return null;
 
-        // 复制到可寻址内存流，保证 OLE2/ZIP 容器解析
-        using var ms = new MemoryStream();
-        stream.CopyTo(ms);
-        ms.Position = 0;
-        return DetectCore(ms);
+        // 复制到可寻址内存流，保证 OLE2/ZIP 容器解析；识别后把调用方的流复位，便于继续读取
+        var canSeek = stream.CanSeek;
+        var origin = canSeek ? stream.Position : 0;
+        try
+        {
+            using var ms = OfficeStreams.CopyToMemory(stream, OfficeLimits.MaxZipTotalBytes);
+            return DetectCore(ms);
+        }
+        finally
+        {
+            if (canSeek) stream.Position = origin;
+        }
     }
 
     /// <summary>按内容识别核心实现</summary>

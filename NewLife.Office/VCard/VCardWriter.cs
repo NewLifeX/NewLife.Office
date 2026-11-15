@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace NewLife.Office.VCard;
@@ -79,7 +80,7 @@ public class VCardWriter
             AppendLine(sb, "TITLE:" + EscapeText(contact.Title));
 
         if (contact.Birthday.HasValue)
-            AppendLine(sb, "BDAY:" + contact.Birthday.Value.ToString("yyyyMMdd"));
+            AppendLine(sb, "BDAY:" + contact.Birthday.Value.ToString("yyyyMMdd", CultureInfo.InvariantCulture));
 
         if (contact.Note != null)
             AppendLine(sb, "NOTE:" + EscapeText(contact.Note));
@@ -111,11 +112,11 @@ public class VCardWriter
         }
 
         if (contact.Revision.HasValue)
-            AppendLine(sb, "REV:" + contact.Revision.Value.ToUniversalTime().ToString("yyyyMMddTHHmmssZ"));
+            AppendLine(sb, "REV:" + contact.Revision.Value.ToUniversalTime().ToString("yyyyMMddTHHmmssZ", CultureInfo.InvariantCulture));
 
         foreach (var kv in contact.ExtraProps)
         {
-            AppendLine(sb, kv.Key.ToUpperInvariant() + ":" + kv.Value);
+            AppendLine(sb, kv.Key.ToUpperInvariant() + ":" + EscapeText(kv.Value));
         }
 
         AppendLine(sb, "END:VCARD");
@@ -129,6 +130,9 @@ public class VCardWriter
     /// <summary>添加折行支持（RFC 6350 要求内容行最长 75 字节）</summary>
     private static void AppendLine(StringBuilder sb, String line)
     {
+        // 行内容里出现裸 CR/LF 会破坏 vCard 结构（CRLF 注入），统一剔除
+        line = line.Replace("\r", String.Empty).Replace("\n", String.Empty);
+
         var bytes = Encoding.UTF8.GetBytes(line);
         if (bytes.Length <= 75)
         {
