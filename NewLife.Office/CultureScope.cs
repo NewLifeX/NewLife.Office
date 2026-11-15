@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Threading;
 
 namespace NewLife.Office;
 
@@ -13,8 +14,10 @@ internal readonly struct CultureScope : IDisposable
 
     private CultureScope(CultureInfo culture)
     {
-        _original = CultureInfo.CurrentCulture;
-        CultureInfo.CurrentCulture = culture;
+        // net45 没有 CultureInfo.CurrentCulture 的 setter，统一走线程对象
+        var thread = Thread.CurrentThread;
+        _original = thread.CurrentCulture;
+        thread.CurrentCulture = culture;
     }
 
     /// <summary>切换到固定区域（小数点为 "."）</summary>
@@ -22,5 +25,5 @@ internal readonly struct CultureScope : IDisposable
     public static CultureScope Invariant() => new(CultureInfo.InvariantCulture);
 
     /// <summary>恢复原区域</summary>
-    public void Dispose() => CultureInfo.CurrentCulture = _original;
+    public void Dispose() => Thread.CurrentThread.CurrentCulture = _original;
 }

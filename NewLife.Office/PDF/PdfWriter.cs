@@ -256,6 +256,8 @@ public class PdfWriter : IDisposable
     /// <param name="font">字体（null=使用 Helvetica）</param>
     public void DrawText(String text, Single x, Single y, Single fontSize = 12, PdfFont? font = null)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         EnsurePage();
         font ??= ContainsCjk(text) ? EnsureCjkFont() : _fontHelvetica;
         // 若调用方显式传入 Latin 字体但文本含 CJK 字符，自动切换 CJK 字体，避免输出问号
@@ -284,6 +286,8 @@ public class PdfWriter : IDisposable
     /// <param name="font">字体，null 时自动选择</param>
     public void DrawText(String text, Single x, Single y, Single characterSpacing, Single wordSpacing, Single fontSize = 12, PdfFont? font = null)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         EnsurePage();
         font ??= ContainsCjk(text) ? EnsureCjkFont() : _fontHelvetica;
         if (!font.IsCjk && ContainsCjk(text))
@@ -368,6 +372,8 @@ public class PdfWriter : IDisposable
     /// <param name="indentX">与左边距的额外水平偏移</param>
     public void AppendLine(String text, Single fontSize = 12, PdfFont? font = null, Single indentX = 0)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         EnsurePage();
         font ??= ContainsCjk(text) ? EnsureCjkFont() : _fontHelvetica;
         var lineHeight = fontSize * 1.4f;
@@ -395,6 +401,8 @@ public class PdfWriter : IDisposable
     /// <param name="colorHex">颜色（16进制 RGB 如 "000000"）</param>
     public void DrawLine(Single x1, Single y1, Single x2, Single y2, Single lineWidth = 0.5f, String? colorHex = null)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         EnsurePage();
         _content.AppendLine("q");
         if (colorHex != null) _content.AppendLine(HexToRgbOp(colorHex, false));
@@ -632,6 +640,8 @@ public class PdfWriter : IDisposable
     /// <remarks>调用 SetLineSolid() 恢复实线</remarks>
     public void SetLineDash(Single dashOn = 4f, Single dashOff = 3f)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         EnsurePage();
         _content.AppendLine($"[{dashOn:F1} {dashOff:F1}] 0 d");
     }
@@ -641,6 +651,8 @@ public class PdfWriter : IDisposable
     /// <param name="gapSize">点间距（点），默认 2.5</param>
     public void SetLineDot(Single dotSize = 1.5f, Single gapSize = 2.5f)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         EnsurePage();
         _content.AppendLine($"[{dotSize:F1} {gapSize:F1}] 0 d");
     }
@@ -658,6 +670,8 @@ public class PdfWriter : IDisposable
     /// <remarks>调用 SetOpacity(1, 1) 或 SetOpacity() 恢复完全不透明</remarks>
     public void SetOpacity(Single fillAlpha = 1f, Single strokeAlpha = 1f)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         EnsurePage();
         var gsName = _ensureExtGState(CurrentPage!, fillAlpha, strokeAlpha);
         _content.AppendLine($"/{gsName} gs");
@@ -708,6 +722,8 @@ public class PdfWriter : IDisposable
     /// <param name="columnWidths">各列宽比例（null则平均分）</param>
     public void DrawTable(IEnumerable<String[]> rows, Boolean firstRowHeader = true, Single[]? columnWidths = null)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         EnsurePage();
         var rowList = rows.ToList();
         if (rowList.Count == 0) return;
@@ -783,6 +799,8 @@ public class PdfWriter : IDisposable
     /// </remarks>
     public void DrawTable(PdfTable table)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         if (table == null) throw new ArgumentNullException(nameof(table));
         if (table.Rows.Count == 0) return;
 
@@ -808,6 +826,8 @@ public class PdfWriter : IDisposable
     /// <param name="h">显示高度（点）</param>
     public void DrawImage(Byte[] imageData, Single x, Single y, Single w, Single h)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         EnsurePage();
         var imgName = $"Im{_imgCounter++}";
         var isJpeg = IsJpegData(imageData);
@@ -828,6 +848,8 @@ public class PdfWriter : IDisposable
     /// <param name="rotationDeg">旋转角度（度，顺时针）</param>
     public void DrawImage(Byte[] imageData, Single x, Single y, Single w, Single h, Single rotationDeg)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         EnsurePage();
         var imgName = $"Im{_imgCounter++}";
         var isJpeg = IsJpegData(imageData);
@@ -854,6 +876,8 @@ public class PdfWriter : IDisposable
     /// <param name="heightPt">显示高度（点）</param>
     public void AppendImage(Byte[] imageData, Single widthPt, Single heightPt)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         EnsurePage();
         if (CurrentY + heightPt > PageHeight - MarginBottom)
         {
@@ -872,6 +896,8 @@ public class PdfWriter : IDisposable
     /// <param name="sizePt">QR 码尺寸（点，正方形）</param>
     public void DrawQRCode(String text, Single x, Single y, Single sizePt)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         var pngBytes = PdfQRCode.Generate(text);
         DrawImage(pngBytes, x, y, sizePt, sizePt);
     }
@@ -881,6 +907,8 @@ public class PdfWriter : IDisposable
     /// <param name="sizePt">QR 码尺寸（点，正方形）</param>
     public void AppendQRCode(String text, Single sizePt = 72f)
     {
+        // 内容流数值固定用 "." 小数点，与宿主线程区域无关
+        using var culture = CultureScope.Invariant();
         EnsurePage();
         if (CurrentY + sizePt > PageHeight - MarginBottom)
         {

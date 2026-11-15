@@ -169,6 +169,32 @@ public class SecurityHardeningTests
         Assert.DoesNotContain("\r\nX-EVIL", ics);
     }
 
+    [Fact, DisplayName("PDF/XPS 数值在 de-DE 区域仍用点号小数点")]
+    public void Pdf_Numbers_AreCultureInvariant()
+    {
+        var origin = System.Threading.Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
+
+            using var ms = new MemoryStream();
+            using (var w = new NewLife.Office.Pdf.PdfWriter())
+            {
+                w.DrawText("culture", 100.5f, 700.25f, 12);
+                w.Save(ms);
+            }
+
+            var text = Encoding.Latin1.GetString(ms.ToArray());
+            Assert.DoesNotContain("100,50", text);
+            Assert.DoesNotContain("12,0", text);
+            Assert.Contains("100.50", text);
+        }
+        finally
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture = origin;
+        }
+    }
+
     /// <summary>构造一个只含单个工作表的 xlsx，工作表 XML 由调用方提供</summary>
     private static MemoryStream BuildMinimalXlsx(String sheetXml)
     {
