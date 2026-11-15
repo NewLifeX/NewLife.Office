@@ -195,6 +195,33 @@ public class SecurityHardeningTests
         }
     }
 
+    [Fact, DisplayName("OfficeFactory 按内容识别 PDF 后流位置已复位")]
+    public void OfficeFactory_CreateReaderByContent_Pdf()
+    {
+        using var ms = new MemoryStream();
+        using (var w = new NewLife.Office.Pdf.PdfWriter())
+        {
+            w.DrawText("detect", 50, 700, 12);
+            w.Save(ms);
+        }
+        ms.Position = 0;
+
+        var reader = OfficeFactory.CreateReaderByContent(ms);
+        var pdf = Assert.IsType<NewLife.Office.Pdf.PdfReader>(reader);
+        Assert.True(pdf.GetPageCount() > 0, "识别后流位置被读空，导致页数为 0");
+    }
+
+    [Fact, DisplayName("伪造超大 /Count 的 PDF 被拒绝")]
+    public void Pdf_FakePageCount_IsRejected()
+    {
+        // 最小 PDF：只有 /Count 巨大、没有可解析的页树
+        var body = "%PDF-1.7\n1 0 obj << /Type /Pages /Count 2000000000 >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n";
+        var bytes = Encoding.ASCII.GetBytes(body);
+
+        using var reader = new NewLife.Office.Pdf.PdfReader(new MemoryStream(bytes));
+        Assert.Throws<InvalidDataException>(() => reader.GetPageCount());
+    }
+
     /// <summary>构造一个只含单个工作表的 xlsx，工作表 XML 由调用方提供</summary>
     private static MemoryStream BuildMinimalXlsx(String sheetXml)
     {
