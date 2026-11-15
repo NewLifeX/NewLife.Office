@@ -1,0 +1,83 @@
+name: interop
+
+# 跨库互操作门禁：本库写出的文档必须能被第三方库打开，第三方库写出的文档必须能被本库读取。
+# 覆盖 xlsx/xls/docx/pptx/pdf/ods/epub/ics/vcf/eml，核心格式（xlsx/xls/docx/pptx/pdf）失败即阻断。
+# 与 test.yml 的单元测试互补：单元测试证明"自己读自己"，本工作流证明"别人读我们、我们读别人"。
+
+on:
+  push:
+    branches: [ '*' ]
+    paths:
+      - 'NewLife.Office/**'
+      - 'XUnitTest/**'
+      - 'tools/interop/**'
+      - '.github/workflows/interop.yml'
+  pull_request:
+    branches: [ '*' ]
+    paths:
+      - 'NewLife.Office/**'
+      - 'XUnitTest/**'
+      - 'tools/interop/**'
+      - '.github/workflows/interop.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  interop:
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    env:
+      OFFICE_INTEROP_DIR: ${{ github.workspace }}/artifacts/interop
+      PYTHONIOENCODING: utf-8
+
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Setup dotNET
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: 10.x
+        cache: true
+        cache-dependency-path: '**/*.csproj'
+
+    - name: Setup Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.12'
+
+    - name: Install third-party libraries
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install -r tools/interop/requirements.txt
+
+    - name: Build
+      run: dotnet build -c Release --nologo
+
+    # 1. 本库写出各格式文档
+    - name: Generate documents with NewLife.Office
+      run: |
+        dotnet test -c Release XUnitTest/XUnitTest.csproj --no-build --nologo \
+          --filter "FullyQualifiedName~InteropFixtureTests.GenerateOurDocuments"
+
+    # 2. 第三方库读取本库文档，同时生成第三方文档
+    - name: Verify with third-party libraries
+      run: python tools/interop/verify.py "$OFFICE_INTEROP_DIR"
+
+    # 3. 本库读取第三方文档
+    - name: Read third-party documents
+      run: |
+        dotnet test -c Release XUnitTest/XUnitTest.csproj --no-build --nologo \
+          --filter "FullyQualifiedName~InteropFixtureTests.ReadThirdPartyDocuments"
+
+    - name: Upload interop artifacts
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: interop-artifacts
+        path: artifacts/interop
+        if-no-files-found: warn

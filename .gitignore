@@ -26,3 +26,6 @@ bld/
 /BenchmarkDotNet.Artifacts
 /TestResults/
 /AotSmoke/out/
+
+# 互操作测试产物
+/artifacts/
