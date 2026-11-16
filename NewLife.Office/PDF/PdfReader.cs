@@ -259,6 +259,9 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
             var pageDict = pageDictObj.Value;
             if (!pageDict.TryGetValue("Contents", out var contentsVal)) continue;
 
+            // 页面字体（含 ToUnicode CMap）：内容流里是字形编码，必须经字体映射还原为 Unicode
+            var fonts = LoadPageFonts(pageDict);
+
             // 处理单个内容流或内容流数组
             var contentRefs = new List<Ref>();
             if (contentsVal is Ref r)
@@ -273,10 +276,51 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
 
                 var decompressed = DecompressStreamData(contentStream.Data, contentStream.Dict);
                 var contentText = _latin1.GetString(decompressed);
-                ExtractTextFromContent(contentText, sb);
+                PdfTextExtractor.ExtractContent(contentText, fonts, sb);
 
                 sb.AppendLine();
             }
+        }
+    }
+
+    /// <summary>加载页面字体解码表。页面无 /Resources 时向前查找 /Pages 节点的继承资源</summary>
+    /// <param name="pageDict">页面字典</param>
+    /// <returns>字体名到解码器的映射；无字体时返回 null</returns>
+    private Dictionary<String, PdfFontDecoder>? LoadPageFonts(PdfDict pageDict)
+    {
+        if (XRefTable == null) return null;
+
+        try
+        {
+            PdfObject? resVal = pageDict.TryGetValue("Resources", out var rv) ? rv : null;
+            if (resVal is Ref r) resVal = PdfObjectParser.ReadObject(_data, XRefTable, r.ObjNum);
+
+            // 资源继承：页树父节点上的 /Resources 对子页生效
+            if (resVal == null)
+            {
+                foreach (var entry in XRefTable.Entries.Keys)
+                {
+                    if (entry == 0) continue;
+
+                    var obj = PdfObjectParser.ReadObject(_data, XRefTable, entry);
+                    if (obj is not DictObj dictObj) continue;
+                    if (!dictObj.Value.TryGetValue("Type", out var typeVal) || typeVal is not PdfName typeName || typeName.Value != "Pages") continue;
+                    if (!dictObj.Value.TryGetValue("Resources", out var pagesRes)) continue;
+
+                    resVal = pagesRes is Ref pr ? PdfObjectParser.ReadObject(_data, XRefTable, pr.ObjNum) : pagesRes;
+                    break;
+                }
+            }
+
+            if (resVal is not DictObj resObj) return null;
+
+            var fonts = PdfFonts.Load(_data, XRefTable, resObj.Value);
+            return fonts.Count > 0 ? fonts : null;
+        }
+        catch
+        {
+            // 字体解析失败不阻断文本提取，退回无字体路径
+            return null;
         }
     }
 
@@ -403,6 +447,8 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
             var pageDict = pageDictObj.Value;
             if (!pageDict.TryGetValue("Contents", out var contentsVal)) continue;
 
+            var fonts = LoadPageFonts(pageDict);
+
             var contentRefs = new List<Ref>();
             if (contentsVal is Ref r) contentRefs.Add(r);
             else if (contentsVal is PdfArray arr) contentRefs.AddRange(arr.Items.OfType<Ref>());
@@ -414,7 +460,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
 
                 var decompressed = DecompressStreamData(contentStream.Data, contentStream.Dict);
                 var contentText = _latin1.GetString(decompressed);
-                ExtractPositionedText(contentText, results);
+                ExtractPositionedText(contentText, results, fonts);
             }
         }
 
@@ -466,6 +512,8 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
         var pageDict = pageDictObj.Value;
         if (!pageDict.TryGetValue("Contents", out var contentsVal)) return results;
 
+        var fonts = LoadPageFonts(pageDict);
+
         var contentRefs = new List<Ref>();
         if (contentsVal is Ref r) contentRefs.Add(r);
         else if (contentsVal is PdfArray arr) contentRefs.AddRange(arr.Items.OfType<Ref>());
@@ -477,7 +525,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
 
             var decompressed = DecompressStreamData(contentStream.Data, contentStream.Dict);
             var contentText = _latin1.GetString(decompressed);
-            ExtractPositionedText(contentText, results);
+            ExtractPositionedText(contentText, results, fonts);
         }
 
         return results;
@@ -1287,7 +1335,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
     /// <summary>从 PDF 内容流中提取带位置信息的文本</summary>
     /// <param name="content">内容流字符串</param>
     /// <param name="results">结果列表</param>
-    private static void ExtractPositionedText(String content, List<PdfText> results)
+    private static void ExtractPositionedText(String content, List<PdfText> results, Dictionary<String, PdfFontDecoder>? fonts = null)
     {
         var curX = 0f;
         var curY = 0f;
@@ -1295,6 +1343,8 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
         var inText = false;
         var i = 0;
         var numStack = new List<Single>();
+        String? lastName = null;
+        String? currentFont = null;
 
         while (i < content.Length)
         {
@@ -1313,7 +1363,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
             // 括号字符串 (text)
             if (c == '(')
             {
-                var s = ReadParenString(content, ref i);
+                var bytes = PdfTextExtractor.ReadLiteralBytes(content, ref i);
                 if (inText)
                 {
                     var peek = i;
@@ -1322,7 +1372,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
                         && (content[peek + 1] == 'j' || content[peek + 1] == 'J'
                             || content[peek + 1] == '\'' || content[peek + 1] == '"'))
                     {
-                        var decoded = DecodePdfString(s);
+                        var decoded = PdfTextExtractor.DecodeBytes(bytes, fonts, currentFont);
                         if (decoded.Length > 0)
                             results.Add(new PdfText { Text = decoded, X = curX, Y = curY, FontSize = fontSize });
                         i = peek + 2;
@@ -1352,8 +1402,8 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
                     if (inText)
                     {
                         var hex = content.Substring(i + 1, end - i - 1);
-                        // 与 ExtractText 路径一致：UTF-16BE（本库 CJK 编码）优先、Latin-1 回退
-                        var decoded = DecodeHexString(hex);
+                        // 按当前字体的 ToUnicode 还原；无字体信息时退回 UTF-16BE/Latin-1
+                        var decoded = PdfTextExtractor.DecodeBytes(PdfTextExtractor.ParseHexBytes(hex), fonts, currentFont);
                         if (decoded.Length > 0)
                         {
                             var peek = end + 1;
@@ -1389,8 +1439,20 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
                         if (ap >= arr.Length) break;
                         if (arr[ap] == '(')
                         {
-                            var s = ReadParenString(arr, ref ap);
-                            arrSb.Append(DecodePdfString(s));
+                            var bytes = PdfTextExtractor.ReadLiteralBytes(arr, ref ap);
+                            arrSb.Append(PdfTextExtractor.DecodeBytes(bytes, fonts, currentFont));
+                        }
+                        else if (arr[ap] == '<')
+                        {
+                            var hexEnd = arr.IndexOf('>', ap + 1);
+                            if (hexEnd > ap)
+                            {
+                                var bytes = PdfTextExtractor.ParseHexBytes(arr[(ap + 1)..hexEnd]);
+                                arrSb.Append(PdfTextExtractor.DecodeBytes(bytes, fonts, currentFont));
+                                ap = hexEnd + 1;
+                                continue;
+                            }
+                            ap++;
                         }
                         else
                         {
@@ -1417,11 +1479,13 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
             // PDF Name（/name），用于 Tf 的字体名等
             if (c == '/')
             {
-                var nameEnd = i + 1;
+                var nameStart = i + 1;
+                var nameEnd = nameStart;
                 while (nameEnd < content.Length && content[nameEnd] != ' ' && content[nameEnd] != '\t'
                        && content[nameEnd] != '\r' && content[nameEnd] != '\n'
                        && content[nameEnd] != '/' && content[nameEnd] != '<' && content[nameEnd] != '>')
                     nameEnd++;
+                lastName = content[nameStart..nameEnd];
                 i = nameEnd;
                 continue;
             }
@@ -1480,6 +1544,7 @@ public class PdfReader : IDisposable, ITextExtractable, IMarkdownExtractable, IM
                     case "Tf":
                         if (numStack.Count >= 1)
                             fontSize = numStack[numStack.Count - 1];
+                        if (lastName != null) currentFont = lastName;
                         break;
                     case "T*":
                         curY -= fontSize > 0 ? fontSize * 1.2f : 12f;
