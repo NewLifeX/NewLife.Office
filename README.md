@@ -29,7 +29,7 @@ NuGet: NewLife.Office (Rendering package: NewLife.Office.Rendering)
 `NewLife.Office` is a comprehensive .NET office automation library covering **Excel (xlsx/xls), Word (docx/doc), PowerPoint (pptx/ppt), PDF**, Markdown, RTF, ODS, Email (eml/msg), iCalendar, vCard, EPUB, XPS, and legacy binary formats based on OLE2/BIFF8, backed by the **Rendering** extension package (documents → images).
 
 - Zero external dependencies: only depends on `NewLife.Core`, built directly on Open XML (ZIP + XML) / PDF / OLE2 file structures
-- Full framework support: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0`, with AOT compatibility analysis (IsAotCompatible, zero IL warnings) on net8.0+
+- Full framework support: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0` / `net11.0`, with AOT compatibility analysis (IsAotCompatible, zero IL warnings) on net8.0+
 - MIT licensed: free with no commercial license risk
 - Unified API: `NewLife.Office` namespace with a consistent API style, low learning cost
 
@@ -42,7 +42,7 @@ NuGet: NewLife.Office (Rendering package: NewLife.Office.Rendering)
 - **High-fidelity roundtrip**: L2/L3 fidelity architecture (model + RawXml/part passthrough), read → modify → write without losing formatting
 - **Markdown conversion hub**: bidirectional MD↔docx/PDF/HTML/Excel/PPT/Word conversion, a unified entry for AI knowledge base ingestion
 - **Rendering extension**: `NewLife.Office.Rendering` (separate NuGet) provides document → image rendering, image processing, and QR codes
-- **AOT/cross-platform**: zero IL warnings on `net8.0` / `net10.0`; CI covers win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch via QEMU), with 24 AOT smoke scenarios including all 31 language tables
+- **AOT/cross-platform**: zero IL warnings on `net8.0` / `net10.0` / `net11.0`; CI covers win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch via QEMU), with 24 AOT smoke scenarios including all 31 language tables
 - **31-language localization**: exception messages, document output labels and assembly metadata are translated for the current culture and fall back to English; `Locales/*.yml` are compiled into the assembly and work under NativeAOT
 
 ## Supported Formats

@@ -29,7 +29,7 @@ NuGet: NewLife.Office (Render-Erweiterungspaket: NewLife.Office.Rendering)
 `NewLife.Office` ist eine umfassende .NET-Büroautomatisierungsbibliothek, die **Excel (xlsx/xls), Word (docx/doc), PowerPoint (pptx/ppt), PDF**, Markdown, RTF, ODS, E-Mail (eml/msg), iCalendar, vCard, EPUB, XPS sowie die auf OLE2/BIFF8 basierenden Legacy-Binärformate abdeckt, ergänzt durch das **Rendering**-Erweiterungspaket (Dokumente → Bilder).
 
 - Null externe Abhängigkeiten: hängt nur von `NewLife.Core` ab, direkt auf Open-XML- (ZIP + XML) / PDF- / OLE2-Dateistrukturen aufgebaut
-- Volle Framework-Unterstützung: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0`, mit AOT-Kompatibilitätsanalyse (IsAotCompatible, keine IL-Warnungen) ab net8.0
+- Volle Framework-Unterstützung: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0` / `net11.0`, mit AOT-Kompatibilitätsanalyse (IsAotCompatible, keine IL-Warnungen) ab net8.0
 - MIT-Lizenz: kostenlos, ohne kommerzielles Lizenzrisiko
 - Einheitliche API: Namespace `NewLife.Office`, konsistenter API-Stil, geringe Lernkosten
 
@@ -42,7 +42,7 @@ NuGet: NewLife.Office (Render-Erweiterungspaket: NewLife.Office.Rendering)
 - **Hochpräziser Roundtrip**: L2/L3-Treuearchitektur (Modell + RawXml/Teil-Durchreichung), Lesen → Ändern → Schreiben ohne Formatverlust
 - **Markdown-Konvertierungszentrum**: bidirektionale Konvertierung MD↔docx/PDF/HTML/Excel/PPT/Word, ein einheitlicher Einstieg für die KI-Wissensdatenbank-Aufnahme
 - **Render-Erweiterung**: `NewLife.Office.Rendering` (separates NuGet) bietet Dokument→Bild-Rendering, Bildverarbeitung und QR-Codes
-- **AOT/plattformübergreifend**: keine IL-Warnungen unter `net8.0` / `net10.0`; CI deckt win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 ab (LoongArch über QEMU), mit 24 AOT-Smoke-Szenarien inklusive aller 31 Sprachtabellen
+- **AOT/plattformübergreifend**: keine IL-Warnungen unter `net8.0` / `net10.0` / `net11.0`; CI deckt win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 ab (LoongArch über QEMU), mit 24 AOT-Smoke-Szenarien inklusive aller 31 Sprachtabellen
 - **Lokalisierung in 31 Sprachen**: Ausnahmemeldungen, Dokument-Ausgabelabels und Assembly-Metadaten werden für die aktuelle Kultur übersetzt und fallen auf Englisch zurück; `Locales/*.yml` werden in die Assembly kompiliert und funktionieren unter NativeAOT
 
 ## Unterstützte Formate

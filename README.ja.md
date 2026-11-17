@@ -29,7 +29,7 @@ NuGet: NewLife.Office（レンダリング拡張パッケージ: NewLife.Office.
 `NewLife.Office` は、**Excel（xlsx/xls）、Word（docx/doc）、PowerPoint（pptx/ppt）、PDF**、Markdown、RTF、ODS、Email（eml/msg）、iCalendar、vCard、EPUB、XPS に加え、OLE2/BIFF8 ベースのレガシーバイナリ形式もカバーする、機能豊富な .NET オフィス自動化ライブラリです。**Rendering** 拡張パッケージ（ドキュメント → 画像）も提供します。
 
 - 外部依存ゼロ: `NewLife.Core` のみに依存し、Open XML（ZIP + XML）/ PDF / OLE2 ファイル構造を直接操作
-- 全フレームワーク対応: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0`、net8.0+ では AOT 互換解析（IsAotCompatible、IL 警告ゼロ）を有効化
+- 全フレームワーク対応: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0` / `net11.0`、net8.0+ では AOT 互換解析（IsAotCompatible、IL 警告ゼロ）を有効化
 - MIT ライセンス: 無料、商用ライセンスリスクなし
 - 統一 API: 名前空間 `NewLife.Office`、全形式で API スタイルが統一され学習コストが低い
 
@@ -42,7 +42,7 @@ NuGet: NewLife.Office（レンダリング拡張パッケージ: NewLife.Office.
 - **高忠実度ラウンドトリップ**: L2/L3 レベルの忠実度アーキテクチャ（モデル + RawXml/パーツ透過）、読む→変更→書くで書式を失わない
 - **Markdown 変換ハブ**: MD↔docx/PDF/HTML/Excel/PPT/Word 双方向変換、AI ナレッジベース投入の統一エントリ
 - **レンダリング拡張**: `NewLife.Office.Rendering`（独立 NuGet）がドキュメント → 画像レンダリング、画像処理、QR コードを提供
-- **AOT/クロスプラットフォーム**: `net8.0` / `net10.0` で IL 警告ゼロ。CI は win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64（LoongArch は QEMU 経由）をカバーし、31 言語表を含む 24 の AOT スモークシナリオを実行
+- **AOT/クロスプラットフォーム**: `net8.0` / `net10.0` / `net11.0` で IL 警告ゼロ。CI は win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64（LoongArch は QEMU 経由）をカバーし、31 言語表を含む 24 の AOT スモークシナリオを実行
 - **31 言語のローカライズ**: 例外メッセージ、ドキュメント出力ラベル、アセンブリ メタデータを現在のカルチャに合わせて翻訳し、英語にフォールバック。`Locales/*.yml` はアセンブリにコンパイルされ、NativeAOT でも動作
 
 ## 対応形式

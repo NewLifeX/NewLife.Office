@@ -29,7 +29,7 @@ NuGet : NewLife.Office (package de rendu : NewLife.Office.Rendering)
 `NewLife.Office` est une bibliothèque complète d'automatisation bureautique .NET couvrant **Excel (xlsx/xls), Word (docx/doc), PowerPoint (pptx/ppt), PDF**, Markdown, RTF, ODS, Email (eml/msg), iCalendar, vCard, EPUB, XPS ainsi que les formats binaires hérités basés sur OLE2/BIFF8, complétée par le package d'extension **Rendering** (documents → images).
 
 - Zéro dépendance externe : dépend uniquement de `NewLife.Core`, construit directement sur les structures de fichiers Open XML (ZIP + XML) / PDF / OLE2
-- Prise en charge complète des frameworks : `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0`, avec analyse de compatibilité AOT (IsAotCompatible, zéro avertissement IL) sur net8.0+
+- Prise en charge complète des frameworks : `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0` / `net11.0`, avec analyse de compatibilité AOT (IsAotCompatible, zéro avertissement IL) sur net8.0+
 - Licence MIT : gratuit, sans risque de licence commerciale
 - API unifiée : espace de noms `NewLife.Office`, style d'API cohérent, faible coût d'apprentissage
 
@@ -42,7 +42,7 @@ NuGet : NewLife.Office (package de rendu : NewLife.Office.Rendering)
 - **Aller-retour haute fidélité** : architecture de fidélité L2/L3 (modèle + passage direct RawXml/parties), lire → modifier → écrire sans perdre le formatage
 - **Centre de conversion Markdown** : conversion bidirectionnelle MD↔docx/PDF/HTML/Excel/PPT/Word, un point d'entrée unifié pour l'ingestion de bases de connaissances IA
 - **Extension de rendu** : `NewLife.Office.Rendering` (NuGet indépendant) fournit le rendu documents → images, le traitement d'images et les codes QR
-- **AOT/multiplateforme** : aucune alerte IL sous `net8.0` / `net10.0` ; la CI couvre win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch via QEMU), avec 24 scénarios de test AOT incluant les 31 tables de langues
+- **AOT/multiplateforme** : aucune alerte IL sous `net8.0` / `net10.0` / `net11.0` ; la CI couvre win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch via QEMU), avec 24 scénarios de test AOT incluant les 31 tables de langues
 - **Localisation en 31 langues** : les messages d'exception, les libellés de sortie des documents et les métadonnées d'assembly sont traduits selon la culture courante et reviennent à l'anglais ; les fichiers `Locales/*.yml` sont compilés dans l'assembly et fonctionnent sous NativeAOT
 
 ## Formats pris en charge

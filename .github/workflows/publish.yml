@@ -24,11 +24,9 @@ jobs:
       uses: actions/setup-dotnet@v6
       with:
         dotnet-version: |
-          6.x
-          7.x
           8.x
-          9.x
           10.x
+          11.x
     - name: Get Version
       # 标签推送时包版本严格等于标签（v1.5.2026.1024 → 1.5.2026.1024），避免跨零点时日期后缀与标签不一致；
       # 手工触发或标签格式不符时仍按当天日期生成后缀

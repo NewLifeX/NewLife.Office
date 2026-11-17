@@ -29,7 +29,7 @@ NuGet: NewLife.Office (pacote de renderização: NewLife.Office.Rendering)
 `NewLife.Office` é uma biblioteca abrangente de automação de Office para .NET que cobre **Excel (xlsx/xls), Word (docx/doc), PowerPoint (pptx/ppt), PDF**, Markdown, RTF, ODS, Email (eml/msg), iCalendar, vCard, EPUB, XPS e os formatos binários legados baseados em OLE2/BIFF8, complementada pelo pacote de extensão **Rendering** (documentos → imagens).
 
 - Zero dependências externas: depende apenas de `NewLife.Core`, construído diretamente sobre as estruturas de arquivo Open XML (ZIP + XML) / PDF / OLE2
-- Suporte completo a frameworks: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0`, com análise de compatibilidade AOT (IsAotCompatible, zero avisos IL) no net8.0+
+- Suporte completo a frameworks: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0` / `net11.0`, com análise de compatibilidade AOT (IsAotCompatible, zero avisos IL) no net8.0+
 - Licença MIT: gratuito, sem risco de licença comercial
 - API unificada: namespace `NewLife.Office`, estilo de API consistente, baixo custo de aprendizado
 
@@ -42,7 +42,7 @@ NuGet: NewLife.Office (pacote de renderização: NewLife.Office.Rendering)
 - **Roundtrip de alta fidelidade**: arquitetura de fidelidade L2/L3 (modelo + passagem direta de RawXml/partes), ler → modificar → escrever sem perder formatação
 - **Centro de conversão Markdown**: conversão bidirecional MD↔docx/PDF/HTML/Excel/PPT/Word, um ponto de entrada unificado para ingestão de bases de conhecimento de IA
 - **Extensão de renderização**: `NewLife.Office.Rendering` (NuGet independente) fornece renderização de documentos → imagens, processamento de imagens e códigos QR
-- **AOT/multiplataforma**: zero avisos de IL em `net8.0` / `net10.0`; a CI cobre win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch via QEMU), com 24 cenários de teste AOT incluindo as 31 tabelas de idiomas
+- **AOT/multiplataforma**: zero avisos de IL em `net8.0` / `net10.0` / `net11.0`; a CI cobre win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch via QEMU), com 24 cenários de teste AOT incluindo as 31 tabelas de idiomas
 - **Localização em 31 idiomas**: mensagens de exceção, rótulos de saída de documentos e metadados do assembly são traduzidos para a cultura atual e recorrem ao inglês; os arquivos `Locales/*.yml` são compilados no assembly e funcionam sob NativeAOT
 
 ## Formatos suportados

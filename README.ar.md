@@ -25,7 +25,7 @@ NuGet: NewLife.Office (حزمة العرض: NewLife.Office.Rendering)
 `NewLife.Office` مكتبة شاملة لأتمتة مستندات Office في .NET تغطي **Excel (xlsx/xls) وWord (docx/doc) وPowerPoint (pptx/ppt) وPDF**، إضافة إلى Markdown وRTF وODS وEmail (eml/msg) وiCalendar وvCard وEPUB وXPS والصيغ الثنائية القديمة المبنية على OLE2/BIFF8، وتدعمها حزمة **Rendering** الإضافية (مستندات → صور).
 
 - صفر تبعيات خارجية: تعتمد على `NewLife.Core` فقط، ومبنية مباشرة على بنى ملفات Open XML (ZIP + XML) / PDF / OLE2
-- دعم كامل لأطر .NET: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0`، مع تحليل توافق AOT (IsAotCompatible، صفر تحذيرات IL) على net8.0+
+- دعم كامل لأطر .NET: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0` / `net11.0`، مع تحليل توافق AOT (IsAotCompatible، صفر تحذيرات IL) على net8.0+
 - ترخيص MIT: مجانًا دون مخاطر ترخيص تجاري
 - واجهة برمجة موحّدة: مساحة الأسماء `NewLife.Office` بأسلوب API متسق وتكلفة تعلّم منخفضة
 
@@ -38,7 +38,7 @@ NuGet: NewLife.Office (حزمة العرض: NewLife.Office.Rendering)
 - **استدارة عالية الدقة**: بنية وفاء L2/L3 (نموذج + تمرير RawXml/الأجزاء)، قراءة → تعديل → كتابة دون فقدان التنسيق
 - **مركز تحويل Markdown**: تحويل ثنائي الاتجاه بين MD وdocx/PDF/HTML/Excel/PPT/Word، مدخل موحّد لتغذية قواعد معرفة الذكاء الاصطناعي
 - **امتداد العرض**: `NewLife.Office.Rendering` (حزمة NuGet منفصلة) يوفّر تحويل المستندات إلى صور، ومعالجة الصور، ورموز QR
-- **AOT/متعدد المنصات**: صفر تحذيرات IL على `net8.0` / `net10.0`؛ تغطي CI منصات win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch عبر QEMU)، مع 24 سيناريو اختبار AOT تشمل جداول اللغات الـ31
+- **AOT/متعدد المنصات**: صفر تحذيرات IL على `net8.0` / `net10.0` / `net11.0`؛ تغطي CI منصات win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch عبر QEMU)، مع 24 سيناريو اختبار AOT تشمل جداول اللغات الـ31
 - **دعم 31 لغة**: تُترجم رسائل الاستثناءات وتسميات مخرجات المستندات وبيانات تعريف التجميع حسب الثقافة الحالية مع الرجوع إلى الإنجليزية؛ تُجمَّع ملفات `Locales/*.yml` داخل التجميع وتعمل تحت NativeAOT
 
 ## الصيغ المدعومة

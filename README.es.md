@@ -29,7 +29,7 @@ NuGet: NewLife.Office (paquete de renderizado: NewLife.Office.Rendering)
 `NewLife.Office` es una biblioteca integral de automatización de Office para .NET que cubre **Excel (xlsx/xls), Word (docx/doc), PowerPoint (pptx/ppt), PDF**, Markdown, RTF, ODS, Email (eml/msg), iCalendar, vCard, EPUB, XPS y los formatos binarios heredados basados en OLE2/BIFF8, complementada con el paquete de extensión **Rendering** (documentos → imágenes).
 
 - Cero dependencias externas: solo depende de `NewLife.Core`, construido directamente sobre las estructuras de archivo Open XML (ZIP + XML) / PDF / OLE2
-- Soporte completo de frameworks: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0`, con análisis de compatibilidad AOT (IsAotCompatible, cero advertencias IL) en net8.0+
+- Soporte completo de frameworks: `net45` / `netstandard2.0` / `netstandard2.1` / `net8.0` / `net10.0` / `net11.0`, con análisis de compatibilidad AOT (IsAotCompatible, cero advertencias IL) en net8.0+
 - Licencia MIT: gratuito, sin riesgo de licencia comercial
 - API unificada: espacio de nombres `NewLife.Office`, estilo de API consistente, bajo costo de aprendizaje
 
@@ -42,7 +42,7 @@ NuGet: NewLife.Office (paquete de renderizado: NewLife.Office.Rendering)
 - **Roundtrip de alta fidelidad**: arquitectura de fidelidad L2/L3 (modelo + paso directo de RawXml/partes), leer → modificar → escribir sin perder formato
 - **Centro de conversión Markdown**: conversión bidireccional MD↔docx/PDF/HTML/Excel/PPT/Word, un punto de entrada unificado para la ingesta de bases de conocimiento de IA
 - **Extensión de renderizado**: `NewLife.Office.Rendering` (NuGet independiente) proporciona renderizado de documentos → imágenes, procesamiento de imágenes y códigos QR
-- **AOT/multiplataforma**: cero advertencias de IL en `net8.0` / `net10.0`; CI cubre win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch mediante QEMU), con 24 escenarios de prueba AOT que incluyen las 31 tablas de idioma
+- **AOT/multiplataforma**: cero advertencias de IL en `net8.0` / `net10.0` / `net11.0`; CI cubre win-x64 / win-x86 / win-arm64 / linux-x64 / linux-arm64 / osx-x64 / osx-arm64 / linux-loongarch64 (LoongArch mediante QEMU), con 24 escenarios de prueba AOT que incluyen las 31 tablas de idioma
 - **Localización en 31 idiomas**: los mensajes de excepción, las etiquetas de salida de documentos y los metadatos del ensamblado se traducen según la cultura actual y recurren al inglés; `Locales/*.yml` se compilan en el ensamblado y funcionan bajo NativeAOT
 
 ## Formatos compatibles

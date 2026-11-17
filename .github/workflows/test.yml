@@ -29,7 +29,9 @@ jobs:
     - name: Setup dotNET
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: 10.x
+        dotnet-version: |
+          10.x
+          11.x
         cache: true
         cache-dependency-path: '**/*.csproj'
     - name: Build
