@@ -1,8 +1,6 @@
 # NewLife.Office - 오피스 자동화 라이브러리
 
 ![GitHub top language](https://img.shields.io/github/languages/top/newlifex/NewLife.Office?logo=github)
-
-
 ![GitHub License](https://img.shields.io/github/license/NewLifeX/NewLife.Office?logo=github)
 ![NuGet Downloads](https://img.shields.io/nuget/dt/NewLife.Office?logo=nuget)
 ![NuGet](https://img.shields.io/nuget/v/NewLife.Office?logo=nuget)
