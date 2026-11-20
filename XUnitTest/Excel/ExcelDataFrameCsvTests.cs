@@ -167,4 +167,124 @@ public class ExcelDataFrameCsvTests
         var body = frame.ToRows(includeHeader: false).ToList();
         Assert.Single(body);
     }
+
+    [Fact, DisplayName("CSV 导入：文件路径入口与文件不存在")]
+    public void FromCsv_FilePath_ReadsAndReportsMissingFile()
+    {
+        var dir = CreateTempDirectory();
+        try
+        {
+            var path = Path.Combine(dir, "data.csv");
+            File.WriteAllText(path, "name,amount\r\nA,1\r\n", new UTF8Encoding(false));
+
+            var frame = ExcelDataFrame.FromCsv(path);
+
+            Assert.Equal(1, frame.RowCount);
+            Assert.Equal("A", frame.GetValue(0, "name"));
+            Assert.Throws<ArgumentNullException>(() => ExcelDataFrame.FromCsv(" "));
+            Assert.Throws<FileNotFoundException>(() => ExcelDataFrame.FromCsv(Path.Combine(dir, "missing.csv")));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact, DisplayName("CSV 导出：文件路径自动建目录")]
+    public void ToCsv_FilePath_CreatesDirectory()
+    {
+        var dir = CreateTempDirectory();
+        try
+        {
+            var frame = ExcelDataFrame.FromRows(
+            [
+                ["name", "value"],
+                ["a", 1.5],
+            ]);
+            var path = Path.Combine(dir, "sub", "out.csv");
+
+            frame.ToCsv(path);
+
+            Assert.True(File.Exists(path));
+            var text = File.ReadAllText(path);
+            Assert.Contains("name", text);
+            Assert.Contains("1.5", text);
+            Assert.Throws<ArgumentNullException>(() => frame.ToCsv(" "));
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact, DisplayName("CSV 导入：推断 Double 与 Boolean 列")]
+    public void FromCsv_InferTypes_DetectsDoublesAndBooleans()
+    {
+        var frame = FromText("ratio,flag\r\n1.5,true\r\n2.5,false\r\n");
+
+        Assert.IsType<Double>(frame.GetValue(0, "ratio"));
+        Assert.IsType<Boolean>(frame.GetValue(0, "flag"));
+        Assert.Equal(false, frame.GetValue(1, "flag"));
+    }
+
+    [Fact, DisplayName("CSV 导入：带时间的日期格式与空流校验")]
+    public void FromCsv_InferTypes_DetectsDateTimesAndValidatesStream()
+    {
+        var frame = FromText("time\r\n2024-01-31 12:30\r\n");
+
+        Assert.IsType<DateTime>(frame.GetValue(0, "time"));
+        Assert.Equal(new DateTime(2024, 1, 31, 12, 30, 0), frame.GetValue(0, "time"));
+        Assert.Throws<ArgumentNullException>(() => ExcelDataFrame.FromCsv((Stream)null!));
+    }
+
+    [Fact, DisplayName("CSV 导入：无表头且关闭推断时全部为字符串")]
+    public void FromCsv_WithoutHeaderAndInference_KeepsText()
+    {
+        var frame = FromText("1,2\r\n3,4\r\n", new CsvOptions { HasHeader = false, InferTypes = false });
+
+        Assert.Equal(["Column1", "Column2"], frame.Columns);
+        Assert.IsType<String>(frame.GetValue(0, "Column1"));
+        Assert.Equal("1", frame.GetValue(0, "Column1"));
+    }
+
+    [Fact, DisplayName("CSV 导出：可省略表头并自定义分隔符")]
+    public void ToCsv_WithoutHeaderAndCustomSeparator()
+    {
+        var frame = ExcelDataFrame.FromRows(
+        [
+            ["name", "value"],
+            ["a", 1d],
+        ]);
+
+        using var ms = new MemoryStream();
+        frame.ToCsv(ms, includeHeader: false, separator: ';');
+        var text = Encoding.UTF8.GetString(ms.ToArray());
+
+        Assert.DoesNotContain("name", text);
+        Assert.Contains("a;1", text);
+    }
+
+    [Fact, DisplayName("CSV 导出：空数据表仅输出表头")]
+    public void ToCsv_EmptyFrame_WritesHeaderOnly()
+    {
+        var frame = ExcelDataFrame.FromRows(
+        [
+            ["name", "value"],
+        ]);
+
+        using var ms = new MemoryStream();
+        frame.ToCsv(ms);
+        var lines = Encoding.UTF8.GetString(ms.ToArray())
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Single(lines);
+        Assert.Equal("name,value", lines[0].TrimStart('\uFEFF'));
+    }
+
+    private static String CreateTempDirectory()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "NewLifeOfficeTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(path);
+        return path;
+    }
 }
