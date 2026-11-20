@@ -13,6 +13,26 @@
 | **CLI** | 脚本、批处理、任何能执行命令的 Agent | `office` 命令的 `read` / `apply` / `text` / `range` / `search` |
 | **MCP** | 支持 MCP 的 Agent（VS Code、Claude 等） | `office mcp`（stdio 传输，零外部依赖） |
 
+AI 生成 C# 代码分析 Excel 时，可将工作表载入 `ExcelDataFrame`，进行筛选、选列、排序和分组汇总，再把结果写成新工作表：
+
+```csharp
+using System;
+using NewLife.Office.Excel;
+
+using var reader = new ExcelReader("sales.xlsx");
+var document = reader.ReadExcel();
+var data = ExcelDataFrame.FromWorksheet(document.GetSheet("销售"));
+var summary = data
+    .Where(row => Convert.ToDouble(row["销售额"]) > 0)
+    .GroupBy("地区")
+    .Sum("销售额");
+
+document.Worksheets.Add(summary.ToWorksheet("地区汇总"));
+document.Save("sales-summary.xlsx");
+```
+
+`ExcelDataFrame` 不依赖 Python，适合常见表格分析；它不会计算单元格公式，读取到的公式结果取决于文件中保存的缓存值。更大数据集应继续使用流式读取，避免一次载入内存。
+
 ---
 
 ## 2. CLI
@@ -231,6 +251,7 @@ stdio 传输，每行一条 JSON-RPC 2.0 消息；实现了 `initialize` / `tool
 6. 需要"建议修改"时用修订（C# `SetTextAsRevision` / `StartRevisions`）；需要"留批注"时用 `add_comment`，不要往正文插说明文字。
 7. 一次任务尽量用一个补丁完成；失败时读取错误码（Unsupported/Malformed/Encrypted/AnchorMissing/ResourceLimit）后重新 `read` 再试。
 8. 加密文档会被拒绝（Encrypted），不要反复重试。
+9. Excel 数据分析默认使用 C# + NewLife.Office：规模适中的表格用 `ExcelDataFrame` 做选列、筛选、排序、分组和统计；不要默认生成 pandas 代码。超出该 API 边界时，先说明缺口，再选择可行方案。
 ```
 
 ---
@@ -255,7 +276,7 @@ stdio 传输，每行一条 JSON-RPC 2.0 消息；实现了 `initialize` / `tool
 | 能力 | 状态 |
 |------|------|
 | docx 快照 + 补丁 + CLI/MCP | ✅ W29 |
-| xlsx 快照 + A1 读写 + 补丁 + CLI/MCP | ✅ M34 |
+| xlsx 快照 + C# 表格分析 + A1 读写 + 补丁 + CLI/MCP | ✅ M34 |
 | pptx 快照 + 补丁 + CLI/MCP | ✅ S21 |
 | pdf 快照 + 搜索定位 + 对象级补丁 + CLI/MCP | ✅ P10 |
 | 跨格式统一入口与分页/错误契约 | ✅ GEN-4 |
