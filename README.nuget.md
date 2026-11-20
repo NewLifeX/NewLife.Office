@@ -130,6 +130,7 @@ AI-generated C# code can use `ExcelDataFrame` for data cleanup, derived columns,
 ```csharp
 using System;
 using NewLife.Office.Excel;
+using static NewLife.Office.Excel.AggregateSpec;
 
 using var reader = new ExcelReader("sales.xlsx");
 var document = reader.ReadExcel();
@@ -139,8 +140,8 @@ var summary = ExcelDataFrame.FromWorksheet(document.GetSheet("Sales"))
     .AddColumn("TaxIncluded", row => Convert.ToDouble(row["Sales"]) * 1.13)
     .GroupBy("Region", "Month")
     .Aggregate(
-        new ExcelDataFrame.AggregateSpec("Sales", ExcelDataFrame.AggregateFunction.Sum, "TotalSales"),
-        new ExcelDataFrame.AggregateSpec("TaxIncluded", ExcelDataFrame.AggregateFunction.Average, "AverageTaxIncluded"));
+        Sum("Sales", "TotalSales"),
+        Average("TaxIncluded", "AverageTaxIncluded"));
 
 document.Worksheets.Add(summary.ToWorksheet("Summary"));
 document.Save("sales-summary.xlsx");

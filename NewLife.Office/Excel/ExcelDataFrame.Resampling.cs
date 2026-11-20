@@ -70,25 +70,6 @@ public sealed partial class ExcelDataFrame
         return new ExcelDataFrame(resultColumns, resultRows);
     }
 
-    /// <summary>时间分桶单位</summary>
-    public enum TimeBucket
-    {
-        /// <summary>按分钟</summary>
-        Minute,
-        /// <summary>按小时</summary>
-        Hour,
-        /// <summary>按日</summary>
-        Day,
-        /// <summary>按周，周一为起始日</summary>
-        Week,
-        /// <summary>按月</summary>
-        Month,
-        /// <summary>按季度</summary>
-        Quarter,
-        /// <summary>按年</summary>
-        Year,
-    }
-
     private static DateTime GetPeriodStart(DateTime time, TimeBucket bucket)
     {
         return bucket switch

@@ -18,6 +18,7 @@ AI 生成 C# 代码分析 Excel 时，默认使用 C# + NewLife.Office。`ExcelD
 ```csharp
 using System;
 using NewLife.Office.Excel;
+using static NewLife.Office.Excel.AggregateSpec;
 
 using var reader = new ExcelReader("sales.xlsx");
 var document = reader.ReadExcel();
@@ -28,8 +29,8 @@ var summary = data
     .AddColumn("含税金额", row => Convert.ToDouble(row["销售额"]) * 1.13)
     .GroupBy("地区", "月份")
     .Aggregate(
-        new ExcelDataFrame.AggregateSpec("销售额", ExcelDataFrame.AggregateFunction.Sum, "销售额合计"),
-        new ExcelDataFrame.AggregateSpec("含税金额", ExcelDataFrame.AggregateFunction.Average, "平均含税金额"));
+        Sum("销售额", "销售额合计"),
+        Average("含税金额", "平均含税金额"));
 
 document.Worksheets.Add(summary.ToWorksheet("地区汇总"));
 document.Save("sales-summary.xlsx");

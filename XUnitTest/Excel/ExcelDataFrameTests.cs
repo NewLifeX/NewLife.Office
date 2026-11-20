@@ -4,7 +4,7 @@ using Xunit;
 namespace XUnitTest.Excel;
 
 /// <summary>ExcelDataFrame 表格分析 API 测试</summary>
-public class ExcelDataFrameTests
+public partial class ExcelDataFrameTests
 {
     private static Worksheet BuildSheet()
     {
@@ -170,9 +170,9 @@ public class ExcelDataFrameTests
         var result = ExcelDataFrame.FromWorksheet(sheet)
             .GroupBy("地区", "月份")
             .Aggregate(
-                new ExcelDataFrame.AggregateSpec("金额", ExcelDataFrame.AggregateFunction.Sum, "总额"),
-                new ExcelDataFrame.AggregateSpec("数量", ExcelDataFrame.AggregateFunction.Average, "平均数量"),
-                ExcelDataFrame.AggregateSpec.CountRows("行数"));
+                new AggregateSpec("金额", AggregateFunction.Sum, "总额"),
+                new AggregateSpec("数量", AggregateFunction.Average, "平均数量"),
+                AggregateSpec.CountRows("行数"));
 
         Assert.Equal(2, result.RowCount);
         Assert.Equal(["地区", "月份", "总额", "平均数量", "行数"], result.Columns);
@@ -243,9 +243,9 @@ public class ExcelDataFrameTests
         var left = ExcelDataFrame.FromWorksheet(leftSheet);
         var right = ExcelDataFrame.FromWorksheet(rightSheet);
         var inner = left.Merge(right, ["地区", "月份"], ["地区", "月份"]);
-        var leftJoin = left.Merge(right, ["地区", "月份"], ["地区", "月份"], ExcelDataFrame.JoinKind.Left);
-        var rightJoin = left.Merge(right, ["地区", "月份"], ["地区", "月份"], ExcelDataFrame.JoinKind.Right);
-        var full = left.Merge(right, ["地区", "月份"], ["地区", "月份"], ExcelDataFrame.JoinKind.Full);
+        var leftJoin = left.Merge(right, ["地区", "月份"], ["地区", "月份"], JoinKind.Left);
+        var rightJoin = left.Merge(right, ["地区", "月份"], ["地区", "月份"], JoinKind.Right);
+        var full = left.Merge(right, ["地区", "月份"], ["地区", "月份"], JoinKind.Full);
 
         Assert.Equal(4, inner.RowCount);
         Assert.Equal(["地区", "月份", "金额", "经理"], inner.Columns);
@@ -349,7 +349,7 @@ public class ExcelDataFrameTests
             ["华东", "开启", null],
         ]);
         var crosstab = emptyValues.Crosstab("地区", "状态");
-        var pivotCount = emptyValues.Pivot("地区", "状态", "数值", ExcelDataFrame.AggregateFunction.Count);
+        var pivotCount = emptyValues.Pivot("地区", "状态", "数值", AggregateFunction.Count);
         Assert.Equal(2, crosstab.GetValue(0, "开启"));
         Assert.Equal(0, pivotCount.GetValue(0, "开启"));
     }
@@ -442,11 +442,11 @@ public class ExcelDataFrameTests
             ],
         });
 
-        var daily = frame.Resample("时间", ExcelDataFrame.TimeBucket.Day,
-            new ExcelDataFrame.AggregateSpec("销售额", ExcelDataFrame.AggregateFunction.Sum, "日销售额"),
-            ExcelDataFrame.AggregateSpec.CountRows("记录数"));
-        var monthly = frame.Resample("时间", ExcelDataFrame.TimeBucket.Month,
-            new ExcelDataFrame.AggregateSpec("销售额", ExcelDataFrame.AggregateFunction.Sum, "月销售额"));
+        var daily = frame.Resample("时间", TimeBucket.Day,
+            new AggregateSpec("销售额", AggregateFunction.Sum, "日销售额"),
+            AggregateSpec.CountRows("记录数"));
+        var monthly = frame.Resample("时间", TimeBucket.Month,
+            new AggregateSpec("销售额", AggregateFunction.Sum, "月销售额"));
 
         Assert.Equal(2, daily.RowCount);
         Assert.Equal(new DateTime(2026, 1, 1), daily.GetValue(0, "时间"));
@@ -472,13 +472,13 @@ public class ExcelDataFrameTests
             Rows = [new Object?[] { "时间", "值" }, new Object?[] { null, 1d }],
         });
 
-        Assert.Throws<ArgumentException>(() => invalidTime.Resample("时间", ExcelDataFrame.TimeBucket.Day,
-            new ExcelDataFrame.AggregateSpec("值", ExcelDataFrame.AggregateFunction.Sum)));
-        Assert.Throws<ArgumentException>(() => frame.Resample("时间", ExcelDataFrame.TimeBucket.Day));
-        Assert.Throws<ArgumentOutOfRangeException>(() => frame.Resample("时间", (ExcelDataFrame.TimeBucket)99,
-            new ExcelDataFrame.AggregateSpec("值", ExcelDataFrame.AggregateFunction.Sum)));
-        Assert.Equal(0, frame.Resample("时间", ExcelDataFrame.TimeBucket.Day,
-            new ExcelDataFrame.AggregateSpec("值", ExcelDataFrame.AggregateFunction.Sum)).RowCount);
+        Assert.Throws<ArgumentException>(() => invalidTime.Resample("时间", TimeBucket.Day,
+            new AggregateSpec("值", AggregateFunction.Sum)));
+        Assert.Throws<ArgumentException>(() => frame.Resample("时间", TimeBucket.Day));
+        Assert.Throws<ArgumentOutOfRangeException>(() => frame.Resample("时间", (TimeBucket)99,
+            new AggregateSpec("值", AggregateFunction.Sum)));
+        Assert.Equal(0, frame.Resample("时间", TimeBucket.Day,
+            new AggregateSpec("值", AggregateFunction.Sum)).RowCount);
     }
 
     [Fact(DisplayName = "表格分析：时间重采样正确截取日历区间起点")]
@@ -490,16 +490,16 @@ public class ExcelDataFrameTests
             ["时间", "值"],
             [time, 1],
         ]);
-        var aggregation = new ExcelDataFrame.AggregateSpec("值", ExcelDataFrame.AggregateFunction.Sum);
+        var aggregation = new AggregateSpec("值", AggregateFunction.Sum);
         var buckets = new[]
         {
-            (ExcelDataFrame.TimeBucket.Minute, new DateTime(2026, 4, 8, 12, 34, 0)),
-            (ExcelDataFrame.TimeBucket.Hour, new DateTime(2026, 4, 8, 12, 0, 0)),
-            (ExcelDataFrame.TimeBucket.Day, new DateTime(2026, 4, 8)),
-            (ExcelDataFrame.TimeBucket.Week, new DateTime(2026, 4, 6)),
-            (ExcelDataFrame.TimeBucket.Month, new DateTime(2026, 4, 1)),
-            (ExcelDataFrame.TimeBucket.Quarter, new DateTime(2026, 4, 1)),
-            (ExcelDataFrame.TimeBucket.Year, new DateTime(2026, 1, 1)),
+            (TimeBucket.Minute, new DateTime(2026, 4, 8, 12, 34, 0)),
+            (TimeBucket.Hour, new DateTime(2026, 4, 8, 12, 0, 0)),
+            (TimeBucket.Day, new DateTime(2026, 4, 8)),
+            (TimeBucket.Week, new DateTime(2026, 4, 6)),
+            (TimeBucket.Month, new DateTime(2026, 4, 1)),
+            (TimeBucket.Quarter, new DateTime(2026, 4, 1)),
+            (TimeBucket.Year, new DateTime(2026, 1, 1)),
         };
 
         foreach (var (bucket, expectedStart) in buckets)

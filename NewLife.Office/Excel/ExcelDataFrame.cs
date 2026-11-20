@@ -390,55 +390,6 @@ public sealed partial class ExcelDataFrame
         }
     }
 
-    /// <summary>分组汇总函数</summary>
-    public enum AggregateFunction
-    {
-        /// <summary>非空值数量；Count() 则统计组内行数</summary>
-        Count,
-        /// <summary>数值求和</summary>
-        Sum,
-        /// <summary>数值平均值</summary>
-        Average,
-        /// <summary>最小值</summary>
-        Min,
-        /// <summary>最大值</summary>
-        Max,
-    }
-
-    /// <summary>分组汇总定义</summary>
-    public sealed class AggregateSpec
-    {
-        /// <summary>实例化分组汇总定义</summary>
-        /// <param name="columnName">汇总列名；仅 Count 可传 null，此时统计组内行数</param>
-        /// <param name="function">汇总函数</param>
-        /// <param name="resultName">结果列名；null 时按函数和源列名生成</param>
-        public AggregateSpec(String? columnName, AggregateFunction function, String? resultName = null)
-        {
-            if (columnName == null && function != AggregateFunction.Count)
-                throw new ArgumentException(L.T("A column is required for this aggregation."), nameof(columnName));
-            if (resultName != null && resultName.Length == 0)
-                throw new ArgumentException(L.T("Result column name cannot be empty."), nameof(resultName));
-
-            ColumnName = columnName;
-            Function = function;
-            ResultName = resultName;
-        }
-
-        /// <summary>汇总列名；null 表示统计行数</summary>
-        public String? ColumnName { get; }
-
-        /// <summary>汇总函数</summary>
-        public AggregateFunction Function { get; }
-
-        /// <summary>结果列名</summary>
-        public String? ResultName { get; }
-
-        /// <summary>创建组内行数统计定义</summary>
-        /// <param name="resultName">结果列名，默认 Count</param>
-        /// <returns>汇总定义</returns>
-        public static AggregateSpec CountRows(String resultName = "Count") => new(null, AggregateFunction.Count, resultName);
-    }
-
     /// <summary>对分组执行汇总并返回新的数据表</summary>
     public sealed class Grouping
     {
@@ -457,28 +408,33 @@ public sealed partial class ExcelDataFrame
 
         /// <summary>统计每组指定列的非空值数量</summary>
         /// <param name="columnName">待统计列名</param>
+        /// <param name="resultName">结果列名；null 时生成 Count_列名</param>
         /// <returns>分组汇总表</returns>
-        public ExcelDataFrame Count(String columnName) => Aggregate(new AggregateSpec(columnName, AggregateFunction.Count));
+        public ExcelDataFrame Count(String columnName, String? resultName = null) => Aggregate(AggregateSpec.Count(columnName, resultName));
 
         /// <summary>计算每组指定数值列的总和</summary>
         /// <param name="columnName">数值列名</param>
+        /// <param name="resultName">结果列名；null 时生成 Sum_列名</param>
         /// <returns>分组汇总表</returns>
-        public ExcelDataFrame Sum(String columnName) => Aggregate(new AggregateSpec(columnName, AggregateFunction.Sum));
+        public ExcelDataFrame Sum(String columnName, String? resultName = null) => Aggregate(AggregateSpec.Sum(columnName, resultName));
 
         /// <summary>计算每组指定数值列的平均值</summary>
         /// <param name="columnName">数值列名</param>
+        /// <param name="resultName">结果列名；null 时生成 Average_列名</param>
         /// <returns>分组汇总表</returns>
-        public ExcelDataFrame Average(String columnName) => Aggregate(new AggregateSpec(columnName, AggregateFunction.Average));
+        public ExcelDataFrame Average(String columnName, String? resultName = null) => Aggregate(AggregateSpec.Average(columnName, resultName));
 
         /// <summary>计算每组指定列的最小值</summary>
         /// <param name="columnName">列名</param>
+        /// <param name="resultName">结果列名；null 时生成 Min_列名</param>
         /// <returns>分组汇总表</returns>
-        public ExcelDataFrame Min(String columnName) => Aggregate(new AggregateSpec(columnName, AggregateFunction.Min));
+        public ExcelDataFrame Min(String columnName, String? resultName = null) => Aggregate(AggregateSpec.Min(columnName, resultName));
 
         /// <summary>计算每组指定列的最大值</summary>
         /// <param name="columnName">列名</param>
+        /// <param name="resultName">结果列名；null 时生成 Max_列名</param>
         /// <returns>分组汇总表</returns>
-        public ExcelDataFrame Max(String columnName) => Aggregate(new AggregateSpec(columnName, AggregateFunction.Max));
+        public ExcelDataFrame Max(String columnName, String? resultName = null) => Aggregate(AggregateSpec.Max(columnName, resultName));
 
         /// <summary>一次计算多个汇总列</summary>
         /// <param name="aggregations">汇总定义</param>

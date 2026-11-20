@@ -94,19 +94,6 @@ public sealed partial class ExcelDataFrame
         return new ExcelDataFrame(columns.ToArray(), rows);
     }
 
-    /// <summary>关联类型</summary>
-    public enum JoinKind
-    {
-        /// <summary>仅保留两侧匹配的行</summary>
-        Inner,
-        /// <summary>保留全部左侧行</summary>
-        Left,
-        /// <summary>保留全部右侧行</summary>
-        Right,
-        /// <summary>保留两侧所有行</summary>
-        Full,
-    }
-
     private Int32[] ResolveJoinKeys(String[] keys, String parameterName)
     {
         var indexes = new Int32[keys.Length];
