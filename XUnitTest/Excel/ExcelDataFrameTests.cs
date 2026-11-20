@@ -424,4 +424,85 @@ public class ExcelDataFrameTests
         Assert.Equal(6d, rollingSum.GetValue(3, "RollingSum_值"));
         Assert.Throws<ArgumentOutOfRangeException>(() => frame.RollingAverage("值", 2, minPeriods: 3));
     }
+
+    [Fact(DisplayName = "表格分析：时间重采样按日历日分组并按时间排序")]
+    public void Resample_GroupsRowsByCalendarDay()
+    {
+        var frame = ExcelDataFrame.FromWorksheet(new Worksheet
+        {
+            Name = "订单",
+            Rows =
+            [
+                new Object?[] { "时间", "销售额" },
+                new Object?[] { new DateTime(2026, 1, 2, 0, 1, 0), 4d },
+                new Object?[] { new DateTime(2026, 1, 1, 10, 15, 0), 5d },
+                new Object?[] { new DateTime(2026, 1, 1, 23, 40, 0), 7d },
+                new Object?[] { new DateTime(2026, 1, 1, 12, 0, 0), null },
+                new Object?[] { null, 100d },
+            ],
+        });
+
+        var daily = frame.Resample("时间", ExcelDataFrame.TimeBucket.Day,
+            new ExcelDataFrame.AggregateSpec("销售额", ExcelDataFrame.AggregateFunction.Sum, "日销售额"),
+            ExcelDataFrame.AggregateSpec.CountRows("记录数"));
+        var monthly = frame.Resample("时间", ExcelDataFrame.TimeBucket.Month,
+            new ExcelDataFrame.AggregateSpec("销售额", ExcelDataFrame.AggregateFunction.Sum, "月销售额"));
+
+        Assert.Equal(2, daily.RowCount);
+        Assert.Equal(new DateTime(2026, 1, 1), daily.GetValue(0, "时间"));
+        Assert.Equal(12d, daily.GetValue(0, "日销售额"));
+        Assert.Equal(3, daily.GetValue(0, "记录数"));
+        Assert.Equal(new DateTime(2026, 1, 2), daily.GetValue(1, "时间"));
+        Assert.Equal(4d, daily.GetValue(1, "日销售额"));
+        Assert.Equal(new DateTime(2026, 1, 1), monthly.GetValue(0, "时间"));
+        Assert.Equal(16d, monthly.GetValue(0, "月销售额"));
+    }
+
+    [Fact(DisplayName = "表格分析：时间重采样忽略空时间并验证时间类型与汇总定义")]
+    public void Resample_ValidatesTimeAndAggregationInputs()
+    {
+        var invalidTime = ExcelDataFrame.FromWorksheet(new Worksheet
+        {
+            Name = "错误时间",
+            Rows = [new Object?[] { "时间", "值" }, new Object?[] { "2026-01-01", 1d }],
+        });
+        var frame = ExcelDataFrame.FromWorksheet(new Worksheet
+        {
+            Name = "空数据",
+            Rows = [new Object?[] { "时间", "值" }, new Object?[] { null, 1d }],
+        });
+
+        Assert.Throws<ArgumentException>(() => invalidTime.Resample("时间", ExcelDataFrame.TimeBucket.Day,
+            new ExcelDataFrame.AggregateSpec("值", ExcelDataFrame.AggregateFunction.Sum)));
+        Assert.Throws<ArgumentException>(() => frame.Resample("时间", ExcelDataFrame.TimeBucket.Day));
+        Assert.Throws<ArgumentOutOfRangeException>(() => frame.Resample("时间", (ExcelDataFrame.TimeBucket)99,
+            new ExcelDataFrame.AggregateSpec("值", ExcelDataFrame.AggregateFunction.Sum)));
+        Assert.Equal(0, frame.Resample("时间", ExcelDataFrame.TimeBucket.Day,
+            new ExcelDataFrame.AggregateSpec("值", ExcelDataFrame.AggregateFunction.Sum)).RowCount);
+    }
+
+    [Fact(DisplayName = "表格分析：时间重采样正确截取日历区间起点")]
+    public void Resample_UsesCalendarBucketStarts()
+    {
+        var time = new DateTime(2026, 4, 8, 12, 34, 56);
+        var frame = ExcelDataFrame.FromRows(
+        [
+            ["时间", "值"],
+            [time, 1],
+        ]);
+        var aggregation = new ExcelDataFrame.AggregateSpec("值", ExcelDataFrame.AggregateFunction.Sum);
+        var buckets = new[]
+        {
+            (ExcelDataFrame.TimeBucket.Minute, new DateTime(2026, 4, 8, 12, 34, 0)),
+            (ExcelDataFrame.TimeBucket.Hour, new DateTime(2026, 4, 8, 12, 0, 0)),
+            (ExcelDataFrame.TimeBucket.Day, new DateTime(2026, 4, 8)),
+            (ExcelDataFrame.TimeBucket.Week, new DateTime(2026, 4, 6)),
+            (ExcelDataFrame.TimeBucket.Month, new DateTime(2026, 4, 1)),
+            (ExcelDataFrame.TimeBucket.Quarter, new DateTime(2026, 4, 1)),
+            (ExcelDataFrame.TimeBucket.Year, new DateTime(2026, 1, 1)),
+        };
+
+        foreach (var (bucket, expectedStart) in buckets)
+            Assert.Equal(expectedStart, frame.Resample("时间", bucket, aggregation).GetValue(0, "时间"));
+    }
 }
