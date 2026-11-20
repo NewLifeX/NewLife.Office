@@ -3342,7 +3342,7 @@ public class ExcelReader : DisposeBase, ITextExtractable, IMarkdownExtractable, 
                 for (var i = 0; i < row.Length; i++)
                 {
                     if (i > 0) sb.Append(',');
-                    sb.Append(CsvEscape(row[i]?.ToString()));
+                    sb.Append(CsvEscape(Convert.ToString(row[i], CultureInfo.InvariantCulture)));
                 }
                 sb.AppendLine();
             }
