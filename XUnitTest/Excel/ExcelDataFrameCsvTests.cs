@@ -56,6 +56,18 @@ public class ExcelDataFrameCsvTests
         Assert.IsType<String>(frame.GetValue(0, "order"));
     }
 
+    [Fact, DisplayName("CSV 导入：超过15位的整数保持字符串")]
+    public void FromCsv_InferTypes_KeepsIntegersBeyondFifteenDigitsAsText()
+    {
+        var frame = FromText("boundary,large\r\n999999999999999,1234567890123456\r\n-999999999999999,-1234567890123456\r\n");
+
+        Assert.IsType<Int64>(frame.GetValue(0, "boundary"));
+        Assert.Equal(999999999999999L, frame.GetValue(0, "boundary"));
+        Assert.IsType<String>(frame.GetValue(0, "large"));
+        Assert.Equal("1234567890123456", frame.GetValue(0, "large"));
+        Assert.Equal("-1234567890123456", frame.GetValue(1, "large"));
+    }
+
     [Fact, DisplayName("CSV 导入：关闭推断后全部保持字符串")]
     public void FromCsv_WithoutInferTypes_KeepsText()
     {

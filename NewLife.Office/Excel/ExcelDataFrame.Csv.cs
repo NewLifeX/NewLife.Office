@@ -202,6 +202,10 @@ public sealed partial class ExcelDataFrame
         if (text.Length > 1 && text[0] == '0') return false;
         if (text.Length > 2 && text[0] == '-' && text[1] == '0') return false;
 
+        var digitCount = text.Length;
+        if (digitCount > 0 && (text[0] == '+' || text[0] == '-')) digitCount--;
+        if (digitCount > 15) return false;
+
         return Int64.TryParse(text, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out _);
     }
 
