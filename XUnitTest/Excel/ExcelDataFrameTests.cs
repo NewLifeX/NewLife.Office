@@ -183,4 +183,142 @@ public class ExcelDataFrameTests
         Assert.Equal("华东", result.GetValue(1, "地区"));
         Assert.Equal(3, ExcelDataFrame.FromWorksheet(sheet).DropMissing("销售额").RowCount);
     }
+
+    [Fact(DisplayName = "表格分析：表间关联支持多键、重复键和左右外连接")]
+    public void Merge_CombinesRowsByCompositeKeys()
+    {
+        var leftSheet = new Worksheet { Name = "订单" };
+        leftSheet.Rows.Add(["地区", "月份", "金额"]);
+        leftSheet.Rows.Add(["华东", "一月", 10d]);
+        leftSheet.Rows.Add(["华东", "一月", 20d]);
+        leftSheet.Rows.Add(["华南", "一月", 30d]);
+        leftSheet.Rows.Add([null, "一月", 40d]);
+
+        var rightSheet = new Worksheet { Name = "区域" };
+        rightSheet.Rows.Add(["地区", "月份", "经理"]);
+        rightSheet.Rows.Add(["华东", "一月", "张三"]);
+        rightSheet.Rows.Add(["华东", "一月", "李四"]);
+        rightSheet.Rows.Add(["华北", "一月", "王五"]);
+        rightSheet.Rows.Add([null, "一月", "空键不匹配"]);
+
+        var left = ExcelDataFrame.FromWorksheet(leftSheet);
+        var right = ExcelDataFrame.FromWorksheet(rightSheet);
+        var inner = left.Merge(right, ["地区", "月份"], ["地区", "月份"]);
+        var leftJoin = left.Merge(right, ["地区", "月份"], ["地区", "月份"], ExcelDataFrame.JoinKind.Left);
+        var rightJoin = left.Merge(right, ["地区", "月份"], ["地区", "月份"], ExcelDataFrame.JoinKind.Right);
+        var full = left.Merge(right, ["地区", "月份"], ["地区", "月份"], ExcelDataFrame.JoinKind.Full);
+
+        Assert.Equal(4, inner.RowCount);
+        Assert.Equal(["地区", "月份", "金额", "经理"], inner.Columns);
+        Assert.Equal("张三", inner.GetValue(0, "经理"));
+        Assert.Equal("李四", inner.GetValue(1, "经理"));
+        Assert.Equal(6, leftJoin.RowCount);
+        Assert.Null(leftJoin.GetValue(4, "经理"));
+        Assert.Equal(6, rightJoin.RowCount);
+        Assert.Equal("华北", rightJoin.GetValue(4, "地区"));
+        Assert.Equal(8, full.RowCount);
+        Assert.Equal("华北", full.GetValue(6, "地区"));
+        Assert.Equal("空键不匹配", full.GetValue(7, "经理"));
+    }
+
+    [Fact(DisplayName = "表格分析：关联列名冲突时自动加后缀并拒绝冲突结果")]
+    public void Merge_ResolvesAndRejectsDuplicateOutputColumns()
+    {
+        var left = ExcelDataFrame.FromWorksheet(new Worksheet
+        {
+            Name = "左",
+            Rows = [new Object?[] { "Id", "名称" }, new Object?[] { 1, "左侧" }],
+        });
+        var right = ExcelDataFrame.FromWorksheet(new Worksheet
+        {
+            Name = "右",
+            Rows = [new Object?[] { "Key", "名称" }, new Object?[] { 1, "右侧" }],
+        });
+
+        var result = left.Merge(right, "Id", "Key");
+        Assert.Equal("名称_right", result.Columns[2]);
+        Assert.Equal("右侧", result.GetValue(0, "名称_right"));
+
+        var leftConflict = ExcelDataFrame.FromWorksheet(new Worksheet
+        {
+            Name = "左侧冲突",
+            Rows = [new Object?[] { "Id", "名称", "名称_right" }, new Object?[] { 1, "左侧", "既有列" }],
+        });
+        Assert.Throws<ArgumentException>(() => leftConflict.Merge(right, "Id", "Key"));
+    }
+
+    [Fact(DisplayName = "表格分析：透视表按重复组合汇总并可反透视")]
+    public void PivotAndMelt_TransformWideAndLongData()
+    {
+        var sheet = new Worksheet { Name = "月报" };
+        sheet.Rows.Add(["地区", "月份", "销售额"]);
+        sheet.Rows.Add(["华东", "一月", 10d]);
+        sheet.Rows.Add(["华东", "一月", 5d]);
+        sheet.Rows.Add(["华东", "二月", 20d]);
+        sheet.Rows.Add(["华南", "一月", 30d]);
+        sheet.Rows.Add(["华南", null, 99d]);
+
+        var source = ExcelDataFrame.FromWorksheet(sheet);
+        var pivot = source.Pivot("地区", "月份", "销售额");
+        var melted = pivot.Melt(["地区"], ["一月", "二月"]);
+
+        Assert.Equal(["地区", "一月", "二月"], pivot.Columns);
+        Assert.Equal(2, pivot.RowCount);
+        Assert.Equal(15d, pivot.GetValue(0, "一月"));
+        Assert.Equal(20d, pivot.GetValue(0, "二月"));
+        Assert.Equal(30d, pivot.GetValue(1, "一月"));
+        Assert.Null(pivot.GetValue(1, "二月"));
+        Assert.Equal(4, melted.RowCount);
+        Assert.Equal("一月", melted.GetValue(0, "Variable"));
+        Assert.Equal(15d, melted.GetValue(0, "Value"));
+        Assert.Null(melted.GetValue(3, "Value"));
+    }
+
+    [Fact(DisplayName = "表格分析：反透视保留空值并检查结果列冲突")]
+    public void Melt_PreservesMissingValuesAndRejectsNameCollisions()
+    {
+        var frame = ExcelDataFrame.FromWorksheet(new Worksheet
+        {
+            Name = "数据",
+            Rows = [new Object?[] { "Id", "一月", "二月" }, new Object?[] { 1, null, 2 }],
+        });
+
+        var result = frame.Melt(["Id"], ["一月", "二月"]);
+
+        Assert.Equal(2, result.RowCount);
+        Assert.Null(result.GetValue(0, "Value"));
+        Assert.Equal(2, result.GetValue(1, "Value"));
+        Assert.Throws<ArgumentException>(() => frame.Melt(["Id"], ["一月"], "Id", "Value"));
+    }
+
+    [Fact(DisplayName = "表格分析：累计和滚动统计按行处理空值")]
+    public void CumulativeAndRollingStatistics_RespectMissingValues()
+    {
+        var frame = ExcelDataFrame.FromWorksheet(new Worksheet
+        {
+            Name = "序列",
+            Rows =
+            [
+                new Object?[] { "值" },
+                new Object?[] { 1d },
+                new Object?[] { 2d },
+                new Object?[] { null },
+                new Object?[] { 4d },
+            ],
+        });
+
+        var cumulative = frame.CumulativeSum("值");
+        var rollingAverage = frame.RollingAverage("值", 3, minPeriods: 2);
+        var rollingSum = frame.RollingSum("值", 3, minPeriods: 2);
+
+        Assert.Equal(1d, cumulative.GetValue(0, "CumulativeSum_值"));
+        Assert.Equal(3d, cumulative.GetValue(1, "CumulativeSum_值"));
+        Assert.Null(cumulative.GetValue(2, "CumulativeSum_值"));
+        Assert.Equal(7d, cumulative.GetValue(3, "CumulativeSum_值"));
+        Assert.Null(rollingAverage.GetValue(0, "RollingAverage_值"));
+        Assert.Equal(1.5d, rollingAverage.GetValue(2, "RollingAverage_值"));
+        Assert.Equal(3d, rollingAverage.GetValue(3, "RollingAverage_值"));
+        Assert.Equal(6d, rollingSum.GetValue(3, "RollingSum_值"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => frame.RollingAverage("值", 2, minPeriods: 3));
+    }
 }
