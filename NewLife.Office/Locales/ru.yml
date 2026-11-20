@@ -56,7 +56,7 @@
 "  convert <input> [output]   Convert office documents to Markdown (output defaults to stdout)": "  convert <input> [output]   Преобразовать документы Office в Markdown (вывод по умолчанию в stdout)"
 "  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)": "  doc2docx <in.doc> <out.docx>   Преобразовать doc (97-2003) в docx (W20)"
 "  info <input>               Show file format information": "  info <input>               Показать информацию о формате файла"
-"Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc.": "Поддерживаемые форматы: docx/xlsx/pptx/pdf/md/ods/rtf/epub и др."
+"Supported formats: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub, etc.": "Поддерживаемые форматы: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub и др."
 "Unable to find worksheet": "Не удалось найти лист"
 "Stream must be seekable.": "Поток должен поддерживать поиск."
 "Not a valid CFB file: magic number mismatch.": "Недопустимый файл CFB: несовпадение магического числа."

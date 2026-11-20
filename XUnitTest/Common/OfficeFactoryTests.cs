@@ -2,6 +2,7 @@
 using System.Text;
 using NewLife.Office;
 using NewLife.Office.Calendar;
+using NewLife.Office.Csv;
 using NewLife.Office.Epub;
 using NewLife.Office.Excel;
 using NewLife.Office.Mail;
@@ -24,7 +25,7 @@ public class OfficeFactoryTests : IntegrationTestBase
     [Fact, DisplayName("IsSupported_支持的后缀返回true")]
     public void IsSupported_Returns_True_For_All_Supported()
     {
-        var extensions = new[] { ".xlsx", ".xls", ".docx", ".doc", ".pptx", ".ppt", ".pdf", ".rtf", ".ods", ".epub", ".vcf", ".eml", ".ics", ".md", ".xps" };
+        var extensions = new[] { ".xlsx", ".xls", ".docx", ".doc", ".pptx", ".ppt", ".pdf", ".rtf", ".ods", ".epub", ".vcf", ".eml", ".ics", ".md", ".csv", ".xps" };
         foreach (var ext in extensions)
         {
             Assert.True(OfficeFactory.IsSupported(ext), $"应支持 {ext}");
@@ -43,7 +44,6 @@ public class OfficeFactoryTests : IntegrationTestBase
     public void IsSupported_Returns_False_For_Unsupported()
     {
         Assert.False(OfficeFactory.IsSupported(".txt"));
-        Assert.False(OfficeFactory.IsSupported(".csv"));
         Assert.False(OfficeFactory.IsSupported(".zip"));
         Assert.False(OfficeFactory.IsSupported(""));
         Assert.False(OfficeFactory.IsSupported(null!));
@@ -79,10 +79,23 @@ public class OfficeFactoryTests : IntegrationTestBase
         Assert.Null(OfficeFactory.CreateReader(path));
     }
 
-    [Fact, DisplayName("SupportedExtensions_包含15种格式")]
-    public void SupportedExtensions_Has15()
+    [Fact, DisplayName("SupportedExtensions_包含16种格式")]
+    public void SupportedExtensions_Has16()
     {
-        Assert.Equal(15, OfficeFactory.SupportedExtensions.Count);
+        Assert.Equal(16, OfficeFactory.SupportedExtensions.Count);
+    }
+
+    [Fact, DisplayName("CreateReader_csv返回CsvDocument")]
+    public void CreateReader_Csv_Returns_CsvDocument()
+    {
+        var path = Path.Combine(OutputDir, "factory_read.csv");
+        File.WriteAllText(path, "地区,金额\r\n华东,100\r\n");
+
+        var reader = OfficeFactory.CreateReader(path);
+
+        var csv = Assert.IsType<CsvDocument>(reader);
+        Assert.Equal(2, csv.RowCount);
+        Assert.Equal("华东", csv.Rows[1][0]);
     }
 
     #region ReadText
@@ -145,6 +158,19 @@ public class OfficeFactoryTests : IntegrationTestBase
         Assert.NotNull(text);
         Assert.Contains("标题", text);
         Assert.Contains("正文段落", text);
+    }
+
+    [Fact, DisplayName("ReadText_从csv文件提取文本")]
+    public void ReadText_Csv_Returns_Text()
+    {
+        var path = Path.Combine(OutputDir, "factory_readtext.csv");
+        File.WriteAllText(path, "地区,金额\r\n华东,100\r\n", new UTF8Encoding(false));
+
+        var text = OfficeFactory.ReadText(path);
+
+        Assert.NotNull(text);
+        Assert.Contains("地区,金额", text);
+        Assert.Contains("华东,100", text);
     }
 
     [Fact, DisplayName("ReadText_从流提取xlsx文本")]

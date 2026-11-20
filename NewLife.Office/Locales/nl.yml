@@ -56,7 +56,7 @@
 "  convert <input> [output]   Convert office documents to Markdown (output defaults to stdout)": "  convert <input> [output]   Office-documenten naar Markdown converteren (uitvoer standaard naar stdout)"
 "  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)": "  doc2docx <in.doc> <out.docx>   doc (97-2003) naar docx (W20) converteren"
 "  info <input>               Show file format information": "  info <input>               Bestandsformaatgegevens tonen"
-"Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc.": "Ondersteunde indelingen: docx/xlsx/pptx/pdf/md/ods/rtf/epub, enz."
+"Supported formats: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub, etc.": "Ondersteunde indelingen: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub, enz."
 "Unable to find worksheet": "Kan werkblad niet vinden"
 "Stream must be seekable.": "De stream moet doorzoekbaar zijn."
 "Not a valid CFB file: magic number mismatch.": "Ongeldig CFB-bestand: magisch getal komt niet overeen."

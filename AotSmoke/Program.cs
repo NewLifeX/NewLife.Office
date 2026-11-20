@@ -1,4 +1,4 @@
-// NewLife.Office NativeAOT 冒烟：24 场景逐项 PASS/FAIL，任一失败以非 0 退出码结束。
+// NewLife.Office NativeAOT 冒烟：25 场景逐项 PASS/FAIL，任一失败以非 0 退出码结束。
 // 同一工程双跑对照：JIT（dotnet run -c Release）与 NativeAOT（dotnet publish -c Release -r <rid> 后运行产物）。
 // 由 .github/workflows/aot.yml 自动执行（win-x64/win-x86/win-arm64/linux-x64/linux-arm64/osx-x64/osx-arm64 原生发布运行，linux-la64 经 QEMU 以 JIT 覆盖）。
 using System.ComponentModel;
@@ -487,6 +487,33 @@ Run("23.四格式 AI 接口 快照/搜索/补丁", () =>
     var okXls = xlsOutline.Success && (xlsOutline.Content ?? "").Contains("Legacy") && xlsText.Success;
 
     return okXlsx && okDocx && okPptx && okPdf && okClone && okXls;
+});
+
+// 24. CSV 导入/分析/导出 + 工具路由（解析复用 CsvFile）
+Run("24.CSV 导入导出与工具路由", () =>
+{
+    var path = PathOf("smoke.csv");
+    File.WriteAllText(path, "地区,金额\r\n华东,9\r\n华南,10\r\n", new UTF8Encoding(false));
+
+    var frame = ExcelDataFrame.FromCsv(path);
+    var sorted = frame.OrderBy("金额", descending: true);
+    var okFrame = (String?)sorted.GetValue(0, "地区") == "华南" && sorted.GetValue(0, "金额") is Int64;
+
+    var outPath = PathOf("smoke-out.csv");
+    sorted.ToCsv(outPath);
+    var back = ExcelDataFrame.FromCsv(outPath);
+    var okRoundTrip = back.Columns.SequenceEqual(frame.Columns) && back.RowCount == 2;
+
+    var outline = OfficeDocumentTool.ReadOutline(path);
+    var text = OfficeDocumentTool.ReadText(path, 1000);
+    var search = OfficeDocumentTool.Search(path, "华南");
+    var patch = OfficeDocumentTool.ApplyPatch(path, "{}", PathOf("smoke-patch.csv"));
+    var okTools = outline.Success && (outline.Content ?? "").Contains("\"type\": \"number\"")
+        && text.Success && (text.Content ?? "").Contains("华东")
+        && search.Success && (search.Content ?? "").Contains("华南")
+        && !patch.Success && patch.Code == OfficeToolErrorCode.Unsupported;
+
+    return okFrame && okRoundTrip && okTools;
 });
 
 Console.WriteLine();

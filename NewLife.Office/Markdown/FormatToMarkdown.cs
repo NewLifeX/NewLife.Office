@@ -8,6 +8,7 @@ using NewLife.Office.Ppt;
 using NewLife.Office.Rtf;
 using NewLife.Office.Word;
 using NewLife;
+using NewLife.Office.Csv;
 
 namespace NewLife.Office.Markdown;
 
@@ -49,6 +50,32 @@ public static class FormatToMarkdown
         using var reader = new ExcelReader(stream, System.Text.Encoding.UTF8);
         return ToMarkdownString(reader, null, options);
     }
+    #endregion
+
+    #region CSV → Markdown
+    /// <summary>将 CSV 文件转换为 Markdown GFM 表格</summary>
+    /// <param name="filePath">CSV 文件路径</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromCsv(String filePath) => FromCsv(filePath, null);
+
+    /// <summary>将 CSV 文件转换为 Markdown GFM 表格</summary>
+    /// <param name="filePath">CSV 文件路径</param>
+    /// <param name="options">转换选项，null 使用默认</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromCsv(String filePath, MarkdownConverterOptions? options)
+        => ToMarkdownString(CsvDocument.ReadFile(filePath), filePath, options);
+
+    /// <summary>将 CSV 流转换为 Markdown</summary>
+    /// <param name="stream">CSV 数据流</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromCsv(Stream stream) => FromCsv(stream, null);
+
+    /// <summary>将 CSV 流转换为 Markdown</summary>
+    /// <param name="stream">CSV 数据流</param>
+    /// <param name="options">转换选项，null 使用默认</param>
+    /// <returns>Markdown 字符串</returns>
+    public static String? FromCsv(Stream stream, MarkdownConverterOptions? options)
+        => ToMarkdownString(CsvDocument.Read(stream), null, options);
     #endregion
 
     #region Word → Markdown
@@ -266,6 +293,7 @@ public static class FormatToMarkdown
             ".rtf" => FromRtf(filePath, options),
             ".epub" => FromEpub(filePath, options),
             ".md" or ".markdown" => ConvertMarkdownFile(filePath, options),
+            ".csv" => FromCsv(filePath, options),
             // 扩展名未知/不支持时按内容识别兜底（magic bytes，对标 anydoc）
             _ => ConvertByContent(filePath, options),
         };
@@ -291,6 +319,7 @@ public static class FormatToMarkdown
             ".rtf" => FromRtf(stream, options),
             ".epub" => FromEpub(stream, options),
             ".md" or ".markdown" => ConvertMarkdownStream(stream, options),
+            ".csv" => FromCsv(stream, options),
             // 扩展名未知/不支持时按内容识别兜底（magic bytes，对标 anydoc）
             _ => ConvertByContent(stream, options),
         };

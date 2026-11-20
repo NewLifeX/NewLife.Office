@@ -33,7 +33,7 @@ NuGet: NewLife.Office (Rendering package: NewLife.Office.Rendering)
 - MIT licensed: free with no commercial license risk
 - Unified API: `NewLife.Office` namespace with a consistent API style, low learning cost
 
-> CSV read/write is provided by `CsvFile` in `NewLife.Core`; this library does not duplicate CSV.
+> CSV parsing and writing are handled by `CsvFile` in `NewLife.Core`; this library adds `CsvDocument` and `ExcelDataFrame.FromCsv/ToCsv` so CSV can be analyzed and routed like a workbook.
 
 ## Highlights
 

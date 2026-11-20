@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Text;
 using NewLife.Office.Calendar;
+using NewLife.Office.Csv;
 using NewLife.Office.Epub;
 using NewLife.Office.Excel;
 using NewLife.Office.Mail;
@@ -18,7 +19,7 @@ namespace NewLife.Office;
 
 /// <summary>办公文档工厂，提供文件格式校验和读取器创建</summary>
 /// <remarks>
-/// 支持的格式：xlsx、xls、docx、doc、pptx、ppt、pdf、rtf、ods、epub、vcf、eml、ics、md、xps。
+/// 支持的格式：xlsx、xls、docx、doc、pptx、ppt、pdf、rtf、ods、epub、vcf、eml、ics、md、csv、xps。
 /// <para>用法示例：</para>
 /// <code>
 /// if (OfficeFactory.IsSupported(".xlsx"))
@@ -45,6 +46,7 @@ public static class OfficeFactory
         ".eml",
         ".ics",
         ".md",
+        ".csv",
         ".xps",
     ];
     #endregion
@@ -81,6 +83,7 @@ public static class OfficeFactory
     /// <item><description>.eml → <see cref="Message"/></description></item>
     /// <item><description>.ics → <see cref="ICalDocument"/></description></item>
     /// <item><description>.md → <see cref="MarkdownDocument"/>（通过 ParseFile 返回）</description></item>
+    /// <item><description>.csv → <see cref="Csv.CsvDocument"/></description></item>
     /// <item><description>.xps → <see cref="XpsDocument"/>（XpsReader 包装）</description></item>
     /// </list>
     /// 调用方应在使用完毕后释放返回对象（若其实现 IDisposable）。
@@ -115,6 +118,7 @@ public static class OfficeFactory
             ".eml" => new EmlReader().Read(fullPath),
             ".ics" => new ICalReader().Read(fullPath),
             ".md" => MarkdownDocument.ParseFile(fullPath),
+            ".csv" => CsvDocument.ReadFile(fullPath),
             ".xps" => new XpsDocument(new XpsReader().Read(fullPath)),
             _ => null,
         };
@@ -148,6 +152,7 @@ public static class OfficeFactory
             ".eml" => new EmlReader().Read(stream),
             ".ics" => new ICalReader().Read(stream),
             ".md" => MarkdownDocument.Parse(stream),
+            ".csv" => CsvDocument.Read(stream),
             ".xps" => new XpsDocument(new XpsReader().Read(stream)),
             _ => null,
         };
@@ -290,7 +295,7 @@ public static class OfficeFactory
         }
     }
 
-    /// <summary>识别文本类格式（md/vcf/ics/eml）</summary>
+    /// <summary>识别文本类格式（md/vcf/ics/eml/csv）</summary>
     private static String? DetectText(Stream stream)
     {
         try
@@ -313,12 +318,59 @@ public static class OfficeFactory
             if (text.StartsWith("MIME-Version:", StringComparison.OrdinalIgnoreCase) ||
                 text.Contains("Return-Path:", StringComparison.OrdinalIgnoreCase))
                 return "eml";
+            if (LooksLikeCsv(text)) return "csv";
             return "md";
         }
         catch
         {
             return null;
         }
+    }
+
+    /// <summary>判断文本是否像逗号分隔的表格</summary>
+    /// <remarks>
+    /// 保守判定：至少 3 行且每行列数一致（≥2 列），且不含 Markdown 结构特征。
+    /// 宁可漏判（调用方仍可按扩展名路由）也不把 Markdown 正文误判成 CSV。
+    /// </remarks>
+    private static Boolean LooksLikeCsv(String text)
+    {
+        if (text.Contains("```")) return false;
+        if (text.TrimStart().StartsWith("#") || text.TrimStart().StartsWith("|") || text.TrimStart().StartsWith(">")) return false;
+
+        var fields = -1;
+        var rows = 0;
+        foreach (var raw in text.Split('\n'))
+        {
+            var line = raw.TrimEnd('\r');
+            if (line.Length == 0) continue;
+            if (line[0] == '#' || line[0] == '|' || line[0] == '>') return false;
+
+            var count = CountFields(line, ',');
+            if (count < 2) return false;
+            if (fields < 0) fields = count;
+            else if (fields != count) return false;
+
+            if (++rows >= 3) return true;
+        }
+        return false;
+    }
+
+    /// <summary>统计引号外的分隔符数量，得到字段数</summary>
+    private static Int32 CountFields(String line, Char separator)
+    {
+        var count = 1;
+        var quoted = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var ch = line[i];
+            if (ch == '"')
+            {
+                quoted = !quoted;
+                continue;
+            }
+            if (!quoted && ch == separator) count++;
+        }
+        return count;
     }
 
     /// <summary>按内容识别格式并创建读取器（扩展名错误/缺失时兜底）</summary>
@@ -364,6 +416,7 @@ public static class OfficeFactory
             "eml" => new EmlReader().Read(stream),
             "ics" => new ICalReader().Read(stream),
             "md" => MarkdownDocument.Parse(stream),
+            "csv" => CsvDocument.Read(stream),
             "xps" => new XpsDocument(new XpsReader().Read(stream)),
             _ => null,
         };
@@ -388,6 +441,7 @@ public static class OfficeFactory
             "eml" => new EmlReader().Read(fullPath),
             "ics" => new ICalReader().Read(fullPath),
             "md" => MarkdownDocument.ParseFile(fullPath),
+            "csv" => CsvDocument.ReadFile(fullPath),
             "xps" => new XpsDocument(new XpsReader().Read(fullPath)),
             _ => null,
         };

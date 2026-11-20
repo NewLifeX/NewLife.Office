@@ -56,7 +56,7 @@
 "  convert <input> [output]   Convert office documents to Markdown (output defaults to stdout)": "  convert <input> [output]   Konversi dokumen Office ke Markdown (output default ke stdout)"
 "  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)": "  doc2docx <in.doc> <out.docx>   Konversi doc (97-2003) ke docx (W20)"
 "  info <input>               Show file format information": "  info <input>               Tampilkan informasi format file"
-"Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc.": "Format yang didukung: docx/xlsx/pptx/pdf/md/ods/rtf/epub, dll."
+"Supported formats: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub, etc.": "Format yang didukung: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub, dll."
 "Unable to find worksheet": "Tidak dapat menemukan lembar kerja"
 "Stream must be seekable.": "Aliran harus dapat dicari."
 "Not a valid CFB file: magic number mismatch.": "File CFB tidak valid: nomor magis tidak cocok."

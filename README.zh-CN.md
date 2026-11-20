@@ -33,7 +33,7 @@ Nuget：NewLife.Office（渲染扩展包：NewLife.Office.Rendering）
 - MIT 免费：无商业许可风险
 - 统一 API：命名空间 `NewLife.Office`，各格式 API 风格一致，学习成本低
 
-> CSV 读写能力由 `NewLife.Core` 的 `CsvFile` 提供，本仓库不重复实现。
+> CSV 的解析与写入由 `NewLife.Core` 的 `CsvFile` 完成；本库补上 `CsvDocument` 与 `ExcelDataFrame.FromCsv/ToCsv`，让 CSV 能像工作簿一样被分析、被工具链识别。
 
 ## 亮点
 

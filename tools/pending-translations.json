@@ -140,7 +140,7 @@
     "Usage: search <input> <text> [--regex] [--max N]",
     "      --images <dir>         Write images to <dir> and reference them by file name",
     "      --header-footer        Include headers/footers as blockquotes (Word)",
-    "  read <input>               Dump structure snapshot as JSON (docx/xlsx/pptx/pdf, for agents)",
+    "  read <input>               Dump structure snapshot as JSON (docx/xlsx/pptx/pdf/csv, for agents)",
     "  apply <in> <patch> <out>   Apply JSON patch to docx/xlsx/pptx/pdf (no output file if any op fails)",
     "  text <input> [--max-chars N] [--cursor N]   Read plain text in chunks",
     "  range <input> <range> [--max-rows N] [--cursor N]   Read a worksheet range page by page",
@@ -198,6 +198,10 @@
     "The CFB FAT chain contains a cycle.",
     "The CFB mini FAT chain contains a cycle.",
     "The CFB mini stream exceeds the resource limit.",
-    "The MIME nesting exceeds the limit ({0})."
+    "The MIME nesting exceeds the limit ({0}).",
+    "The table has no columns.",
+    "The CSV file contains no data.",
+    "The CSV row count exceeds the resource limit ({0}).",
+    "The CSV column count {0} exceeds the resource limit ({1})."
   ]
 }

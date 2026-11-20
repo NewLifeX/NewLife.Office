@@ -29,7 +29,7 @@ NuGet: NewLife.Office (حزمة العرض: NewLife.Office.Rendering)
 - ترخيص MIT: مجانًا دون مخاطر ترخيص تجاري
 - واجهة برمجة موحّدة: مساحة الأسماء `NewLife.Office` بأسلوب API متسق وتكلفة تعلّم منخفضة
 
-> تُوفَّر قراءة/كتابة CSV عبر `CsvFile` في `NewLife.Core`؛ هذه المكتبة لا تكرّر CSV.
+> يتم تحليل CSV وكتابته عبر `CsvFile` في `NewLife.Core`؛ وتضيف هذه المكتبة `CsvDocument` و`ExcelDataFrame.FromCsv/ToCsv` لتحليل CSV ككتاب عمل وتوجيهه في الأدوات.
 
 ## أبرز الميزات
 

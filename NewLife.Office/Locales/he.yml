@@ -56,7 +56,7 @@
 "  convert <input> [output]   Convert office documents to Markdown (output defaults to stdout)": "  convert <input> [output]   המרת מסמכי Office ל-Markdown (פלט כברירת מחדל ל-stdout)"
 "  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)": "  doc2docx <in.doc> <out.docx>   המרת doc (97-2003) ל-docx (W20)"
 "  info <input>               Show file format information": "  info <input>               הצגת מידע על פורמט הקובץ"
-"Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc.": "פורמטים נתמכים: docx/xlsx/pptx/pdf/md/ods/rtf/epub וכו'."
+"Supported formats: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub, etc.": "פורמטים נתמכים: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub וכו'."
 "Unable to find worksheet": "לא ניתן למצוא גיליון עבודה"
 "Stream must be seekable.": "הזרם חייב לתמוך בחיפוש."
 "Not a valid CFB file: magic number mismatch.": "קובץ CFB לא חוקי: מספר קסם אינו תואם."

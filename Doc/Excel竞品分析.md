@@ -37,12 +37,12 @@
 | 写入 xlsx | ✅ | ✅ | ✅ | ✅ | ✅ | ❌（只读） | ✅ | ✅ |
 | 读取 xls | ✅ | ❌ | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ |
 | 写入 xls | ✅ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| CSV 支持 | ✅（NewLife.Core CsvFile） | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ✅ |
+| CSV 支持 | ✅（CsvFile + DataFrame 桥接） | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ✅ |
 | 多工作表 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 流式读取 | ✅ | ⚠️ | ⚠️ | ❌ | ✅ | ✅ | ⚠️ | ✅ |
 | 流式写入 | ✅ | ❌ | ✅ | ❌ | ✅ | ❌ | ⚠️ | ✅ |
 
-> 说明：本项目 xls（BIFF8）由 BiffReader+BiffWriter 提供读写双全支持；CSV 由 NewLife.Core 的 CsvFile 提供。
+> 说明：本项目 xls（BIFF8）由 BiffReader+BiffWriter 提供读写双全支持；CSV 的解析与写入由 NewLife.Core 的 CsvFile 提供，本库补充 `CsvDocument` 文档模型与 `ExcelDataFrame.FromCsv/ToCsv` 分析桥接。
 
 ### 2.2 单元格与样式
 
@@ -401,7 +401,7 @@ pandas 不是 Excel 文件读写库，而是 Python 的内存数据分析工具�
 
 | 能力 | pandas | NewLife.Office |
 |------|---------|----------------|
-| 文件与格式 | 内置 `read_csv`/`read_excel` 等 IO 接口；Excel 引擎由相应 Python 依赖提供 | 原生读写 xlsx/xls，支持样式、公式、图表、透视表及未建模部件透传；CSV 由 NewLife.Core 提供 |
+| 文件与格式 | 内置 `read_csv`/`read_excel` 等 IO 接口；Excel 引擎由相应 Python 依赖提供 | 原生读写 xlsx/xls，支持样式、公式、图表、透视表及未建模部件透传；CSV 由 NewLife.Core 提供解析，本库提供 `CsvDocument`/`ExcelDataFrame` 桥接 |
 | 表格分析模型 | `DataFrame`/`Series`，带索引、类型与对齐语义 | `ExcelDataFrame` 以工作表首行为列名，值使用 .NET 对象 |
 | 常见分析 | 丰富的索引、缺失值、分组、合并、重塑、时序与统计 API | 选列、筛选、清洗、派生列、多键分组/多指标汇总、Inner/Left/Right/Full 多键关联、透视/反透视、多列排序/Top-N、累计/滚动统计、数值描述、Pearson 相关矩阵 |
 | 公式与格式 | 面向数据值，不负责保留工作簿的复杂 Excel 版式 | 读写 Excel 公式与格式，但不提供公式计算引擎 |

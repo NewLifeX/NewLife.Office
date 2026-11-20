@@ -72,6 +72,20 @@ public class OfficeFactoryDetectionTests
         Assert.Equal("md", OfficeFactory.Detect(new MemoryStream(Encoding.UTF8.GetBytes(text))));
     }
 
+    [Fact, DisplayName("Detect_CSV文本识别")]
+    public void Detect_Csv()
+    {
+        var text = "地区,金额\r\n华东,100\r\n华南,200\r\n";
+        Assert.Equal("csv", OfficeFactory.Detect(new MemoryStream(Encoding.UTF8.GetBytes(text))));
+    }
+
+    [Fact, DisplayName("Detect_Markdown正文含逗号不误判CSV")]
+    public void Detect_MarkdownWithCommas()
+    {
+        var text = "这是第一行,带有逗号\r\n这是第二行,字段数不同,有三段\r\n第三行,两段\r\n";
+        Assert.Equal("md", OfficeFactory.Detect(new MemoryStream(Encoding.UTF8.GetBytes(text))));
+    }
+
     [Fact, DisplayName("Detect_vCard文本识别")]
     public void Detect_VCard()
     {

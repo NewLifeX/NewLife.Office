@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using NewLife;
 using NewLife.Office;
@@ -134,6 +135,36 @@ public class OfficeToolTests
         var tail = OfficeDocumentTool.ReadRange(path, "数据!A1:B10", 10, 6);
         Assert.False(tail.Truncated);
         Assert.Contains("成员8", tail.Content);
+    }
+
+    [Fact(DisplayName = "工具-CSV 按工作簿路由")]
+    public void Csv_RoutesLikeWorkbook()
+    {
+        var dir = TempDir();
+        var path = Path.Combine(dir, "data.csv");
+        File.WriteAllText(path, "姓名,部门\r\n成员0,研发\r\n成员1,市场\r\n", new UTF8Encoding(false));
+
+        var outline = OfficeDocumentTool.ReadOutline(path);
+        Assert.True(outline.Success);
+        Assert.Equal("csv", outline.Format);
+        Assert.Contains("\"sheets\"", outline.Content);
+        Assert.Contains("姓名", outline.Content);
+
+        var text = OfficeDocumentTool.ReadText(path);
+        Assert.True(text.Success);
+        Assert.Contains("成员0,研发", text.Content);
+
+        var range = OfficeDocumentTool.ReadRange(path, "A1:B2", 0, 0);
+        Assert.True(range.Success);
+        Assert.Contains("成员0", range.Content);
+
+        var search = OfficeDocumentTool.Search(path, "成员1");
+        Assert.True(search.Success);
+        Assert.Contains("成员1", search.Content);
+
+        var patch = OfficeDocumentTool.ApplyPatch(path, "{}", Path.Combine(dir, "out.csv"));
+        Assert.False(patch.Success);
+        Assert.Equal(OfficeToolErrorCode.Unsupported, patch.Code);
     }
 
     [Fact(DisplayName = "工具-工作簿与PDF搜索")]

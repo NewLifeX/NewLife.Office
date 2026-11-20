@@ -56,7 +56,7 @@
 "  convert <input> [output]   Convert office documents to Markdown (output defaults to stdout)": "  convert <input> [output]   Převést dokumenty Office na Markdown (výstup ve výchozím nastavení do stdout)"
 "  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)": "  doc2docx <in.doc> <out.docx>   Převést doc (97-2003) na docx (W20)"
 "  info <input>               Show file format information": "  info <input>               Zobrazit informace o formátu souboru"
-"Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc.": "Podporované formáty: docx/xlsx/pptx/pdf/md/ods/rtf/epub atd."
+"Supported formats: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub, etc.": "Podporované formáty: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub atd."
 "Unable to find worksheet": "Nelze najít list"
 "Stream must be seekable.": "Stream musí podporovat hledání."
 "Not a valid CFB file: magic number mismatch.": "Neplatný soubor CFB: nesoulad magického čísla."

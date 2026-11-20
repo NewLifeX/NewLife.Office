@@ -63,4 +63,13 @@ public static class OfficeLimits
 
     /// <summary>Markdown 引用块嵌套深度上限（默认 64）</summary>
     public static Int32 MaxMarkdownQuoteDepth { get; set; } = 64;
+
+    /// <summary>CSV 文本最大字节数（默认 512MB，仅不可寻址流复制到内存时生效）</summary>
+    public static Int64 MaxCsvBytes { get; set; } = 512L * 1024 * 1024;
+
+    /// <summary>CSV 最大行数（默认 104 万，与 Excel 行数上限一致）</summary>
+    public static Int32 MaxCsvRows { get; set; } = 1_048_576;
+
+    /// <summary>CSV 最大列数（默认 16384，与 Excel 列数上限一致）</summary>
+    public static Int32 MaxCsvColumns { get; set; } = 16_384;
 }

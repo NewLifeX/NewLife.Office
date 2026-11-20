@@ -56,7 +56,7 @@
 "  convert <input> [output]   Convert office documents to Markdown (output defaults to stdout)": "  convert <input> [output]   تحويل مستندات Office إلى Markdown (الإخراج افتراضيًا إلى stdout)"
 "  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)": "  doc2docx <in.doc> <out.docx>   تحويل doc (97-2003) إلى docx (W20)"
 "  info <input>               Show file format information": "  info <input>               عرض معلومات تنسيق الملف"
-"Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc.": "التنسيقات المدعومة: docx/xlsx/pptx/pdf/md/ods/rtf/epub وغيرها."
+"Supported formats: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub, etc.": "التنسيقات المدعومة: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub وغيرها."
 "Unable to find worksheet": "تعذّر العثور على ورقة العمل"
 "Stream must be seekable.": "يجب أن يدعم التدفق البحث."
 "Not a valid CFB file: magic number mismatch.": "ملف CFB غير صالح: عدم تطابق الرقم السحري."

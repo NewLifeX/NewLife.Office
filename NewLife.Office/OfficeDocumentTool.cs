@@ -93,13 +93,13 @@ public static class OfficeDocumentTool
     #region 格式识别
     /// <summary>识别文档格式</summary>
     /// <param name="path">文件路径</param>
-    /// <returns>docx/xlsx/pptx/pdf，无法识别返回未知后缀</returns>
+    /// <returns>docx/xlsx/pptx/pdf/csv，无法识别返回未知后缀</returns>
     public static String Detect(String path)
     {
         if (path == null) throw new ArgumentNullException(nameof(path));
 
         var ext = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
-        if (ext is "docx" or "xlsx" or "pptx" or "pdf") return ext;
+        if (ext is "docx" or "xlsx" or "pptx" or "pdf" or "csv") return ext;
 
         return OfficeFactory.Detect(path) ?? ext;
     }
@@ -134,6 +134,26 @@ public static class OfficeDocumentTool
             return false;
         }
     }
+
+    /// <summary>把 CSV 载入单表工作簿，复用工作表快照/区域/搜索逻辑</summary>
+    /// <remarks>走 ExcelDataFrame 导入以获得类型推断，快照里的列类型才不是清一色 text。</remarks>
+    private static ExcelDocument LoadCsv(String path)
+    {
+        ExcelDataFrame frame;
+        try
+        {
+            frame = ExcelDataFrame.FromCsv(path);
+        }
+        catch (ArgumentException ex)
+        {
+            // 空文件/列名重复属于数据问题，按 Malformed 返回而不是锚点缺失
+            throw new InvalidDataException(ex.Message, ex);
+        }
+
+        var document = new ExcelDocument();
+        document.Worksheets.Add(frame.ToWorksheet(Path.GetFileNameWithoutExtension(path)));
+        return document;
+    }
     #endregion
 
     #region 读取
@@ -145,7 +165,7 @@ public static class OfficeDocumentTool
         try
         {
             var format = Detect(path);
-            if (format is not ("docx" or "xlsx" or "xls" or "pptx" or "pdf"))
+            if (format is not ("docx" or "xlsx" or "xls" or "pptx" or "pdf" or "csv"))
                 return Fail(format, OfficeToolErrorCode.Unsupported, L.T("Unsupported structure snapshot format: {0}", format));
             if (format is "docx" or "xlsx" or "pptx" && IsEncryptedOoxml(path))
                 return Fail(format, OfficeToolErrorCode.Encrypted, L.T("The document is encrypted; decrypt it first."));
@@ -161,6 +181,9 @@ public static class OfficeDocumentTool
                     break;
                 case "xls":
                     using (var reader = new BiffReader(path)) json = ExcelLegacyConverter.ToDocument(reader).ToOutline().ToJson();
+                    break;
+                case "csv":
+                    json = LoadCsv(path).ToOutline().ToJson();
                     break;
                 case "pptx":
                     using (var reader = new PptxReader(path)) json = reader.ReadDocument().ToOutline().ToJson();
@@ -235,7 +258,7 @@ public static class OfficeDocumentTool
         try
         {
             var format = Detect(path);
-            if (format is not ("xlsx" or "xls"))
+            if (format is not ("xlsx" or "xls" or "csv"))
                 return Fail(format, OfficeToolErrorCode.Unsupported, L.T("Range reading is only supported for workbooks: {0}", format));
 
             ExcelDocument document;
@@ -243,6 +266,10 @@ public static class OfficeDocumentTool
             {
                 using var legacy = new BiffReader(path);
                 document = ExcelLegacyConverter.ToDocument(legacy);
+            }
+            else if (format == "csv")
+            {
+                document = LoadCsv(path);
             }
             else
             {
@@ -318,6 +345,12 @@ public static class OfficeDocumentTool
                         document = reader.ReadExcel();
                     }
 
+                    var result = ExcelSearch.Search(document, text, regex, false, maxResults);
+                    return new OfficeToolResult { Success = true, Format = format, Content = result.ToJson() };
+                }
+                case "csv":
+                {
+                    var document = LoadCsv(path);
                     var result = ExcelSearch.Search(document, text, regex, false, maxResults);
                     return new OfficeToolResult { Success = true, Format = format, Content = result.ToJson() };
                 }

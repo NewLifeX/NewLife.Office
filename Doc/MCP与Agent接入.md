@@ -1,6 +1,6 @@
 # MCP 与 Agent 接入
 
-> 面向 AI/Agent 的 docx/xlsx/pptx/pdf 读写接入说明。核心思路：**先看结构（read）→ 再按锚点改（apply）**，
+> 面向 AI/Agent 的 docx/xlsx/pptx/pdf/csv 读写接入说明。核心思路：**先看结构（read）→ 再按锚点改（apply）**，
 > 避免让模型凭记忆猜文档结构、也避免"改完静默不生效"。
 
 ---
@@ -58,8 +58,12 @@ dotnet tool install -g NewLife.Office.Cli
 office --version
 office --help
 
-# 结构快照（docx/xlsx/pptx/pdf 自动识别）
+# 结构快照（docx/xlsx/pptx/pdf/csv 自动识别）
 office read report.xlsx
+office read data.csv
+
+# CSV 转 Markdown 表格
+office convert data.csv
 
 # 按补丁修改（任一条失败则不写出文件）
 office apply report.xlsx patch.json out.xlsx
@@ -86,6 +90,7 @@ office convert report.docx report.md --images ./report-images --header-footer
 - `apply` 退出码：`0` 全部成功、`1` 参数/文件错误、`2` 格式/加密错误、`3` 有操作失败（此时**不产生输出文件**）。
 - `text` / `range` 在 stderr 输出续读游标提示（`nextCursor=N`）。
 - `convert` 的 `--images <dir>` 把图片写成 `{文档名}-image1.png`…（带源文档名前缀，多个文档落同一目录不会互相覆盖）并在 Markdown 中以文件名引用；`--header-footer` 把页眉页脚以引用块标注输出（默认均关闭，避免污染正文）。
+- CSV（`.csv`）按单表工作簿处理：`read`/`text`/`range`/`search`/`convert` 直接可用，列类型按内容推断；`apply` 对 CSV 返回 `Unsupported`，需要编辑请先转成 xlsx。
 
 ---
 

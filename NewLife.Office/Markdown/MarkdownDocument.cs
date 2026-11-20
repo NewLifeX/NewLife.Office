@@ -130,36 +130,7 @@ public sealed class MarkdownDocument : ITextExtractable, IMarkdownExtractable
     /// <summary>字节数组解码：BOM → 严格 UTF-8 → GBK 兜底（中文环境）</summary>
     /// <param name="bytes">字节数组</param>
     /// <returns>解码后文本</returns>
-    private static String DecodeText(Byte[] bytes)
-    {
-        if (bytes == null || bytes.Length == 0) return "";
-
-        // BOM 检测（UTF-8 / UTF-16 LE / UTF-16 BE）
-        if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
-            return Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3);
-        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
-            return Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);
-        if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
-            return Encoding.BigEndianUnicode.GetString(bytes, 2, bytes.Length - 2);
-
-        // 严格 UTF-8 校验，避免乱码
-        try
-        {
-            return new UTF8Encoding(false, true).GetString(bytes);
-        }
-        catch (DecoderFallbackException)
-        {
-            // 非 UTF-8：尝试 GBK（net45 原生支持；netstandard 无提供程序时回退 UTF-8）
-            try
-            {
-                return Encoding.GetEncoding(936).GetString(bytes);
-            }
-            catch
-            {
-                return Encoding.UTF8.GetString(bytes);
-            }
-        }
-    }
+    private static String DecodeText(Byte[] bytes) => OfficeTextDecoder.Decode(bytes);
 
     /// <summary>从 HTML 字符串解析文档（反向转换，MD04）</summary>
     /// <param name="html">HTML 文本</param>

@@ -462,7 +462,7 @@ public static class Program
         Console.WriteLine(Localization.Translate("      --header-footer        Include headers/footers as blockquotes (Word)"));
         Console.WriteLine(Localization.Translate("  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)"));
         Console.WriteLine(Localization.Translate("  info <input>               Show file format information"));
-        Console.WriteLine(Localization.Translate("  read <input>               Dump structure snapshot as JSON (docx/xlsx/pptx/pdf, for agents)"));
+        Console.WriteLine(Localization.Translate("  read <input>               Dump structure snapshot as JSON (docx/xlsx/pptx/pdf/csv, for agents)"));
         Console.WriteLine(Localization.Translate("  apply <in> <patch> <out>   Apply JSON patch to docx/xlsx/pptx/pdf (no output file if any op fails)"));
         Console.WriteLine(Localization.Translate("  text <input> [--max-chars N] [--cursor N]   Read plain text in chunks"));
         Console.WriteLine(Localization.Translate("  range <input> <range> [--max-rows N] [--cursor N]   Read a worksheet range page by page"));
@@ -471,7 +471,7 @@ public static class Program
         Console.WriteLine(Localization.Translate("  --help, -h                 Show this help"));
         Console.WriteLine(Localization.Translate("  --version, -v              Show version"));
         Console.WriteLine();
-        Console.WriteLine(Localization.Translate("Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc."));
+        Console.WriteLine(Localization.Translate("Supported formats: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub, etc."));
     }
 
     private static Int32 PrintUsageAndReturn()

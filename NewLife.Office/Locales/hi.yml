@@ -56,7 +56,7 @@
 "  convert <input> [output]   Convert office documents to Markdown (output defaults to stdout)": "  convert <input> [output]   Office दस्तावेज़ों को Markdown में बदलें (आउटपुट डिफ़ॉल्ट रूप से stdout पर)"
 "  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)": "  doc2docx <in.doc> <out.docx>   doc (97-2003) को docx (W20) में बदलें"
 "  info <input>               Show file format information": "  info <input>               फ़ाइल प्रारूप जानकारी दिखाएँ"
-"Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc.": "समर्थित प्रारूप: docx/xlsx/pptx/pdf/md/ods/rtf/epub आदि।"
+"Supported formats: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub, etc.": "समर्थित प्रारूप: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub आदि।"
 "Unable to find worksheet": "वर्कशीट नहीं मिली"
 "Stream must be seekable.": "स्ट्रीम खोज-योग्य होनी चाहिए।"
 "Not a valid CFB file: magic number mismatch.": "अमान्य CFB फ़ाइल: मैजिक नंबर मेल नहीं खाता।"

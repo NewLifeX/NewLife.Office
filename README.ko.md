@@ -31,7 +31,7 @@ NuGet: NewLife.Office (렌더링 확장 패키지: NewLife.Office.Rendering)
 - MIT 라이선스: 무료, 상업용 라이선스 리스크 없음
 - 통일된 API: `NewLife.Office` 네임스페이스, 모든 형식의 API 스타일 일관, 학습 비용 낮음
 
-> CSV 읽기/쓰기는 `NewLife.Core`의 `CsvFile`이 제공하므로 이 라이브러리에서는 중복 구현하지 않습니다.
+> CSV 구문 분석과 쓰기는 `NewLife.Core`의 `CsvFile`이 담당하며, 이 라이브러리는 `CsvDocument`와 `ExcelDataFrame.FromCsv/ToCsv`를 추가해 CSV를 통합 문서처럼 분석하고 도구 체인에서 라우팅합니다.
 
 ## 하이라이트
 

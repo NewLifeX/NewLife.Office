@@ -40,6 +40,30 @@ public class CliToolTests
         }
     }
 
+    [Fact, DisplayName("CLI：convert csv 输出 Markdown 表格")]
+    public void Convert_Csv_ToMarkdownTable()
+    {
+        var dir = GetTempDir();
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var input = Path.Combine(dir, "data.csv");
+            File.WriteAllText(input, "地区,金额\r\n华东,100\r\n", new UTF8Encoding(false));
+            var output = Path.Combine(dir, "out.md");
+
+            var code = Program.Main(["convert", input, output]);
+
+            Assert.Equal(0, code);
+            var markdown = File.ReadAllText(output);
+            Assert.Contains("| 地区 | 金额 |", markdown);
+            Assert.Contains("| 华东 | 100 |", markdown);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
     [Fact, DisplayName("CLI：convert 输出到 stdout（无 output 参数）")]
     public void Convert_ToStdout()
     {

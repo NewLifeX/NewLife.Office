@@ -10,7 +10,7 @@ namespace NewLife.Office.Cli;
 /// <remarks>
 /// 走 MCP 的 stdio 传输：每行一条 JSON-RPC 2.0 消息（请求/响应/通知），stdin 读、stdout 写。
 /// 只实现最小可用集合：<c>initialize</c> / <c>tools/list</c> / <c>tools/call</c> / <c>ping</c>。
-/// <para>工具：四格式的结构快照/补丁，以及统一的 <c>office_read_outline</c> / <c>office_read_text</c> / <c>office_search</c> / <c>office_apply_patch</c>。</para>
+/// <para>工具：各格式的结构快照/补丁，以及统一的 <c>office_read_outline</c> / <c>office_read_text</c> / <c>office_search</c> / <c>office_apply_patch</c>（CSV 只读，补丁返回 Unsupported）。</para>
 /// <para>零外部依赖：只用 BCL 的 System.Text.Json 手写协议层，不引入 MCP SDK。</para>
 /// </remarks>
 internal static class McpServer
@@ -103,7 +103,7 @@ internal static class McpServer
                 ["patch"] = new JsonObject { ["type"] = "object", ["description"] = "补丁对象，形如 {\"ops\":[...]}" },
             }, "path", "output", "patch");
 
-        var officeOutline = Tool("office_read_outline", "读取任意受支持文档（docx/xlsx/pptx/pdf）的结构快照，按扩展名或内容自动识别格式，返回 JSON 文本",
+        var officeOutline = Tool("office_read_outline", "读取任意受支持文档（docx/xlsx/pptx/pdf/csv）的结构快照，按扩展名或内容自动识别格式，返回 JSON 文本",
             new JsonObject { ["path"] = PathProp("文档路径") }, "path");
 
         var officeText = Tool("office_read_text", "分段读取任意文档的纯文本：maxChars 控制本次字符数，cursor 传上次返回的 nextCursor 续读",

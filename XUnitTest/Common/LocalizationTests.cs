@@ -80,7 +80,7 @@ public class LocalizationTests
         "  convert <input> [output]   Convert office documents to Markdown (output defaults to stdout)",
         "  doc2docx <in.doc> <out.docx>   Convert doc (97-2003) to docx (W20)",
         "  info <input>               Show file format information",
-        "Supported formats: docx/xlsx/pptx/pdf/md/ods/rtf/epub, etc.",
+        "Supported formats: docx/xlsx/pptx/pdf/md/csv/ods/rtf/epub, etc.",
         "Unable to find worksheet",
         "Stream must be seekable.",
         "Not a valid CFB file: magic number mismatch.",

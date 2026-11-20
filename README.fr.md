@@ -31,7 +31,7 @@ NuGet : NewLife.Office (package de rendu : NewLife.Office.Rendering)
 - Licence MIT : gratuit, sans risque de licence commerciale
 - API unifiée : espace de noms `NewLife.Office`, style d'API cohérent, faible coût d'apprentissage
 
-> La lecture/écriture CSV est fournie par `CsvFile` dans `NewLife.Core` ; cette bibliothèque ne duplique pas le CSV.
+> L'analyse et l'écriture CSV sont assurées par `CsvFile` de `NewLife.Core` ; cette bibliothèque ajoute `CsvDocument` et `ExcelDataFrame.FromCsv/ToCsv` pour analyser un CSV comme un classeur et le router dans la chaîne d'outils.
 
 ## Points forts
 

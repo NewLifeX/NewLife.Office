@@ -86,6 +86,72 @@ public sealed partial class ExcelDataFrame
 
         return new ExcelDataFrame(columns, rows);
     }
+
+    /// <summary>从行数据创建数据表</summary>
+    /// <remarks>
+    /// 与 <see cref="FromWorksheet"/> 使用相同的列名规则：空列名生成 Column1..ColumnN，重复列名抛异常。
+    /// 各行长度可不等，短行按空单元格补齐。
+    /// </remarks>
+    /// <param name="rows">行数据，首行可为列名</param>
+    /// <param name="hasHeader">首行是否列名；false 时列名为 Column1..ColumnN</param>
+    /// <returns>内存中的数据表</returns>
+    public static ExcelDataFrame FromRows(IEnumerable<Object?[]> rows, Boolean hasHeader = true)
+    {
+        if (rows == null) throw new ArgumentNullException(nameof(rows));
+
+        var list = new List<Object?[]>();
+        var columnCount = 0;
+        foreach (var row in rows)
+        {
+            if (row == null) continue;
+            columnCount = Math.Max(columnCount, row.Length);
+            list.Add(row);
+        }
+        if (columnCount == 0)
+            throw new ArgumentException(L.T("The table has no columns."), nameof(rows));
+
+        var header = hasHeader && list.Count > 0 ? list[0] : [];
+        var columns = new String[columnCount];
+        var indexes = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
+        for (var i = 0; i < columnCount; i++)
+        {
+            var headerName = i < header.Length
+                ? Convert.ToString(header[i], CultureInfo.InvariantCulture)
+                : null;
+            var name = String.IsNullOrWhiteSpace(headerName) ? $"Column{i + 1}" : headerName!;
+            if (!indexes.Add(name))
+                throw new ArgumentException(L.T("Duplicate column name: {0}", name), nameof(rows));
+            columns[i] = name;
+        }
+
+        var data = new List<Object?[]>(Math.Max(0, list.Count - (hasHeader ? 1 : 0)));
+        for (var i = hasHeader ? 1 : 0; i < list.Count; i++)
+        {
+            var source = list[i];
+            var values = new Object?[columnCount];
+            Array.Copy(source, values, Math.Min(source.Length, columnCount));
+            data.Add(values);
+        }
+
+        return new ExcelDataFrame(columns, data);
+    }
+
+    /// <summary>导出为行数据</summary>
+    /// <param name="includeHeader">是否包含列名行</param>
+    /// <returns>行数据副本，首行为列名（includeHeader 为 true 时）</returns>
+    public IEnumerable<Object?[]> ToRows(Boolean includeHeader = true)
+    {
+        if (includeHeader)
+        {
+            var header = new Object?[_columns.Length];
+            for (var i = 0; i < _columns.Length; i++)
+                header[i] = _columns[i];
+            yield return header;
+        }
+
+        foreach (var row in _rows)
+            yield return (Object?[])row.Clone();
+    }
     #endregion
 
     #region 查询与转换
