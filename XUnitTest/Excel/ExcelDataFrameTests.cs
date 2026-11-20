@@ -313,6 +313,70 @@ public class ExcelDataFrameTests
         Assert.Null(melted.GetValue(3, "Value"));
     }
 
+    [Fact(DisplayName = "表格分析：交叉表统计全部行并按首次出现顺序保留空类别")]
+    public void Crosstab_CountsRowsAndPreservesFirstSeenCategories()
+    {
+        var sheet = new Worksheet { Name = "分类" };
+        sheet.Rows.Add(["地区", "状态", "数值"]);
+        sheet.Rows.Add(["华东", "开启", null]);
+        sheet.Rows.Add(["华南", "关闭", null]);
+        sheet.Rows.Add(["华东", "开启", null]);
+        sheet.Rows.Add([null, "关闭", null]);
+        sheet.Rows.Add(["华东", null, null]);
+        sheet.Rows.Add(["华北", "开启", null]);
+        sheet.Rows.Add(["", "  ", null]);
+
+        var result = ExcelDataFrame.FromWorksheet(sheet).Crosstab("地区", "状态");
+
+        Assert.Equal(["地区", "开启", "关闭", "(空)"], result.Columns);
+        Assert.Equal(4, result.RowCount);
+        Assert.Equal("华东", result.GetValue(0, "地区"));
+        Assert.Equal(2, result.GetValue(0, "开启"));
+        Assert.Equal(0, result.GetValue(0, "关闭"));
+        Assert.Equal(1, result.GetValue(0, "(空)"));
+        Assert.Equal("华南", result.GetValue(1, "地区"));
+        Assert.Equal(1, result.GetValue(1, "关闭"));
+        Assert.Null(result.GetValue(2, "地区"));
+        Assert.Equal(1, result.GetValue(2, "关闭"));
+        Assert.Equal(1, result.GetValue(2, "(空)"));
+        Assert.Equal("华北", result.GetValue(3, "地区"));
+        Assert.Equal(1, result.GetValue(3, "开启"));
+
+        var emptyValues = ExcelDataFrame.FromRows(
+        [
+            ["地区", "状态", "数值"],
+            ["华东", "开启", null],
+            ["华东", "开启", null],
+        ]);
+        var crosstab = emptyValues.Crosstab("地区", "状态");
+        var pivotCount = emptyValues.Pivot("地区", "状态", "数值", ExcelDataFrame.AggregateFunction.Count);
+        Assert.Equal(2, crosstab.GetValue(0, "开启"));
+        Assert.Equal(0, pivotCount.GetValue(0, "开启"));
+    }
+
+    [Fact(DisplayName = "表格分析：交叉表拒绝缺列、相同键和冲突结果列")]
+    public void Crosstab_ValidatesKeysAndResultColumnNames()
+    {
+        var frame = ExcelDataFrame.FromRows(
+        [
+            ["地区", "状态"],
+            ["华东", "地区"],
+        ]);
+
+        Assert.Throws<ArgumentException>(() => frame.Crosstab("不存在", "状态"));
+        Assert.Throws<ArgumentException>(() => frame.Crosstab("地区", "不存在"));
+        Assert.Throws<ArgumentException>(() => frame.Crosstab("地区", "地区"));
+        Assert.Throws<ArgumentException>(() => frame.Crosstab("地区", "状态"));
+
+        var duplicateHeaders = ExcelDataFrame.FromRows(
+        [
+            ["地区", "状态"],
+            ["华东", "A"],
+            ["华南", "a"],
+        ]);
+        Assert.Throws<ArgumentException>(() => duplicateHeaders.Crosstab("地区", "状态"));
+    }
+
     [Fact(DisplayName = "表格分析：反透视保留空值并检查结果列冲突")]
     public void Melt_PreservesMissingValuesAndRejectsNameCollisions()
     {

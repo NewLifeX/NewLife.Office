@@ -13,7 +13,7 @@
 | **CLI** | 脚本、批处理、任何能执行命令的 Agent | `office` 命令的 `read` / `apply` / `text` / `range` / `search` |
 | **MCP** | 支持 MCP 的 Agent（VS Code、Claude 等） | `office mcp`（stdio 传输，零外部依赖） |
 
-AI 生成 C# 代码分析 Excel 时，默认使用 C# + NewLife.Office。`ExcelDataFrame` 可做清洗、派生列、多键分组汇总、表间关联、透视/反透视、Top-N、滚动统计和 Pearson 相关矩阵，再把结果写成新工作表：
+AI 生成 C# 代码分析 Excel 时，默认使用 C# + NewLife.Office。`ExcelDataFrame` 可做清洗、派生列、多键分组汇总、表间关联、透视/反透视、Crosstab 分类交叉表、Top-N、滚动统计和 Pearson 相关矩阵，再把结果写成新工作表：
 
 ```csharp
 using System;
@@ -35,7 +35,7 @@ document.Worksheets.Add(summary.ToWorksheet("地区汇总"));
 document.Save("sales-summary.xlsx");
 ```
 
-`ExcelDataFrame` 不依赖 Python，适合常见表格分析；相关矩阵按列对计算 Pearson 样本相关系数并成对忽略空值，样本不足或常量列返回空值。关联支持 Inner/Left/Right/Full，多列键可按顺序配对，空键不匹配，重复键会展开为所有匹配组合。透视默认汇总重复组合的数值和；反透视保留空值；滚动统计按固定行数窗口计算。它不会计算单元格公式，读取到的公式结果取决于文件中保存的缓存值。更大数据集应继续使用流式读取，避免一次载入内存。
+`ExcelDataFrame` 不依赖 Python，适合常见表格分析；`Crosstab(rowColumn, columnColumn)` 只按两个分类列交叉计数所有数据行，不读取或检查值列，类别依首次出现顺序排列。两侧 `null`、`DBNull` 和空白字符串归为同一空类别：行类别显示为 `null`，列类别标题为 `(空)`；生成的列标题若冲突则报错。相关矩阵按列对计算 Pearson 样本相关系数并成对忽略空值，样本不足或常量列返回空值。关联支持 Inner/Left/Right/Full，多列键可按顺序配对，空键不匹配，重复键会展开为所有匹配组合。透视默认汇总重复组合的数值和；反透视保留空值；滚动统计按固定行数窗口计算。它不会计算单元格公式，读取到的公式结果取决于文件中保存的缓存值。更大数据集应继续使用流式读取，避免一次载入内存。
 
 ---
 
