@@ -388,6 +388,26 @@ public sealed partial class ExcelDataFrame
                 return _values[index];
             }
         }
+
+        /// <summary>读取数值；空值返回 null，文本数字按固定区域解析</summary>
+        /// <remarks>与 <c>Convert.ToDouble(row["列名"])</c> 相比，空值不会变成 0，而是保留为 null。</remarks>
+        /// <param name="columnName">数值列名</param>
+        /// <returns>数值；空单元格返回 null</returns>
+        /// <exception cref="ArgumentException">列不存在或包含非数字值</exception>
+        public Double? Number(String columnName)
+        {
+            var value = this[columnName];
+            return IsMissing(value) ? null : ToNumber(value!, columnName);
+        }
+
+        /// <summary>读取文本；空值返回 null，其他类型按固定区域转成字符串</summary>
+        /// <param name="columnName">列名</param>
+        /// <returns>文本；空单元格返回 null</returns>
+        public String? Text(String columnName)
+        {
+            var value = this[columnName];
+            return IsMissing(value) ? null : Convert.ToString(value, CultureInfo.InvariantCulture);
+        }
     }
 
     /// <summary>对分组执行汇总并返回新的数据表</summary>

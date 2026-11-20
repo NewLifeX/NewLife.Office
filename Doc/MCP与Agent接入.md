@@ -24,9 +24,9 @@ using var reader = new ExcelReader("sales.xlsx");
 var document = reader.ReadExcel();
 var data = ExcelDataFrame.FromWorksheet(document.GetSheet("销售"));
 var summary = data
-    .Where(row => Convert.ToDouble(row["销售额"]) > 0)
+    .Where(row => row.Number("销售额") > 0)
     .DropMissing("地区", "销售额")
-    .AddColumn("含税金额", row => Convert.ToDouble(row["销售额"]) * 1.13)
+    .AddColumn("含税金额", row => row.Number("销售额") * 1.13)
     .GroupBy("地区", "月份")
     .Aggregate(
         Sum("销售额", "销售额合计"),

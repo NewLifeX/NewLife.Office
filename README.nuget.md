@@ -135,9 +135,9 @@ using static NewLife.Office.Excel.AggregateSpec;
 using var reader = new ExcelReader("sales.xlsx");
 var document = reader.ReadExcel();
 var summary = ExcelDataFrame.FromWorksheet(document.GetSheet("Sales"))
-    .Where(row => Convert.ToDouble(row["Sales"]) > 0)
+    .Where(row => row.Number("Sales") > 0)
     .DropMissing("Region", "Sales")
-    .AddColumn("TaxIncluded", row => Convert.ToDouble(row["Sales"]) * 1.13)
+    .AddColumn("TaxIncluded", row => row.Number("Sales") * 1.13)
     .GroupBy("Region", "Month")
     .Aggregate(
         Sum("Sales", "TotalSales"),
