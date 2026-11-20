@@ -118,4 +118,69 @@ public class ExcelDataFrameTests
         Assert.Equal("华东", saved.Rows[1][0]);
         Assert.Equal(150d, Convert.ToDouble(saved.Rows[1][1]));
     }
+
+    [Fact(DisplayName = "表格分析：多列分组并一次生成多个指标")]
+    public void GroupBy_AggregatesMultipleKeysAndMeasures()
+    {
+        var sheet = new Worksheet { Name = "明细" };
+        sheet.Rows.Add(["地区", "月份", "产品", "金额", "数量"]);
+        sheet.Rows.Add(["华东", "一月", "苹果", 100d, 2]);
+        sheet.Rows.Add(["华东", "一月", "梨", 50d, 1]);
+        sheet.Rows.Add(["华东", "二月", "苹果", 80d, 2]);
+
+        var result = ExcelDataFrame.FromWorksheet(sheet)
+            .GroupBy("地区", "月份")
+            .Aggregate(
+                new ExcelDataFrame.AggregateSpec("金额", ExcelDataFrame.AggregateFunction.Sum, "总额"),
+                new ExcelDataFrame.AggregateSpec("数量", ExcelDataFrame.AggregateFunction.Average, "平均数量"),
+                ExcelDataFrame.AggregateSpec.CountRows("行数"));
+
+        Assert.Equal(2, result.RowCount);
+        Assert.Equal(["地区", "月份", "总额", "平均数量", "行数"], result.Columns);
+        Assert.Equal("一月", result.GetValue(0, "月份"));
+        Assert.Equal(150d, result.GetValue(0, "总额"));
+        Assert.Equal(1.5d, result.GetValue(0, "平均数量"));
+        Assert.Equal(2, result.GetValue(0, "行数"));
+    }
+
+    [Fact(DisplayName = "表格分析：派生列、空值填补和去重")]
+    public void AddColumn_FillMissingAndDropDuplicates()
+    {
+        var sheet = new Worksheet { Name = "数据" };
+        sheet.Rows.Add(["名称", "数量", "单价"]);
+        sheet.Rows.Add(["A", 2d, 5d]);
+        sheet.Rows.Add(["A", 2d, 5d]);
+        sheet.Rows.Add(["B", null, 3d]);
+
+        var result = ExcelDataFrame.FromWorksheet(sheet)
+            .DropDuplicates("名称")
+            .FillMissing(0, "数量")
+            .AddColumn("金额", row => Convert.ToDouble(row["数量"]) * Convert.ToDouble(row["单价"]));
+
+        Assert.Equal(2, result.RowCount);
+        Assert.Equal(10d, result.GetValue(0, "金额"));
+        Assert.Equal(0, result.GetValue(1, "数量"));
+        Assert.Equal(0d, result.GetValue(1, "金额"));
+        Assert.Equal(3, ExcelDataFrame.FromWorksheet(sheet).RowCount);
+    }
+
+    [Fact(DisplayName = "表格分析：清理缺失行并多列排序取前几项")]
+    public void DropMissingAndTop_SortsByMultipleColumns()
+    {
+        var sheet = new Worksheet { Name = "排名" };
+        sheet.Rows.Add(["地区", "销售额", "利润"]);
+        sheet.Rows.Add(["华东", 100d, 10d]);
+        sheet.Rows.Add(["华南", 100d, 20d]);
+        sheet.Rows.Add(["华北", 90d, 30d]);
+        sheet.Rows.Add(["未知", null, 99d]);
+
+        var result = ExcelDataFrame.FromWorksheet(sheet)
+            .DropMissing("销售额")
+            .Top(2, ("销售额", true), ("利润", true));
+
+        Assert.Equal(2, result.RowCount);
+        Assert.Equal("华南", result.GetValue(0, "地区"));
+        Assert.Equal("华东", result.GetValue(1, "地区"));
+        Assert.Equal(3, ExcelDataFrame.FromWorksheet(sheet).DropMissing("销售额").RowCount);
+    }
 }

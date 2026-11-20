@@ -17,7 +17,7 @@ namespace NewLife.Office.Excel;
 /// </code>
 /// </example>
 /// </remarks>
-public sealed class ExcelDataFrame
+public sealed partial class ExcelDataFrame
 {
     #region 属性
     private readonly String[] _columns;
@@ -159,7 +159,27 @@ public sealed class ExcelDataFrame
     /// <summary>按指定列分组，再计算每组的汇总值</summary>
     /// <param name="columnName">分组列名</param>
     /// <returns>分组汇总操作</returns>
-    public Grouping GroupBy(String columnName) => new(this, GetColumnIndex(columnName));
+    public Grouping GroupBy(String columnName) => GroupBy([columnName]);
+
+    /// <summary>按多个指定列分组</summary>
+    /// <param name="columnNames">分组列名，输出顺序与参数顺序一致</param>
+    /// <returns>分组汇总操作</returns>
+    public Grouping GroupBy(params String[] columnNames)
+    {
+        if (columnNames == null) throw new ArgumentNullException(nameof(columnNames));
+        if (columnNames.Length == 0) throw new ArgumentException(L.T("At least one grouping column is required."), nameof(columnNames));
+
+        var indexes = new Int32[columnNames.Length];
+        var unique = new HashSet<Int32>();
+        for (var i = 0; i < columnNames.Length; i++)
+        {
+            indexes[i] = GetColumnIndex(columnNames[i]);
+            if (!unique.Add(indexes[i]))
+                throw new ArgumentException(L.T("Duplicate grouping column: {0}", columnNames[i]), nameof(columnNames));
+        }
+
+        return new Grouping(this, indexes);
+    }
 
     /// <summary>生成数值列的描述统计</summary>
     /// <param name="columnName">数值列名；非空值必须可转换为数字</param>
@@ -319,85 +339,168 @@ public sealed class ExcelDataFrame
         Max,
     }
 
+    /// <summary>分组汇总定义</summary>
+    public sealed class AggregateSpec
+    {
+        /// <summary>实例化分组汇总定义</summary>
+        /// <param name="columnName">汇总列名；仅 Count 可传 null，此时统计组内行数</param>
+        /// <param name="function">汇总函数</param>
+        /// <param name="resultName">结果列名；null 时按函数和源列名生成</param>
+        public AggregateSpec(String? columnName, AggregateFunction function, String? resultName = null)
+        {
+            if (columnName == null && function != AggregateFunction.Count)
+                throw new ArgumentException(L.T("A column is required for this aggregation."), nameof(columnName));
+            if (resultName != null && resultName.Length == 0)
+                throw new ArgumentException(L.T("Result column name cannot be empty."), nameof(resultName));
+
+            ColumnName = columnName;
+            Function = function;
+            ResultName = resultName;
+        }
+
+        /// <summary>汇总列名；null 表示统计行数</summary>
+        public String? ColumnName { get; }
+
+        /// <summary>汇总函数</summary>
+        public AggregateFunction Function { get; }
+
+        /// <summary>结果列名</summary>
+        public String? ResultName { get; }
+
+        /// <summary>创建组内行数统计定义</summary>
+        /// <param name="resultName">结果列名，默认 Count</param>
+        /// <returns>汇总定义</returns>
+        public static AggregateSpec CountRows(String resultName = "Count") => new(null, AggregateFunction.Count, resultName);
+    }
+
     /// <summary>对分组执行汇总并返回新的数据表</summary>
     public sealed class Grouping
     {
         private readonly ExcelDataFrame _source;
-        private readonly Int32 _keyIndex;
+        private readonly Int32[] _keyIndexes;
 
-        internal Grouping(ExcelDataFrame source, Int32 keyIndex)
+        internal Grouping(ExcelDataFrame source, Int32[] keyIndexes)
         {
             _source = source;
-            _keyIndex = keyIndex;
+            _keyIndexes = keyIndexes;
         }
 
         /// <summary>统计每组行数</summary>
         /// <returns>分组列与 Count 列组成的数据表</returns>
-        public ExcelDataFrame Count() => Execute(null, AggregateFunction.Count);
+        public ExcelDataFrame Count() => Aggregate(AggregateSpec.CountRows());
 
         /// <summary>统计每组指定列的非空值数量</summary>
         /// <param name="columnName">待统计列名</param>
         /// <returns>分组汇总表</returns>
-        public ExcelDataFrame Count(String columnName) => Execute(columnName, AggregateFunction.Count);
+        public ExcelDataFrame Count(String columnName) => Aggregate(new AggregateSpec(columnName, AggregateFunction.Count));
 
         /// <summary>计算每组指定数值列的总和</summary>
         /// <param name="columnName">数值列名</param>
         /// <returns>分组汇总表</returns>
-        public ExcelDataFrame Sum(String columnName) => Execute(columnName, AggregateFunction.Sum);
+        public ExcelDataFrame Sum(String columnName) => Aggregate(new AggregateSpec(columnName, AggregateFunction.Sum));
 
         /// <summary>计算每组指定数值列的平均值</summary>
         /// <param name="columnName">数值列名</param>
         /// <returns>分组汇总表</returns>
-        public ExcelDataFrame Average(String columnName) => Execute(columnName, AggregateFunction.Average);
+        public ExcelDataFrame Average(String columnName) => Aggregate(new AggregateSpec(columnName, AggregateFunction.Average));
 
         /// <summary>计算每组指定列的最小值</summary>
         /// <param name="columnName">列名</param>
         /// <returns>分组汇总表</returns>
-        public ExcelDataFrame Min(String columnName) => Execute(columnName, AggregateFunction.Min);
+        public ExcelDataFrame Min(String columnName) => Aggregate(new AggregateSpec(columnName, AggregateFunction.Min));
 
         /// <summary>计算每组指定列的最大值</summary>
         /// <param name="columnName">列名</param>
         /// <returns>分组汇总表</returns>
-        public ExcelDataFrame Max(String columnName) => Execute(columnName, AggregateFunction.Max);
+        public ExcelDataFrame Max(String columnName) => Aggregate(new AggregateSpec(columnName, AggregateFunction.Max));
 
-        private ExcelDataFrame Execute(String? valueColumn, AggregateFunction function)
+        /// <summary>一次计算多个汇总列</summary>
+        /// <param name="aggregations">汇总定义</param>
+        /// <returns>包含分组列和所有汇总列的数据表</returns>
+        public ExcelDataFrame Aggregate(params AggregateSpec[] aggregations)
         {
-            var valueIndex = valueColumn == null ? -1 : _source.GetColumnIndex(valueColumn);
-            if (function != AggregateFunction.Count && valueIndex < 0)
-                throw new ArgumentException(L.T("An aggregation column is required."), nameof(valueColumn));
+            if (aggregations == null) throw new ArgumentNullException(nameof(aggregations));
+            if (aggregations.Length == 0) throw new ArgumentException(L.T("At least one aggregation is required."), nameof(aggregations));
 
-            var groups = new Dictionary<Object, List<Object?[]>>(ObjectKeyComparer.Instance);
-            var ordered = new List<(Object? Key, List<Object?[]> Rows)>();
+            var valueIndexes = new Int32[aggregations.Length];
+            var resultColumns = new String[_keyIndexes.Length + aggregations.Length];
+            var names = new HashSet<String>(StringComparer.OrdinalIgnoreCase);
+            for (var i = 0; i < _keyIndexes.Length; i++)
+            {
+                var name = _source._columns[_keyIndexes[i]];
+                if (!names.Add(name))
+                    throw new ArgumentException(L.T("Duplicate result column: {0}", name), nameof(aggregations));
+                resultColumns[i] = name;
+            }
+
+            for (var i = 0; i < aggregations.Length; i++)
+            {
+                var spec = aggregations[i] ?? throw new ArgumentException(L.T("Aggregation definitions cannot contain null."), nameof(aggregations));
+                valueIndexes[i] = spec.ColumnName == null ? -1 : _source.GetColumnIndex(spec.ColumnName);
+                var resultName = spec.ResultName ?? (spec.ColumnName == null
+                    ? spec.Function.ToString()
+                    : $"{spec.Function}_{_source._columns[valueIndexes[i]]}");
+                if (String.IsNullOrWhiteSpace(resultName))
+                    throw new ArgumentException(L.T("Result column name cannot be empty."), nameof(aggregations));
+                if (!names.Add(resultName))
+                    throw new ArgumentException(L.T("Duplicate result column: {0}", resultName), nameof(aggregations));
+                resultColumns[_keyIndexes.Length + i] = resultName;
+            }
+
+            var groups = new Dictionary<CompositeKey, List<Object?[]>>();
+            var ordered = new List<(Object?[] Keys, List<Object?[]> Rows)>();
             foreach (var row in _source._rows)
             {
-                var key = row[_keyIndex];
-                var dictionaryKey = IsMissing(key) ? NullGroupKey.Instance : key!;
-                if (!groups.TryGetValue(dictionaryKey, out var groupRows))
+                var keyValues = new Object?[_keyIndexes.Length];
+                for (var i = 0; i < _keyIndexes.Length; i++)
+                    keyValues[i] = IsMissing(row[_keyIndexes[i]]) ? null : row[_keyIndexes[i]];
+
+                var key = new CompositeKey(keyValues);
+                if (!groups.TryGetValue(key, out var groupRows))
                 {
                     groupRows = [];
-                    groups.Add(dictionaryKey, groupRows);
-                    ordered.Add((IsMissing(key) ? null : key, groupRows));
+                    groups.Add(key, groupRows);
+                    ordered.Add((keyValues, groupRows));
                 }
                 groupRows.Add(row);
             }
 
-            var functionName = function.ToString();
-            var valueName = valueColumn == null ? functionName : $"{functionName}_{_source._columns[valueIndex]}";
-            if (String.Equals(_source._columns[_keyIndex], valueName, StringComparison.OrdinalIgnoreCase))
-                throw new ArgumentException(L.T("Aggregation result column conflicts with the group column."), nameof(valueColumn));
-
             var rows = new List<Object?[]>(ordered.Count);
             foreach (var group in ordered)
             {
-                var result = new Object?[2];
-                result[0] = group.Key;
-                result[1] = valueIndex < 0
-                    ? group.Rows.Count
-                    : Aggregate(group.Rows, valueIndex, function, _source._columns[valueIndex]);
+                var result = new Object?[resultColumns.Length];
+                Array.Copy(group.Keys, result, group.Keys.Length);
+                for (var i = 0; i < aggregations.Length; i++)
+                    result[_keyIndexes.Length + i] = valueIndexes[i] < 0
+                        ? group.Rows.Count
+                        : ExcelDataFrame.Aggregate(group.Rows, valueIndexes[i], aggregations[i].Function, aggregations[i].ColumnName!);
                 rows.Add(result);
             }
 
-            return new ExcelDataFrame([_source._columns[_keyIndex], valueName], rows);
+            return new ExcelDataFrame(resultColumns, rows);
+        }
+    }
+
+    private sealed class CompositeKey(Object?[] values) : IEquatable<CompositeKey>
+    {
+        private readonly Object?[] _values = values;
+
+        public Boolean Equals(CompositeKey? other)
+        {
+            if (other == null || _values.Length != other._values.Length) return false;
+            for (var i = 0; i < _values.Length; i++)
+                if (!ObjectKeyComparer.Instance.Equals(_values[i], other._values[i])) return false;
+            return true;
+        }
+
+        public override Boolean Equals(Object? obj) => obj is CompositeKey other && Equals(other);
+
+        public override Int32 GetHashCode()
+        {
+            var hash = 17;
+            foreach (var value in _values)
+                hash = unchecked(hash * 31 + (value == null ? 0 : ObjectKeyComparer.Instance.GetHashCode(value)));
+            return hash;
         }
     }
 
@@ -448,9 +551,5 @@ public sealed class ExcelDataFrame
             => value is Byte or SByte or Int16 or UInt16 or Int32 or UInt32 or Int64 or UInt64 or Single or Double or Decimal;
     }
 
-    private sealed class NullGroupKey
-    {
-        public static readonly NullGroupKey Instance = new();
-    }
     #endregion
 }
