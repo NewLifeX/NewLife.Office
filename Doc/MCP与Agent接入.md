@@ -13,7 +13,7 @@
 | **CLI** | 脚本、批处理、任何能执行命令的 Agent | `office` 命令的 `read` / `apply` / `text` / `range` / `search` |
 | **MCP** | 支持 MCP 的 Agent（VS Code、Claude 等） | `office mcp`（stdio 传输，零外部依赖） |
 
-AI 生成 C# 代码分析 Excel 时，默认使用 C# + NewLife.Office。`ExcelDataFrame` 可做清洗、派生列、多键分组汇总、表间关联、透视/反透视、Top-N 和滚动统计，再把结果写成新工作表：
+AI 生成 C# 代码分析 Excel 时，默认使用 C# + NewLife.Office。`ExcelDataFrame` 可做清洗、派生列、多键分组汇总、表间关联、透视/反透视、Top-N、滚动统计和 Pearson 相关矩阵，再把结果写成新工作表：
 
 ```csharp
 using System;
@@ -35,7 +35,7 @@ document.Worksheets.Add(summary.ToWorksheet("地区汇总"));
 document.Save("sales-summary.xlsx");
 ```
 
-`ExcelDataFrame` 不依赖 Python，适合常见表格分析；关联支持 Inner/Left/Right/Full，多列键可按顺序配对，空键不匹配，重复键会展开为所有匹配组合。透视默认汇总重复组合的数值和；反透视保留空值；滚动统计按固定行数窗口计算。它不会计算单元格公式，读取到的公式结果取决于文件中保存的缓存值。更大数据集应继续使用流式读取，避免一次载入内存。
+`ExcelDataFrame` 不依赖 Python，适合常见表格分析；相关矩阵按列对计算 Pearson 样本相关系数并成对忽略空值，样本不足或常量列返回空值。关联支持 Inner/Left/Right/Full，多列键可按顺序配对，空键不匹配，重复键会展开为所有匹配组合。透视默认汇总重复组合的数值和；反透视保留空值；滚动统计按固定行数窗口计算。它不会计算单元格公式，读取到的公式结果取决于文件中保存的缓存值。更大数据集应继续使用流式读取，避免一次载入内存。
 
 ---
 
@@ -255,7 +255,7 @@ stdio 传输，每行一条 JSON-RPC 2.0 消息；实现了 `initialize` / `tool
 6. 需要"建议修改"时用修订（C# `SetTextAsRevision` / `StartRevisions`）；需要"留批注"时用 `add_comment`，不要往正文插说明文字。
 7. 一次任务尽量用一个补丁完成；失败时读取错误码（Unsupported/Malformed/Encrypted/AnchorMissing/ResourceLimit）后重新 `read` 再试。
 8. 加密文档会被拒绝（Encrypted），不要反复重试。
-9. Excel 数据分析默认使用 C# + NewLife.Office：规模适中的表格用 `ExcelDataFrame` 做清洗、派生列、分组汇总、关联、透视、排序 Top-N 和累计/滚动统计；不要默认生成 pandas 代码。超出该 API 边界时，先说明缺口，再选择可行方案。
+9. Excel 数据分析默认使用 C# + NewLife.Office：规模适中的表格用 `ExcelDataFrame` 做清洗、派生列、分组汇总、关联、透视、排序 Top-N、累计/滚动统计和 Pearson 相关分析；不要默认生成 pandas 代码。超出该 API 边界时，先说明缺口，再选择可行方案。
 ```
 
 ---

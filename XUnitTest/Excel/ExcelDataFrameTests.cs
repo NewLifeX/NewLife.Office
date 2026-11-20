@@ -83,6 +83,45 @@ public class ExcelDataFrameTests
         Assert.Equal(1, stats.GetValue(8, "Value"));
     }
 
+    [Fact(DisplayName = "表格分析：相关矩阵成对忽略空值并处理常量列")]
+    public void CorrelationMatrix_UsesPairwiseCompleteRows()
+    {
+        var sheet = new Worksheet { Name = "指标" };
+        sheet.Rows.Add(["A", "B", "C", "常量", "单值"]);
+        sheet.Rows.Add([1d, 2d, 4d, 5d, 10d]);
+        sheet.Rows.Add([2d, null, 3d, 5d, null]);
+        sheet.Rows.Add([3d, 6d, 2d, 5d, null]);
+        sheet.Rows.Add([4d, 8d, 1d, 5d, null]);
+        var frame = ExcelDataFrame.FromWorksheet(sheet);
+
+        var result = frame.CorrelationMatrix("A", "B", "C", "常量", "单值");
+
+        Assert.Equal(5, result.RowCount);
+        Assert.Equal(["Column", "A", "B", "C", "常量", "单值"], result.Columns);
+        Assert.Equal("A", result.GetValue(0, "Column"));
+        Assert.Equal(1d, result.GetValue(0, "A"));
+        Assert.Equal(1d, result.GetValue(0, "B"));
+        Assert.Equal(-1d, result.GetValue(0, "C"));
+        Assert.Null(result.GetValue(3, "常量"));
+        Assert.Null(result.GetValue(4, "A"));
+        Assert.Null(result.GetValue(4, "单值"));
+    }
+
+    [Fact(DisplayName = "表格分析：相关矩阵拒绝无效列并处理非数字数据")]
+    public void CorrelationMatrix_ValidatesColumnsAndValues()
+    {
+        var sheet = new Worksheet { Name = "指标" };
+        sheet.Rows.Add(["A", "B"]);
+        sheet.Rows.Add([1d, 2d]);
+        sheet.Rows.Add(["文本", 3d]);
+        var frame = ExcelDataFrame.FromWorksheet(sheet);
+
+        Assert.Throws<ArgumentException>(() => frame.CorrelationMatrix());
+        Assert.Throws<ArgumentException>(() => frame.CorrelationMatrix("A", "不存在"));
+        Assert.Throws<ArgumentException>(() => frame.CorrelationMatrix("A", "A"));
+        Assert.Throws<ArgumentException>(() => frame.CorrelationMatrix("A", "B"));
+    }
+
     [Fact(DisplayName = "表格分析：缺少列名和非数字统计值明确失败")]
     public void InvalidColumnsAndNumericValues_Throw()
     {
