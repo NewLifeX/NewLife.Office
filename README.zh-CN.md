@@ -125,6 +125,25 @@ office mcp
 
 > 各格式锚点与补丁指令见 [MCP 与 Agent 接入](Doc/MCP与Agent接入.md)。
 
+AI 生成 C# 代码分析 Excel 时，可用 `ExcelDataFrame` 完成常见筛选、分组与汇总，不需要 Python：
+
+```csharp
+using System;
+using NewLife.Office.Excel;
+
+using var reader = new ExcelReader("sales.xlsx");
+var document = reader.ReadExcel();
+var summary = ExcelDataFrame.FromWorksheet(document.GetSheet("销售"))
+    .Where(row => Convert.ToDouble(row["销售额"]) > 0)
+    .GroupBy("地区")
+    .Sum("销售额");
+
+document.Worksheets.Add(summary.ToWorksheet("地区汇总"));
+document.Save("sales-summary.xlsx");
+```
+
+> 该 API 在内存中处理表格，不计算 Excel 公式；更大文件请使用流式读取接口。
+
 ### Excel 写入与读取
 
 ```csharp

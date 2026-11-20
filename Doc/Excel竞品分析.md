@@ -1,6 +1,6 @@
 # Excel 竞品分析
 
-> 版本：v2.1 | 日期：2026-11-03
+> 版本：v2.2 | 日期：2026-11-20
 > 返回：[竞品分析报告](竞品分析报告.md)
 
 ---
@@ -395,6 +395,32 @@ cell.CellStyle = cellStyle;
 
 ---
 
+### 5.6 数据分析能力：pandas 与 NewLife.Office
+
+pandas 不是 Excel 文件读写库，而是 Python 的内存数据分析工具。它的 `DataFrame`/`Series` 提供筛选、索引、缺失值处理、分组聚合与统计；NewLife.Office 的核心职责则是 xls/xlsx 读写、格式保真及文档编辑。两者不宜按“谁替代谁”比较。
+
+| 能力 | pandas | NewLife.Office |
+|------|---------|----------------|
+| 文件与格式 | 内置 `read_csv`/`read_excel` 等 IO 接口；Excel 引擎由相应 Python 依赖提供 | 原生读写 xlsx/xls，支持样式、公式、图表、透视表及未建模部件透传；CSV 由 NewLife.Core 提供 |
+| 表格分析模型 | `DataFrame`/`Series`，带索引、类型与对齐语义 | `ExcelDataFrame` 以工作表首行为列名，值使用 .NET 对象 |
+| 常见分析 | 丰富的索引、缺失值、分组、合并、时序与统计 API | 选列、条件筛选、排序、按单列分组计数/求和/平均/最值、数值描述 |
+| 公式与格式 | 面向数据值，不负责保留工作簿的复杂 Excel 版式 | 读写 Excel 公式与格式，但不提供公式计算引擎 |
+| 运行时 | 需要 Python 及 pandas/NumPy 生态 | 纯 C#，无需 Python 运行时；主库仅依赖 NewLife.Core |
+| 大数据处理 | 主要以 DataFrame 内存计算，也可分块读取 | 读写器支持流式读取；`ExcelDataFrame` 本身仍是内存模型 |
+
+**结论**：值得实现 pandas 常见表格工作流的 C# 子集，但不值得在 Office 库内重造 pandas。`ExcelDataFrame` 先覆盖 AI 生成代码最常用的“读入 → 筛选/分组/统计 → 写回”路径；索引自动对齐、多级索引、时序分析、任意连接和 NumPy 向量计算继续交给 Python 数据科学栈。
+
+**边界**：公式结果只读取文件中已保存的缓存值；空单元格以 `null` 处理；数值描述与求和要求非空值可转换为数字；全空组的求和结果为 0、平均值为 null；当前分组按一个列分组、每次执行一种汇总。
+
+**资料（官方文档，查阅于 2026-11-20）**：
+- [pandas 表格数据与 DataFrame](https://pandas.pydata.org/docs/getting_started/intro_tutorials/01_table_oriented.html)
+- [pandas 文件读写接口](https://pandas.pydata.org/docs/user_guide/io.html)
+- [pandas 数据选择与索引](https://pandas.pydata.org/docs/user_guide/indexing.html)
+- [pandas 分组与聚合](https://pandas.pydata.org/docs/user_guide/groupby.html)
+- [pandas 缺失数据处理](https://pandas.pydata.org/docs/user_guide/missing_data.html)
+
+---
+
 ## 6. 结论与差异化定位
 
 ### 6.1 NewLife.Office 优势
@@ -402,6 +428,7 @@ cell.CellStyle = cellStyle;
 - **零外部依赖**：主库仅依赖 NewLife.Core，无任何第三方 Excel 库，包体积 <100KB，MIT 许可完全免费商用
 - **双格式读写**：xls（BIFF8）与 xlsx 读写双全，同层级竞品中少有（EPPlus/ClosedXML 不支持 xls 写入）
 - **功能覆盖广**：样式、图表、数据透视表、迷你图、条件格式、结构化表格等高级特性齐全，与 EPPlus/Aspose 同级
+- **C# 表格分析**：`ExcelDataFrame` 为 AI 生成的 C# 代码提供常见筛选、分组和统计能力，无需切换 Python 运行时
 - **开发效率高**：对象映射、模板填充、ExcelHelper 一键 API，单行完成导入导出，代码量比 EPPlus/NPOI 少 60–80%
 - **框架兼容广**：net45 / netstandard2.0 / netstandard2.1 / net6.0+ 全覆盖
 
@@ -421,6 +448,7 @@ cell.CellStyle = cellStyle;
 - **vs ClosedXML**：无 Open XML SDK 依赖，包体积更小，支持 net45 与 xls
 - **vs MiniExcel**：功能全面超越（样式/图表/公式/图片/页面设置/透视表等），同时保留其轻量流式与一键 API 的优势
 - **vs Aspose.Cells**：除公式计算引擎等少数企业级特性外功能接近，但零成本、零依赖、开源可控
+- **vs pandas**：不追求替代通用数据科学库；NewLife.Office 负责 Excel 格式处理与 C# 常用分析，复杂统计/时序/NumPy 场景仍适合 pandas
 
 > 本项目定位：**轻量、零依赖、高保真的 .NET 办公自动化基础库**——在开源竞品中功能覆盖最全面，在商业竞品面前以免费与轻量为差异化优势。
 

@@ -123,6 +123,25 @@ office mcp
 
 > Anchors and patch operations per format: [MCP & Agent Integration](Doc/MCP与Agent接入.md).
 
+AI-generated C# code can use `ExcelDataFrame` for common Excel filtering, grouping and aggregation without a Python runtime:
+
+```csharp
+using System;
+using NewLife.Office.Excel;
+
+using var reader = new ExcelReader("sales.xlsx");
+var document = reader.ReadExcel();
+var summary = ExcelDataFrame.FromWorksheet(document.GetSheet("Sales"))
+    .Where(row => Convert.ToDouble(row["Sales"]) > 0)
+    .GroupBy("Region")
+    .Sum("Sales");
+
+document.Worksheets.Add(summary.ToWorksheet("Summary"));
+document.Save("sales-summary.xlsx");
+```
+
+> This API processes table data in memory and does not calculate Excel formulas. Use the streaming reader for larger files.
+
 ### Excel Write and Read
 
 ```csharp
