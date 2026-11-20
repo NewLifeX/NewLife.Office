@@ -125,7 +125,7 @@ office mcp
 
 > 各格式锚点与补丁指令见 [MCP 与 Agent 接入](Doc/MCP与Agent接入.md)。
 
-AI 生成 C# 代码分析 Excel 时，可用 `ExcelDataFrame` 完成常见筛选、分组与汇总，不需要 Python：
+AI 生成 C# 代码分析 Excel 时，可用 `ExcelDataFrame` 完成数据清洗、派生列、多键汇总、表间关联、透视、Top-N 和滚动统计，不需要 Python：
 
 ```csharp
 using System;
@@ -135,8 +135,12 @@ using var reader = new ExcelReader("sales.xlsx");
 var document = reader.ReadExcel();
 var summary = ExcelDataFrame.FromWorksheet(document.GetSheet("销售"))
     .Where(row => Convert.ToDouble(row["销售额"]) > 0)
-    .GroupBy("地区")
-    .Sum("销售额");
+    .DropMissing("地区", "销售额")
+    .AddColumn("含税金额", row => Convert.ToDouble(row["销售额"]) * 1.13)
+    .GroupBy("地区", "月份")
+    .Aggregate(
+        new ExcelDataFrame.AggregateSpec("销售额", ExcelDataFrame.AggregateFunction.Sum, "销售额合计"),
+        new ExcelDataFrame.AggregateSpec("含税金额", ExcelDataFrame.AggregateFunction.Average, "平均含税金额"));
 
 document.Worksheets.Add(summary.ToWorksheet("地区汇总"));
 document.Save("sales-summary.xlsx");

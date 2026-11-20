@@ -125,6 +125,29 @@ office mcp
 
 > Anchors and patch operations per format: [MCP & Agent Integration](https://github.com/NewLifeX/NewLife.Office/blob/master/Doc/MCP与Agent接入.md).
 
+AI-generated C# code can use `ExcelDataFrame` for data cleanup, derived columns, multi-key aggregation, joins, pivoting, Top-N and rolling statistics without a Python runtime:
+
+```csharp
+using System;
+using NewLife.Office.Excel;
+
+using var reader = new ExcelReader("sales.xlsx");
+var document = reader.ReadExcel();
+var summary = ExcelDataFrame.FromWorksheet(document.GetSheet("Sales"))
+    .Where(row => Convert.ToDouble(row["Sales"]) > 0)
+    .DropMissing("Region", "Sales")
+    .AddColumn("TaxIncluded", row => Convert.ToDouble(row["Sales"]) * 1.13)
+    .GroupBy("Region", "Month")
+    .Aggregate(
+        new ExcelDataFrame.AggregateSpec("Sales", ExcelDataFrame.AggregateFunction.Sum, "TotalSales"),
+        new ExcelDataFrame.AggregateSpec("TaxIncluded", ExcelDataFrame.AggregateFunction.Average, "AverageTaxIncluded"));
+
+document.Worksheets.Add(summary.ToWorksheet("Summary"));
+document.Save("sales-summary.xlsx");
+```
+
+> This API processes table data in memory and does not calculate Excel formulas. Use the streaming reader for larger files.
+
 ### Excel Write and Read
 
 ```csharp
